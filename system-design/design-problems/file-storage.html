@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>15.13 File Storage — System Design</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../">Handbook</a> / <a href="../">System Design</a> / 15. Design Problems / 15.13 File Storage</p>
+
+<h1>File Storage</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Design a scalable file storage system similar to Amazon S3 that stores, retrieves, and manages arbitrary files (photos, videos, documents). The system must handle large files efficiently, support metadata management, provide data deduplication, and deliver files through a CDN for fast global access.</p>
+
+<h2>Functional Requirements</h2>
+<ul>
+  <li>Upload files of any type and size (up to 5GB per file)</li>
+  <li>Download files via public or authenticated URLs</li>
+  <li>Support file metadata (name, size, content-type, custom tags)</li>
+  <li>Support hierarchical namespace (folders/directories) or flat object model</li>
+  <li>Provide data deduplication to save storage costs</li>
+  <li>Support file versioning and soft delete</li>
+</ul>
+
+<h2>Non-Functional Requirements</h2>
+<ul>
+  <li><strong>Durability:</strong> 99.999999999% (11 nines) — no data loss</li>
+  <li><strong>Availability:</strong> 99.99% for read operations</li>
+  <li><strong>Scalability:</strong> exabytes of storage, petabytes of daily throughput</li>
+  <li><strong>Throughput:</strong> support high upload/download bandwidth</li>
+  <li><strong>Consistency:</strong> read-after-write consistency</li>
+  <li><strong>Security:</strong> encryption at rest and in transit, access control</li>
+</ul>
+
+<h3>Capacity Estimates</h3>
+<table>
+  <tr><th>Metric</th><th>Estimate</th><th>Notes</th></tr>
+  <tr><td>Total storage</td><td>100 PB</td><td>Growing 50% YoY</td></tr>
+  <tr><td>Files stored</td><td>10B</td><td>Average 10KB</td></tr>
+  <tr><td>Uploads/day</td><td>100M</td><td>Mixed small/large files</td></tr>
+  <tr><td>Downloads/day</td><td>1B</td><td>Read-heavy (10:1 ratio)</td></tr>
+  <tr><td>Upload bandwidth</td><td>50 Gbps</td><td>Peak</td></tr>
+  <tr><td>Download bandwidth</td><td>500 Gbps</td><td>Peak (via CDN)</td></tr>
+  <tr><td>Average file size</td><td>10 KB</td><td>Bimodal: many small, few large</td></tr>
+</table>
+
+<h2>API Design</h2>
+<pre>
+# Upload (small files, &lt; 100MB)
+PUT    /api/v1/buckets/{bucket}/objects/{key}
+Body:  (file content)
+Resp:  { "key": "photos/2026/trip.jpg", "size": 5242880,
+         "etag": "\"d41d8cd98f00b204e9800998ecf8427e\"",
+         "last_modified": "2026-06-28T10:00:00Z" }
+
+# Upload (large files, multipart)
+POST   /api/v1/buckets/{bucket}/multipart-uploads
+Resp:  { "upload_id": "upl_abc123" }
+PUT    /api/v1/buckets/{bucket}/multipart-uploads/{upload_id}/parts/{part_number}
+POST   /api/v1/buckets/{bucket}/multipart-uploads/{upload_id}/complete
+
+# Download
+GET    /api/v1/buckets/{bucket}/objects/{key}
+Resp:  HTTP 200  Content-Type: image/jpeg  Body: (file content)
+
+# Pre-signed URL (temporarily grant access)
+POST   /api/v1/buckets/{bucket}/objects/{key}/presign
+Body:  { "expires_in": 3600, "operations": ["GET"] }
+Resp:  { "url": "https://storage.example.com/bucket/key?sig=...", "expires_at": "..." }
+</pre>
+
+<h2>High-Level Design</h2>
+<div class="diagram">
+                         ┌──────────────┐
+   Client ──────────────►│  API Gateway  │
+                         └──────┬───────┘
+                                │
+                   ┌────────────┴────────────┐
+                   │                         │
+            Write Path                 Read Path
+                   │                         │
+          ┌────────▼────────┐     ┌─────────▼─────────┐
+          │  Upload Service  │     │   Download Service  │
+          │  (receive, chunk)│     │   (serve + redirect)│
+          └────────┬────────┘     └─────────┬─────────┘
+                   │                        │
+          ┌────────▼────────┐     ┌─────────▼─────────┐
+          │  Metadata DB     │     │   CDN Edge         │
+          │  (PostgreSQL /   │     │   (geographically  │
+          │   DynamoDB)      │     │    distributed)    │
+          └────────┬────────┘     └─────────┬─────────┘
+                   │                        │
+          ┌────────▼────────┐     ┌─────────▼─────────┐
+          │  Block Storage   │────►│   CDN Origin       │
+          │  Cluster         │     │   (object storage) │
+          │  ┌─────┐ ┌─────┐│     └───────────────────┘
+          │  │Node1│ │Node2││
+          │  └─────┘ └─────┘│
+          │  Replication: 3x  │
+          └──────────────────┘
+</div>
+
+<h2>Deep Dive: Block Storage Architecture</h2>
+<p>Files are split into fixed-size blocks (e.g., 4MB-64MB) and distributed across storage nodes. This enables parallel uploads, efficient deduplication, and fault tolerance per block.</p>
+
+<div class="callout">
+  <strong>Why block storage?</strong> Storing files as monolithic objects limits upload parallelism and makes deduplication impossible (a 1-byte change to a 1GB file requires re-storing the entire 1GB). Block storage enables content-addressable deduplication and parallel I/O.
+</div>
+
+<h3>Content-Addressable Storage (CAS)</h3>
+<p>Each block is identified by the hash of its content (SHA-256). Blocks with the same hash are stored once, regardless of how many files reference them.</p>
+
+<pre>
+# Block identification
+block_hash = SHA256(block_content)
+
+# File = ordered list of block hashes
+File "photo.jpg" (5MB):
+  Block 1: hash=a1b2c3... (4MB)
+  Block 2: hash=d4e5f6... (1MB)
+
+File "photo_copy.jpg" (5MB, identical):
+  Same blocks: a1b2c3, d4e5f6
+  → Zero additional storage (deduplication)
+</pre>
+
+<div class="callout green">
+  <strong>Deduplication savings:</strong> For photo storage services, deduplication can save 30-50% of storage (duplicate photos, shared files, backups). For code repositories, savings can be 80%+ (shared dependencies across projects).
+</div>
+
+<h2>Deep Dive: Multipart Upload</h2>
+<p>For large files (&gt; 100MB), use multipart upload:</p>
+<ol>
+  <li><strong>Initiate:</strong> Client requests a multipart upload ID.</li>
+  <li><strong>Upload parts:</strong> Client splits the file into parts (typically 5-100MB each) and uploads each part independently in parallel. Each part gets an ETag (MD5).</li>
+  <li><strong>Complete:</strong> Client sends a complete-multipart request with the ordered list of parts and their ETags. Server assembles the metadata (no physical concatenation needed if using block storage).</li>
+  <li><strong>Abort:</strong> If upload fails, client can abort. Unreferenced blocks are garbage collected.</li>
+</ol>
+
+<div class="callout yellow">
+  <strong>Resumable uploads:</strong> Multipart upload enables resumable uploads. If the connection drops during part 5 of 10, the client only needs to retry parts 5-10. This is critical for large files on unreliable networks.
+</div>
+
+<h2>Deep Dive: Metadata Service</h2>
+<table>
+  <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+  <tr><td>object_key</td><td>VARCHAR(1024)</td><td>Full path (e.g., "photos/2026/trip.jpg")</td></tr>
+  <tr><td>bucket</td><td>VARCHAR(63)</td><td>Bucket/container name</td></tr>
+  <tr><td>owner_id</td><td>BIGINT</td><td>Owner user ID</td></tr>
+  <tr><td>size</td><td>BIGINT</td><td>Total file size in bytes</td></tr>
+  <tr><td>content_type</td><td>VARCHAR(128)</td><td>MIME type</td></tr>
+  <tr><td>etag</td><td>VARCHAR(64)</td><td>MD5 of complete file</td></tr>
+  <tr><td>version_id</td><td>BIGINT</td><td>Version (for versioning)</td></tr>
+  <tr><td>blocks</td><td>JSONB</td><td>Ordered list of block hashes</td></tr>
+  <tr><td>is_deleted</td><td>BOOLEAN</td><td>Soft delete marker</td></tr>
+  <tr><td>created_at</td><td>TIMESTAMP</td><td></td></tr>
+  <tr><td>modified_at</td><td>TIMESTAMP</td><td></td></tr>
+</table>
+
+<div class="callout">
+  <strong>Flat namespace vs hierarchical:</strong> S3 uses a flat object model (object keys can contain "/" but are not real directories). This is simpler and more scalable than a true hierarchical filesystem. Directory listing is implemented as a prefix query on the object key (WHERE key LIKE 'photos/2026/%').
+</div>
+
+<h2>Deep Dive: CDN Integration</h2>
+<ul>
+  <li><strong>Origin pull:</strong> CDN edge nodes pull files from the origin storage cluster on cache miss. Configure origin shielding to avoid multiple edge nodes hitting the origin for the same file.</li>
+  <li><strong>Pre-signed URLs:</strong> Generate time-limited, signed URLs for private files. The CDN validates the signature and expiration. No need for backend authentication on every request.</li>
+  <li><strong>Cache control:</strong> Set Cache-Control headers based on file type. Immutable files (by content hash) can be cached indefinitely. Mutable files get short TTLs.</li>
+  <li><strong>Invalidation:</strong> For cache invalidation, either (a) change the URL (version the key), or (b) use a purge API. Versioning the URL is preferred as it is more reliable and scales better.</li>
+</ul>
+
+<h2>Deep Dive: Garbage Collection</h2>
+<p>When files are deleted, blocks must be cleaned up. But shared blocks may still be referenced by other files.</p>
+
+<ol>
+  <li>Mark file as deleted in metadata (soft delete).</li>
+  <li>GC job scans unreferenced blocks: for each block, check if any file references it.</li>
+  <li>Delete blocks with zero references.</li>
+  <li>Use a reference count or a mark-and-sweep algorithm.</li>
+</ol>
+
+<div class="callout red">
+  <strong>Reference counting pitfall:</strong> Simple reference counting can cause issues if deletions are missed (orphaned blocks accumulate). Use a periodic mark-and-sweep: enumerate all referenced blocks from metadata, compare with all stored blocks, delete the difference. Run weekly to catch orphaned blocks.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>How do you ensure data durability? <em>A: Replicate each block across 3+ nodes in different failure domains (racks, availability zones). Use erasure coding (e.g., 10+4) for cold storage to reduce replication overhead while maintaining durability. Checksum each block and verify on read (read-repair if checksum mismatch).</em></li>
+  <li>How does block storage handle concurrent updates to the same file? <em>A: Versioning — each update creates a new version with its own block list. Old versions are retained based on the versioning policy (keep last N versions, or keep for N days).</em></li>
+  <li>How do you handle storage node failures? <em>A: Detect via heartbeat. Replicate missing blocks from surviving replicas to maintain the replication factor. Rebalance the cluster to distribute load. Use consistent hashing for block placement.</em></li>
+  <li>What is erasure coding and when would you use it? <em>A: Erasure coding splits data into N data chunks and computes M parity chunks. Any N of (N+M) chunks can reconstruct the data. Reduces storage overhead from 3x (replication) to 1.33x (10+4). Used for cold data where read latency is less critical.</em></li>
+  <li>How do you handle very small files (&lt; 1KB)? <em>A: Store small files in the metadata record directly (inline storage). Avoid the overhead of block allocation for tiny files. Threshold: files &lt; 128KB stored inline in the metadata database.</em></li>
+</ul>
+
+<div class="callout red">
+  <strong>What to Skip:</strong>
+  <ul>
+    <li>Don't design the physical storage hardware — focus on the logical architecture</li>
+    <li>Don't design the CDN network topology — treat it as a service</li>
+    <li>Don't implement file compression — mention as an optimization</li>
+    <li>Don't design access control policies in detail unless asked</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Papers</div>
+  <ul>
+    <li>"The Google File System" — Ghemawat et al. (research.google.com/pubs/gfs.html)</li>
+    <li>"Dynamo: Amazon's Highly Available Key-value Store" — DeCandia et al.</li>
+    <li>"Erasure Coding in Windows Azure Storage" — Huang et al. (Microsoft Research)</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Articles</div>
+  <ul>
+    <li>Amazon S3 documentation: "Storage Classes" and "Multipart Upload" (docs.aws.amazon.com/s3)</li>
+    <li>Dropbox Engineering: "How Dropbox Efficiently Stores 500PB of User Data"</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="metrics-system.html">&larr; Previous: Metrics System</a>
+  <a href="dropbox.html">Next: Dropbox &rarr;</a>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.2.4 Offset — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">8. Messaging</a> / 8.2.4 Offset</p>
+
+<h1>8.2.4 Offset</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+
+<p>Understand the concept of Kafka offsets, how consumers track their position in a partition, and the critical difference between committed and current offsets.</p>
+
+<h2>Definition</h2>
+
+<p>An <strong>offset</strong> is a unique, monotonically increasing integer assigned to each message within a Kafka partition. It represents the message's position in the partition's append-only log. Offsets are immutable — once assigned, an offset for a given message never changes, even if messages before it are compacted away.</p>
+
+<div class="callout">
+  <strong>Key Insight:</strong> The offset is the consumer's bookmark. It tells the consumer where it left off, enabling it to resume processing after a crash or restart without missing messages or reprocessing too many.
+</div>
+
+<h2>How Offsets Work</h2>
+
+<div class="diagram">
+  Partition 0 (append-only log):
+  ┌───────┬───────┬───────┬───────┬───────┬───────┬───────┐
+  │  msg1 │  msg2 │  msg3 │  msg4 │  msg5 │  msg6 │  msg7 │
+  │ off=0 │ off=1 │ off=2 │ off=3 │ off=4 │ off=5 │ off=6 │
+  └───────┴───────┴───────┴───────┴───────┴───────┴───────┘
+                           ▲                ▲
+                   committed offset   current position
+
+  Consumer State:
+  ┌─────────────────────────────────────────────────────┐
+  │ Committed Offset: 3                                 │
+  │   → Consumer has acknowledged processing up to msg4  │
+  │   → On restart, resumes reading from offset 4        │
+  │                                                     │
+  │ Current Position: 5                                 │
+  │   → Consumer is currently processing msg6             │
+  │   → If it crashes NOW, it resumes from offset 4      │
+  │     (committed offset), reprocessing msg5 and msg6   │
+  └─────────────────────────────────────────────────────┘
+</div>
+
+<h2>Committed Offset vs. Current Offset</h2>
+
+<table>
+  <tr><th>Concept</th><th>Definition</th><th>Purpose</th></tr>
+  <tr><td><strong>Committed offset</strong></td><td>Last offset the consumer has successfully processed and acknowledged</td><td>Recovery point after crash/restart</td></tr>
+  <tr><td><strong>Current position</strong></td><td>Offset the consumer is currently reading/processing</td><td>Tracks how far ahead the consumer has read</td></tr>
+  <tr><td><strong>Lag</strong></td><td>Difference between log end offset and committed offset</td><td>Measures how far behind the consumer is</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Critical Distinction:</strong> If a consumer crashes after reading msg5 (current position = 5) but before committing, it will restart from the committed offset (3) and reprocess msg4 and msg5. This is the root cause of duplicate processing in at-least-once delivery semantics.
+</div>
+
+<h2>Offset Management</h2>
+
+<h3>Automatic Commit</h3>
+<p>Kafka can auto-commit offsets at regular intervals (default: every 5 seconds). This is simple but risky — if the consumer crashes between processing and auto-commit, messages are reprocessed.</p>
+
+<div class="diagram">
+  Auto-Commit Timeline:
+  ──► process msg3 ──► process msg4 ──► CRASH ──► restart
+        (not committed)    (not committed)         │
+                                                    ▼
+                                              resumes from offset 0
+                                              (last committed offset)
+  Result: msg1, msg2, msg3, msg4 all reprocessed
+</div>
+
+<h3>Manual Commit</h3>
+<p>The consumer explicitly commits offsets after processing. This gives precise control over what has been acknowledged:</p>
+
+<ul>
+  <li><strong>Commit after processing:</strong> Process the message, then commit. If processing succeeds but commit fails, the message is reprocessed (at-least-once).</li>
+  <li><strong>Commit the next offset before processing:</strong> Risky — if processing fails, the message is skipped (at-most-once).</li>
+</ul>
+
+<div class="callout green">
+  <strong>Best Practice:</strong> Use manual synchronous commits after successfully processing each batch. For higher throughput, commit after processing a batch of N messages, accepting that a crash may reprocess up to N messages.
+</div>
+
+<h3>Storing Committed Offsets</h3>
+<p>Committed offsets are stored in a special Kafka topic called <code>__consumer_offsets</code>. Each consumer group has its own entry. Kafka periodically compacts this topic, keeping only the latest committed offset per group-partition pair.</p>
+
+<h2>Offset Reset Strategies</h2>
+
+<p>When a new consumer group starts or when a committed offset is invalid (e.g., the offset was deleted by retention), Kafka needs to decide where to start reading:</p>
+
+<table>
+  <tr><th>Strategy</th><th>Behavior</th><th>Use Case</th></tr>
+  <tr><td><code>earliest</code></td><td>Start from the oldest available message in the partition</td><td>Backfilling, reprocessing all history</td></tr>
+  <tr><td><code>latest</code></td><td>Start from the newest message (skip old messages)</td><td>Real-time consumers that only care about new data</td></tr>
+  <tr><td><code>none</code></td><td>Throw an exception if no committed offset exists</td><td>Strict mode — fail fast if offset is missing</td></tr>
+</table>
+
+<h2>Consumer Lag Monitoring</h2>
+
+<p>Consumer lag (the delta between the log end offset and the committed offset) is a critical metric. High lag means the consumer cannot keep up with producers.</p>
+
+<div class="callout">
+  <strong>Monitoring:</strong> Use tools like Kafka Consumer Group Lag Monitor, Burrow, or Grafana dashboards to track lag per partition. Alert when lag exceeds a threshold. Common causes: consumer too slow, consumer crashed, partition reassignment in progress.
+</div>
+
+<h2>Common Interview Questions</h2>
+
+<ol>
+  <li>"What is a Kafka offset and what is it used for?"</li>
+  <li>"What is the difference between committed offset and current position?"</li>
+  <li>"What happens when a consumer crashes before committing its offset?"</li>
+  <li>"Explain auto-commit vs. manual commit — when would you use each?"</li>
+  <li>"What is consumer lag and how would you monitor it?"</li>
+  <li>"Where are committed offsets stored in Kafka?"</li>
+  <li>"What is the offset reset strategy and when does it matter?"</li>
+  <li>"How would you reset a consumer to reprocess all messages from the beginning?"</li>
+</ol>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Do not dive into:</strong>
+  <ul>
+    <li>The internal format of the <code>__consumer_offsets</code> topic — too implementation-specific.</li>
+    <li>Offset storage version history (v1 vs v2 format).</li>
+    <li>Tiered storage and how it affects offset lookup — unless discussing very large-scale Kafka deployments.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source>
+  <div class="source-label">Books &amp; Guides</div>
+  <ul>
+    <li><a href="https://kafka.apache.org/documentation/#consumerconfigs">Kafka Documentation — Consumer Configs</a> — enable.auto.commit, auto.offset.reset</li>
+    <li><a href="https://www.confluent.io/learn/kafka-consumer-offsets/">Confluent — Understanding Kafka Consumer Offsets</a> — Deep dive on offset management</li>
+    <li><a href="https://kafka.apache.org/24/documentation/streams/developer-guide/config-streams.html">Kafka Streams Developer Guide</a> — Offset management patterns</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="partition.html">&larr; 8.2.3 Partition</a>
+  <a href="producer.html">8.2.5 Producer &rarr;</a>
+</div>
+
+</body>
+</html>

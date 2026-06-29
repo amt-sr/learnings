@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.5.2 LFU (Least Frequently Used)</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">7 Caching</a> / <a href="index.html">7.5 Eviction</a> / 7.5.2
+</div>
+
+<h1>LFU (Least Frequently Used)</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand LFU eviction, its frequency-counting mechanics, the new-item starvation problem, decay mechanisms, and how Redis implements LFU in practice. Be ready to compare LFU against LRU and justify when each is the better choice.</p>
+
+<h2>Definition</h2>
+<p><strong>LFU (Least Frequently Used)</strong> is a cache eviction policy that removes the item with the lowest access frequency count. Each cache entry maintains a counter that increments on every access (read or write). When the cache is full, the entry with the smallest counter is evicted.</p>
+
+<div class="callout">
+  <strong>Key insight:</strong> LFU approximates popularity -- it assumes that data accessed many times in the past will continue to be accessed often. This works well for workloads with stable popularity distributions (e.g., trending content, product catalogs, recommendation caches).
+</div>
+
+<h2>How LFU Works</h2>
+<p>Every cache entry tracks a <strong>frequency counter</strong>. On each access, the counter increments. During eviction, the entry with the lowest frequency is chosen. Ties are broken by recency (LRU within the same frequency bucket).</p>
+
+<div class="diagram">
+ LFU Cache (capacity = 3)
+
+ Frequency buckets (LRU within each bucket):
+
+   freq=5:  [D]
+   freq=3:  [B] ←→ [A]
+   freq=1:  [C]
+
+ get(E) → miss, insert E with freq=1:
+   freq=5:  [D]
+   freq=3:  [B] ←→ [A]
+   freq=1:  [C] ←→ [E]         (E added to freq=1 bucket)
+
+ Evict lowest freq → remove C (LRU tail of freq=1):
+   freq=5:  [D]
+   freq=3:  [B] ←→ [A]
+   freq=1:  [E]
+</div>
+
+<h2>The New-Item Starvation Problem</h2>
+<div class="callout red">
+  <strong>LFU weakness -- new-item starvation:</strong> A newly inserted item starts with frequency = 1. In a cache full of items with high frequency counts (e.g., freq=1000), the new item will be evicted immediately on the next cache miss -- even if it will become popular. Old, once-popular items that are no longer accessed keep their high counts and persist indefinitely.
+</div>
+
+<div class="diagram">
+ Without decay:
+   freq=500: [X] (popular 2 months ago, never accessed since)
+   freq=500: [Y] (popular 2 months ago, never accessed since)
+   freq=500: [Z] (popular 2 months ago, never accessed since)
+
+   New hot item [H] arrives → freq=1 → immediately evicted!
+   X, Y, Z are "zombie" entries consuming cache slots.
+</div>
+
+<h2>Decay Mechanism</h2>
+<p>To prevent zombie entries, LFU implementations periodically <strong>decay</strong> (reduce) all frequency counters. This gives older, less-accessed entries a chance to be overtaken by newer, more active entries.</p>
+
+<h3>Redis LFU: Probabilistic Decay</h3>
+<p>Redis implements a practical LFU with a <strong>logarithmic counter</strong> and <strong>probabilistic decay</strong>:</p>
+<ul>
+  <li><strong>Logarithmic counter:</strong> An 8-bit counter (0-255) that grows logarithmically. Each increment only has a probability of incrementing based on the current value. This means counter 10 increments more often than counter 200.</li>
+  <li><strong>Probabilistic decay:</strong> Every N minutes, Redis probabilistically decrements each key's counter by 1. The probability is configured via <code>lfu-decay-time</code> (default: 1 minute). This is NOT a full scan -- counters are decayed lazily when accessed.</li>
+  <li><strong>LFUttl:</strong> A new item starts with a configurable initial counter value (default: 5) to provide a "warm-up" period and reduce starvation.</li>
+</ul>
+
+<pre>
+# Redis LFU configuration
+maxmemory-policy volatile-lfu    # evict LFU among keys with TTL
+lfu-decay-time 1                 # decay factor: ~10% chance per minute
+lfu-log-factor 10                # logarithmic counter increment probability
+</pre>
+
+<div class="callout green">
+  <strong>Why logarithmic?</strong> A linear counter would overflow an 8-bit field quickly in high-traffic systems. A logarithmic counter provides a wider dynamic range -- it can distinguish between items accessed 10 times vs 10,000 times without needing a 32-bit counter.
+</div>
+
+<h2>LRU vs LFU Comparison</h2>
+<table>
+  <tr><th>Aspect</th><th>LRU</th><th>LFU</th></tr>
+  <tr><td>Recency-sensitive</td><td class="green">Yes -- recent accesses promoted</td><td class="red">No -- old popular items persist</td></tr>
+  <tr><td>Frequency-sensitive</td><td class="red">No -- one-time scan evicts all</td><td class="green">Yes -- popular items retained</td></tr>
+  <tr><td>Sequential scan vulnerability</td><td class="red">High -- cache pollution</td><td class="green">Low -- one-time items stay at freq=1</td></tr>
+  <tr><td>New-item starvation</td><td class="green">None -- new items get a chance</td><td class="red">Severe without decay</td></tr>
+  <tr><td>Memory overhead</td><td>Low (pointer per entry)</td><td>Higher (counter + bucket metadata)</td></tr>
+  <tr><td>Implementation complexity</td><td>Low (HashMap + DLL)</td><td>Higher (HashMap + freq buckets + DLL per bucket)</td></tr>
+  <tr><td>Best for</td><td>Session data, temporal workloads</td><td>Content popularity, recommendation caches</td></tr>
+  <tr><td>Redis support</td><td><code>allkeys-lru</code> (default)</td><td><code>allkeys-lfu</code>, <code>volatile-lfu</code></td></tr>
+  <tr><td>Memcached support</td><td>Default and only policy</td><td>Not available</td></tr>
+</table>
+
+<h2>O(1) LFU Implementation</h2>
+<p>An O(1) LFU cache uses a HashMap for key lookup, a HashMap mapping frequency to a doubly-linked list (DLL) of keys at that frequency, and a minimum-frequency tracker:</p>
+
+<pre>
+class LFUCache:
+    def __init__(self, capacity: int):
+        self.cap = capacity
+        self.key_to_val_freq = {}        # key → (value, freq)
+        self.freq_to_keys = defaultdict(OrderedDict)  # freq → OrderedDict
+        self.min_freq = 0
+
+    def get(self, key: int) -> int:
+        if key not in self.key_to_val_freq:
+            return -1
+        val, freq = self.key_to_val_freq[key]
+        # Move key to freq+1 bucket
+        del self.freq_to_keys[freq][key]
+        if not self.freq_to_keys[freq]:
+            if freq == self.min_freq:
+                self.min_freq += 1
+            del self.freq_to_keys[freq]
+        self.freq_to_keys[freq + 1][key] = True
+        self.key_to_val_freq[key] = (val, freq + 1)
+        return val
+
+    def put(self, key: int, value: int) -> None:
+        if self.cap <= 0: return
+        if key in self.key_to_val_freq:
+            self.get(key)  # promote freq
+            self.key_to_val_freq[key] = (value, self.key_to_val_freq[key][1])
+            return
+        if len(self.key_to_val_freq) >= self.cap:
+            # Evict LRU key from min_freq bucket
+            evict_key, _ = self.freq_to_keys[self.min_freq].popitem(last=False)
+            del self.key_to_val_freq[evict_key]
+        self.key_to_val_freq[key] = (value, 1)
+        self.freq_to_keys[1][key] = True
+        self.min_freq = 1
+</pre>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>Design an LFU cache with O(1) get and put. (LeetCode 460.)</li>
+  <li>How does LFU handle the new-item starvation problem? What is decay?</li>
+  <li>Compare LRU vs LFU for a video streaming platform's content cache.</li>
+  <li>How does Redis implement LFU? Why use a logarithmic counter?</li>
+  <li>What happens if you use LFU for a workload with strong temporal locality but no stable popularity?</li>
+  <li>How would you combine LRU and LFU into a hybrid eviction policy?</li>
+  <li>What is the space complexity overhead of LFU compared to LRU?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Skip in interviews:</strong>
+  <ul>
+    <li>The exact Redis logarithmic counter probability formula -- describe the concept, don't derive the math.</li>
+    <li>Fine-grained details of the Redis <code>lfu-log-factor</code> lookup table implementation.</li>
+    <li>Optimizations like TinyLFU (used in Caffeine) unless the interviewer explicitly brings up advanced eviction policies.</li>
+    <li>ARC (Adaptive Replacement Cache) internals unless prompted -- it is a hybrid LRU/LFU but rarely asked directly.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Primary</div>
+  <ul>
+    <li><a href="https://redis.io/docs/manual/eviction/">Redis Eviction Policies</a> -- official docs on LFU eviction with decay configuration</li>
+    <li><a href="https://leetcode.com/problems/lfu-cache/">LeetCode 460 -- LFU Cache</a> -- canonical O(1) LFU coding interview problem</li>
+    <li><a href="https://en.wikipedia.org/wiki/Cache_replacement_policies#Least_Frequently_Used_(LFU)">Wikipedia: Cache Replacement Policies -- LFU</a> -- formal definition and variants</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Supplementary</div>
+  <ul>
+    <li><a href="https://redis.com/blog/new-redis-4-0-features/#lfu-based-eviction">Redis 4.0 LFU Eviction Blog Post</a> -- Redis team's rationale for logarithmic counters and probabilistic decay</li>
+    <li><a href="https://arxiv.org/abs/2301.10195">TinyLFU Paper Reference</a> -- modern approximation of LFU used in Caffeine (Java)</li>
+    <li><a href="https://dzone.com/articles/cache-eviction-strategies">DZone: Cache Eviction Strategies Compared</a> -- practical comparison across workloads</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="lru.html">&larr; 7.5.1 LRU</a>
+  <a href="fifo.html">7.5.3 FIFO &rarr;</a>
+</div>
+
+</body>
+</html>

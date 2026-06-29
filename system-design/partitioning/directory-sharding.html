@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.2.3 Directory Sharding</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="../index.html">6 Partitioning</a> / <a href="index.html">6.2 Sharding</a> / 6.2.3</p>
+
+<h1>Directory Sharding</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the most flexible sharding strategy — using a lookup table (directory) to map keys to shards. Learn when directory-based sharding is the right choice, how it compares to range and hash sharding, and why the directory itself becomes a critical reliability concern.</p>
+
+<h2>Definition</h2>
+<p>Directory sharding uses a <strong>central lookup table (directory)</strong> that maps each key to its assigned shard. Instead of computing the shard via a formula (range or hash), the application consults the directory to find which shard holds the data. The directory can assign keys to shards arbitrarily, enabling fine-grained control over placement.</p>
+
+<div class="diagram">
+  ┌─────────────────────────────────────────────────────────────┐
+  │                    Directory (Lookup Table)                 │
+  │                                                             │
+  │  key          │  shard_id     │  assigned_at               │
+  │  ─────────────────────────────────────────                  │
+  │  user:1001    │  Shard 2      │  2024-01-15                │
+  │  user:1002    │  Shard 0      │  2024-01-15                │
+  │  user:1003    │  Shard 2      │  2024-01-16                │
+  │  user:1004    │  Shard 1      │  2024-01-16                │
+  │  user:1005    │  Shard 0      │  2024-01-17                │
+  └─────────────────────┬───────────────────────────────────────┘
+                        │
+          ┌─────────────┼─────────────┐
+          ▼             ▼             ▼
+  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+  │   Shard 0    │ │   Shard 1    │ │   Shard 2    │
+  │ user:1002    │ │ user:1004    │ │ user:1001    │
+  │ user:1005    │ │ user:1007    │ │ user:1003    │
+  │ user:1008    │ │              │ │ user:1006    │
+  └──────────────┘ └──────────────┘ └──────────────┘
+  Server A         Server B         Server C
+</div>
+
+<h2>Flexible Assignment</h2>
+<p>The core advantage: the directory can place keys wherever it wants. Unlike hash sharding (deterministic formula) or range sharding (contiguous ranges), directory sharding allows arbitrary mapping.</p>
+
+<h3>Use Cases for Flexibility</h3>
+<ul>
+  <li><strong>Manual load balancing:</strong> Move specific high-traffic keys to less-loaded shards.</li>
+  <li><strong>Tenant isolation:</strong> Ensure enterprise customer A's data is on a dedicated shard with premium resources, while small customers share a shard.</li>
+  <li><strong>Gradual migration:</strong> Move keys one at a time from old shards to new shards without a massive resharding event.</li>
+  <li><strong>Colocation:</strong> Place related entities (a user and their orders) on the same shard to avoid cross-shard joins.</li>
+</ul>
+
+<div class="callout green">
+  <strong>Resharding advantage:</strong> With directory sharding, adding a shard requires only updating the directory. Move specific keys to the new shard by updating their directory entry. No formula change, no massive data movement. Compare this to hash modulo where adding a shard moves nearly all keys.
+</div>
+
+<h2>Single Point of Failure</h2>
+<p>The directory itself is the critical vulnerability. If the directory is unavailable, <strong>no data can be routed</strong> — every query requires a directory lookup first. The directory becomes the most important service in your infrastructure.</p>
+
+<div class="diagram">
+  Query flow with directory sharding:
+
+  Client → [1] Query Directory: "Where is user:1001?"
+                    │
+                    ▼
+         ┌─────────────────────┐
+         │   Directory Svc     │ ← SPOF if not replicated
+         │   user:1001 → S2    │
+         └──────────┬──────────┘
+                    │
+                    ▼
+         [2] Route to Shard 2: "SELECT * FROM users WHERE id = 1001"
+                    │
+                    ▼
+         ┌─────────────────────┐
+         │   Shard 2 (S2)     │
+         │   user:1001 data   │
+         └─────────────────────┘
+
+  Extra latency: +1 network round-trip for directory lookup
+</div>
+
+<h3>Mitigating the SPOF</h3>
+<ul>
+  <li><strong>Cache the directory:</strong> Client-side caching (with TTL) avoids hitting the directory on every query. Invalidation on key moves propagates asynchronously.</li>
+  <li><strong>Replicate the directory:</strong> Run the directory on a highly available cluster (Raft consensus, multi-AZ). It is read-heavy so replication is straightforward.</li>
+  <li><strong>Embed routing in application:</strong> Keep a local copy of the directory in each application instance, refreshed periodically.</li>
+</ul>
+
+<div class="callout red">
+  <strong>Performance consideration:</strong> Every query now requires two network hops: one to the directory, one to the shard. With caching, this is reduced to one hop for repeated queries. But the first query for a key always incurs the extra latency. At high QPS, the directory must handle reads at the same rate as the data shards — it needs its own horizontal scaling strategy.
+</div>
+
+<h2>Comparison: Range vs Hash vs Directory</h2>
+
+<table>
+  <tr>
+    <th>Dimension</th>
+    <th>Range Sharding</th>
+    <th>Hash Sharding</th>
+    <th>Directory Sharding</th>
+  </tr>
+  <tr>
+    <td>Distribution</td>
+    <td class="red">Depends on key distribution</td>
+    <td class="green">Uniform (with good hash)</td>
+    <td class="green">Controlled (manual or automated)</td>
+  </tr>
+  <tr>
+    <td>Range queries</td>
+    <td class="green">Efficient (single shard)</td>
+    <td class="red">Inefficient (fan-out)</td>
+    <td>Depends on directory colocation</td>
+  </tr>
+  <tr>
+    <td>Resharding cost</td>
+    <td>Split hot ranges (moderate)</td>
+    <td class="red">Massive data movement</td>
+    <td class="green">Update directory only</td>
+  </tr>
+  <tr>
+    <td>Routing complexity</td>
+    <td class="green">Simple (range lookup)</td>
+    <td class="green">Simple (formula)</td>
+    <td>Extra hop (directory lookup)</td>
+  </tr>
+  <tr>
+    <td>Flexibility</td>
+    <td>Low (contiguous ranges only)</td>
+    <td>Low (deterministic formula)</td>
+    <td class="green">High (arbitrary assignment)</td>
+  </tr>
+  <tr>
+    <td>Operational overhead</td>
+    <td>Low</td>
+    <td>Low</td>
+    <td class="red">High (directory management)</td>
+  </tr>
+  <tr>
+    <td>Failure mode</td>
+    <td>Hot range skew</td>
+    <td>Resharding disruption</td>
+    <td class="red">Directory SPOF / latency</td>
+  </tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Interview tip:</strong> Directory sharding is rarely the first answer to "how would you shard this?" Start with hash sharding as the default, then mention directory sharding as an option when you need fine-grained control over key placement (e.g., multi-tenant SaaS with per-tenant isolation). Showing that you know all three strategies and their tradeoffs demonstrates senior-level understanding.
+</div>
+
+<h2>Directory Sharding in Production</h2>
+<p>Real-world systems often combine directory sharding with hash or range sharding:</p>
+<ul>
+  <li><strong>Composite:</strong> Use hash sharding for most data, but maintain a directory for exceptional cases (VIP tenants, hot keys that need manual placement).</li>
+  <li><strong>Two-level:</strong> First-level directory maps tenant → shard group; second-level hash sharding distributes within the group.</li>
+  <li><strong>Service mesh routing:</strong> Modern service meshes (Envoy, Istio) use xDS API as a form of directory for routing requests to backend shards.</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>What is directory sharding and when would you use it?</li>
+  <li>How do you handle the single point of failure in a directory-based sharding system?</li>
+  <li>Compare and contrast range, hash, and directory sharding.</li>
+  <li>Design a multi-tenant SaaS database — how would you ensure tenant isolation while sharing infrastructure?</li>
+  <li>How would you reshard a directory-based system? What happens to in-flight requests during a key move?</li>
+  <li>What is the latency impact of directory sharding compared to hash sharding?</li>
+</ul>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Do not over-engineer the directory implementation.</strong> The interviewer does not need to see a schema design for the directory table or a consensus protocol for directory replication. Focus on the <em>architectural tradeoffs</em> (flexibility vs complexity vs latency). Skip discussions of ZooKeeper, etcd, or Consul internals unless the conversation specifically turns to directory implementation.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Recommended Reading</div>
+  <ul>
+    <li><a href="https://martin.kleppmann.com/book/">"Designing Data-Intensive Applications" — Martin Kleppmann, Ch. 6 (Partitioning)</a></li>
+    <li><a href="https://medium.com/tech-at-wildlife-studios/the-directory-based-sharding-approach-d35dbf12b45">"The Directory-Based Sharding Approach" — Wildlife Studios Engineering</a></li>
+    <li><a href="https://www.citusdata.com/blog/2019/07/25/why-we-built-citus-and-how-it-works/">Citus Data: Distributed Database Sharding with Coordinator</a></li>
+    <li><a href="https://www.vitess.io/docs/concepts/">Vitess Documentation: VSchema and Sharding (directory-based routing)</a></li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="hash-sharding.html">&larr; 6.2.2 Hash Sharding</a>
+  <a href="hash-ring.html">6.3.1 Hash Ring &rarr;</a>
+</div>
+
+</body>
+</html>

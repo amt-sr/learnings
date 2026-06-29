@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.4.2 Cache Penetration — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb"><a href="../../../">System Design</a> / <a href="../">7 Caching</a> / <a href="#">7.4 Cache Problems</a> / 7.4.2</div>
+
+<h1>7.4.2 Cache Penetration</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<div class="callout green">
+  <strong>Goal:</strong> Understand cache penetration — when queries for nonexistent data bypass the cache and hit the database on every request. Learn the three main solutions: caching null values, Bloom filters, and request rate limiting.
+</div>
+
+<h2>Definition</h2>
+
+<p>Cache Penetration occurs when a client repeatedly queries for data that <strong>does not exist</strong> in the database. Since the data is not in the database, it is never cached, and every request results in a cache miss followed by a database query that returns nothing. The cache provides no protection — every request reaches the database, defeating the purpose of caching entirely.</p>
+
+<div class="callout yellow">
+  <strong>Cache Penetration vs. Cache Stampede:</strong> Cache Stampede (7.4.1) is about <em>many</em> requests for <em>existing</em> data overwhelming the DB when a cache entry expires. Cache Penetration is about requests for <em>nonexistent</em> data always bypassing the cache. Both result in excessive DB load, but for different reasons.
+</div>
+
+<h2>The Problem Visualized</h2>
+
+<div class="diagram">
+  Attacker / Client sends 1000 requests for user:-999 (does not exist)
+
+  Request 1:    Cache MISS → DB query → NULL → (nothing to cache)
+  Request 2:    Cache MISS → DB query → NULL → (nothing to cache)
+  Request 3:    Cache MISS → DB query → NULL → (nothing to cache)
+  ...
+  Request 1000: Cache MISS → DB query → NULL → (nothing to cache)
+
+  Cache hit ratio: 0% (cache is useless for these queries)
+  Database: processes ALL 1000 queries that all return NULL
+</div>
+
+<h2>Common Causes</h2>
+
+<ul>
+  <li><strong>Malicious attacks:</strong> An attacker intentionally queries for random/nonexistent IDs to overwhelm the database (a form of DoS).</li>
+  <li><strong>Invalid user input:</strong> Users search for products, users, or content that does not exist (e.g., searching for a deleted tweet).</li>
+  <li><strong>Data lifecycle gaps:</strong> Queries for recently deleted or expired data that has been removed from the database but whose cache entries have already expired.</li>
+  <li><strong>Enumeration attacks:</strong> Systematically querying sequential IDs (user:1, user:2, ..., user:1000000) to find valid entries.</li>
+</ul>
+
+<h2>Solutions</h2>
+
+<h3>Solution 1: Cache Null Values</h3>
+
+<p>When a query returns null (no data found), cache the null result with a short TTL. Subsequent requests for the same key get a cache hit and return null without hitting the database.</p>
+
+<pre>
+# Pseudocode — Cache Null Values
+function getUser(userId):
+    cacheKey = "user:" + userId
+
+    data = cache.get(cacheKey)
+    if data is not null:
+        if data == NULL_SENTINEL:
+            return null    # Known to not exist
+        return data         # Cached real data
+
+    # Cache miss — query DB
+    data = db.query("SELECT * FROM users WHERE id = ?", userId)
+
+    if data is null:
+        # Cache the null result with a SHORT TTL (e.g., 60 seconds)
+        cache.set(cacheKey, NULL_SENTINEL, TTL=60)
+    else:
+        cache.set(cacheKey, data, TTL=3600)
+
+    return data
+</pre>
+
+<table>
+  <tr><th>Pros</th><th>Cons</th></tr>
+  <tr><td>Simple to implement</td><td>Wastes cache memory on null entries</td></tr>
+  <tr><td>Effective against repeated queries for same missing key</td><td>Does not protect against random/unique missing keys</td></tr>
+  <tr><td>No additional infrastructure</td><td>Short TTL means protection is temporary</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Key consideration:</strong> Use a much shorter TTL for null values (e.g., 30–60 seconds) than for real data (e.g., 1 hour). This limits cache memory consumption while still providing short-term protection.
+</div>
+
+<h3>Solution 2: Bloom Filter</h3>
+
+<p>Place a <strong>Bloom filter</strong> in front of the cache as a fast pre-check. The Bloom filter contains a compact representation of all valid keys. Before querying the cache or database, check the Bloom filter. If it says the key does not exist, return immediately without touching cache or DB.</p>
+
+<div class="diagram">
+  Request
+    │
+    ▼
+  ┌─────────────┐     Key NOT in set?     ┌─────────────┐
+  │ Bloom Filter │───────(NO)──────────────│ Return NULL │
+  │              │                          │ immediately │
+  │ "Does user:  │                          └─────────────┘
+  │  999 exist?" │
+  │              │     Key MAY be in set?
+  └──────┬───────┘────────(YES)─────────────────────────
+         │
+         ▼
+  ┌─────────────┐     HIT                  ┌─────────────┐
+  │    Cache    │────────────────────────>│ Return data │
+  │              │                          └─────────────┘
+  │              │     MISS
+  └──────┬───────┘─────────────────────────────────────
+         │
+         ▼
+  ┌─────────────┐
+  │  Database   │─────── Found? ──── Cache result + Return
+  │              │
+  │              │─────── Not found? ─ Return NULL
+  └─────────────┘
+</div>
+
+<pre>
+# Pseudocode — Bloom Filter
+bloomFilter = BloomFilter(expectedInsertions=10_000_000, falsePositiveRate=0.01)
+
+# Populate Bloom filter with all valid user IDs
+for user in db.query("SELECT id FROM users"):
+    bloomFilter.put(user.id)
+
+function getUser(userId):
+    # Step 1: Check Bloom filter
+    if not bloomFilter.mightContain(userId):
+        return null    # Definitely does not exist — no DB query needed
+
+    # Step 2: Check cache
+    data = cache.get("user:" + userId)
+    if data is not null:
+        return data
+
+    # Step 3: Query DB (may still be a false positive)
+    data = db.query("SELECT * FROM users WHERE id = ?", userId)
+    if data is not null:
+        cache.set("user:" + userId, data, TTL=3600)
+
+    return data
+</pre>
+
+<div class="callout yellow">
+  <strong>Bloom filter properties:</strong>
+  <ul>
+    <li><strong>False positives possible:</strong> The filter may say a key exists when it does not (hit the DB to confirm).</li>
+    <li><strong>False negatives impossible:</strong> If the filter says a key does not exist, it definitely does not exist.</li>
+    <li><strong>Space efficient:</strong> A Bloom filter for 10 million keys at 1% false positive rate requires only ~12 MB.</li>
+    <li><strong>Cannot delete entries:</strong> Standard Bloom filters do not support deletion (counting Bloom filters do, but with higher overhead).</li>
+  </ul>
+</div>
+
+<h3>Solution 3: Request Rate Limiting and Input Validation</h3>
+
+<p>Implement rate limiting and input validation at the API layer to prevent abusive or malformed queries from reaching the cache and database.</p>
+
+<pre>
+# Pseudocode — Request rate limiting
+function getUser(userId):
+    # Validate input
+    if not isValidUserId(userId):
+        raise InvalidInput("User ID must be a positive integer")
+
+    # Rate limit per client/IP
+    rateLimiter.checkLimit(clientIP, maxRequests=100, windowSec=60)
+
+    # Proceed with cache → DB lookup
+    ...
+</pre>
+
+<div class="callout">
+  <strong>Best combined approach:</strong> In production, use a layered defense — Bloom filter to quickly reject known-nonexistent keys, cache null values for repeated misses that pass the Bloom filter, and rate limiting to prevent abuse. This is what FAANG-scale systems typically deploy.
+</div>
+
+<h2>Common Interview Questions</h2>
+
+<ul>
+  <li>What is cache penetration? How does it differ from cache stampede?</li>
+  <li>Explain three solutions to cache penetration. Which do you prefer?</li>
+  <li>What is a Bloom filter? What are its properties (false positives, false negatives)?</li>
+  <li>How much memory does a Bloom filter for 100 million keys require at 1% false positive rate?</li>
+  <li>Why would you cache null values? What TTL would you use?</li>
+  <li>Design a system to prevent cache penetration for a URL shortener.</li>
+  <li>What happens when you add a new user to the database but forget to update the Bloom filter?</li>
+</ul>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>For a system design interview, skip:</strong>
+  <ul>
+    <li>Mathematical derivation of Bloom filter false positive probability formulas.</li>
+    <li>Optimal hash function selection for Bloom filters (MurmerHash vs. xxHash vs. FNV).</li>
+    <li>Counting Bloom filter or Cuckoo filter internals (just mention their existence if needed).</li>
+    <li>Rate limiting implementation details (token bucket vs. sliding window internals).</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Books &amp; Papers</div>
+  <ul>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em> — Chapter 3: Storage and Retrieval (Bloom filters)</li>
+    <li>Alex Xu, <em>System Design Interview Vol. 1</em> — Chapter 6: Design a URL Shortener</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Online Resources</div>
+  <ul>
+    <li>Bloom Filter Wikipedia — <a href="https://en.wikipedia.org/wiki/Bloom_filter">en.wikipedia.org/wiki/Bloom_filter</a></li>
+    <li>RedisBloom Module — <a href="https://redis.io/docs/stack/bloom/">redis.io/docs/stack/bloom</a></li>
+    <li>Guava BloomFilter — <a href="https://github.com/google/guava/wiki/HashingExplained">github.com/google/guava</a></li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="cache-stampede.html">← 7.4.1 Cache Stampede</a>
+  <a href="cache-avalanche.html">7.4.3 Cache Avalanche →</a>
+</div>
+
+</body>
+</html>

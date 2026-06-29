@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.6.3 Heartbeats - System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">5 Distributed Systems</a> / <a href="index.html">5.6 Consensus</a> / 5.6.3
+</div>
+
+<h1>5.6.3 Heartbeats</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<div class="callout green">
+  <strong>Goal:</strong> Understand how heartbeats provide the foundation for failure detection in distributed systems. Know the relationship between heartbeat intervals, timeouts, and false positive rates. Be able to design a heartbeat system and discuss edge cases like network partitions and GC pauses.
+</div>
+
+<h2>Definition</h2>
+
+<p>A <strong>heartbeat</strong> is a periodic signal sent by one node to another (or broadcast to a group) to indicate that the sender is alive and functioning. The absence of expected heartbeats triggers a failure suspicion, which may initiate recovery actions such as leader election or traffic rerouting.</p>
+
+<h2>How Heartbeats Work</h2>
+
+<p>Heartbeats are the most basic form of failure detection in distributed systems. A node sends periodic "I'm alive" messages to its monitor. If the monitor does not receive a heartbeat within a configured timeout, it suspects the sender has failed.</p>
+
+<div class="diagram">
+  Heartbeat Failure Detection
+  ──────────────────────────
+
+  Leader (A)                        Follower (B)
+  ────────                          ──────────
+      │                                  │
+      │──heartbeat (t=0ms)─────────────→│ received ✓
+      │                                  │ reset timer
+      │                                  │
+      │──heartbeat (t=50ms)────────────→│ received ✓
+      │                                  │ reset timer
+      │                                  │
+      │      [A crashes at t=75ms]      │
+      │                                  │
+      │                                  │
+      │      t=100ms → heartbeat NOT received
+      │      t=150ms → heartbeat NOT received
+      │      t=200ms → TIMEOUT! Suspect A failed
+      │                  → Initiate leader election
+</div>
+
+<h2>Heartbeat Interval and Timeout</h2>
+
+<p>The two key parameters in a heartbeat-based failure detector:</p>
+
+<ul>
+  <li><strong>Heartbeat interval:</strong> How often the sender transmits a heartbeat (e.g., every 50ms).</li>
+  <li><strong>Failure timeout:</strong> How long the receiver waits before declaring the sender failed (e.g., 150ms).</li>
+</ul>
+
+<table>
+  <tr>
+    <th>Configuration</th>
+    <th>Detection Speed</th>
+    <th>False Positive Risk</th>
+    <th>Network Overhead</th>
+  </tr>
+  <tr>
+    <td>Frequent heartbeat, short timeout</td>
+    <td class="green">Fast (low latency)</td>
+    <td class="red">High (GC pauses, network spikes)</td>
+    <td class="red">High</td>
+  </tr>
+  <tr>
+    <td>Infrequent heartbeat, long timeout</td>
+    <td class="red">Slow (high latency)</td>
+    <td class="green">Low (tolerates temporary delays)</td>
+    <td class="green">Low</td>
+  </tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Rule of thumb:</strong> The failure timeout should be at least 2-3x the heartbeat interval and at least 10x the expected network round-trip time (RTT). For cross-datacenter deployments with 50ms RTT, a heartbeat interval of 100ms and timeout of 300ms is typical.
+</div>
+
+<h3>Piggybacking Heartbeats</h3>
+
+<p>In practice, heartbeats are often piggybacked on existing messages rather than sent as standalone packets. In Raft, the leader's AppendEntries RPCs serve as heartbeats -- if there are no log entries to replicate, the leader sends empty AppendEntries messages.</p>
+
+<pre>
+// Raft-style heartbeat piggybacking
+type AppendEntriesArgs struct {
+    Term     int
+    LeaderId int
+    PrevLogIndex int
+    PrevLogTerm  int
+    Entries  []LogEntry  // Empty = pure heartbeat
+    LeaderCommit  int
+}
+</pre>
+
+<h2>Failure Detection via Heartbeats</h2>
+
+<p>The simplest heartbeat failure detector is a binary (yes/no) decision: the node is either alive or dead. This is simple to implement but prone to errors:</p>
+
+<ul>
+  <li><strong>False positive:</strong> Declaring a live node as dead (due to GC pause, network congestion, scheduler starvation).</li>
+  <li><strong>False negative:</strong> Declaring a dead node as alive (due to a heartbeat arriving just before the timeout from a buffered queue).</li>
+</ul>
+
+<div class="callout">
+  <strong>Interview tip:</strong> When discussing heartbeats, always mention the false positive problem. A false positive is far more dangerous than a false negative -- declaring a healthy leader as dead triggers an unnecessary election, which blocks writes and could cause a split-brain if the "dead" leader is still processing requests.
+</div>
+
+<h2>Phi Accrual Failure Detector</h2>
+
+<p>The <strong>phi accrual detector</strong> (used in Cassandra, Akka, and Amazon Swarm) is a more sophisticated approach that measures the <em>likelihood</em> of failure rather than making a binary decision.</p>
+
+<h3>How It Works</h3>
+<ol>
+  <li>Maintain a sliding window of recent heartbeat arrival intervals.</li>
+  <li>Calculate the mean and standard deviation of these intervals.</li>
+  <li>When a heartbeat is late, compute <strong>phi</strong> = -log10(probability of the next heartbeat arriving this late by random chance).</li>
+  <li>Higher phi = more likely the node has failed.</li>
+</ol>
+
+<div class="diagram">
+  Phi Accrual Detector
+  ────────────────────
+
+  Heartbeat intervals (sliding window): [45, 52, 48, 51, 50, 47, 53, 49, 50, 51] ms
+  Mean: 49.6ms, StdDev: 2.2ms
+
+  Current time since last heartbeat:
+  ─────────────────────────────────
+  50ms  → phi ≈ 1.0  (normal, probably alive)
+  60ms  → phi ≈ 3.0  (suspicious)
+  70ms  → phi ≈ 5.0  (very suspicious)
+  80ms  → phi ≈ 8.0  (almost certainly failed)
+  100ms → phi ≈ 12.0 (definitely failed)
+
+  Threshold: phi > 8 → declare failure
+  Advantage: Adapts to network conditions automatically
+</div>
+
+<p>The phi accrual detector adapts to changing network conditions: if the network becomes slower, the mean and standard deviation increase, and the detector automatically adjusts its failure threshold. This avoids false positives during transient network degradation.</p>
+
+<h2>Relationship to Leader Election</h2>
+
+<p>Heartbeats are the direct mechanism that triggers leader election:</p>
+
+<ol>
+  <li>The leader sends periodic heartbeats to all followers.</li>
+  <li>Each follower resets its election timer upon receiving a heartbeat.</li>
+  <li>If a follower's election timer expires (no heartbeat received), it starts a new election.</li>
+  <li>The new leader begins sending heartbeats to establish its authority.</li>
+</ol>
+
+<div class="callout">
+  <strong>Design question to consider:</strong> If the leader is under heavy load and its heartbeats are delayed (but the leader is alive), followers may trigger unnecessary elections. This is why heartbeat messages should be prioritized over data replication, and why Raft piggybacks heartbeats on AppendEntries RPCs (so the heartbeat is always the first thing processed).
+</div>
+
+<h2>Edge Cases</h2>
+
+<ul>
+  <li><strong>GC pauses:</strong> A long Java/C# garbage collection pause can delay all heartbeats from a node, causing followers to suspect it has failed. Mitigation: use phi accrual detector with a higher threshold, or separate the heartbeat thread from the GC-managed heap.</li>
+  <li><strong>Network partitions:</strong> During a partition, the isolated nodes cannot receive heartbeats and will start their own election. This is correct behavior -- the system splits into two partitions, each with its own leader, and only the majority partition can make progress.</li>
+  <li><strong>Clock skew:</strong> Heartbeat timeouts should be based on wall-clock time at the receiver, not synchronized clocks. The timeout measures "how long since I last heard from the leader," not "what time is it."</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+
+<ul>
+  <li>How does a follower know the leader has failed?</li>
+  <li>What happens if a heartbeat is delayed due to a network spike?</li>
+  <li>How would you tune heartbeat intervals for a cross-DC deployment?</li>
+  <li>What is a phi accrual failure detector and why is it better than a simple timeout?</li>
+  <li>How does Raft use heartbeats?</li>
+  <li>What happens during a GC pause in a heartbeat-based system?</li>
+  <li>How do you prevent unnecessary leader elections caused by heartbeat delays?</li>
+</ul>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Do NOT deep-dive into the mathematical details</strong> of the phi accrual detector's probability distribution. Knowing the concept (phi as a probabilistic measure of suspicion) is sufficient. Skip SWIM protocol details here (covered in the Membership section). Also skip application-level heartbeat protocols (like HTTP health checks) -- focus on protocol-level heartbeats within consensus algorithms.
+</div>
+
+<div class="source">
+  <div class="source-label">Reading Sources</div>
+  <ul>
+    <li>The Phi Accrual Failure Detector (Hayashibara et al., 2004)</li>
+    <li>In Search of an Understandable Consensus Algorithm (Ongaro &amp; Ousterhout, 2014) -- Section 5.2 on heartbeats in Raft</li>
+    <li>Designing Data-Intensive Applications (Kleppmann) -- Chapter 5, replication leadership</li>
+    <li>Cassandra Architecture: Phi Accrual Failure Detector documentation</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="leader-election.html">&larr; 5.6.2 Leader Election</a>
+  <a href="failure-detector.html">5.6.4 Failure Detector &rarr;</a>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.2.5 Write Back (Write Behind) — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb"><a href="../../../">System Design</a> / <a href="../">7 Caching</a> / <a href="#">7.2 Cache Patterns</a> / 7.2.5</div>
+
+<h1>7.2.5 Write Back (Write Behind)</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<div class="callout green">
+  <strong>Goal:</strong> Understand the Write Back caching pattern — how it achieves the lowest write latency by deferring database writes, the data loss risk it introduces, and where it is used in real systems (CPU caches, databases, message queues).
+</div>
+
+<h2>Definition</h2>
+
+<p>Write Back (also called Write Behind) is a caching pattern where write operations update <strong>the cache only</strong>, and the cache asynchronously flushes the data to the database at a later time. The application receives an immediate acknowledgment after the cache write — it does not wait for the database write. A background process (or the cache itself) is responsible for periodically writing dirty (modified) entries from the cache to the database.</p>
+
+<div class="callout red">
+  <strong>Critical tradeoff:</strong> Write Back provides the lowest possible write latency but introduces a <strong>data loss window</strong>. If the cache fails or is restarted before dirty entries are flushed to the database, those writes are permanently lost.
+</div>
+
+<h2>How It Works</h2>
+
+<div class="diagram">
+  Application              Cache Layer                 Database
+      │                        │                           │
+      │  ──── WRITE PATH ────  │                           │
+      │                        │                           │
+      │ 1. SET user:123        │                           │
+      │    {name: "Alice"}     │                           │
+      │ ──────────────────────>│                           │
+      │                        │                           │
+      │                        │ 2. Mark entry as DIRTY     │
+      │                        │    user:123 = {name:Alice}│
+      │                        │    dirty = true            │
+      │                        │                           │
+      │ 3. Write ACK (fast!)   │                           │
+      │ <──────────────────────│                           │
+      │                        │                           │
+      │                        │                           │
+      │  ──── BACKGROUND FLUSH (async) ────                │
+      │                        │                           │
+      │                        │ 4. Batch write dirty      │
+      │                        │    entries to DB           │
+      │                        │ ─────────────────────────>│
+      │                        │                           │
+      │                        │ 5. Mark entries as CLEAN   │
+      │                        │ <─────────────────────────│
+      │                        │                           │
+      │                        │                           │
+      │  ──── READ PATH ────   │                           │
+      │                        │                           │
+      │ 6. GET user:123        │                           │
+      │ ──────────────────────>│                           │
+      │                        │                           │
+      │ 7. Cache HIT           │                           │
+      │    {name: "Alice"}     │  (may be dirty but is     │
+      │ <──────────────────────│   the latest known value) │
+</div>
+
+<pre>
+# Pseudocode — Write Back
+function updateUser(userId, newData):
+    cacheKey = "user:" + userId
+
+    # Write to cache ONLY — immediate return
+    cache.set(cacheKey, newData, dirty=True)
+
+    # Application gets ACK immediately (~1ms)
+    # Background process will flush to DB later
+    return success
+
+
+# Background flush process (runs periodically)
+def flushDirtyEntries():
+    dirtyEntries = cache.getDirtyEntries()
+
+    # Batch write to database
+    db.batchUpdate(dirtyEntries)
+
+    # Mark as clean
+    for entry in dirtyEntries:
+        entry.dirty = False
+</pre>
+
+<h2>Write Latency Comparison</h2>
+
+<table>
+  <tr><th>Pattern</th><th>Write Latency</th><th>When DB is Updated</th></tr>
+  <tr><td>Write Through</td><td>~6 ms (cache + DB sync)</td><td>Immediately, synchronously</td></tr>
+  <tr><td>Write Around</td><td>~5 ms (DB only)</td><td>Immediately, synchronously</td></tr>
+  <tr><td class="green">Write Back</td><td class="green">~1 ms (cache only)</td><td>Later, asynchronously</td></tr>
+</table>
+
+<p>The write latency improvement is dramatic — from milliseconds to sub-millisecond. But this comes at the cost of a consistency window and data loss risk.</p>
+
+<h2>The Dirty Bit and Flush Mechanics</h2>
+
+<p>Write Back implementations track which cache entries have been modified but not yet persisted:</p>
+
+<ul>
+  <li><strong>Dirty bit:</strong> Each cache entry has a flag indicating whether it has been modified since the last DB flush.</li>
+  <li><strong>Flush triggers:</strong> Background flush can be triggered by:
+    <ul>
+      <li>Time-based: Every N seconds (e.g., every 5 seconds)</li>
+      <li>Threshold-based: When dirty entries exceed a count (e.g., 1000 dirty entries)</li>
+      <li>Size-based: When dirty data exceeds a memory threshold</li>
+      <li>On eviction: When a dirty entry is evicted from cache, it must be flushed first</li>
+    </ul>
+  </li>
+  <li><strong>Write coalescing:</strong> Multiple writes to the same key can be coalesced into a single DB write. If key K is written 100 times in a flush interval, only the final value needs to be persisted.</li>
+</ul>
+
+<div class="callout yellow">
+  <strong>Write coalescing benefit:</strong> In write-heavy workloads (e.g., incrementing a counter 10,000 times/sec), Write Back can reduce 10,000 DB writes to a single batched write per flush interval. This is a massive reduction in DB load.
+</div>
+
+<h2>Data Loss Risk</h2>
+
+<div class="callout red">
+  <strong>This is the critical tradeoff:</strong> If the cache server crashes or loses power before dirty entries are flushed, those writes are lost forever. The window of vulnerability is the time between the cache write and the successful flush to the database.
+</div>
+
+<h3>Mitigating Data Loss</h3>
+
+<ul>
+  <li><strong>Short flush intervals:</strong> Reduce the window of vulnerability (e.g., flush every 1–5 seconds).</li>
+  <li><strong>Write-ahead log (WAL):</strong> Before acknowledging the write, log it to a durable WAL. If the cache crashes, the WAL can be replayed to recover dirty entries.</li>
+  <li><strong>Replication:</strong> Replicate the cache to a standby node. If the primary fails, the standby has the dirty entries and can take over flushing.</li>
+  <li><strong>Acceptable loss:</strong> Some applications can tolerate brief data loss (e.g., analytics counters, page view counts) and use Write Back without additional safeguards.</li>
+</ul>
+
+<h2>Real-World Usage</h2>
+
+<table>
+  <tr><th>System</th><th>How It Uses Write Back</th></tr>
+  <tr><td>CPU Caches (L1/L2/L3)</td><td>Writes go to cache line (marked dirty); flushed to main memory on eviction or cache line replacement. This is the original write-back pattern.</td></tr>
+  <tr><td>Database Buffer Pools</td><td>PostgreSQL, MySQL InnoDB buffer pools use write-back: dirty pages are written to disk asynchronously by a background writer.</td></tr>
+  <tr><td>Redis (with appendonly)</td><td>Redis can be configured as a write-back cache using AOF fsync=everysec — writes are acknowledged immediately, flushed to disk every second.</td></tr>
+  <tr><td>Kafka</td><td>Producers write to the page cache (memory); the OS asynchronously flushes to disk. Acknowledgment depends on the configured <code>acks</code> setting.</td></tr>
+  <tr><td>InfluxDB</td><td>Writes go to an in-memory WAL; flushed to persistent storage in the background.</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+
+<ul>
+  <li>Explain the Write Back caching pattern. What are its advantages and risks?</li>
+  <li>What is the data loss window in Write Back? How would you mitigate it?</li>
+  <li>What is write coalescing? How does Write Back benefit from it?</li>
+  <li>Compare Write Back vs. Write Through. When would you choose each?</li>
+  <li>How do CPU caches use Write Back? What happens on a cache line eviction?</li>
+  <li>How does a database buffer pool use Write Back internally?</li>
+  <li>Can you use Write Back for financial transaction data? Why or why not?</li>
+</ul>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>For a system design interview, skip:</strong>
+  <ul>
+    <li>Low-level CPU cache line replacement algorithms (LRU vs. pseudo-LRU vs. random) unless the question is about hardware architecture.</li>
+    <li>Database WAL implementation details (e.g., how InnoDB's redo log handles checkpointing) unless the question targets database internals.</li>
+    <li>Specific Linux kernel page cache mechanics (dirty_ratio, dirty_background_ratio tunables).</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Books &amp; Papers</div>
+  <ul>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em> — Chapter 3: Storage and Retrieval</li>
+    <li>Alex Xu, <em>System Design Interview Vol. 2</em> — Chapter 6: Design a Key-Value Store</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Online Resources</div>
+  <ul>
+    <li>Redis Persistence: AOF — <a href="https://redis.io/docs/management/persistence/">redis.io/docs/management/persistence</a></li>
+    <li>PostgreSQL WAL Architecture — <a href="https://www.postgresql.org/docs/current/wal.html">postgresql.org/docs/current/wal</a></li>
+    <li>Intel: Write-Back Caching — <a href="https://www.intel.com/content/www/us/en/developer/articles/technical/intel-sdm.html">intel.com/developer/articles</a></li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="write-around.html">← 7.2.4 Write Around</a>
+  <a href="cache-invalidation.html">7.3.1 Cache Invalidation →</a>
+</div>
+
+</body>
+</html>

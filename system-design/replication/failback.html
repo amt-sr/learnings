@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.7.2 Failback</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">4 Replication</a> / 4.7 Recovery / 4.7.2
+</div>
+
+<h1>Failback</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the failback process &mdash; reverting to the original leader after a failover &mdash; and why many modern systems choose to avoid it entirely.</p>
+
+<h2>Definition</h2>
+<p><strong>Failback</strong> is the process of returning the leadership role to the original leader node after a failover event. When the old leader recovers and comes back online, failback restores it to the leader position and demotes the temporary leader back to a follower.</p>
+
+<h2>Why Failback Is Hard</h2>
+<div class="diagram">
+  ORIGINAL STATE:
+  [Leader A] --replicate--> [Follower B] --replicate--> [Follower C]
+
+  FAILOVER (A crashes):
+  [Leader A: DOWN]          [Follower B -> PROMOTED]     [Follower C]
+                                      |                          |
+  B accepts writes: w5, w6, w7, w8    |   B replicates to C    |
+  B's log: [w1, w2, w3, w4, w5, w6, w7, w8]                   |
+  C's log: [w1, w2, w3, w4, w5, w6, w7, w8]                   |
+
+  A RECOVERS:
+  [Leader A: BACK ONLINE]     [Leader B: still leader]     [Follower C]
+  A's log: [w1, w2, w3, w4]  B's log: [w1..w8]           C's log: [w1..w8]
+
+  PROBLEM: A is MISSING w5..w8
+  A also may have committed w4.5 that B never saw (if async)
+       |
+       v
+  FAILOVER TO A (FAILBACK):
+  Step 1: Sync A from B (A needs w5..w8)
+  Step 2: Resolve any conflicts (w4.5 on A that B doesn't have)
+  Step 3: Promote A to leader
+  Step 4: Demote B back to follower
+  Step 5: Redirect all traffic back to A
+  Step 6: B now replicates from A (which it was leading moments ago)
+       |
+  RISKS: Data loss during switchover, brief unavailability,
+         application connection churn, potential split brain
+         if timing is off.
+</div>
+
+<h2>Failback Process Steps</h2>
+
+<ol>
+  <li><strong>Old leader rejoins as follower:</strong> The recovered old leader syncs from the current (temporary) leader, applying all writes it missed during the outage.</li>
+  <li><strong>Conflict resolution:</strong> If the old leader had committed writes that the temporary leader never received (async replication gap), those writes must be reconciled. This may require manual intervention.</li>
+  <li><strong>Cooldown period:</strong> Wait for the old leader to fully catch up and stabilize. Verify replication lag is zero.</li>
+  <li><strong>Planned switchover:</strong> Perform a controlled failover from the temporary leader back to the original leader. This is essentially a planned failover.</li>
+  <li><strong>Traffic rerouting:</strong> Update DNS, VIP, or proxy to point back to the original leader. Clients reconnect.</li>
+</ol>
+
+<h2>Risks of Failback</h2>
+
+<table>
+  <tr>
+    <th>Risk</th>
+    <th>Description</th>
+    <th>Severity</th>
+  </tr>
+  <tr>
+    <td>Data loss during switchover</td>
+    <td>The switchover from B back to A is itself a failover, with all the associated risks (stale data, split brain, connection drops).</td>
+    <td class="red">High</td>
+  </tr>
+  <tr>
+    <td>Double failover instability</td>
+    <td>Two leadership changes in quick succession increase the window for things to go wrong. Each failover carries risk.</td>
+    <td class="red">High</td>
+  </tr>
+  <tr>
+    <td>Connection churn</td>
+    <td>Applications must reconnect twice: once when the original leader fails, once during failback.</td>
+    <td class="red">Medium</td>
+  </tr>
+  <tr>
+    <td>Hidden conflicts</td>
+    <td>The old leader may have unreplicated writes that surface only after failback reconciliation.</td>
+    <td class="red">High</td>
+  </tr>
+</table>
+
+<h2>The Modern Approach: Avoid Failback</h2>
+<p>Most modern systems <strong>do not failback</strong>. Instead, they permanently promote the new leader and let the old leader rejoin as a follower. This avoids the complexity and risk of a second switchover.</p>
+
+<div class="diagram">
+  MODERN APPROACH (No Failback):
+
+  [Leader A] --replicate--> [Follower B] --replicate--> [Follower C]
+
+  FAILOVER (A crashes):
+  [Leader A: DOWN]          [Leader B] (permanent)     [Follower C]
+                                      |
+  B stays leader permanently   A recovers and joins as follower
+       |                          |
+       v                          v
+  [Leader B] --replicate--> [Follower A] --replicate--> [Follower C]
+
+  BENEFITS:
+  - Only one failover event (less risk)
+  - A simply syncs from B (standard replication)
+  - No conflicts (A has no writes that B doesn't have, since A was down)
+  - Simpler orchestration
+  - No traffic rerouting back
+</div>
+
+<div class="callout green">
+  <strong>Industry standard:</strong> PostgreSQL Patroni, Orchestrator for MySQL, and Raft-based systems (etcd, CockroachDB) all promote the new leader permanently. The old leader rejoins as a follower. Failback is only used when the original leader had specific hardware advantages (faster disk, more RAM) and the operator wants to rebalance.
+</div>
+
+<h2>When Failback Makes Sense</h2>
+<p>There are a few scenarios where intentional failback is appropriate:</p>
+<ul>
+  <li><strong>Hardware rebalancing:</strong> The original leader runs on more powerful hardware, and the temporary leader is on a weaker node. Failback optimizes for performance.</li>
+  <li><strong>Geographic rebalancing:</strong> The temporary leader is in a different data center with higher latency to clients. Failback to the preferred DC.</li>
+  <li><strong>Planned maintenance:</strong> A planned switchover (not an emergency failover) where the operator controls the timing and can verify zero replication lag before switching.</li>
+  <li><strong>Symmetric cluster design:</strong> In some traditional database setups, the "primary" role is tied to a specific node (e.g., a specific IP address or host), and operators want to restore the original topology.</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li><strong>"After a failover, do you failback to the original leader?"</strong> &mdash; Generally no. Permanently promote the new leader. Failback adds a second failover's worth of risk. Only failback for planned rebalancing, not as a standard procedure.</li>
+  <li><strong>"What problems does failback introduce?"</strong> &mdash; Double failover risk, connection churn, conflict resolution for writes only the old leader had, potential split brain during the second switchover.</li>
+  <li><strong>"How would you implement safe failback if required?"</strong> &mdash; (1) Old leader rejoins as follower and fully syncs. (2) Verify zero lag via checksums. (3) Perform a planned, controlled switchover (essentially the same as a planned failover). (4) Verify all followers are healthy before cutting over.</li>
+  <li><strong>"How does Patroni handle failback?"</strong> &mdash> Patroni does not failback by default. When the old leader recovers, it joins as a follower. If the operator wants to move leadership back, they trigger a controlled switchover via <code>patronictl switchover</code>.</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid DR failback specifics:</strong> Disaster recovery failback (replicating from a warm standby site back to the primary site after an outage) is a different topic from database leader failback. Do not conflate the two.<br><br>
+  <strong>Avoid DNS TTL manipulation:</strong> While DNS TTL is relevant to traffic rerouting, the specific DNS configuration is an infrastructure concern, not a system design concept.<br><br>
+  <strong>Aavoid failback in stateful services:</strong> StatefulSet failback in Kubernetes is a niche topic. Focus on database failback.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary References</div>
+  <ul>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em> &mdash; Chapter 5: Replication (section: "Implementing Replicated State Machines")</li>
+    <li>Patroni Documentation: <a href="https://patroni.readthedocs.io/en/latest/README.html#switchover">Switchover vs. Failover</a></li>
+    <li>GitHub Orchestrator: <a href="https://github.com/openark/orchestrator/wiki/Refactoring-and-topology-changes">Topology recovery and planned switchover</a></li>
+    <li>PostgreSQL Docs: <a href="https://www.postgresql.org/docs/current/warm-standby.html#Synchronous-Replication">Failover and Replication Management</a></li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="failover.html">&larr; 4.7.1 Failover</a>
+  <a href="read-repair.html">4.7.3 Read Repair &rarr;</a>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.3.4 Resharding - System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">6 Partitioning</a> / <a href="index.html">6.3 Consistent Hashing</a> / 6.3.4
+</div>
+
+<h1>Resharding</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<div class="callout">
+  <strong>Goal:</strong> Understand when and why you need to reshard a data store, the different approaches (double-write, online resharding), and the operational challenges of resharding at scale.
+</div>
+
+<h2>Definition</h2>
+
+<p><strong>Resharding</strong> is the process of changing the number of shards or the partitioning scheme of an existing data store. Unlike rebalancing (which redistributes data within the same partitioning scheme), resharding often involves a fundamental change to how keys are mapped -- for example, moving from a 10-shard to a 20-shard configuration, or switching from range-based to hash-based partitioning. Resharding is a planned, often complex operation distinct from the incremental rebalancing that consistent hashing handles automatically.</p>
+
+<h2>Why Reshard?</h2>
+
+<h3>Data Growth</h3>
+
+<p>As data volume grows beyond the capacity of existing shards, you need more shards to maintain performance. A shard that held 100GB may need to be split into two 50GB shards, or a 10-shard cluster may need to become a 20-shard cluster.</p>
+
+<h3>Uneven Load</h3>
+
+<p>Even with consistent hashing, certain key ranges may become hot due to access patterns rather than data size. Resharding can redistribute load by changing the partitioning scheme or adding capacity to handle skewed distributions.</p>
+
+<h3>Performance Requirements</h3>
+
+<p>Adding shards reduces the amount of data and traffic per shard, improving latency and throughput per partition. This is critical when approaching per-shard limits (IOPS, storage, CPU, network).</p>
+
+<div class="callout yellow">
+  <strong>Resharding vs. Rebalancing:</strong> Rebalancing is an ongoing, incremental process handled by the partitioning system (consistent hashing does this natively). Resharding is typically a larger, planned operation that may involve changing the partition count, the hashing scheme, or the partition strategy itself.
+</div>
+
+<h2>Approaches to Resharding</h2>
+
+<h3>Approach 1: Double-Write During Migration</h3>
+
+<div class="diagram">  Phase 1: Dual Write
+    +--- Client ---+
+    |             |
+    v             v
+  [Old Shard]   [New Shard]      Both receive writes
+    ^             ^
+    |             |
+    +--- Router --+              Reads from old shard
+
+  Phase 2: Backfill
+    [Old Shard] --copy data--> [New Shard]    Historical data migrated
+
+  Phase 3: Cutover
+    +--- Client ---+
+                 |
+                 v
+              [New Shard]       Old shard decommissioned
+
+  Phase 4: Cleanup
+    [Old Shard] deleted</div>
+
+<ol>
+  <li><strong>Dual-write phase:</strong> Route all writes to both old and new shard schemes. Reads continue from the old shard.</li>
+  <li><strong>Backfill phase:</strong> Copy all existing data from old shards to new shards. This may take hours or days for large datasets.</li>
+  <li><strong>Cutover phase:</strong> Switch reads to new shards. Validate data consistency between old and new.</li>
+  <li><strong>Cleanup phase:</strong> Decommission old shards after confirming correctness.</li>
+</ol>
+
+<h3>Approach 2: Online Resharding (Background)</h3>
+
+<p>Similar to double-write but without the explicit cutover. The system gradually moves data in the background while serving traffic from both old and new locations. A routing layer directs each request to the correct shard based on a progress map.</p>
+
+<div class="callout green">
+  <strong>Key Distinction:</strong> Double-write is simpler to reason about (writes go everywhere), while online resharding is more efficient (writes go only to the correct shard, data is migrated in the background). Online resharding is what DynamoDB and Cassandra do under the hood.
+</div>
+
+<h2>Challenges</h2>
+
+<h3>Zero-Downtime</h3>
+
+<p>Production systems cannot afford downtime for resharding. The migration must happen while the system serves traffic, which means handling concurrent reads, writes, and data movement without inconsistencies.</p>
+
+<h3>Data Verification</h3>
+
+<p>After migration, you must verify that every key in the old shards exists in the correct new shard. This typically involves cross-checking counts, checksums, or running sample validation queries. Inconsistencies can arise from writes that occurred during migration.</p>
+
+<h3>Rollback</h3>
+
+<p>If something goes wrong during resharding, you need a rollback plan. Double-write simplifies rollback (the old shards still have all data). Online resharding may require reverse-migration, which is expensive and error-prone.</p>
+
+<h3>Operational Complexity</h3>
+
+<table>
+  <tr>
+    <th>Challenge</th>
+    <th>Risk</th>
+    <th>Mitigation</th>
+  </tr>
+  <tr>
+    <td>Increased write load</td>
+    <td class="red">Double-write doubles write amplification</td>
+    <td>Throttle migration speed; batch writes</td>
+  </tr>
+  <tr>
+    <td>Routing consistency</td>
+    <td class="red">Stale routing causes reads from wrong shard</td>
+    <td>Versioned routing metadata with TTL</td>
+  </tr>
+  <tr>
+    <td>Partial failure</td>
+    <td class="red">System in inconsistent mid-migration state</td>
+    <td>Idempotent migration steps; checkpoint progress</td>
+  </tr>
+  <tr>
+    <td>Data loss</td>
+    <td class="red">Writes during migration lost if not dual-written</td>
+    <td>Write-ahead log; dual-write or background with WAL replay</td>
+  </tr>
+  <tr>
+    <td>Latency spikes</td>
+    <td class="red">Backfill competes with serving traffic for I/O</td>
+    <td>Rate-limit backfill; dedicated bandwidth</td>
+  </tr>
+</table>
+
+<h2>Real-World Examples</h2>
+
+<ul>
+  <li><strong>DynamoDB:</strong> Automatic sharding; when a partition reaches 10GB or throughput limits, it splits into two partitions transparently. No customer involvement needed.</li>
+  <li><strong>Cassandra:</strong> Add nodes to the cluster; vnodes automatically redistribute token ranges. Resharding is effectively continuous.</li>
+  <li><strong>YouTube (historical):</strong> Migrated from a sharded MySQL setup to Vitess, requiring a coordinated resharding effort with double-write.</li>
+  <li><strong>Uber:</strong> Migrated from a single-shard Schemaless store to multi-shard, using online migration with background data copying.</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+
+<ol>
+  <li>How would you reshard a database with 100TB of data?</li>
+  <li>Explain the double-write approach to resharding. What are its pros and cons?</li>
+  <li>How do you ensure zero data loss during a resharding operation?</li>
+  <li>What happens if resharding fails halfway through? How do you roll back?</li>
+  <li>How is resharding different from rebalancing in a consistent hashing system?</li>
+  <li>Design a system to reshards from 10 shards to 20 shards with zero downtime.</li>
+  <li>How would you verify data integrity after resharding?</li>
+</ol>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Avoid going deep into:</strong>
+  <ul>
+    <li>Vitess-specific resharding internals (vttablet, VReplication) unless the interview is about Vitess.</li>
+    <li>Specific database vendor resharding tools (e.g., MongoDB chunk migration protocol details).</li>
+    <li>Backup-and-restore resharding (shut down, copy, restart) -- not relevant for zero-downtime discussion.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Primary Sources</div>
+  <ul>
+    <li>Dynamo: Amazon's Highly Available Key-value Store (2007) -- Section 4: Partitioning</li>
+    <li>Uber Engineering Blog: "How We Scaled Uber's Schemaless Data Storage"</li>
+    <li>YouTube Engineering Blog: "Sharding YouTube" (historical)</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Recommended Reading</div>
+  <ul>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em>, Chapter 6: Partitioning</li>
+    <li>Alex Xu, <em>System Design Interview Vol. 2</em>, Chapter 6: Consistent Hashing</li>
+    <li>Instagram Engineering: "Sharding and_IDS at Instagram" (Instagram migrated from PostgreSQL shards)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="rebalancing.html">&larr; 6.3.3 Rebalancing</a>
+  <a href="hot-keys.html">6.3.5 Hot Keys &rarr;</a>
+</div>
+
+</body>
+</html>

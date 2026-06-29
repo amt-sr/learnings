@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.4.3 Exponential Backoff - System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">8 Messaging</a> / <a href="index.html">8.4 Reliability</a> / 8.4.3
+</div>
+
+<h1>Exponential Backoff</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand exponential backoff with jitter as a fundamental reliability pattern. Be able to explain why naive fixed-interval retries cause thundering herd problems, how exponential backoff mitigates them, and why jitter is essential for correctness at scale.</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>Exponential Backoff</strong> is a retry strategy where the delay between attempts doubles after each failure (e.g., 1s, 2s, 4s, 8s, 16s...). It gives a failing system progressively more time to recover while bounding total retry duration via a maximum backoff cap.
+</div>
+
+<h2>The Problem: Thundering Herd</h2>
+<p>When a shared dependency fails and many clients retry simultaneously at the same fixed interval, they create synchronized retry storms that can overwhelm the recovering service.</p>
+
+<div class="diagram">
+  Time:    0s        1s        2s        3s        4s
+  Client A: FAIL  ────► RETRY FAIL  ────► RETRY FAIL ──► RETRY
+  Client B: FAIL  ────► RETRY FAIL  ────► RETRY FAIL ──► RETRY
+  Client C: FAIL  ────► RETRY FAIL  ────► RETRY FAIL ──► RETRY
+  ...
+  Client N: FAIL  ────► RETRY FAIL  ────► RETRY FAIL ──► RETRY
+
+  All N clients hit the recovering service at the SAME moment → overload again
+</div>
+
+<h2>Exponential Backoff Solution</h2>
+
+<div class="diagram">
+  Time:    0s     1s     2s     3s     4s     8s    16s
+  Client A: FAIL ──► R1 ──► R2 ──► R3 ──► R4 ──► R5
+  Client B: FAIL ──────► R1 ──────► R2 ─────────► R3 ──────────► R4
+  Client C: FAIL ───────────► R1 ───────────► R2 ──────────────────► R3
+
+  Retries spread out over time → load is distributed, recovery is possible
+</div>
+
+<h3>The Formula</h3>
+<pre>
+delay = min(base * 2^attempt, max_delay)
+</pre>
+<p>Where <code>base</code> is the initial delay (e.g., 1 second), <code>attempt</code> is the retry number (0-indexed), and <code>max_delay</code> is an upper bound (e.g., 60 seconds).</p>
+
+<h3>Example Timeline</h3>
+<table>
+  <tr>
+    <th>Attempt</th>
+    <th>Delay (base=1s, max=60s)</th>
+    <th>Cumulative Time</th>
+  </tr>
+  <tr>
+    <td>1</td>
+    <td>1s</td>
+    <td>1s</td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td>2s</td>
+    <td>3s</td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td>4s</td>
+    <td>7s</td>
+  </tr>
+  <tr>
+    <td>4</td>
+    <td>8s</td>
+    <td>15s</td>
+  </tr>
+  <tr>
+    <td>5</td>
+    <td>16s</td>
+    <td>31s</td>
+  </tr>
+  <tr>
+    <td>6</td>
+    <td>32s</td>
+    <td>63s</td>
+  </tr>
+  <tr>
+    <td>7</td>
+    <td>60s (capped)</td>
+    <td>123s</td>
+  </tr>
+  <tr>
+    <td>8+</td>
+    <td>60s (capped)</td>
+    <td>continues at 60s intervals</td>
+  </tr>
+</table>
+
+<h2>Jitter: Preventing Synchronized Retries</h2>
+<p>Even with exponential backoff, clients that start at the same time still retry at correlated intervals. Jitter adds randomness to break synchronization.</p>
+
+<div class="callout yellow">
+  <strong>Without jitter, exponential backoff only helps if clients started failing at different times.</strong> If 1,000 consumers fail simultaneously (e.g., downstream DB restarts), they all follow the same 1s, 2s, 4s schedule and still create synchronized waves. Jitter is not optional -- it is required for correctness at scale.
+</div>
+
+<h3>Jitter Strategies</h3>
+<table>
+  <tr>
+    <th>Strategy</th>
+    <th>Formula</th>
+    <th>Behavior</th>
+  </tr>
+  <tr>
+    <td>Full Jitter</td>
+    <td><code>random(0, base * 2^attempt)</code></td>
+    <td>Widest distribution, lowest average delay. Best for throughput recovery.</td>
+  </tr>
+  <tr>
+    <td>Equal Jitter</td>
+    <td><code>base * 2^attempt / 2 + random(0, base * 2^attempt / 2)</code></td>
+    <td>Guarantees minimum wait of half the backoff interval. More conservative.</td>
+  </tr>
+  <tr>
+    <td>Decorrelated Jitter</td>
+    <td><code>random(base, prev_delay * 3)</code></td>
+    <td>Each retry picks a random value between base and 3x the previous delay. Good distribution, no correlated waves.</td>
+  </tr>
+</table>
+
+<div class="diagram">
+  Full Jitter (10 clients, base=1s):
+
+  Client 1: ──0.3s──► ─────0.7s──► ──────2.1s──► ─────────6.4s──►
+  Client 2: ──0.8s──► ─────1.4s──► ──────4.9s──► ─────────12.1s─►
+  Client 3: ──0.1s──► ─────0.3s──► ──────1.0s──► ─────────3.2s──►
+  ...
+  Client 10: ─0.6s──► ─────1.1s──► ──────3.7s──► ─────────9.8s──►
+
+  No two clients retry at the same moment → smooth load distribution
+</div>
+
+<h2>Max Backoff Cap</h2>
+<p>Without a cap, delays grow unboundedly: 1s, 2s, 4s, ... 17 minutes, 34 minutes, 68 minutes. After 20 retries, the delay exceeds 12 days. A cap prevents:</p>
+<ul>
+  <li>Excessive latency for long-running recovery scenarios.</li>
+  <li>Outlasting the useful lifetime of the operation (e.g., a user request timeout).</li>
+  <li>Zombie retries that fire hours after the original request was abandoned.</li>
+</ul>
+
+<div class="callout green">
+  <strong>Rule of thumb:</strong> Set max backoff to a value that is long enough for the downstream to recover (e.g., a DB failover may take 30-60 seconds) but short enough to not exceed the operation's SLA.
+</div>
+
+<h2>Where Exponential Backoff Is Used</h2>
+
+<table>
+  <tr>
+    <th>System / Protocol</th>
+    <th>Usage</th>
+  </tr>
+  <tr>
+    <td>TCP</td>
+    <td>Congestion control: Karn's algorithm with exponential backoff for retransmission timeout</td>
+  </tr>
+  <tr>
+    <td>Wi-Fi (802.11)</td>
+    <td>CSMA/CA: binary exponential backoff for channel contention</td>
+  </tr>
+  <tr>
+    <td>AWS SDK</td>
+    <td>Standard retry mode: exponential backoff with full jitter, max 3 retries</td>
+  </tr>
+  <tr>
+    <td>gRPC</td>
+    <td>Configurable backoff with jitter for client-side retries (MAX_BACKOFF default: 120s)</td>
+  </tr>
+  <tr>
+    <td>Kafka</td>
+    <td>Producer retries: <code>retry.backoff.ms</code> (default 100ms), consumer rebalance backoff: <code>retry.backoff.ms</code></td>
+  </tr>
+  <tr>
+    <td>Ethernet</td>
+    <td>Truncated binary exponential backoff for collision resolution</td>
+  </tr>
+  <tr>
+    <td>HTTP/2</td>
+    <td>Not built-in, but client libraries (OkHttp, HttpClient) implement it</td>
+  </tr>
+</table>
+
+<h2>Exponential Backoff vs. Circuit Breaker</h2>
+<div class="callout">
+  <strong>Complementary patterns:</strong> Exponential backoff handles individual operation retries. Circuit breakers handle service-level degradation. A circuit breaker stops all traffic to a failing service and lets it recover, while exponential backoff spaces out retries for individual requests. In production, both are used together.
+</div>
+
+<ul>
+  <li><strong>Exponential backoff:</strong> "This specific request failed; I will wait longer before trying again."</li>
+  <li><strong>Circuit breaker:</strong> "This service is failing broadly; I will stop sending it traffic for a cooldown period."</li>
+  <li>When the circuit opens, individual retries stop (fast-fail). When the circuit closes (half-open state), exponential backoff governs the probe requests.</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>Why is fixed-interval retry insufficient in distributed systems?</li>
+  <li>What is the thundering herd problem and how does exponential backoff help?</li>
+  <li>Why is jitter necessary even with exponential backoff?</li>
+  <li>Explain the difference between full jitter, equal jitter, and decorrelated jitter.</li>
+  <li>How would you tune exponential backoff parameters for a user-facing API vs. a batch processing pipeline?</li>
+  <li>How does exponential backoff relate to the circuit breaker pattern?</li>
+  <li>Design a retry strategy for a microservice that calls a third-party payment API with rate limits.</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>In an interview, avoid:</strong>
+  <ul>
+    <li>Proposing exponential backoff without mentioning jitter. Without jitter, it still fails at scale.</li>
+    <li>Forgetting the max backoff cap. Unbounded backoff is effectively "never retry."</li>
+    <li>Confusing exponential backoff with circuit breakers -- they solve different problems.</li>
+    <li>Ignoring the interaction between backoff and message ordering (long backoff delays block subsequent messages in a partition).</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary Sources</div>
+  <ul>
+    <li>AWS Architecture Blog -- <a href="https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/">Exponential Backoff And Jitter</a></li>
+    <li>AWS SDK for Java 2.x -- <a href="https://docs.aws.amazon.com/sdk-for-java/v2/developer-guide/standard-retry.html">Standard Retry Behavior</a></li>
+    <li>Google SRE Book, Chapter 4 -- <a href="https://sre.google/sre-book/handling-overload/">Handling Overload</a></li>
+    <li>TCP/IP Illustrated, Vol. 1 (Stevens) -- TCP retransmission and Karn's algorithm</li>
+    <li>IEEE 802.11 -- Binary Exponential Backoff for CSMA/CA</li>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em>, Chapter 8</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="dead-letter-queue.html">&larr; 8.4.2 DLQ</a>
+  <a href="ordering.html">8.4.4 Ordering &rarr;</a>
+</div>
+
+</body>
+</html>

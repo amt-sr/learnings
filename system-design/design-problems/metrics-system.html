@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>15.12 Metrics System — System Design</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../">Handbook</a> / <a href="../">System Design</a> / 15. Design Problems / 15.12 Metrics System</p>
+
+<h1>Metrics System</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Design a time-series metrics system (similar to Prometheus, Datadog, or CloudWatch) that collects, stores, aggregates, and visualizes metrics from thousands of services. The system must handle high cardinality data, support downsampling for long-term retention, and provide fast query performance across various time ranges.</p>
+
+<h2>Functional Requirements</h2>
+<ul>
+  <li>Collect numeric metrics (counters, gauges, histograms, summaries) from services</li>
+  <li>Support arbitrary labels/tags (high cardinality) for dimensional queries</li>
+  <li>Support PromQL / similar query language for aggregation and analysis</li>
+  <li>Provide dashboards and alerting based on metric thresholds</li>
+  <li>Downsample data for cost-effective long-term storage</li>
+  <li>Support recording rules for pre-computed aggregations</li>
+</ul>
+
+<h2>Non-Functional Requirements</h2>
+<ul>
+  <li><strong>High ingestion rate:</strong> 10M+ data points/sec</li>
+  <li><strong>Low query latency:</strong> &lt; 1s for common dashboards, &lt; 5s for complex queries</li>
+  <li><strong>Storage efficiency:</strong> 10x compression over raw data</li>
+  <li><strong>Scalability:</strong> handle millions of time series</li>
+  <li><strong>Durability:</strong> no data loss for ingested metrics</li>
+</ul>
+
+<h3>Capacity Estimates</h3>
+<table>
+  <tr><th>Metric</th><th>Estimate</th><th>Notes</th></tr>
+  <tr><td>Time series count</td><td>50M</td><td>Active unique metric+label combinations</td></tr>
+  <tr><td>Data points/sec</td><td>10M</td><td>50M series * 15s scrape interval / 75 (average)</td></tr>
+  <tr><td>Data points/day</td><td>864B</td><td>10M * 86400</td></tr>
+  <tr><td>Raw storage/day</td><td>~8 TB</td><td>864B * ~10 bytes per point</td></tr>
+  <tr><td>Compressed (1 year)</td><td>~300 TB</td><td>With 10x compression + downsampling</td></tr>
+  <tr><td>Cardinality (labels)</td><td>100K+</td><td>Per metric (e.g., API latency by endpoint)</td></tr>
+</table>
+
+<h2>API Design</h2>
+<pre>
+# Ingest (push-based)
+POST   /api/v1/metrics/write
+Body:  {
+  "metric": "http_request_duration_seconds",
+  "labels": { "method": "GET", "path": "/api/users", "status": "200" },
+  "value": 0.045,
+  "timestamp": 1701234567000
+}
+
+# Scrape (pull-based)
+GET    /metrics
+Resp:  http_request_duration_seconds{method="GET",path="/api/users",status="200"} 0.045
+       http_request_duration_seconds_count{...} 1250
+       http_requests_total{method="GET",path="/api/users"} 15234
+
+# Query
+POST   /api/v1/query
+Body:  { "query": "rate(http_requests_total[5m])", "time": 1701234567 }
+Resp:  { "status": "success", "data": { "result": [...] } }
+
+# Query range (for charts)
+POST   /api/v1/query_range
+Body:  { "query": "rate(http_request_duration_seconds[5m])",
+         "start": 1701230400, "end": 1701234567, "step": 60 }
+</pre>
+
+<h2>High-Level Design</h2>
+<div class="diagram">
+  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
+  │ Service A │ │ Service B │ │ Service C │ │ Host/VM  │
+  │ /metrics  │ │ /metrics  │ │ push API │ │ /metrics │
+  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘
+       │            │            │            │
+  ┌────▼────────────▼────────────▼────────────▼────┐
+  │              Collection Layer                   │
+  │  ┌──────────┐          ┌────────────────────┐  │
+  │  │ Scrapers  │          │ Ingestion Server   │  │
+  │  │ (pull /   │          │ (push: write API)  │  │
+  │  │  target)  │          │                    │  │
+  │  └─────┬─────┘          └──────────┬─────────┘  │
+  └────────┼───────────────────────────┼────────────┘
+           │                           │
+           └───────────────┬──────────┘
+                           ▼
+                 ┌─────────────────┐
+                 │   Storage       │
+                 │  ┌─────────────┐│
+                 │  │ TSDB        ││  Time-series database
+                 │  │ (column-    ││  (Cassandra, or custom
+                 │  │  oriented)  ││   Gorilla-like storage)
+                 │  └─────────────┘│
+                 │  ┌─────────────┐│
+                 │  │ Downsample  ││  Compact long-term data
+                 │  │ Workers     ││  15s → 1m → 5m → 1h → 1d
+                 │  └─────────────┘│
+                 └────────┬────────┘
+                          │
+                 ┌────────▼────────┐
+                 │  Query Engine   │
+                 │  (PromQL-like)  │
+                 └────────┬────────┘
+                          │
+                 ┌────────▼────────┐
+                 │  Dashboard &    │
+                 │  Alerting       │
+                 └─────────────────┘
+</div>
+
+<h2>Deep Dive: Data Model</h2>
+<p>A time series is uniquely identified by a metric name and a set of label-value pairs (dimensions).</p>
+
+<pre>
+Time series: {
+  metric_name: "http_request_duration_seconds",
+  labels: { method: "GET", path: "/api/users", status: "200" }
+}
+
+# Data points over time:
+timestamp    | value
+1701234550000 | 0.032
+1701234560000 | 0.045
+1701234570000 | 0.038
+1701234580000 | 0.051
+</pre>
+
+<div class="callout yellow">
+  <strong>High cardinality is the enemy:</strong> Each unique combination of labels creates a new time series. If <code>http_request_duration_seconds</code> has labels for method (4), path (10K), status (100), and user_id (1M), the cardinality is 4 * 10K * 100 * 1M = 4 trillion time series. This will crash any metrics system. Enforce cardinality limits (e.g., max 100K per metric) and avoid high-cardinality labels (user_id, request_id) in metrics.
+</div>
+
+<h2>Deep Dive: Storage Engine</h2>
+<p>Time-series data has unique properties that enable efficient storage:</p>
+
+<ul>
+  <li><strong>Append-only:</strong> New data points are always appended (time moves forward). No in-place updates.</li>
+  <li><strong>Sorted by time:</strong> Data is naturally ordered by timestamp within each series.</li>
+  <li><strong>Delta encoding:</strong> Values change slowly between consecutive points. Store deltas instead of absolute values.</li>
+  <li><strong>Gorilla compression:</strong> Facebook's Gorilla paper describes XOR-based compression for floating-point time series, achieving 10-20x compression.</li>
+</ul>
+
+<table>
+  <tr><th>Technique</th><th>Compression Ratio</th><th>Description</th></tr>
+  <tr><td>Delta-of-delta timestamps</td><td class="green">~5x</td><td>Store the difference between timestamp deltas</td></tr>
+  <tr><td>XOR floating-point values</td><td class="green">~10x</td><td>Gorilla: XOR current value with previous, store leading zeros + XOR value</td></tr>
+  <tr><td>Dictionary encoding (labels)</td><td class="green">~20x</td><td>Map label values to integers, store integers instead of strings</td></tr>
+  <tr><td>General compression (Snappy/Zstd)</td><td>2-3x</td><td>Applied after column-specific encoding</td></tr>
+</table>
+
+<div class="callout green">
+  <strong>Column-oriented storage:</strong> Store timestamps in one column and values in another. This enables efficient compression (homogeneous data in each column) and selective reading (e.g., read only the value column for aggregation, skip timestamps).
+</div>
+
+<h2>Deep Dive: Downsampling</h2>
+<p>Raw data at 15s resolution is expensive to store long-term. Downsample (roll up) to coarser resolutions over time.</p>
+
+<div class="diagram">
+  Downsampling Pipeline:
+
+  Raw data (15s intervals)
+       │
+       │  After 7 days
+       ▼
+  1-minute rollups (avg, min, max, sum, count)
+       │
+       │  After 30 days
+       ▼
+  5-minute rollups
+       │
+       │  After 90 days
+       ▼
+  1-hour rollups
+       │
+       │  After 1 year
+       ▼
+  1-day rollups (kept indefinitely)
+
+  Storage reduction:
+  - 15s raw:    4 points/min    (baseline)
+  - 1m:        1 point/min     (4x reduction)
+  - 5m:        0.2 points/min   (20x reduction)
+  - 1h:        0.017 points/min (240x reduction)
+</div>
+
+<div class="callout">
+  <strong>Rollup functions:</strong> Different aggregation functions are appropriate for different metric types. Counters → sum. Gauges → avg, min, max. Histograms → pre-computed percentile buckets (p50, p95, p99) from the raw histogram data.
+</div>
+
+<h2>Deep Dive: Query Engine</h2>
+<p>Support a PromQL-like query language for flexible metric analysis:</p>
+
+<pre>
+# Rate of HTTP requests (per second, over 5 min window)
+rate(http_requests_total[5m])
+
+# 95th percentile latency by service
+histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))
+
+# Top 10 services by error rate (aggregation)
+topk(10, sum(rate(http_requests_total{status=~"5.."}[5m])) by (service))
+
+# CPU usage > 80% alert
+100 * (1 - avg(rate(node_cpu_seconds{mode="idle"}[5m]))) > 80
+</pre>
+
+<div class="callout">
+  <strong>Query optimization:</strong> Pre-computed recording rules avoid re-evaluating expensive queries on every dashboard refresh. For example, pre-compute <code>rate(http_requests_total[5m])</code> every 15 seconds and store as a new time series. Dashboard queries read the pre-computed series instead of re-scanning raw data.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>How is this different from a logging system? <em>A: Metrics are structured numeric data points indexed by time and labels. Logs are unstructured/semi-structured text. Metrics are highly compressible and support mathematical operations (rate, sum, percentile). Logs support full-text search. They serve different purposes.</em></li>
+  <li>How do you handle counter resets (process restart)? <em>A: Use the <code>rate()</code> or <code>increase()</code> function which detects counter resets and handles them correctly by extrapolating the rate across the reset boundary.</em></li>
+  <li>What is the difference between pull and push collection? <em>A: Pull (Prometheus-style): server scrapes /metrics endpoints at intervals. Pros: server controls load, easy service discovery. Cons: missed scrapes during server restart. Push (StatsD/Telegraf-style): clients send metrics to a gateway. Pros: no missed data. Cons: backpressure management, harder service discovery.</em></li>
+  <li>How do you handle a sudden spike in time series count? <em>A: Cardinality limiter: reject new time series when total exceeds a threshold. Alert on cardinality growth. Auto-detect high-cardinality labels using sampling. Kill the offending time series and alert the team.</em></li>
+  <li>How do you support histograms? <em>A: Store cumulative bucket counts: <code>_bucket{le="0.1"}</code>, <code>_bucket{le="0.5"}</code>, <code>_bucket{le="1.0"}</code>, <code>_bucket{le="+Inf"}</code>. The <code>histogram_quantile()</code> function interpolates percentiles from bucket counts. This avoids storing every individual value.</em></li>
+</ul>
+
+<div class="callout red">
+  <strong>What to Skip:</strong>
+  <ul>
+    <li>Don't design the full dashboard UI — focus on the data pipeline</li>
+    <li>Don't implement the full PromQL parser — describe the key operations</li>
+    <li>Don't design distributed tracing (Jaeger/Zipkin) — it's a separate observability pillar</li>
+    <li>Don't get into service discovery mechanisms unless asked</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Papers</div>
+  <ul>
+    <li>"Gorilla: A Fast, Scalable, In-Memory Time Series Database" — Facebook (vldb.org, 2015)</li>
+    <li>"Monitoring at Twitter: Metrics Collection and Analysis" (static.sched.com)</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Documentation</div>
+  <ul>
+    <li>Prometheus documentation: "Data Model" and "PromQL" (prometheus.io/docs)</li>
+    <li>OpenTelemetry documentation: "Metrics" (opentelemetry.io/docs)</li>
+    <li>InfluxDB documentation: "Storage Engine and Downsampling" (docs.influxdata.com)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="logging-system.html">&larr; Previous: Logging System</a>
+  <a href="file-storage.html">Next: File Storage &rarr;</a>
+</div>
+
+</body>
+</html>

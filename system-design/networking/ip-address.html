@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.1.1 IP Address</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .formula { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; text-align: center; font-size: 1.1rem; color: #79c0ff; }
+  .formula small { display: block; text-align: left; color: #8b949e; font-size: 0.8rem; margin-top: 0.75rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#2">2 Networking</a> / <a href="../index.html#2.1">2.1 Network Basics</a> / 2.1.1
+</div>
+
+<h1>IP Address</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What an IP address is and the difference between IPv4 and IPv6</li>
+  <li>Public vs private IPs and NAT</li>
+  <li>Subnetting, CIDR, and why it matters for system design</li>
+  <li>Loopback, link-local, and special addresses</li>
+</ul>
+
+<h2>Definition</h2>
+<p>An IP address is a <strong>numerical label assigned to each device on a network</strong>, used for routing traffic between source and destination.</p>
+
+<div class="callout yellow">
+  <strong>Analogy:</strong> An IP address is like a postal address for your computer. Without it, no data can find its way to the right machine — just like a letter can't be delivered without a street address.
+</div>
+
+<h2>IPv4 vs IPv6</h2>
+<table>
+  <tr><th></th><th>IPv4</th><th>IPv6</th></tr>
+  <tr><td>Address length</td><td>32-bit (4 bytes)</td><td>128-bit (16 bytes)</td></tr>
+  <tr><td>Format</td><td>Dotted decimal: 192.168.1.1</td><td>Colon hex: 2001:0db8::1</td></tr>
+  <tr><td>Total addresses</td><td class="red">~4.3 billion</td><td class="green">~3.4 × 10^38</td></tr>
+  <tr><td>Header size</td><td>20-60 bytes</td><td>40 bytes (fixed)</td></tr>
+  <tr><td>Fragmentation</td><td>Routers and senders</td><td>Senders only</td></tr>
+  <tr><td>Broadcast</td><td>Yes</td><td>No (multicast only)</td></tr>
+  <tr><td>NAT</td><td>Required (address exhaustion)</td><td>Not needed</td></tr>
+  <tr><td>Adoption</td><td>Still dominant</td><td>Growing (~45% Google traffic)</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Why IPv6 matters for system design:</strong> With billions of IoT devices and containers (Kubernetes pods), IPv4 exhaustion is real. Large-scale systems use IPv6 internally or dual-stack. Cloud providers (AWS, GCP) default to IPv6 for new VPCs.
+</div>
+
+<h2>Private vs Public IP</h2>
+<table>
+  <tr><th>Class</th><th>Private Range</th><th>CIDR</th><th>Usable Addresses</th></tr>
+  <tr><td>Class A</td><td>10.0.0.0 – 10.255.255.255</td><td>10.0.0.0/8</td><td>~16.7 million</td></tr>
+  <tr><td>Class B</td><td>172.16.0.0 – 172.31.255.255</td><td>172.16.0.0/12</td><td>~1 million</td></tr>
+  <tr><td>Class C</td><td>192.168.0.0 – 192.168.255.255</td><td>192.168.0.0/16</td><td>~65,536</td></tr>
+</table>
+
+<div class="callout green">
+  <strong>NAT (Network Address Translation):</strong> Private IPs are not routable on the internet. NAT translates private → public at the router level, allowing many internal devices to share one public IP. This is why your home network works with a single ISP-assigned IP.
+</div>
+
+<h2>Special IP Addresses</h2>
+<table>
+  <tr><th>Address</th><th>Name</th><th>Usage</th></tr>
+  <tr><td>127.0.0.1</td><td>Loopback</td><td>Localhost — traffic never leaves the machine</td></tr>
+  <tr><td>0.0.0.0</td><td>Unspecified</td><td>Bind to all interfaces; "no specific address"</td></tr>
+  <tr><td>255.255.255.255</td><td>Broadcast</td><td>Send to all hosts on the local network</td></tr>
+  <tr><td>169.254.x.x</td><td>Link-local (APIPA)</td><td>Self-assigned when DHCP fails</td></tr>
+  <tr><td>224.0.0.0 – 239.255.255.255</td><td>Multicast</td><td>One-to-many delivery</td></tr>
+</table>
+
+<h2>CIDR Notation</h2>
+<p>CIDR (Classless Inter-Domain Routing) expresses the network portion of an IP address.</p>
+<div class="formula">
+  IP/CIDR = Network prefix + Host portion
+  <small>/24 means first 24 bits are network, last 8 bits are host<br>/32 = single host, /0 = all addresses</small>
+</div>
+<pre>Examples:
+  10.0.0.0/8    → 16,777,216 addresses  (entire Class A private)
+  192.168.1.0/24 → 256 addresses        (common home network)
+  172.16.0.0/12  → 1,048,576 addresses  (entire Class B private)
+  10.0.1.0/24    → 256 addresses        (single subnet)
+  10.0.1.5/32    → 1 address           (single host)</pre>
+
+<h2>Subnetting in System Design</h2>
+<div class="diagram">  Why subnetting matters for large systems:
+
+  VPC (AWS):
+  ┌─────────────────────────────────────────┐
+  │  10.0.0.0/16  (65,536 IPs total)       │
+  │  ├── 10.0.1.0/24  Public subnets (LBs)  │
+  │  ├── 10.0.2.0/24  App servers          │
+  │  ├── 10.0.3.0/24  DB primaries         │
+  │  ├── 10.0.4.0/24  DB replicas          │
+  │  ├── 10.0.5.0/24  Cache (Redis)        │
+  │  └── 10.0.6.0/24  Worker nodes         │
+  └─────────────────────────────────────────┘
+
+  Each subnet = isolated failure domain + security group boundary</div>
+
+<div class="callout">
+  <strong>Interview tip:</strong> When designing a system, mention subnetting: "We'd put load balancers in public subnets, app servers and databases in private subnets, and use security groups to restrict traffic between tiers." This shows infrastructure awareness.
+</div>
+
+<h2>DNS and IP</h2>
+<p>Humans use domain names (google.com). Computers use IP addresses. <a href="dns-resolution.html">DNS</a> resolves one to the other.</p>
+<pre>User types:  google.com
+DNS resolves: → 142.250.80.46 (IPv4)
+              → 2607:f8b0:4005:808::200e (IPv6)
+
+Every HTTP request starts with DNS → IP resolution.
+Cached DNS = 0ms. Uncached = 1-100ms.
+See: <a href="dns-caching.html">DNS Caching</a></pre>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What's the difference between public and private IP?"</strong><br>Public: routable on the internet, globally unique. Private: non-routable, used within internal networks (10.x, 172.16-31.x, 192.168.x). NAT bridges them.</li>
+  <li><strong>"Why do we still use IPv4 if IPv6 is better?"</strong><br>NAT works well enough, IPv4 infrastructure is entrenched, migration cost is high. IPv6 adoption is growing driven by cloud, mobile, and IoT.</li>
+  <li><strong>"What's 127.0.0.1?"</strong><br>Loopback address. Traffic to 127.0.0.1 never leaves the machine — used for local development and inter-process communication on the same host.</li>
+  <li><strong>"What's CIDR /24?"</strong><br>First 24 bits define the network, last 8 bits for hosts = 256 addresses (254 usable, minus network + broadcast).</li>
+  <li><strong>"How does NAT work?"</strong><br>Router maintains a translation table mapping (private IP:port) → (public IP:port). Outbound traffic gets NATed. Inbound responses are reverse-NATed back to the original private IP.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>IPv6 header field-by-field breakdown</li>
+    <li>Detailed subnetting math (binary AND operations)</li>
+    <li>IPv4 classful addressing history (Class A/B/C/D/E details)</li>
+    <li>ARP protocol internals</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>Computer Networking: A Top-Down Approach (Kurose &amp; Ross)</strong> — Chapter 4 (Network Layer)</li>
+    <li><strong>TCP/IP Illustrated Vol. 1 (Stevens)</strong> — Chapter 3 (IP)</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="../foundations/trade-offs.html">&larr; 1.1.12 Trade-offs</a>
+  <a href="port.html">Next: 2.1.2 Port &rarr;</a>
+</div>
+
+</body>
+</html>

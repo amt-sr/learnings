@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.4.1 Retry - System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">8 Messaging</a> / <a href="index.html">8.4 Reliability</a> / 8.4.1
+</div>
+
+<h1>Retry</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand retry strategies for failed operations in distributed systems, including fixed interval vs. exponential backoff, max retries, retry budgets, and when to stop retrying and escalate to a dead letter queue.</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>Retry</strong> is the automatic re-execution of a failed operation. In messaging systems, a consumer that fails to process a message (due to a transient error) re-attempts processing before giving up and moving the message to a dead letter queue.
+</div>
+
+<h2>Why Retries Matter</h2>
+<p>Failures in distributed systems are routine, not exceptional. Network glitches, downstream service unavailability, temporary resource exhaustion, and schema mismatches are all common. A well-designed retry strategy:</p>
+<ul>
+  <li>Recovers from <strong>transient failures</strong> without human intervention.</li>
+  <li>Provides <strong>back pressure</strong> to upstream producers when downstream is degraded.</li>
+  <li>Prevents <strong>cascading failures</strong> by spacing out retry attempts.</li>
+  <li>Guarantees eventual processing or explicit escalation via a dead letter queue.</li>
+</ul>
+
+<h2>Retry Strategies</h2>
+
+<h3>Fixed Interval</h3>
+<p>Retry at a constant delay after each failure.</p>
+
+<div class="diagram">
+  Attempt 1: FAIL ──► wait 1s ──► Attempt 2: FAIL ──► wait 1s ──► Attempt 3: FAIL ──► wait 1s ──► FAIL
+</div>
+
+<div class="callout yellow">
+  <strong>Problem:</strong> Fixed intervals do not adapt to load. If 10,000 messages all fail simultaneously, they all retry at the same moment, causing a thundering herd that can take down the recovery target.
+</div>
+
+<h3>Exponential Backoff</h3>
+<p>Double the delay after each failure: 1s, 2s, 4s, 8s, 16s...</p>
+
+<div class="diagram">
+  Attempt 1: FAIL ──► wait 1s  ──► Attempt 2: FAIL ──► wait 2s  ──► Attempt 3: FAIL
+                                                                  │
+                                              wait 4s ─────────────┘
+                                                  │
+                                              Attempt 4: FAIL ──► wait 8s ──► Attempt 5
+</div>
+
+<p>Exponential backoff naturally spaces retries further apart, reducing load on the recovering system. See <a href="exponential-backoff.html">8.4.3 Exponential Backoff</a> for full details.</p>
+
+<h3>Retry Budget</h3>
+<p>A per-client or per-service budget that limits total retry attempts over a time window, preventing retry storms.</p>
+
+<div class="diagram">
+  Retry Budget = 10% of total requests / second
+
+  Incoming: 1000 req/s  ──►  Allow 100 retries/s
+                               │
+                               ├─ If budget exhausted: new failures go directly to DLQ
+                               │    (no retry, fast-fail)
+                               └─ Budget refills each second
+</div>
+
+<ul>
+  <li>Popularized by Google's <em>Site Reliability Engineering</em> book.</li>
+  <li>Typical budget: 10-20% of primary request capacity.</li>
+  <li>Prevents a degraded downstream from being hammered by retries on top of new traffic.</li>
+</ul>
+
+<h2>Retry Parameters</h2>
+
+<table>
+  <tr>
+    <th>Parameter</th>
+    <th>Description</th>
+    <th>Typical Values</th>
+  </tr>
+  <tr>
+    <td>Max Retries</td>
+    <td>Maximum number of retry attempts before giving up</td>
+    <td>3-5 for user-facing, 5-10 for batch</td>
+  </tr>
+  <tr>
+    <td>Initial Delay</td>
+    <td>Delay before the first retry</td>
+    <td>100ms - 1s</td>
+  </tr>
+  <tr>
+    <td>Backoff Multiplier</td>
+    <td>Factor to increase delay each retry</td>
+    <td>2x (exponential)</td>
+  </tr>
+  <tr>
+    <td>Max Delay (cap)</td>
+    <td>Upper bound on backoff delay</td>
+    <td>10s - 60s</td>
+  </tr>
+  <tr>
+    <td>Jitter</td>
+    <td>Random variance added to delay</td>
+    <td>+/- 10-25% of delay</td>
+  </tr>
+  <tr>
+    <td>Retry Budget</td>
+    <td>Max retry rate relative to primary traffic</td>
+    <td>10-20%</td>
+  </tr>
+  <tr>
+    <td>Retryable vs. Non-Retryable</td>
+    <td>Classification of error types</td>
+    <td>Network timeout: retry; validation error: no retry</td>
+  </tr>
+</table>
+
+<h2>Distinguishing Retryable vs. Non-Retryable Errors</h2>
+<div class="callout green">
+  <strong>Critical design decision:</strong> Not all errors should be retried. Retrying a deterministic failure (invalid data, missing schema, permission denied) wastes resources and delays the inevitable move to the DLQ.
+</div>
+
+<table>
+  <tr>
+    <th>Error Type</th>
+    <th>Retry?</th>
+    <th>Examples</th>
+  </tr>
+  <tr>
+    <td>Transient / recoverable</td>
+    <td class="green">Yes</td>
+    <td>Network timeout, connection reset, 503 Service Unavailable, rate limit (429)</td>
+  </tr>
+  <tr>
+    <td>Deterministic / permanent</td>
+    <td class="red">No</td>
+    <td>400 Bad Request, 403 Forbidden, 404 Not Found, deserialization error, schema mismatch</td>
+  </tr>
+  <tr>
+    <td>Resource contention</td>
+    <td>Yes (with backoff)</td>
+    <td>Database deadlock, connection pool exhaustion, out-of-memory (if recoverable)</td>
+  </tr>
+  <tr>
+    <td>Data-dependent</td>
+    <td>Maybe</td>
+    <td>Unique constraint violation -- retry only if idempotent or root cause is known</td>
+  </tr>
+</table>
+
+<h2>Retry in Practice</h2>
+
+<h3>Kafka Consumer Retry Pattern</h3>
+<div class="diagram">
+  Consumer processes message
+       │
+       ├─ SUCCESS ──► commit offset, continue
+       │
+       └─ FAILURE
+            │
+            ├─ Retryable? ──► No  ──► send to DLQ immediately
+            │
+            └─ Yes
+                 │
+                 ├─ backoff delay (exponential + jitter)
+                 ├─ retry count < max_retries?
+                 │    ├─ Yes  ──► reprocess
+                 │    └─ No   ──► send to DLQ, alert
+                 │
+                 └─ If retry budget exhausted ──► send to DLQ immediately
+</div>
+
+<h3>AWS SDK Retry Defaults</h3>
+<ul>
+  <li><strong>Standard mode:</strong> Max 3 retries, exponential backoff (base 2s), jitter.</li>
+  <li><strong>Adaptive mode:</strong> Client monitors latency and adjusts retry behavior dynamically based on observed response times.</li>
+  <li><strong>Legacy mode:</strong> Max 5 retries, fixed 5s delay between attempts (deprecated).</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>How would you implement a retry strategy for a message consumer that calls a third-party API?</li>
+  <li>What is a retry budget and why is it important in large-scale systems?</li>
+  <li>How do you distinguish between retryable and non-retryable errors?</li>
+  <li>What happens if all consumers retry simultaneously? How do you prevent thundering herd?</li>
+  <li>Design a retry policy for a payment processing service -- what parameters would you tune?</li>
+  <li>How does retry interact with message ordering?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>In an interview, avoid:</strong>
+  <ul>
+    <li>Proposing unlimited retries without a max retry count or timeout.</li>
+    <li>Retrying non-retryable errors (400, 403, 404, validation failures).</li>
+    <li>Ignoring retry storms -- always mention backoff, jitter, or retry budgets.</li>
+    <li>Forgetting to mention the dead letter queue as the final fallback for exhausted retries.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary Sources</div>
+  <ul>
+    <li>Google SRE Book, Chapter 4 -- <a href="https://sre.google/sre-book/handling-overload/">Handling Overload</a> (retry budgets)</li>
+    <li>AWS SDK for Java -- <a href="https://docs.aws.amazon.com/sdk-for-java/v1/developer-guide/standard-retry.html">Standard Retry Behavior</a></li>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em>, Chapter 8 (fault tolerance)</li>
+    <li>Spring Kafka -- <a href="https://docs.spring.io/spring-kafka/reference/html/#message-listener-container">Error Handling and Retry</a></li>
+    <li>Netflix Hystrix / Resilience4j -- retry and circuit breaker patterns</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="exactly-once.html">&larr; 8.3.3 Exactly Once</a>
+  <a href="dead-letter-queue.html">8.4.2 Dead Letter Queue &rarr;</a>
+</div>
+
+</body>
+</html>

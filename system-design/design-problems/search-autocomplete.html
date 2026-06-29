@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>15.9 Search Autocomplete — System Design</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../">Handbook</a> / <a href="../">System Design</a> / 15. Design Problems / 15.9 Search Autocomplete</p>
+
+<h1>Search Autocomplete</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Design a search autocomplete system that suggests completions as the user types. The system must return ranked suggestions in under 50ms, handle millions of queries per second, and support personalization, trending topics, and multilingual content.</p>
+
+<h2>Functional Requirements</h2>
+<ul>
+  <li>Return top-K suggestions (typically 5-10) as the user types each character</li>
+  <li>Rank suggestions by popularity, recency, and personal relevance</li>
+  <li>Support prefix matching (typing "goo" suggests "google", "google maps", "goodbye")</li>
+  <li>Support multilingual and Unicode content</li>
+  <li>Update suggestions in near real-time as new trending queries emerge</li>
+  <li>Support personalization based on user history and location</li>
+</ul>
+
+<h2>Non-Functional Requirements</h2>
+<ul>
+  <li><strong>Ultra-low latency:</strong> &lt; 50ms p99 per keystroke</li>
+  <li><strong>High throughput:</strong> 1M+ queries/sec</li>
+  <li><strong>High availability:</strong> 99.99% uptime</li>
+  <li><strong>Freshness:</strong> trending suggestions update within minutes</li>
+  <li><strong>Scalability:</strong> millions of terms in the index</li>
+</ul>
+
+<h3>Capacity Estimates</h3>
+<table>
+  <tr><th>Metric</th><th>Estimate</th><th>Notes</th></tr>
+  <tr><td>Queries/sec</td><td>1M</td><td>Peak (Google-scale would be 10x+)</td></tr>
+  <tr><td>Unique terms</td><td>50M</td><td>English + multilingual</td></tr>
+  <tr><td>Suggestions per prefix</td><td>10</td><td>Top-K to return</td></tr>
+  <tr><td>Average prefix length</td><td>3 chars</td><td>Users typically type 2-4 chars before selecting</td></tr>
+  <tr><td>Update frequency</td><td>Every 5 min</td><td>Trending data refresh</td></tr>
+  <tr><td>Memory per trie node</td><td>~50 bytes</td><td>Pointer + frequency + metadata</td></tr>
+</table>
+
+<h2>API Design</h2>
+<pre>
+GET    /api/v1/suggest?q=goo&limit=10&locale=en-US
+Resp:  {
+  "suggestions": [
+    { "text": "google", "type": "query", "frequency": 9500000 },
+    { "text": "google maps", "type": "query", "frequency": 3200000 },
+    { "text": "google translate", "type": "query", "frequency": 2100000 },
+    { "text": "google drive", "type": "query", "frequency": 1800000 },
+    { "text": "goodwill", "type": "query", "frequency": 900000 }
+  ],
+  "cache_hit": true
+}
+</pre>
+
+<h2>High-Level Design</h2>
+<div class="diagram">
+                     ┌───────────────┐
+   Client (keystroke)──►│  API Gateway   │
+                     └───────┬───────┘
+                             │
+                      ┌──────▼──────┐
+                      │  Suggest     │
+                      │  Service     │
+                      └──────┬──────┘
+                             │
+                 ┌───────────┼───────────┐
+                 │           │           │
+          ┌──────▼──────┐    │    ┌──────▼──────┐
+          │  Prefix     │    │    │  Personal   │
+          │  Trie       │    │    │  Suggestions│
+          │  (In-Memory)│    │    │  (Redis)    │
+          └──────┬──────┘    │    └─────────────┘
+                 │           │
+          ┌──────▼──────┐    │
+          │  Ranking    │    │
+          │  Merger     │◄───┘
+          └─────────────┘
+                 │
+          ┌──────▼──────┐
+          │  Update     │
+          │  Pipeline   │◄─── Query logs (Kafka)
+          └─────────────┘
+</div>
+
+<h2>Deep Dive: Trie Data Structure</h2>
+<p>A trie (prefix tree) is the natural data structure for prefix search. Each node represents a character. A path from root to a node represents a prefix. Terminal nodes store the complete terms and their frequencies.</p>
+
+<div class="diagram">
+  Trie for autocomplete:
+
+  (root)
+   ├── g ──── o ──── o ──── g ──── l ──── e      "google" (freq: 9500000)
+   │                     └─── d ──── w ──── i ──── l ── l  "goodwill" (900000)
+   ├── g ──── o ──── o ──── g ──── l ──── e ──── " " ──── m ... "google maps"
+   │                                                ...          "google drive"
+   │                                                ...          "google translate"
+   ├── a ──── p ──── p ──── l ──── e ──── " " ──── s ──── t ... "apple store"
+   └── ...
+
+  Query: "goo" → traverse g→o→o → collect all terms under this node
+  Result: "google", "google maps", "google drive", "google translate", "goodwill"
+  Ranked by frequency (descending)
+</div>
+
+<div class="callout">
+  <strong>Optimization: Top-K at each node.</strong> Instead of storing all terms under a node, store only the top-K (e.g., 10) most frequent completions at each trie node. This limits the traversal to O(K) regardless of how many terms share a prefix. The trie becomes a "top-K trie" where every node pre-computes its best suggestions.
+</div>
+
+<h2>Deep Dive: In-Memory Trie with Top-K</h2>
+<p>For sub-50ms latency, the trie must be entirely in memory.</p>
+
+<pre>
+class TrieNode:
+    children: Map<char, TrieNode>
+    top_suggestions: PriorityQueue<Suggestion>  # Top 10 by rank
+    is_terminal: bool
+
+# Lookup: "goo" → traverse 3 nodes → return top_suggestions
+# Time: O(prefix_length) for traversal + O(1) for retrieval
+# Space: O(N * avg_word_length) where N = number of unique terms
+# For 50M terms, ~50M * 20 chars * 50 bytes/node ≈ 50 GB (with top-K storage)
+</pre>
+
+<div class="callout yellow">
+  <strong>Memory optimization:</strong> 50 GB for a single machine is large but feasible with modern servers (256GB RAM). For horizontal scaling, shard the trie by first character (26 shards for English, more for Unicode). Each shard holds ~2GB. Replicate each shard for availability.
+</div>
+
+<h2>Deep Dive: Ranking Strategy</h2>
+<p>Combine multiple signals to rank suggestions:</p>
+
+<pre>
+rank = w1 * log(query_frequency)           # Global popularity
+     + w2 * recency_score                   # How recently the query became popular
+     + w3 * personal_frequency              # How often this user searches this term
+     + w4 * location_relevance              # Location-based boost
+     + w5 * click_through_rate              # Historical CTR for this suggestion
+
+Where:
+  w1 = 0.4, w2 = 0.2, w3 = 0.2, w4 = 0.1, w5 = 0.1  (tunable weights)
+</pre>
+
+<div class="callout green">
+  <strong>Two-stage ranking:</strong> First stage (in the trie) uses pre-computed global rank. Second stage (in the ranking merger) adjusts scores based on personal signals. This separates the data structure from personalization and allows independent updates.
+</div>
+
+<h2>Deep Dive: Update Pipeline</h2>
+<p>Search query logs drive trie updates. The pipeline must refresh trending data frequently without disrupting reads.</p>
+
+<ol>
+  <li><strong>Collect:</strong> Query logs are written to Kafka in real-time.</li>
+  <li><strong>Aggregate:</strong> Stream processor (Flink) aggregates query frequencies over a time window (e.g., last 24 hours, last 7 days).</li>
+  <li><strong>Build:</strong> Build a new trie snapshot from aggregated data. This is done offline.</li>
+  <li><strong>Deploy:</strong> Atomic swap: replace the old trie with the new one. No downtime — use pointer swap (double buffering). The new trie is pre-loaded in memory before the swap.</li>
+</ol>
+
+<div class="diagram">
+  Update Pipeline (every 5 minutes):
+
+  Query Logs → Kafka → Flink Aggregator → Trie Builder → Memory
+  (continuous)    (stream)    (batch agg)     (offline build)  (atomic swap)
+
+  Double buffering:
+  ┌──────────┐     ┌──────────┐
+  │ Trie v1   │────►│ Serving  │  ← Current trie (read traffic)
+  │ (active)  │     └──────────┘
+  └──────────┘
+  ┌──────────┐
+  │ Trie v2   │     ← Being built in background
+  │ (building)│
+  └──────────┘
+           │
+           ▼ (once build complete)
+  ┌──────────┐     ┌──────────┐
+  │ Trie v2   │────►│ Serving  │  ← Atomic pointer swap
+  │ (active)  │     └──────────┘
+  └──────────┘
+</div>
+
+<h2>Deep Dive: Handling Typo Tolerance</h2>
+<p>Users make typos. The autocomplete should still return relevant suggestions.</p>
+<ul>
+  <li><strong>Edit distance:</strong> For short prefixes (&lt; 3 chars), compute edit distance to known prefixes. Allow 1 edit for prefixes of length 2, 0 edits for single-char prefixes.</li>
+  <li><strong>Phonetic matching:</strong> For proper nouns, use Soundex or Metaphone to match terms that sound similar.</li>
+  <li><strong>Popular correction:</strong> If the user's prefix has no suggestions but a close prefix (1 edit away) has popular suggestions, suggest the corrected prefix.</li>
+</ul>
+
+<div class="callout">
+  <strong>Balancing typo tolerance and latency:</strong> Full edit distance computation for every keystroke is expensive. Pre-compute a "fuzzy index" that maps common misspellings to correct prefixes. Or use a probabilistic data structure (BK-tree) for bounded-distance searches.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>How do you handle Unicode and non-Latin scripts? <em>A: The trie is character-agnostic — it works with any character set. For CJK languages, segment text into words before indexing. Use UTF-8 aware trie nodes. Shard by Unicode range for non-Latin scripts.</em></li>
+  <li>How do you personalize suggestions? <em>A: Maintain per-user query history in Redis. On suggestion request, merge global suggestions with personal history. Boost personal terms. Use a separate lightweight "personal trie" per active user, or just a top-100 list per user.</em></li>
+  <li>What happens when the trie update is slow? <em>A: The old trie continues serving. Updates are not blocking. If the pipeline is delayed (e.g., aggregation taking too long), serve stale results. Alert on pipeline lag. Accept eventual consistency for suggestions.</em></li>
+  <li>How do you handle trending spikes (sudden surge for a new term)? <em>A: Use a separate "real-time trending" layer with a shorter time window (last hour). Merge trending results into the trie results with a boost. Trending terms are stored in Redis sorted sets with short TTLs.</em></li>
+  <li>Why not use Elasticsearch for autocomplete? <em>A: You could — ES supports prefix queries and completion suggesters. However, for ultra-low latency (&lt; 50ms) at 1M QPS, an in-memory trie is faster because it avoids network overhead and index lookup. ES is better when the corpus is too large for memory.</em></li>
+</ul>
+
+<div class="callout red">
+  <strong>What to Skip:</strong>
+  <ul>
+    <li>Don't design the full search engine — focus only on autocomplete/prefix search</li>
+    <li>Don't implement spell-checking or "did you mean" — mention as a related but separate system</li>
+    <li>Don't design the query logging pipeline in detail</li>
+    <li>Don't over-focus on edge cases like empty queries or single-character inputs</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><em>System Design Interview Vol 2</em> — Alex Xu, Ch. 3: Design Search Autocomplete</li>
+    <li><em>Introduction to Algorithms</em> — Cormen et al. (trie data structure)</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Articles</div>
+  <ul>
+    <li>Elasticsearch documentation: "Completion Suggester" (elastic.co/guide/en/elasticsearch/reference/current/search-suggesters.html)</li>
+    <li>LinkedIn Engineering: "Typeahead the Suggester" (engineering.linkedin.com)</li>
+    <li>"How Typeahead Works" — Flickr Engineering Blog</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="news-feed.html">&larr; Previous: News Feed</a>
+  <a href="payment-gateway.html">Next: Payment Gateway &rarr;</a>
+</div>
+
+</body>
+</html>

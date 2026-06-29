@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.1.1 HDD</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#3">3 Storage</a> / <a href="../index.html#3.1">3.1 Physical Storage</a> / 3.1.1
+</div>
+
+<h1>Hard Disk Drives (HDD)</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>How HDDs store and retrieve data using spinning platters and magnetic heads</li>
+  <li>Seek time vs rotational latency vs transfer time — and which dominates</li>
+  <li>Sequential vs random I/O and why sequential is orders of magnitude faster</li>
+  <li>Typical IOPS numbers and why they matter for database design</li>
+  <li>How HDDs compare to <a href="ssd.html">SSDs</a> and when HDDs still make sense</li>
+</ul>
+
+<h2>Definition</h2>
+<p>A Hard Disk Drive (HDD) is an <strong>electromechanical storage device that uses spinning magnetic platters and a moving read/write head</strong> to store and retrieve data. Data is written in concentric circles called tracks, which are divided into sectors. The fundamental limitation is mechanical: the head must physically move to the correct position and wait for the data to rotate underneath it.</p>
+
+<h2>How an HDD Works</h2>
+<div class="diagram">  HDD Internal View:
+
+  Top-down view of a single platter:
+
+               ┌─────────────────────────┐
+               │                         │
+               │   Track 0 (outermost)   │ ◄── Actuator arm pivots
+               │   Track 1               │     and moves head
+               │   Track 2               │     radially across tracks
+               │   ...                   │
+               │   Track N (innermost)   │
+               │                         │
+               │         ↕               │
+               │     Spindle             │
+               │   (rotates platter)     │
+               └─────────────────────────┘
+
+  Each track is divided into sectors (512 B or 4 KB):
+
+  Track 7:  [Sec0][Sec1][Sec2] ... [SecN]
+                         ↑
+                    Read/Write Head
+                    reads one sector
+                    as platter spins
+
+  Multiple platters share the same actuator arm:
+  A "cylinder" = same track number across all platters</div>
+
+<p>When the OS requests data at a logical block address (LBA), the disk controller:</p>
+<ol>
+  <li><strong>Seeks</strong> — moves the actuator arm to the correct track</li>
+  <li><strong>Waits</strong> — rotates the platter until the correct sector passes under the head</li>
+  <li><strong>Transfers</strong> — reads or writes the data as the sector moves past</li>
+</ol>
+
+<h2>Access Time Breakdown</h2>
+<table>
+  <tr><th>Component</th><th>Description</th><th>Typical Time</th></tr>
+  <tr><td><strong>Seek Time</strong></td><td>Move the head to the correct track (mechanical arm movement)</td><td class="red">3–10 ms</td></tr>
+  <tr><td><strong>Rotational Latency</strong></td><td>Wait for the correct sector to spin under the head (avg = half rotation)</td><td class="red">2–4 ms (7200 RPM), 2 ms (15K RPM)</td></tr>
+  <tr><td><strong>Transfer Time</strong></td><td>Read/write data as it passes under the head</td><td class="green">~0.01–0.1 ms</td></tr>
+  <tr><td><strong>Total Random Access</strong></td><td>Sum of all three</td><td class="red">~5–10 ms (~100–200 IOPS)</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Key insight:</strong> Seek and rotational latency dominate the access time. Transfer time is negligible. This is why a single 1 MB sequential read is almost as fast as a single 4 KB random read — the positioning cost is paid once regardless of transfer size. But 1000 random 4 KB reads each pay the full ~5–10 ms penalty, yielding catastrophic throughput.
+</div>
+
+<h2>Sequential vs Random I/O</h2>
+<table>
+  <tr><th></th><th>Sequential I/O</th><th>Random I/O</th></tr>
+  <tr><td>Pattern</td><td>Reading contiguous blocks in order</td><td>Reading scattered blocks non-sequentially</td></tr>
+  <tr><td>Seek overhead</td><td class="green">Amortized once across many blocks</td><td class="red">Paid per request</td></tr>
+  <tr><td>Throughput</td><td class="green">100–200 MB/s</td><td class="red">0.5–2 MB/s</td></tr>
+  <tr><td>IOPS</td><td class="green">N/A (throughput-bound)</td><td class="red">~70–200 IOPS</td></tr>
+  <tr><td>Latency per operation</td><td class="green">Low (data streams under head)</td><td class="red">High (5–10 ms per seek)</td></tr>
+  <tr><td>Use case</td><td><a href="write-ahead-log.html">WAL</a> appends, full table scans, backups</td><td>B-tree index lookups, OLTP point queries</td></tr>
+</table>
+
+<div class="diagram">  Sequential Read:
+  Track: [███████████████████████████████]
+             ^head moves once→→→→→→→→→→→^
+  One seek + continuous read = high throughput
+
+  Random Read:
+  Track 2: [██]   → seek to Track 50
+  Track 50:    [██]   → seek to Track 12
+  Track 12:        [██]   → seek to Track 87
+  Track 87:            [██]   → seek to Track 3
+  Each access pays full seek + rotational latency penalty</div>
+
+<h3>Why Sequential is Fast (Interview Angle)</h3>
+<p>After the initial seek, the head stays in position while data streams under it at the platter's rotational speed. At 7200 RPM, a track on the outer edge passes under the head at roughly 50–100 MB/s. The disk firmware and OS also leverage <strong>read-ahead</strong>: when it detects a sequential pattern, the OS prefetches upcoming blocks into the <a href="page-cache.html">page cache</a>, further hiding latency.</p>
+
+<h2>Typical IOPS by RPM</h2>
+<table>
+  <tr><th>RPM</th><th>Avg Seek</th><th>Half Rotation</th><th>Estimated IOPS</th></tr>
+  <tr><td>5400</td><td>~9 ms</td><td>~5.5 ms</td><td class="red">~60–80</td></tr>
+  <tr><td>7200</td><td>~8 ms</td><td>~4.2 ms</td><td class="red">~70–100</td></tr>
+  <tr><td>10000</td><td>~5 ms</td><td>~3.0 ms</td><td>~130–150</td></tr>
+  <tr><td>15000</td><td>~3.5 ms</td><td>~2.0 ms</td><td class="green">~180–210</td></tr>
+</table>
+
+<p>IOPS estimate: 1000 ms / (seek_time + half_rotation_time). At 7200 RPM with 8 ms seek + 4.2 ms rotation = ~83 IOPS for random 4 KB reads.</p>
+
+<div class="callout yellow">
+  <strong>Interview tip:</strong> When asked "how many IOPS does an HDD handle?", the answer depends on RPM. A 7200 RPM drive gives ~75–100 random IOPS. This is why the <a href="buffer-pool.html">buffer pool</a> is critical — at 100 IOPS, you can only do 100 random disk reads per second. Everything else must come from memory.
+</div>
+
+<h2>HDD vs SSD Comparison</h2>
+<table>
+  <tr><th></th><th><a href="hdd.html">HDD</a></th><th><a href="ssd.html">SSD</a></th></tr>
+  <tr><td>Technology</td><td>Magnetic platters + mechanical head</td><td>NAND flash memory + controller</td></tr>
+  <tr><td>Random read latency</td><td class="red">~5–10 ms</td><td class="green">~0.05–0.5 ms</td></tr>
+  <tr><td>Random read IOPS</td><td class="red">~70–200</td><td class="green">10,000–1,000,000</td></tr>
+  <tr><td>Sequential throughput</td><td>100–200 MB/s</td><td class="green">500–7,000 MB/s (NVMe)</td></tr>
+  <tr><td>Cost per GB</td><td class="green">$0.02–0.04</td><td class="red">$0.05–0.15</td></tr>
+  <tr><td>Capacity</td><td class="green">Up to 20 TB (consumer)</td><td>Up to 8 TB (consumer)</td></tr>
+  <tr><td>Durability</td><td>No write endurance limits</td><td>Limited write cycles (TBW rating)</td></tr>
+</table>
+
+<h2>When HDDs Still Make Sense</h2>
+<ul>
+  <li><strong>Cold storage and archival:</strong> Data accessed infrequently does not need SSD speed. Amazon S3 Glacier and similar services use HDD-based storage behind the scenes.</li>
+  <li><strong>Backups:</strong> Sequential write performance on HDD is adequate for backup workloads, and the cost per GB is significantly lower.</li>
+  <li><strong>Large-scale data lakes:</strong> When you have petabytes of data (e.g., Hadoop HDFS clusters), the cost difference between HDD and SSD storage is enormous.</li>
+  <li><strong>Media streaming and content delivery:</strong> Sequential reads of large files (video, audio) work well with HDD throughput.</li>
+  <li><strong>Write-heavy append-only logs:</strong> WAL-style sequential writes on HDD can reach 100+ MB/s, which is often sufficient.</li>
+</ul>
+
+<div class="callout green">
+  <strong>Design takeaway:</strong> Even though most production databases now use SSDs, understanding HDD characteristics matters because many storage engine design decisions (B-tree structure, <a href="lsm-tree.html">LSM-tree</a> compaction, WAL layout) were optimized for HDD behavior. Understanding why these designs exist makes you a stronger system designer.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"Why are random reads so slow on HDDs?"</strong><br>Each random read requires the mechanical actuator arm to move to the correct track (seek time, 3–10 ms) and then wait for the platter to rotate the target sector under the head (rotational latency, 2–4 ms). This mechanical overhead is ~10,000x slower than electronic <a href="ram.html">RAM</a> access. Compare to <a href="ssd.html">SSDs</a> where there is no mechanical movement — the controller addresses flash cells electronically.</li>
+  <li><strong>"How many IOPS can a typical HDD handle?"</strong><br>A 7200 RPM drive achieves approximately 75–100 IOPS for random 4 KB reads. A 15K RPM enterprise drive reaches 180–210 IOPS. At 100 IOPS, processing 10,000 random reads takes 100 seconds. This is why databases heavily cache in <a href="buffer-pool.html">buffer pools</a> and why <a href="lsm-tree.html">LSM-trees</a> convert random writes into sequential appends.</li>
+  <li><strong>"Why does the <a href="write-ahead-log.html">WAL</a> perform well on HDDs?"</strong><br>The WAL is append-only, meaning writes go to the next sequential position on disk. The head rarely needs to seek — it just waits for the current sector to arrive. Sequential writes on HDD can reach 100–200 MB/s, comparable to SSDs. This is the core insight that makes write-ahead logging viable even on spinning disks.</li>
+  <li><strong>"When would you still choose HDDs over SSDs?"</strong><br>Cost-sensitive scenarios with large data volumes and predominantly sequential access patterns: backups, archival storage, data lakes, media serving. An 8 TB HDD costs ~$160 ($0.02/GB) while an 8 TB SSD costs ~$800+ ($0.10/GB). For 100 TB of cold data, HDDs save tens of thousands of dollars.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>CMR vs SMR (Conventional vs Shingled Magnetic Recording) internals</li>
+    <li>Head parking, power management, and thermal calibration details</li>
+    <li>SATA/SAS protocol signaling and command queue specifics</li>
+    <li>RAID implementation details (covered elsewhere)</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Database Internals" by Alex Petrov</strong> — Chapter 2 (Disk-Based Storage)</li>
+    <li><strong>"Designing Data-Intensive Applications" by Martin Kleppmann</strong> — Chapter 3 (Storage and Retrieval)</li>
+    <li><strong>"Operating Systems: Three Easy Pieces" (Arpaci-Dusseau)</strong> — Chapter 37 (Hard Disk Drives)</li>
+    <li><strong>"Computer Architecture: A Quantitative Approach" (Hennessy &amp; Patterson)</strong> — Storage hierarchy section</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <span></span>
+  <a href="ssd.html">Next: 3.1.2 SSD &rarr;</a>
+</div>
+
+</body>
+</html>

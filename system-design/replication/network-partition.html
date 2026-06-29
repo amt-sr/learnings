@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.6.6 Network Partition</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">4 Replication</a> / 4.6 Replication Problems / 4.6.6
+</div>
+
+<h1>Network Partition</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand network partitions as a fundamental failure mode in distributed systems, the CAP theorem implications, and the tradeoffs systems must make during a partition.</p>
+
+<h2>Definition</h2>
+<p>A <strong>network partition</strong> (also called a <strong>network split</strong> or <strong>partial failure</strong>) is a failure mode where messages between some nodes are lost or delayed beyond a timeout. Nodes are split into groups that can communicate within their group but not across groups. This is one of the three fundamental failures in distributed systems: crash faults, Byzantine faults, and network partitions.</p>
+
+<div class="callout red">
+  <strong>Network partitions are not rare.</strong> They occur regularly in production at every scale &mdash; switch failures, routing flaps, DNS issues, misconfigurations, cross-datacenter link degradation. Any distributed system design must account for partitions.
+</div>
+
+<h2>Anatomy of a Network Partition</h2>
+<div class="diagram">
+  NORMAL STATE:
+
+  [AZ-1]                    [AZ-2]                    [AZ-3]
+  Node-1 ----<--> Node-2 ----<--> Node-3 ----<--> Node-4 ----<--> Node-5
+       \___________________________|____________________________/
+                          Full connectivity
+
+
+  AFTER NETWORK PARTITION:
+
+  [AZ-1]         [AZ-2]
+  Node-1 <--> Node-2         Node-3 <--> Node-4 <--> Node-5
+       |                          |
+   MAJORITY                   MINORITY
+   (2 of 5?                   (3 of 5?
+    NO, 2 < 3)                 YES, 3 >= 3)
+       |                          |
+  Cannot elect leader        Can elect leader
+  (no quorum)                (has quorum)
+       |                          |
+  Reject writes              Accept writes
+  Read-only mode             Available + Consistent
+  (Unavailable + Consistent)
+</div>
+
+<h2>CAP Theorem and Partitions</h2>
+<p>The CAP theorem (Brewer, 2000; Gilbert &amp; Lynch proof) states that during a network partition, a distributed system must choose between:</p>
+
+<table>
+  <tr>
+    <th>Choice</th>
+    <th>Behavior During Partition</th>
+    <th>What You Sacrifice</th>
+    <th>Examples</th>
+  </tr>
+  <tr>
+    <td><strong>CP</strong> (Consistency over Availability)</td>
+    <td>Stop accepting writes on the minority side. Only the majority partition serves requests.</td>
+    <td>Availability: some clients see errors or timeouts</td>
+    <td>ZooKeeper, etcd, HBase, MongoDB (majority write concern), CockroachDB</td>
+  </tr>
+  <tr>
+    <td><strong>AP</strong> (Availability over Consistency)</td>
+    <td>Both sides continue accepting writes. Data diverges. Resolved after partition heals.</td>
+    <td>Consistency: clients may see stale or conflicting data</td>
+    <td>Cassandra, DynamoDB, CouchDB, Riak, Eureka</td>
+  </tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Key interview point:</strong> CAP is about behavior <em>during a partition</em>. It does not say a system is always inconsistent or always unavailable. It says: when a partition occurs, you must pick one. In normal operation (no partition), a CP system is both consistent and available, and an AP system is both available and consistent. The tradeoff only materializes during failure.
+</div>
+
+<h2>Handling Strategies During Partition</h2>
+
+<h3>Strategy 1: Leader Step Down (CP)</h3>
+<p>When a leader detects it cannot reach a majority of nodes, it voluntarily steps down. The minority partition goes read-only. No writes are accepted, preventing split brain and data divergence.</p>
+
+<ul>
+  <li><strong>Pros:</strong> No data divergence. Strong consistency preserved.</li>
+  <li><strong>Cons:</strong> Clients in the minority partition experience unavailability.</li>
+</ul>
+
+<h3>Strategy 2: Read-Only Mode with Graceful Degradation</h3>
+<p>The minority partition switches to read-only mode. It can still serve cached or replicated data for reads but rejects writes. This provides partial availability while preventing divergence.</p>
+
+<div class="diagram">
+  Minority Partition During Network Partition:
+
+  [Node A]  [Node B]  [Node C]
+       |         |         |
+  WRITE request (from client)
+       |         |         |
+  Check: quorum? NO (1/5 nodes)
+       |         |         |
+  Response: 503 Service Unavailable
+  (or serve from local cache if acceptable)
+       |         |         |
+
+  READ request (from client)
+       |         |         |
+  Check: serve from local data? YES
+       |         |         |
+  Response: 200 OK (potentially stale)
+</div>
+
+<h3>Strategy 3: Continue Accepting Writes (AP)</h3>
+<p>Both partitions accept writes. Each uses version vectors or timestamps to track writes. After the partition heals, a reconciliation process merges divergent data. Conflicting writes are resolved using LWW, CRDTs, or application logic.</p>
+
+<ul>
+  <li><strong>Pros:</strong> Both partitions remain available. Better for globally distributed systems where availability is critical.</li>
+  <li><strong>Cons:</strong> Data diverges. Conflict resolution may silently lose data.</li>
+</ul>
+
+<h3>Strategy 4: Quorum Reads</h3>
+<p>During a partition, require reads from a quorum of replicas. If a client reads from R replicas out of N total, and W replicas acknowledged the write, the read is consistent if R + W > N. This ensures at least one replica in the read set has the latest write.</p>
+
+<div class="callout green">
+  <strong>DynamoDB example:</strong> By default, DynamoDB reads from 2 of 3 replicas (R=2) and writes to 2 of 3 (W=2). Since R + W > N (2 + 2 > 3), a quorum read always returns the most recent write, even if one replica is partitioned away.
+</div>
+
+<h2>Real-World Examples</h2>
+
+<table>
+  <tr>
+    <th>System</th>
+    <th>Partition Behavior</th>
+    <th>Details</th>
+  </tr>
+  <tr>
+    <td>etcd</td>
+    <td class="green">CP</td>
+    <td>Minority partition stops serving. Leader only on majority side. Raft-based.</td>
+  </tr>
+  <tr>
+    <td>Cassandra</td>
+    <td class="red">AP</td>
+    <td>All nodes accept writes. Divergence resolved via read repair, hinted handoff, and LWW.</td>
+  </tr>
+  <tr>
+    <td>CockroachDB</td>
+    <td class="green">CP</td>
+    <td>Uses Raft. Minority partition goes read-only. Range leases prevent split brain.</td>
+  </tr>
+  <tr>
+    <td>DynamoDB</td>
+    <td class="red">AP</td>
+    <td>Configurable consistency. Default: eventually consistent. Strongly consistent reads available as an option.</td>
+  </tr>
+  <tr>
+    <td>Netflix Eureka</td>
+    <td class="red">AP</td>
+    <td>Service registry. During partition, all nodes serve stale registration data. Better to route to a stale endpoint than to fail.</td>
+  </tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li><strong>"Explain the CAP theorem. What does a system do during a network partition?"</strong> &mdash; CAP says during a partition, choose C (reject writes on minority, stay consistent) or A (accept writes everywhere, risk divergence). Normal operation allows both. The choice is a design decision based on business requirements.</li>
+  <li><strong>"Would you design your system as CP or AP?"</strong> &mdash; Context-dependent. Financial: CP (cannot tolerate divergence). Social media feed: AP (availability matters more than perfect consistency). E-commerce inventory: somewhere in between (quorum reads/writes).</li>
+  <li><strong>"How does a 5-node Raft cluster behave during a 3-2 partition?"</strong> &mdash; The 3-node side has quorum, elects a leader, and serves reads and writes. The 2-node side cannot elect a leader (no quorum), goes read-only, and returns errors on write attempts. When partition heals, the 2-node side catches up from the leader.</li>
+  <li><strong>"How do you handle a network partition between two data centers?"</strong> &mdash; Discuss: cross-DC latency-aware routing, quorum settings, whether to go read-only in the minority DC, failover orchestration, and the business impact of unavailability vs. divergence.</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid PACELC deep dives:</strong> PACELC (Partition: Availability vs. Consistency, Else: Latency vs. Consistency) extends CAP but is rarely asked. Mention it briefly if you want to show depth.<br><br>
+  <strong>Avoid specific BGP/routing protocol details:</strong> Network partitions are an abstraction. Interviewers do not expect routing protocol knowledge unless the role is network-infrastructure specific.<br><br>
+  <strong>Avoid Gilbert-Lynch proof details:</strong> The formal proof is interesting but rarely tested. Focus on the practical implications.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary References</div>
+  <ul>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em> &mdash; Chapter 5: Replication (section: "Problems with Replication Lag") and Chapter 9: Consistency and Consensus</li>
+    <li>Seth Gilbert &amp; Nancy Lynch, "Brewer's Conjecture and the Feasibility of Consistent, Available, Partition-Tolerant Web Services" (2002)</li>
+    <li>Amazon Dynamo Paper: <a href="https://www.allthingsdistributed.com/2007/10/amazons_dynamo.html">Dynamo: Amazon's Highly Available Key-value Store</a></li>
+    <li>Diego Ongaro, <em>Raft: In Search of an Understandable Consensus Algorithm</em> &mdash; Section 5: Leader election and safety during partitions</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="divergence.html">&larr; 4.6.5 Divergence</a>
+  <a href="failover.html">4.7.1 Failover &rarr;</a>
+</div>
+
+</body>
+</html>

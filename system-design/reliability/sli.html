@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SLI — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">System Design</a> / <a href="./index.html">Reliability</a> / 10.1.3 SLI</div>
+
+<h1>Service Level Indicator (SLI)</h1>
+<div class="meta">
+  <span>Difficulty ⭐⭐</span>
+  <span>Interview Frequency ★★</span>
+</div>
+
+<div class="callout">
+  <strong>Goal:</strong> Understand what to measure, how to choose good SLIs, the three canonical SLI categories (availability, latency, throughput), and how SLIs feed into SLO targets.
+</div>
+
+<h2>Definition</h2>
+<p>A <strong>Service Level Indicator (SLI)</strong> is a quantitative measure of some aspect of the level of service provided. SLIs are the raw measurements that SLOs are evaluated against. A good SLI is: <strong>measurable</strong>, <strong>understandable</strong>, <strong>actionable</strong> (the team can influence it), and <strong>aligned with user experience</strong>.</p>
+
+<h2>The Three Canonical SLIs</h2>
+
+<div class="diagram">
+  ┌──────────────────────────────────────────────────┐
+  │                  SLI Categories                   │
+  ├──────────────────┬───────────────────────────────┤
+  │  Availability    │  Ratio of successful requests  │
+  │  "Is it working?"│  to total requests             │
+  │                  │  success_count / total_count   │
+  ├──────────────────┼───────────────────────────────┤
+  │  Latency         │  Ratio of requests completing  │
+  │  "Is it fast?"   │  within a threshold            │
+  │                  │  fast_count / total_count      │
+  ├──────────────────┼───────────────────────────────┤
+  │  Throughput      │  Ratio of achieved vs target   │
+  │  "Can it handle  │  capacity                      │
+  │   the load?"     │  actual_qps / target_qps       │
+  └──────────────────┴───────────────────────────────┘
+</div>
+
+<h3>Availability SLI</h3>
+<p>The most common SLI. Measures the ratio of successful responses.</p>
+
+<pre>
+Availability = successful_requests / total_requests
+
+// "Successful" must be carefully defined:
+// - HTTP: 2xx/3xx responses (not 4xx client errors from bad input)
+// - gRPC: OK status codes
+// - Exclude health check / synthetic traffic
+// - Include timeout errors as failures
+</pre>
+
+<div class="callout yellow">
+  <strong>Gotcha:</strong> A service can be "available" (returning 200) but serving wrong data. Availability SLIs do not capture <em>correctness</em>. For financial systems, correctness SLIs (e.g., double-entry balance validation) are equally important.
+</div>
+
+<h3>Latency SLI</h3>
+<p>Measures how fast the service responds, typically at specific percentiles.</p>
+
+<table>
+  <tr><th>Percentile</th><th>Use Case</th><th>What It Captures</th></tr>
+  <tr><td>p50 (median)</td><td>Typical user experience</td><td>Half of requests; too optimistic for reliability</td></tr>
+  <tr><td>p90</td><td>Good overall feel</td><td>Marginal cases, caching misses</td></tr>
+  <tr><td>p99</td><td>SLO target</td><td>Tail latency; outliers, GC pauses, queueing</td></tr>
+  <tr><td>p99.9</td><td>Critical services</td><td>Extreme tail; hot loops, lock contention</td></tr>
+</table>
+
+<pre>
+Latency SLI = count(requests ≤ 200ms) / total_requests
+
+// Use a threshold that maps to user-perceived "fast"
+// Not the average — averages hide tail latency
+</pre>
+
+<h3>Throughput SLI</h3>
+<p>Measures whether the system can handle the expected load.</p>
+
+<pre>
+Throughput SLI = actual_requests_served / target_capacity
+
+// Example: if the system is designed for 10k QPS
+// and is serving 9.5k QPS successfully → SLI = 95%
+</pre>
+
+<h2>Choosing Good SLIs</h2>
+<p>Google's SRE team identifies these criteria for useful SLIs:</p>
+
+<div class="diagram">
+  Good SLI Checklist:
+  ✓ Measures user-facing behavior, not internal metrics
+  ✓ The team can actually affect the number
+  ✓ It's measurable with existing or easily-added instrumentation
+  ✓ It's sensitive enough to detect regressions
+  ✓ It's not so noisy that it triggers false alarms
+  ✗ Does NOT measure things users don't care about
+  ✗ Does NOT include synthetic/health-check traffic
+</div>
+
+<h3>SLI Selection by Service Type</h3>
+<table>
+  <tr><th>Service Type</th><th>Primary SLI</th><th>Secondary SLI</th></tr>
+  <tr><td>User-facing API</td><td>Availability (5xx rate)</td><td>p99 latency</td></tr>
+  <tr><td>Data pipeline</td><td>Freshness (data age)</td><td>Throughput (records/sec)</td></tr>
+  <tr><td>Storage service</td><td>Availability (read/write success)</td><td>p99 read latency</td></tr>
+  <tr><td>ML inference</td><td>p99 inference latency</td><td>Model freshness</td></tr>
+  <tr><td>Message queue</td><td>End-to-end delivery latency</td><td>Message durability (loss rate)</td></tr>
+</table>
+
+<h2>SLI Measurement Architecture</h2>
+
+<div class="diagram">
+  Request Flow:
+  ┌────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
+  │ Client │───▶│ LB / API │───▶│ Service  │───▶│ Database │
+  │        │◀───│ Gateway  │◀───│ Instance │◀───│          │
+  └────────┘    └──────────┘    └──────────┘    └──────────┘
+       │             │               │               │
+       ▼             ▼               ▼               ▼
+  ┌─────────────────────────────────────────────────────────┐
+  │                    Metrics Pipeline                       │
+  │  [Metrics Exporter] → [Collector] → [TSDB / Prometheus] │
+  │       │                                                │
+  │       ▼                                                │
+  │  [SLO Dashboard]  [Alerting]  [Error Budget Tracker]    │
+  └─────────────────────────────────────────────────────────┘
+</div>
+
+<h3>Where to Instrument</h3>
+<ul>
+  <li><strong>Client-side (gold standard):</strong> Captures the full request path including network, DNS, and TLS. Hardest to instrument but most accurate.</li>
+  <li><strong>Gateway / Load Balancer:</strong> Captures upstream latency. Good balance of effort vs accuracy. Most teams use this.</li>
+  <li><strong>Service-side:</strong> Captures processing time only. Misses network latency. Can be misleading.</li>
+  <li><strong>Server-side:</strong> Captures internal processing. Useful for debugging but not for user-facing SLIs.</li>
+</ul>
+
+<h2>Common Pitfalls</h2>
+
+<div class="callout red">
+  <strong>Averaging:</strong> Never use mean latency for SLIs. A single outlier request does not degrade user experience as much as many slow requests. Use percentiles.
+</div>
+
+<div class="callout red">
+  <strong>Over-filtering:</strong> Some teams exclude "client errors" (4xx) from availability. This can mask real problems — a misconfigured client sending bad requests is still a problem the service owner should see.
+</div>
+
+<div class="callout red">
+  <strong>Too many SLIs:</strong> Having 20 SLIs makes it impossible to focus. Start with 2-3 per service and add more only when a specific failure mode justifies it.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>"How would you measure availability for your designed system?" — Define success criteria, instrumentation point, time window, and exclusions.</li>
+  <li>"What is the difference between p50 and p99 latency?" — p50 is the median (half of requests); p99 captures the tail where most user complaints come from.</li>
+  <li>"Why shouldn't you use average latency as an SLI?" — Averages hide outliers. A few extremely slow requests are invisible in the mean but devastating to users.</li>
+  <li>"Where would you instrument SLI measurements?" — Ideally at the edge/client side; pragmatically at the load balancer/gateway layer.</li>
+  <li>"How many SLIs should a service have?" — Start with 2-3: availability and latency at minimum. Add only when justified by failure modes.</li>
+</ul>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Depth:</strong> Specific Prometheus/OpenTelemetry metric export configurations. <br>
+  <strong>Depth:</strong> Histogram bucket sizing strategies — interviewers want the concept, not the instrumentation details. <br>
+  <strong>Depth:</strong> Red-metric vs blue-metric (RED/USE) framework details unless asked.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Google SRE Book — Chapter 5: Monitoring Distributed Systems</div>
+  <p>The four golden signals (latency, traffic, errors, saturation) and how they map to SLIs.</p>
+</div>
+<div class="source">
+  <div class="source-label">Google SRE Book — Chapter 4: Service Level Objectives</div>
+  <p>Choosing good SLIs, the three canonical SLI types, and mapping SLIs to SLOs.</p>
+</div>
+<div class="source">
+  <div class="source-label">Monitoring in the Time of Cloud (Celeste Horgan, SREcon)</div>
+  <p>Practical guidance on SLI instrumentation at scale with distributed tracing.</p>
+</div>
+
+<div class="nav">
+  <a href="slo.html">&larr; SLO</a>
+  <a href="circuit-breaker.html">Circuit Breaker &rarr;</a>
+</div>
+</body>
+</html>

@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.6.2 Cache Hit</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#2">2 Networking</a> / <a href="../index.html#2.6">2.6 CDN</a> / 2.6.2
+</div>
+
+<h1>Cache Hit</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What a cache hit is and how the CDN decides to serve from cache</li>
+  <li>Cache hit ratios and what drives them higher or lower</li>
+  <li>Cache-Control headers and how they control cacheability</li>
+  <li>Typical hit ratios for different content types (70-95%)</li>
+</ul>
+
+<h2>Definition</h2>
+<p>A <strong>cache hit occurs when the CDN edge server finds the requested resource in its local cache and serves it directly without contacting the origin server</strong>. The client receives the response entirely from the edge, resulting in the lowest possible latency and zero load on the origin.</p>
+
+<div class="diagram">  Cache Hit Flow:
+  ┌───────┐         ┌────────────────┐         ┌────────┐
+  │Client │──GET──► │  Edge Server   │         │ Origin │
+  │       │         │                │         │        │
+  │       │◄─200─── │  Found in      │  (never │        │
+  │       │  ~10ms  │  local cache!  │  called) │        │
+  └───────┘         └────────────────┘         └────────┘
+
+  Cache Miss Flow (for comparison):
+  ┌───────┐         ┌────────────────┐         ┌────────┐
+  │Client │──GET──► │  Edge Server   │──GET──► │ Origin │
+  │       │         │                │◄─200─── │        │
+  │       │◄─200─── │  Store in      │         │        │
+  │       │ ~200ms  │  cache, serve  │         │        │
+  └───────┘         └────────────────┘         └────────┘</div>
+
+<h2>How the CDN Decides: Cache Lookup</h2>
+<p>When a request arrives at the edge, the CDN follows a deterministic lookup process:</p>
+
+<div class="diagram">  Request arrives at edge: GET /images/logo.png
+
+  Step 1: Build cache key
+    cache_key = hash(method + host + path + query_string + vary_headers)
+    example:  sha256("GET cdn.example.com /images/logo.png")
+
+  Step 2: Look up cache key in local storage
+    ├── Found → CHECK FRESHNESS
+    │           ├── Fresh (not expired) → SERVE FROM CACHE (cache hit)
+    │           │   Response headers:
+    │           │     X-Cache: HIT
+    │           │     Age: 3600  (seconds since cached)
+    │           │     CF-Cache-Status: HIT  (Cloudflare)
+    │           │     X-Amz-Cf-Pop: NRT57  (CloudFront)
+    │           │
+    │           └── Stale (expired but still stored)
+    │               ├── Serve stale + revalidate in background
+    │               │   (stale-while-revalidate)
+    │               └── Or revalidate with origin first
+    │                   If-None-Match / If-Modified-Since
+    │                   ├── 304 Not Modified → SERVE CACHED (revalidated hit)
+    │                   └── 200 OK (new content) → UPDATE CACHE, serve new
+    │
+    └── Not found → CACHE MISS (fetch from origin)</div>
+
+<h2>Cache-Control Headers</h2>
+<p>The origin server controls cacheability through HTTP response headers. These headers tell the CDN <strong>what to cache and for how long</strong>.</p>
+
+<table>
+  <tr><th>Header</th><th>Example</th><th>Meaning</th></tr>
+  <tr><td><strong>Cache-Control: max-age</strong></td><td>max-age=3600</td><td>Cache for 3600 seconds (1 hour)</td></tr>
+  <tr><td><strong>Cache-Control: s-maxage</strong></td><td>s-maxage=86400</td><td>Shared cache (CDN) TTL: 1 day; overrides max-age for CDNs</td></tr>
+  <tr><td><strong>Cache-Control: no-store</strong></td><td>no-store</td><td class="red">Never cache (user data, personalized pages)</td></tr>
+  <tr><td><strong>Cache-Control: no-cache</strong></td><td>no-cache</td><td class="yellow">Cache but always revalidate before serving</td></tr>
+  <tr><td><strong>Cache-Control: public</strong></td><td>public</td><td class="green">May be cached by any cache (CDN, browser, proxy)</td></tr>
+  <tr><td><strong>Cache-Control: private</strong></td><td>private</td><td class="yellow">Only browser may cache, CDN must not</td></tr>
+  <tr><td><strong>Cache-Control: must-revalidate</strong></td><td>must-revalidate</td><td>After expiry, must verify with origin before using stale copy</td></tr>
+  <tr><td><strong>Cache-Control: immutable</strong></td><td>immutable</td><td class="green">Never revalidate (content never changes, e.g., hashed filenames)</td></tr>
+</table>
+
+<h3>Stale-While-Revalidate and Stale-If-Error</h3>
+<pre>Cache-Control: max-age=3600, stale-while-revalidate=86400, stale-if-error=604800
+
+  Time    State       Behavior
+  ─────────────────────────────────────────────────────────
+  0s      Fresh       Serve from cache, no validation
+  3600s   Stale       Serve stale + trigger background revalidation
+                      (user gets instant response, cache updates async)
+  3600s   Error       If origin returns 5xx, serve stale for up to 7 days
+  90000s  Expired     Must fetch from origin, nothing to serve if error</pre>
+
+<h2>Validation Headers</h2>
+<p>When the CDN needs to check if a cached resource is still current, it sends validation headers to the origin:</p>
+
+<table>
+  <tr><th>Mechanism</th><th>Request Header</th><th>Response</th><th>Result</th></tr>
+  <tr><td><strong>ETag</strong></td><td>If-None-Match: "abc123"</td><td>304 Not Modified</td><td class="green">Serve cached copy (saves bandwidth)</td></tr>
+  <tr><td><strong>Last-Modified</strong></td><td>If-Modified-Since: Wed, 21 Oct 2025</td><td>304 Not Modified</td><td class="green">Serve cached copy</td></tr>
+  <tr><td><strong>ETag changed</strong></td><td>If-None-Match: "abc123"</td><td>200 OK (new body)</td><td>Update cache, serve new</td></tr>
+</table>
+
+<div class="callout">
+  <strong>304 vs full response:</strong> A 304 response has an empty body (just headers). This saves significant bandwidth for large assets like images or videos. The CDN updates its cached copy and serves it. This is a "revalidated hit" &mdash; the CDN had the resource but confirmed it is still valid.
+</div>
+
+<h2>Cache Hit Ratio</h2>
+<p><strong>Cache hit ratio = cache hits / (cache hits + cache misses)</strong>. This is the single most important CDN metric. Higher is better.</p>
+
+<table>
+  <tr><th>Content Type</th><th>Typical Hit Ratio</th><th>Why</th></tr>
+  <tr><td>Static assets (JS, CSS, images with hashed URLs)</td><td class="green">90-95%</td><td>Filenames change when content changes; can cache forever</td></tr>
+  <tr><td>Images, fonts (without hashing)</td><td class="green">80-90%</td><td>Popular images requested repeatedly; long TTLs</td></tr>
+  <tr><td>Video streams (HLS/DASH segments)</td><td class="green">85-95%</td><td>Same segments served to many viewers</td></tr>
+  <tr><td>API responses (short TTL)</td><td class="yellow">50-70%</td><td>Frequent invalidation, varied query params</td></tr>
+  <tr><td>Dynamic/user-specific content</td><td class="red">0-10%</td><td>Not cacheable (Cache-Control: private/no-store)</td></tr>
+  <tr><td><strong>Overall site average</strong></td><td class="green">70-95%</td><td>Depends heavily on cache strategy</td></tr>
+</table>
+
+<h3>Impact of Hit Ratio on Origin Load</h3>
+<pre>Scenario: 1 million requests per hour, origin can handle 200K requests/hour
+
+  Hit Ratio: 95%   → 50K requests to origin   ✓ well within capacity
+  Hit Ratio: 80%   → 200K requests to origin   ⚠ at capacity limit
+  Hit Ratio: 60%   → 400K requests to origin   ✗ origin overflows
+
+  A 15% drop in hit ratio doubled the origin load!
+
+  Cost impact (assuming origin costs 10x more per request than CDN):
+  Hit Ratio 95%:  50K origin × $0.01 + 950K CDN × $0.001  = $1,450/hr
+  Hit Ratio 80%: 200K origin × $0.01 + 800K CDN × $0.001  = $2,800/hr
+  Hit Ratio 60%: 400K origin × $0.01 + 600K CDN × $0.001  = $4,600/hr</pre>
+
+<div class="callout green">
+  <strong>Interview tip:</strong> When designing a system, always discuss cache hit ratio. A well-designed CDN strategy should target 90%+ hit ratios for static assets. Mention content hashing (putting a hash in the filename like <code>app.a1b2c3.js</code>) as the primary technique for achieving this, combined with <code>Cache-Control: immutable</code>.
+</div>
+
+<h2>What Drives Hit Ratio Down</h2>
+<ul>
+  <li><strong>URL proliferation</strong> &mdash; unique query parameters (e.g., <code>/image.jpg?timestamp=123</code>) create separate cache entries. Each unique URL is a potential miss.</li>
+  <li><strong>Low TTLs</strong> &mdash; aggressive max-age values cause frequent revalidation, increasing miss-like behavior.</li>
+  <li><strong>Long-tail content</strong> &mdash; millions of rarely-accessed URLs (e.g., user profile images for inactive users) each get fetched once and then sit idle.</li>
+  <li><strong>Small cache capacity</strong> &mdash; if the edge server's cache fills up, it evicts entries (usually LRU), turning what would be hits into misses.</li>
+  <li><strong>Authentication tokens in URLs</strong> &mdash; <code>/api/user?token=abc</code> is never a cache hit because every user has a unique token.</li>
+  <li><strong>Incorrect Vary headers</strong> &mdash; <code>Vary: User-Agent</code> creates separate cache entries for every browser version, fragmenting the cache.</li>
+</ul>
+
+<h2>Vary Header and Cache Key Complexity</h2>
+<pre>The Vary header tells the CDN which request headers affect the response.
+Each unique combination creates a separate cache entry.
+
+  Vary: Accept-Encoding
+    → 2 entries: gzip version + br (Brotli) version
+    → Normal and expected
+
+  Vary: User-Agent
+    → Thousands of entries: one per unique User-Agent string
+    → Cache fragmentation! Hit ratio drops dramatically
+
+  Vary: Cookie
+    → Potentially one entry per user
+    → Effectively disables caching for that resource
+
+  Best practice: Only Vary on headers that genuinely change the response
+  For most static content: Vary: Accept-Encoding (for compression)
+  For localized content:   Vary: Accept-Language</pre>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What is a cache hit ratio and what's a good one?"</strong><br>Cache hit ratio = hits / (hits + misses). For static assets with content hashing, 90-95% is achievable. For a mixed-traffic site, 70-80% is good. Below 50% usually indicates a caching configuration problem (unique query params, low TTLs, auth tokens in URLs).</li>
+  <li><strong>"How does the CDN decide whether to serve from cache?"</strong><br>The CDN builds a cache key from the URL (and Vary headers), looks it up in local storage. If found and not expired (per Cache-Control max-age), it serves directly. If expired, it may serve stale while revalidating. If not found, it triggers a <a href="cache-miss.html">cache miss</a> and fetches from origin.</li>
+  <li><strong>"How would you improve a low cache hit ratio?"</strong><br>(1) Normalize query parameters (strip tracking params like <code>utm_source</code>), (2) use content hashing in filenames, (3) increase TTLs with <code>stale-while-revalidate</code>, (4) remove unnecessary <code>Vary</code> headers, (5) move auth from query params to request headers, (6) increase edge cache capacity.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>Browser cache vs CDN cache internals &mdash; focus on CDN behavior in system design</li>
+    <li>Detailed <code>Vary: *</code> edge cases &mdash; just know it effectively disables caching</li>
+    <li>Legacy <code>Expires</code> header &mdash; <code>Cache-Control</code> superseded it; know <code>Expires</code> exists but don't deep-dive</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>MDN: HTTP Caching</strong> &mdash; developer.mozilla.org/en-US/docs/Web/HTTP/Caching</li>
+    <li><strong>"Caching Best Practices" &mdash; web.dev</strong> &mdash; web.dev/articles/http-cache</li>
+    <li><strong>"Cache-Control: Immutable" &mdash; Jake Archibald</strong> &mdash; jakearchibald.com</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="edge-servers.html">&larr; edge-servers.html</a>
+  <a href="cache-miss.html">Next: cache-miss.html &rarr;</a>
+</div>
+
+</body>
+</html>

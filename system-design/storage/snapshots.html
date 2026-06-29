@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.7.2 Snapshots</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">3 Storage</a> / <a href="index.html">3.7 MVCC</a> / 3.7.2
+</div>
+
+<h1>Snapshots</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand what a snapshot is in the context of MVCC, how PostgreSQL constructs and assigns snapshots, why read-only transactions benefit from consistent snapshots, and the dangers of long-running transactions holding snapshots open.</p>
+
+<h2>Definition</h2>
+<p>A <strong>snapshot</strong> in MVCC is a logical point-in-time view of the database that answers the question: "which transactions are visible to me?" When a transaction (or individual statement, depending on isolation level) begins, the database captures a snapshot that records which transactions had committed at that moment. Every subsequent read by this transaction uses the snapshot to filter row versions&mdash;seeing only versions created by committed transactions and ignoring versions from transactions that were still in-progress or had not yet started.</p>
+
+<div class="callout">
+  <strong>Key insight:</strong> A snapshot is not a physical copy of the database. It is a small metadata structure that describes a <em>visibility horizon</em>&mdash;a set of transaction IDs that the transaction considers committed. The actual data is read from the version chains; the snapshot merely determines which version in each chain is selected.
+</div>
+
+<h2>PostgreSQL Snapshot Structure</h2>
+<p>PostgreSQL represents a snapshot as three values:</p>
+
+<table>
+  <tr>
+    <th>Component</th>
+    <th>Description</th>
+  </tr>
+  <tr>
+    <td><code>xmin</code></td>
+    <td>The lowest (oldest) active transaction ID at snapshot time. All transactions with IDs less than <code>xmin</code> are guaranteed to be either committed or aborted&mdash;their status is known.</td>
+  </tr>
+  <tr>
+    <td><code>xmax</code></td>
+    <td>The first transaction ID that is <strong>not yet started</strong> at snapshot time. All transactions with IDs greater than or equal to <code>xmax</code> are invisible (they started after the snapshot).</td>
+  </tr>
+  <tr>
+    <td><code>xip[]</code> array</td>
+    <td>A sorted array of transaction IDs that were <strong>in-progress</strong> when the snapshot was taken. These fall in the range [<code>xmin</code>, <code>xmax</code>) and their outcome (commit/abort) was unknown at snapshot time.</td>
+  </tr>
+</table>
+
+<div class="diagram">
+  Transaction timeline at snapshot moment:
+
+  TID:  90  91  92  93  94  95  96  97  98  99 100 101
+        ✓   ✓   ✓   ✓   ?   ✓   ?   ?   ✓   ?   ?   ?  (future)
+        |         |         |                   |
+        |         |    xmin=93                 |    xmax=100
+        |         |         |                   |
+        committed committed in-progress committed in-progress  not-started
+
+  Snapshot:
+    xmin = 93
+    xmax = 100
+    xip[] = [94, 96, 97, 99]   ← transactions that were active
+
+  Visibility for a tuple version with xmin=92:
+    92 < xmin(93) → check commit status → committed → VISIBLE
+
+  Visibility for a tuple version with xmin=96:
+    96 is in xip[] → was in-progress at snapshot time → INVISIBLE
+    (even if T96 later commits, this snapshot won't see it)
+
+  Visibility for a tuple version with xmin=101:
+    101 >= xmax(100) → started after snapshot → INVISIBLE
+</div>
+
+<h2>Consistent Snapshot for Read-Only Transactions</h2>
+<p>In <strong>REPEATABLE READ</strong> and <strong>SERIALIZABLE</strong> isolation levels, PostgreSQL takes a single snapshot at the start of the transaction's first query. All subsequent statements within that transaction use the <em>same</em> snapshot, guaranteeing a consistent view of the database throughout the transaction.</p>
+
+<ul>
+  <li><strong>Read Committed:</strong> A new snapshot is taken at the start of <em>each</em> statement. This means a transaction can see changes committed by other transactions between its statements.</li>
+  <li><strong>Repeatable Read:</strong> A single snapshot at first statement. The transaction sees a frozen view of the database, never seeing changes from concurrent commits.</li>
+  <li><strong>Serializable:</strong> Same snapshot mechanism as Repeatable Read, plus additional predicate locking to detect serialization anomalies.</li>
+</ul>
+
+<div class="callout green">
+  <strong>Why this matters for read-heavy workloads:</strong> A long-running analytics query under Repeatable Read takes a snapshot once and then reads a consistent dataset, even while thousands of concurrent writes are streaming in. The snapshot ensures the query sees no partial updates.
+</div>
+
+<h2>Long-Running Transactions and Snapshot Too Old</h2>
+<p>A snapshot pins old row versions in the database: as long as any active snapshot might need to see a particular version, that version cannot be garbage-collected. This creates a direct conflict between long-running transactions and storage reclamation.</p>
+
+<div class="diagram">
+  Timeline of danger:
+
+  T1 (xmin=100): BEGIN; SELECT * FROM large_table;
+       │  (query runs for 45 minutes)
+       │
+  T2 (xmin=110): UPDATE users SET status='active';
+  T3 (xmin=111): UPDATE users SET status='active';
+  ...
+  T99 (xmin=199): UPDATE users SET status='active';
+       │
+       │  VACUUM cannot reclaim any old versions of "users" rows
+       │  because T1's snapshot (xmin=100) might still need them.
+       │
+       ▼  Table bloats. Undo log grows. Performance degrades.
+
+  In PostgreSQL:  no "snapshot too old" error by default,
+    but VACUUM is starved, table grows unbounded.
+
+  In Oracle:      ORA-01555: snapshot too old (undo overwritten)
+    because undo segments are finite and get recycled.
+</div>
+
+<div class="callout red">
+  <strong>Operational impact:</strong> A single forgotten <code>BEGIN</code> without <code>COMMIT</code> or <code>ROLLBACK</code> can prevent vacuum across the entire database. In production systems, set <code>idle_in_transaction_session_timeout</code> and monitor <code>pg_stat_activity</code> for long-held snapshots.
+</div>
+
+<h2>Snapshot Across Different Systems</h2>
+
+<table>
+  <tr>
+    <th>System</th>
+    <th>Snapshot Scope</th>
+    <th>Retention Mechanism</th>
+    <th>Failure Mode</th>
+  </tr>
+  <tr>
+    <td>PostgreSQL</td>
+    <td>Per-statement (RC) or per-transaction (RR/S)</td>
+    <td>Active snapshots prevent VACUUM from reclaiming dead tuples</td>
+    <td class="red">Table bloat, transaction ID wraparound</td>
+  </tr>
+  <tr>
+    <td>MySQL InnoDB</td>
+    <td>Per-transaction in RC/RR</td>
+    <td>Undo log segments; <code>innodb_undo_log_truncate</code></td>
+    <td class="red">ORA-01555 equivalent (rollback segment overrun)</td>
+  </tr>
+  <tr>
+    <td>Oracle</td>
+    <td>Per-statement (RC) or per-transaction (SERIALIZABLE)</td>
+    <td>Undo tablespace with <code>undo_retention</code> setting</td>
+    <td class="red">ORA-01555: snapshot too old</td>
+  </tr>
+  <tr>
+    <td>CockroachDB</td>
+    <td>Per-statement (RC) or per-transaction (SERIALIZABLE)</td>
+    <td>GC threshold based on oldest active timestamp</td>
+    <td class="red">Similar bloat if GC is stalled</td>
+  </tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>What is a snapshot in MVCC? Is it a physical copy of the data?</li>
+  <li>Explain the three components of a PostgreSQL snapshot (<code>xmin</code>, <code>xmax</code>, <code>xip</code>).</li>
+  <li>Why does Read Committed take a new snapshot per statement while Repeatable Read takes one per transaction? What are the trade-offs?</li>
+  <li>What happens to VACUUM when a long-running transaction holds a snapshot open?</li>
+  <li>How do you detect and prevent snapshot-holding transactions in production?</li>
+  <li>What is ORA-01555 "snapshot too old"? Why doesn't PostgreSQL throw this error by default?</li>
+  <li>Design a system to take consistent snapshots across a distributed database. What are the challenges?</li>
+</ul>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>For interviews, skip:</strong>
+  <ul>
+    <li>PostgreSQL's <code>pg_snapshot</code> internal C struct layout and memory management</li>
+    <li>Oracle's <code>SCN</code> (System Change Number) arithmetic and wrap-around handling</li>
+    <li>MySQL InnoDB's <code>read_view_t</code> internals and <code>MVCC::view_open()</code> implementation</li>
+    <li>Distributed snapshot algorithms (Spanner's TrueTime-based snapshots are a different topic)</li>
+    <li>CockroachDB's HLC (Hybrid Logical Clock) based snapshot internals</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Reading Sources</div>
+  <ul>
+    <li>PostgreSQL Documentation &mdash; "MVCC in PostgreSQL" (snapshot semantics per isolation level)</li>
+    <li><em>Designing Data-Intensive Applications</em>, Martin Kleppmann &mdash; Chapter 7: Transactions (snapshot isolation explained)</li>
+    <li><em>The Internals of PostgreSQL</em>, InterDB.jp &mdash; Chapter 5: Concurrency Control (snapshot construction)</li>
+    <li>Oracle Concepts Guide &mdash; "Read Consistency and Undo Segments" (ORA-01555 mechanics)</li>
+    <li><em>Database Internals</em>, Alex Petrov &mdash; Chapter 9: Distributed Transactions (snapshot scope)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="version-chains.html">&larr; 3.7.1 Version Chains</a>
+  <a href="visibility-rules.html">Next: 3.7.3 Visibility Rules &rarr;</a>
+</div>
+
+</body>
+</html>

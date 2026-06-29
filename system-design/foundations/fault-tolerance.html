@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.1.7 Fault Tolerance</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .formula { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; text-align: center; font-size: 1.1rem; color: #79c0ff; }
+  .formula small { display: block; text-align: left; color: #8b949e; font-size: 0.8rem; margin-top: 0.75rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#1">1 Fundamentals</a> / <a href="../index.html#1.1">1.1 System Design Basics</a> / 1.1.7
+</div>
+
+<h1>Fault Tolerance</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>The difference between faults, errors, and failures</li>
+  <li>Types of faults and how to handle each</li>
+  <li>Why distributed systems make fault tolerance hard</li>
+  <li>Specific techniques: circuit breakers, bulkheads, retries, timeouts, idempotency</li>
+  <li>Failure detection and why perfect detection is impossible</li>
+</ul>
+
+<h2>Definition</h2>
+<p>Fault tolerance is the <strong>ability of a system to continue operating correctly in the presence of component failures</strong>, degrading gracefully rather than crashing.</p>
+
+<div class="callout yellow">
+  <strong>Analogy:</strong> A car with a spare tire is fault-tolerant to a flat tire. It doesn't prevent the flat, but it keeps you moving. The spare tire is redundancy. Knowing how to change it is the recovery plan.
+</div>
+
+<h2>Fault vs Error vs Failure</h2>
+<p>This distinction is critical. Interviewers expect you to use these terms precisely.</p>
+<table>
+  <tr><th></th><th>Fault</th><th>Error</th><th>Failure</th></tr>
+  <tr><td>What</td><td>A defect in a component</td><td>Deviation from correct state</td><td>System no longer delivers service</td></tr>
+  <tr><td>Example</td><td>Buggy line of code, memory leak</td><td>Wrong calculation, corrupted state</td><td>Service returns 500 errors</td></tr>
+  <tr><td>Cause</td><td>Design flaw, wear and tear</td><td>Fault activated at runtime</td><td>Error propagated to user</td></tr>
+</table>
+
+<div class="callout">
+  <strong>The cascade:</strong> Fault → Error → Failure. Not every fault causes an error, and not every error causes a failure. Fault tolerance aims to stop the cascade at the fault stage or contain the error before it becomes a failure.
+</div>
+
+<h2>Why Fault Tolerance is Hard in Distributed Systems</h2>
+<div class="callout red">
+  <strong>The fundamental challenge:</strong> In a distributed system, partial failures are <em>normal</em>. You cannot know with certainty whether a remote node is dead, slow, or the network is partitioned. The FLP impossibility theorem proves that in asynchronous networks, there is no algorithm that can reliably distinguish a crashed node from a slow one.
+</div>
+
+<pre>The CAP theorem captures this: during a network partition, you must choose between
+consistency and availability. You cannot have both. Every distributed system design
+is an implicit bet on which failures are more likely.</pre>
+
+<h2>Types of Faults</h2>
+<table>
+  <tr><th>Type</th><th>Description</th><th>Example</th><th>Common in</th></tr>
+  <tr><td>Crash faults</td><td>Component stops entirely (process, machine)</td><td>OOM kill, kernel panic, power loss</td><td>All systems</td></tr>
+  <tr><td>Timing faults</td><td>Component exceeds time bounds</td><td>GC pause, slow disk, network congestion</td><td>Java apps, shared storage</td></tr>
+  <tr><td>Byzantine faults</td><td>Component behaves arbitrarily/maliciously</td><td>Compromised node, firmware bug</td><td>Rare — most systems don't handle these</td></tr>
+  <tr><td>Omission faults</td><td>Component fails to send/recv messages</td><td>Dropped packets, buffer overflow</td><td>Network systems</td></tr>
+  <tr><td>Performance faults</td><td>Component runs slowly but doesn't stop</td><td>Throttled API, overloaded database</td><td>Cloud systems, shared infra</td></tr>
+</table>
+
+<h2>Fault Tolerance Techniques</h2>
+
+<h3>1. Redundancy and Replication</h3>
+<div class="diagram">  Active-Active:  [Server A] ←→ [Server B]
+  Both serve traffic. Either can fail.
+
+  Active-Passive: [Server A (serving)] → [Server B (standby)]
+  B takes over only when A fails.</div>
+
+<h3>2. Circuit Breakers</h3>
+<p>Stop cascading failures by failing fast when a dependency is unhealthy.</p>
+<div class="diagram">  CLOSED (normal) ──threshold exceeded──→ OPEN (fail fast)
+       ↑                                      │ after timeout
+       └──single success──────────────→ HALF-OPEN (probe)</div>
+<pre>CLOSED:    Normal requests flow to dependency
+OPEN:       All requests return immediately (fallback/error)
+HALF-OPEN:  One test request; success→CLOSED, fail→OPEN
+
+Configurable: failure count threshold, timeout before retry, half-open success count</pre>
+<p>See: <a href="../reliability/circuit-breaker.html">Circuit Breaker</a></p>
+
+<h3>3. Bulkheads</h3>
+<p>Isolate failures so one dependency cannot exhaust shared resources.</p>
+<pre>Without:  Shared thread pool → Slow Service B → all threads blocked → app dead
+With:     Pool A → Service A (isolated)
+           Pool B → Service B (slow, but only Pool B affected)
+           Pool C → Service C (unaffected)</pre>
+<p>See: <a href="../reliability/bulkhead.html">Bulkhead</a></p>
+
+<h3>4. Retries with Exponential Backoff</h3>
+<pre>Request fails → Wait 1s + jitter → Retry → fails
+  → Wait 2s + jitter → Retry → fails
+  → Wait 4s + jitter → Retry → success
+
+Formula:  delay = base * 2^attempt + random(0, jitter_ms)
+Max: 3-5 retries, cap at ~60s
+ALWAYS add jitter to prevent thundering herd.</pre>
+
+<div class="callout yellow">
+  <strong>Retries MUST be paired with idempotency.</strong> Use idempotency keys for non-idempotent operations (payments, orders).
+</div>
+
+<h3>5. Timeouts</h3>
+<p>Every remote call MUST have an explicit timeout. Without timeouts, a hung connection blocks a thread forever.</p>
+<pre>Connection timeout: 5s  (how long to establish connection)
+Read timeout:    10s  (how long to wait for response)
+Overall timeout:  15s  (total time budget)
+
+Rule: Set timeouts based on the slowest NORMAL response time, not the fastest.
+If p99 latency is 200ms, set read timeout to 2-5 seconds (10-25x).</pre>
+
+<h3>6. Idempotency</h3>
+<p>An operation is idempotent if executing it multiple times produces the same result as once.</p>
+<pre>Non-idempotent: POST /charge { amount: 50 }  → Retry → double charge!
+Idempotent:     POST /charge { idempotency_key: "req_abc" }  → Retry → cached result</pre>
+<p>Design: Use PUT instead of POST (PUT is idempotent by definition). Use idempotency keys for POST.</p>
+
+<h3>7. Graceful Degradation</h3>
+<pre>Normal:      Full search with filters, sorting, recommendations
+Degraded:     Basic search (recommendations service down)
+Further:      Cached popular results (search service down)
+Unavailable: "Try again later" (entire backend down)</pre>
+<p>See: <a href="../reliability/graceful-degradation.html">Graceful Degradation</a></p>
+
+<h3>8. Rate Limiting</h3>
+<p>Prevent a single client from overwhelming the system, which could cause failures.</p>
+<ul>
+  <li><a href="../reliability/token-bucket.html">Token Bucket</a> — burst-friendly, most common</li>
+  <li><a href="../reliability/leaky-bucket.html">Leaky Bucket</a> — steady rate</li>
+  <li><a href="../reliability/sliding-window.html">Sliding Window</a> — smoother limits</li>
+</ul>
+
+<h2>Failure Detection</h2>
+<p>How do you know something has failed?</p>
+<ul>
+  <li><strong>Heartbeats:</strong> Periodic "I'm alive" messages. Missing N heartbeats = failure suspected.</li>
+  <li><strong>Phi Accrual Detector:</strong> (Cassandra/Akka) Adaptive — models heartbeat arrival times as a Gaussian distribution. Phi value represents suspicion level. Better than fixed thresholds because it adapts to network conditions.</li>
+  <li><strong>Gossip protocols:</strong> Nodes exchange failure information. All nodes eventually learn about failures. Used by Cassandra, Consul.</li>
+</ul>
+
+<div class="callout red">
+  <strong>FLP Impossibility (1985):</strong> In an asynchronous network, there is no deterministic algorithm that can solve consensus if even one process can crash. This is why systems like ZooKeeper and etcd use timeouts (which assume a synchronous window) rather than pure async detection.
+</div>
+
+<h2>Byzantine Fault Tolerance</h2>
+<p>Most systems only handle crash faults (the node stops). Byzantine faults are when a node sends contradictory messages to different peers — like a general sending "attack north" to half the army and "attack south" to the other half.</p>
+
+<div class="callout">
+  <strong>Why most systems don't need BFT:</strong> BFT is expensive (requires 3f+1 nodes for f Byzantine faults). In practice, the risk of a node behaving arbitrarily is much lower than the risk of it crashing. ZooKeeper, etcd, and most production systems handle crash faults only.
+</div>
+<p>BFT is needed in: aerospace, financial exchanges, blockchain (where participants are adversarial).</p>
+
+<h2>Real World Examples</h2>
+<ul>
+  <li><strong>Netflix:</strong> Hystrix (now Resilience4j) for circuit breakers. Thread pool isolation (bulkheads). Chaos Monkey for testing.</li>
+  <li><strong>Google:</strong> Borg preempts tasks for hardware failures. Service-level auto-restart within seconds.</li>
+  <li><strong>AWS:</strong> Multi-AZ deployment. Automated instance recovery. Route 53 health checks trigger failover.</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"How do you prevent cascading failures?"</strong><br><a href="../reliability/circuit-breaker.html">Circuit breakers</a> (stop calling failing service), <a href="../reliability/bulkhead.html">bulkheads</a> (isolate thread pools), timeouts (never block forever), <a href="reliability.html">graceful degradation</a>.</li>
+  <li><strong>"Why do retries need jitter?"</strong><br>Without jitter, all clients retry at the same intervals after a shared failure → synchronized waves of load that crash the recovering service. Random jitter spreads retries over time.</li>
+  <li><strong>"What happens when a database fails?"</strong><br>Circuit breaker opens → requests go to fallback → <a href="../replication/read-replica.html">Read from replicas</a> (stale reads) → Retry with backoff → Failover to standby → <a href="reliability.html">Graceful degradation</a>.</li>
+  <li><strong>"How do you design idempotent retries?"</strong><br>Idempotency key on every request. Server stores result per key. Retries with same key return cached result without re-executing.</li>
+  <li><strong>"What's the difference between circuit breaker and bulkhead?"</strong><br>Circuit breaker: Protects the caller from a failing dependency. Bulkhead: Prevents one dependency from consuming all resources.</li>
+  <li><strong>"What is graceful degradation?"</strong><br>When a non-critical component fails, reduce functionality instead of going down entirely. Serve cached content, show simplified UI, disable features.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>PBFT, Raft, Paxos protocol details (unless specifically asked)</li>
+    <li>FLP impossibility proof details</li>
+    <li>Specific resilience library implementations</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>Designing Data-Intensive Applications</strong> — Chapter 5 (Replication), Chapter 8 (Transactions)</li>
+    <li><strong>Google SRE Book</strong> — Chapter 13 (Failure Management)</li>
+    <li><strong>"Release It!" (Michael Nygard)</strong> — Chapters on stability patterns (circuit breakers, bulkheads, timeouts)</li>
+    <li><strong>Kyle Kingsbury's Jepsen series</strong> — Real-world consistency testing of distributed databases</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="durability.html">&larr; 1.1.6 Durability</a>
+  <a href="latency.html">Next: 1.1.8 Latency &rarr;</a>
+</div>
+
+</body>
+</html>

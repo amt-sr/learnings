@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.8.6 Covering Index</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="#">System Design</a> / <a href="#">3 Storage</a> / <a href="#">3.8 Indexes</a> / 3.8.6
+</div>
+
+<h1>Covering Index</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand how a covering index satisfies a query entirely from the index B+ tree without requiring a bookmark lookup back to the data pages, how to identify covering index opportunities via EXPLAIN, and the trade-off between index size and read performance.</p>
+
+<h2>Definition</h2>
+<p>A <strong>covering index</strong> is an index that contains all columns required by a query -- including columns in the SELECT list, WHERE clause, ORDER BY, and GROUP BY. Because the index alone satisfies the query, the database engine does not need to perform a bookmark lookup (also called a key lookup or table fetch) to retrieve the full row. This turns an otherwise two-step lookup into a single B+ tree traversal.</p>
+
+<h2>How It Works</h2>
+
+<div class="diagram">
+  Non-Covering Index (requires bookmark lookup)
+
+  Secondary Index (on email)          Clustered Index (= data)
+       [m@z|s@z]                         [50|100]
+      /         \                       /        \
+  [a@c|j@b]   [t@b|w@a]           [10|30|40]  [60|80|90]
+    |    |       |    |              |    |      |    |
+  (PK) (PK)   (PK) (PK)           Data  Data   Data Data
+
+  SELECT name, email FROM users WHERE email = 'jane@example.com';
+  Step 1: Find leaf in secondary index -> PK = 42
+  Step 2: Traverse clustered index -> read full row -> extract name, email
+  Cost: 2 B+ tree traversals
+
+
+  Covering Index (no bookmark lookup)
+
+  Index (on email) INCLUDE (name)
+       [m@z|s@z]
+      /         \
+  [a@c|j@b]   [t@b|w@a]
+    |    |       |    |
+  (email,       (email,
+   name)         name)
+
+  SELECT name, email FROM users WHERE email = 'jane@example.com';
+  Step 1: Find leaf -> get email AND name directly from index leaf
+  Step 2: (none needed -- query is fully satisfied)
+  Cost: 1 B+ tree traversal (index-only scan)
+</div>
+
+<h2>Creating Covering Indexes</h2>
+
+<h3>Using a Composite Index</h3>
+
+<p>The simplest way to create a covering index is to include all needed columns as part of the index key.</p>
+
+<pre>
+-- Query:
+SELECT user_id, status, created_at
+FROM orders
+WHERE user_id = 42 AND status = 'active';
+
+-- Covering composite index:
+CREATE INDEX idx_orders_user_status_created
+  ON orders(user_id, status, created_at);
+
+-- All three columns are in the index key.
+-- Query satisfied entirely from the index.
+</pre>
+
+<h3>Using INCLUDE (Non-Key Columns)</h3>
+
+<p>Most modern databases support an INCLUDE clause that adds columns to the index leaf without making them part of the key. Included columns are not used for index ordering or seek but are stored in the leaf for covering purposes.</p>
+
+<pre>
+-- SQL Server / PostgreSQL 11+
+CREATE INDEX idx_orders_user_status
+  ON orders(user_id, status)
+  INCLUDE (created_at, amount);
+
+-- Key columns: user_id, status (used for seek + ordering)
+-- Included columns: created_at, amount (stored in leaf, not in key)
+
+-- Benefits of INCLUDE:
+-- 1. Smaller key -> more entries per page -> shallower tree
+-- 2. Included columns don't affect sort order or uniqueness
+-- 3. Can include wide columns (VARCHAR, TEXT) without bloating the key
+</pre>
+
+<table>
+  <tr>
+    <th>Engine</th>
+    <th>INCLUDE Clause Support</th>
+    <th>Notes</th>
+  </tr>
+  <tr>
+    <td>SQL Server</td>
+    <td class="green">Yes</td>
+    <td>Original inventor of INCLUDE syntax. Widely used.</td>
+  </tr>
+  <tr>
+    <td>PostgreSQL 11+</td>
+    <td class="green">Yes</td>
+    <td>Supported for B-tree indexes. Uses "covering indexes" terminology.</td>
+  </tr>
+  <tr>
+    <td>MySQL / InnoDB</td>
+    <td class="red">No</td>
+    <td>Must include all columns in the key (or use a full composite index)</td>
+  </tr>
+  <tr>
+    <td>SQLite</td>
+    <td class="green">Yes</td>
+    <td>Supported since 3.9.0.</td>
+  </tr>
+</table>
+
+<h2>Identifying Covering Index Opportunities</h2>
+
+<h3>Using EXPLAIN</h3>
+
+<pre>
+-- MySQL
+EXPLAIN SELECT name, email FROM users WHERE email = 'jane@example.com';
+
+-- Look for: Extra: Using index
+-- "Using index" means the query was satisfied entirely from an index (covering).
+
+-- PostgreSQL
+EXPLAIN ANALYZE SELECT name, email FROM users WHERE email = 'jane@example.com';
+
+-- Look for: "Index Only Scan using idx_users_email on users"
+-- vs "Index Scan using idx_users_email on users" (non-covering, needs heap fetch)
+-- vs "Bitmap Heap Scan" (requires table access)
+</pre>
+
+<table>
+  <tr>
+    <th>EXPLAIN Output</th>
+    <th>MySQL</th>
+    <th>PostgreSQL</th>
+    <th>Meaning</th>
+  </tr>
+  <tr>
+    <td>Covering (index-only)</td>
+    <td>Using index</td>
+    <td>Index Only Scan</td>
+    <td class="green">Query satisfied from index alone</td>
+  </tr>
+  <tr>
+    <td>Non-covering</td>
+    <td>(blank) or Using where</td>
+    <td>Index Scan</td>
+    <td class="red">Requires table/heap access (bookmark lookup)</td>
+  </tr>
+  <tr>
+    <td>Full table scan</td>
+    <td>ALL</td>
+    <td>Seq Scan</td>
+    <td class="red">No index used at all</td>
+  </tr>
+</table>
+
+<h2>Trade-off: Larger Index vs Faster Reads</h2>
+
+<div class="diagram">
+  The Covering Index Spectrum
+
+  Narrow index (no covering)                Wide index (covering)
+  ========================                =========================
+  | Key: email              |             | Key: email              |
+  | Leaf: (email, PK)       |             | Leaf: (email, PK, name, |
+  | Small on disk            |             |   status, created_at)   |
+  | 1 tree traversal +      |             | Larger on disk          |
+  | 1 bookmark lookup        |             | 1 tree traversal only   |
+  | Total: 2 I/O ops        |             | Total: 1 I/O op         |
+  =========================                =========================
+        ^                                          ^
+        |                                          |
+  Low write amplification                 High write amplification
+  Higher latency per query                Lower latency per query
+  Smaller buffer pool usage              Larger buffer pool usage
+</div>
+
+<table>
+  <tr>
+    <th>Factor</th>
+    <th>Narrow Index (No Covering)</th>
+    <th>Wide Index (Covering)</th>
+  </tr>
+  <tr>
+    <td>Read latency</td>
+    <td class="red">Higher (bookmark lookup)</td>
+    <td class="green">Lower (single traversal)</td>
+  </tr>
+  <tr>
+    <td>Write amplification</td>
+    <td class="green">Lower</td>
+    <td class="red">Higher (wider index entries)</td>
+  </tr>
+  <tr>
+    <td>Index size on disk</td>
+    <td class="green">Smaller</td>
+    <td class="red">Larger</td>
+  </tr>
+  <tr>
+    <td>Buffer pool efficiency</td>
+    <td class="green">More index pages fit in memory</td>
+    <td class="red">Fewer index pages fit in memory</td>
+  </tr>
+  <tr>
+    <td>Best for</td>
+    <td>Write-heavy or memory-constrained</td>
+    <td>Read-heavy with hot queries</td>
+  </tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Practical guidance:</strong> Covering indexes are most impactful when (a) the query is hot (executed frequently), (b) the table is large (bookmark lookup is expensive), and (c) the additional columns are small (index bloat is minimal). For write-heavy tables with many indexes already, adding more columns to an index may worsen write performance more than it improves reads.
+</div>
+
+<h2>Common Patterns</h2>
+
+<h3>Paginated Listing Queries</h3>
+
+<pre>
+-- Common API pattern: paginated user list with sorting
+SELECT user_id, name, email, created_at
+FROM users
+WHERE status = 'active'
+ORDER BY created_at DESC
+LIMIT 50 OFFSET 0;
+
+-- Covering index:
+CREATE INDEX idx_users_status_created
+  ON users(status, created_at DESC)
+  INCLUDE (name, email);
+
+-- Satisfies WHERE, ORDER BY, and SELECT entirely from the index.
+-- No bookmark lookup for any of the 50 rows.
+</pre>
+
+<h3>Aggregate Queries</h3>
+
+<pre>
+-- Dashboard query: count active users per day
+SELECT DATE(created_at) AS day, COUNT(*)
+FROM users
+WHERE status = 'active'
+GROUP BY DATE(created_at);
+
+-- Covering index:
+CREATE INDEX idx_users_status_created
+  ON users(status, created_at);
+
+-- WHERE status + GROUP BY created_at are both in the index.
+-- No heap access needed.
+</pre>
+
+<h2>Common Interview Questions</h2>
+
+<ul>
+  <li>What is a covering index and why is it important for performance?</li>
+  <li>How do you verify that a query is using a covering index?</li>
+  <li>What is the INCLUDE clause and how does it differ from adding columns to the index key?</li>
+  <li>What is the trade-off between index size and query performance for covering indexes?</li>
+  <li>How would you design a covering index for a paginated API endpoint?</li>
+  <li>Can a covering index be used with GROUP BY or ORDER BY? How?</li>
+  <li>What happens when you add too many columns to a covering index?</li>
+  <li>How does MySQL handle covering indexes differently from PostgreSQL and SQL Server?</li>
+</ul>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Depth to avoid in interviews:</strong>
+  <ul>
+    <li>Visibility map internals in PostgreSQL for index-only scans (HOT updates, VM pages).</li>
+    <li>InnoDB adaptive hash index interaction with covering index lookups.</li>
+    <li>Columnar vs rowar storage trade-offs inside index leaf pages.</li>
+    <li>FILLFACTOR and page-level optimization for covering index leaf density.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><a href="#">SQL Performance Explained</a> (Markus Winand) -- Chapter 1: Index-only scans and covering indexes (the "most important index" concept)</li>
+    <li><a href="#">High Performance MySQL</a> (Baron Schwartz) -- Covering index optimization, EXPLAIN interpretation</li>
+    <li><a href="#">Database Internals</a> (Alex Petrov) -- Chapter 4: Index structures and on-disk layout</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Documentation</div>
+  <ul>
+    <li><a href="#">MySQL 8.0 Reference Manual</a> -- 8.3.5 Column Indexes (Using index in EXPLAIN)</li>
+    <li><a href="#">PostgreSQL Documentation</a> -- 11.9 Index-Only Scans and Covering Indexes</li>
+    <li><a href="#">SQL Server Docs</a> -- Create Indexes with Included Columns</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="composite-index.html">&larr; 3.8.5 Composite Index</a>
+  <a href="b-plus-tree.html">3.9.1 B+ Tree &rarr;</a>
+</div>
+
+</body>
+</html>

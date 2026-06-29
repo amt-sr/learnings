@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.5.3 Operational Transform</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb"><a href="#">System Design</a> / <a href="#">5 Distributed Systems</a> / <a href="#">5.5 Conflict Resolution</a> / 5.5.3</div>
+<h1>Operational Transform</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand Operational Transform (OT) -- the algorithm behind Google Docs and other collaborative editors. Learn how it transforms concurrent operations to maintain consistency, why it requires a central server, and how it compares to CRDTs.</p>
+
+<h2>Definition</h2>
+<p><strong>Operational Transform (OT)</strong> is a conflict resolution algorithm for real-time collaborative editing. When two users make concurrent edits to the same document, OT <strong>transforms</strong> each operation against the other so that both users end up with the same document state. The transformation function adjusts operation positions and parameters to account for concurrent changes.</p>
+
+<div class="callout">
+  <strong>Key insight:</strong> OT's core idea is simple: if two users concurrently edit position 5 in a document, and one user inserts 3 characters before position 5, then the other user's operation at position 5 must be <strong>shifted</strong> to position 8. This "shifting" is the transformation.
+</div>
+
+<h2>How OT Works</h2>
+
+<h3>The Transform Function</h3>
+<p>Given two concurrent operations op1 and op2, the transform function <code>T(op1, op2)</code> produces two new operations:</p>
+<ul>
+  <li><code>op1'</code> -- op1 transformed against op2 (op1 adjusted to account for op2)</li>
+  <li><code>op2'</code> -- op2 transformed against op1 (op2 adjusted to account for op1)</li>
+</ul>
+<p>After applying both op1 and op2' (or op2 and op1'), the document reaches the <strong>same state</strong>.</p>
+
+<h3>Example: Two Concurrent Inserts</h3>
+<div class="diagram">Initial document: "Hello World"
+             Index:  01234567890...
+
+Client A: inserts "Beautiful " at position 6
+  Operation A: insert("Beautiful ", pos=6)
+
+Client B: inserts "Great " at position 6  (concurrent, didn't see A's op)
+  Operation B: insert("Great ", pos=6)
+
+Both operations target the same position, but they're concurrent.
+Without OT, Client A would see "Hello Beautiful Great World"
+         Client B would see "Hello Great Beautiful World"
+  → INCONSISTENT
+
+With OT -- transform(opA, opB):
+  opA': insert("Beautiful ", pos=6)    → stays at 6 (A came first in our order)
+  opB': insert("Great ", pos=15)       → shifted by len("Beautiful ") = 9
+
+Client A: apply A then B' → "Hello Beautiful Great World"
+Client B: apply B then A' → "Hello Beautiful Great World"
+  → CONSISTENT (both converge to same document)
+
+The transform function T adjusts positions based on the TYPE and
+POSITION of concurrent operations. Insert shifts subsequent inserts;
+delete reduces positions of subsequent operations.</div>
+
+<h2>OT Architecture</h2>
+<p>OT systems typically follow a <strong>centralized server</strong> architecture:</p>
+
+<div class="diagram">Client A                    Server                    Client B
+   |                          |                          |
+   |-- op1 (local) --------->|                          |
+   |                          |                          |
+   |                          |<--------- op2 (local) ---|
+   |                          |                          |
+   |                          | transform(op1, op2)      |
+   |                          |                          |
+   |<-- op2' (transformed) ---|                          |
+   |                          |                          |
+   |                          |-- op1' (transformed) --->|
+   |                          |                          |
+
+Server is the SINGLE SOURCE OF TRUTH:
+  1. Maintains the "official" operation history
+  2. Transforms incoming ops against all concurrent ops
+  3. Broadcasts transformed ops to all clients
+  4. Clients apply ops in the server's order
+
+Clients maintain:
+  - Local state (document + operation history)
+  - Pending ops (sent to server, awaiting acknowledgment)
+  - Server state (last known server revision)</div>
+
+<div class="callout yellow">
+  <strong>Critical requirement:</strong> OT needs a <strong>central authority</strong> (the server) that defines a total order of operations. This is different from CRDTs, which can work in a fully decentralized manner. The server's role in OT is non-trivial -- it maintains the canonical operation history and resolves conflicts.
+</div>
+
+<h2>Transform Function Examples</h2>
+
+<h3>Insert vs Insert</h3>
+<table>
+  <tr><th>Scenario</th><th>Transform</th></tr>
+  <tr><td>insert(pos, "X") vs insert(pos, "Y") (same position)</td><td>X at pos, Y at pos + len(X) (left bias wins)</td></tr>
+  <tr><td>insert(pos1, "X") vs insert(pos2, "Y") (pos1 &lt; pos2)</td><td>No position change (operations don't overlap)</td></tr>
+  <tr><td>insert(pos, "X") vs insert(pos, "Y") (pos &gt; other.pos)</td><td>Shift by len of the other insert</td></tr>
+</table>
+
+<h3>Insert vs Delete</h3>
+<table>
+  <tr><th>Scenario</th><th>Transform</th></tr>
+  <tr><td>insert(pos, "X") vs delete(pos, n) (insert inside delete range)</td><td>Insert shifts the delete, delete "swallows" insert position</td></tr>
+  <tr><td>insert(pos, "X") vs delete(pos2, n) (pos &lt; pos2)</td><td>Insert shifts the delete: delete at pos2 + len(X)</td></tr>
+  <tr><td>insert(pos, "X") vs delete(pos2, n) (pos &gt; pos2 + n)</td><td>Insert shifts: insert at pos - n</td></tr>
+</table>
+
+<h3>Delete vs Delete</h3>
+<table>
+  <tr><th>Scenario</th><th>Transform</th></tr>
+  <tr><td>delete(pos1, n1) vs delete(pos2, n2) (overlapping ranges)</td><td>Shorten second delete to remove only un-deleted range</td></tr>
+  <tr><td>delete(pos1, n1) vs delete(pos2, n2) (non-overlapping)</td><td>Shift positions based on which came first</td></tr>
+</table>
+
+<div class="callout red">
+  <strong>Complexity explosion:</strong> The number of possible transformation combinations grows with the number of operation types. With just insert and delete, there are 9 transform cases (3x3). Adding formatting operations (bold, italic, etc.) creates dozens of cases. Getting the transform function correct for all combinations is notoriously difficult.
+</div>
+
+<h2>OT vs CRDTs</h2>
+
+<table>
+  <tr><th>Aspect</th><th>OT</th><th><a href="crdt.html">CRDT</a></th></tr>
+  <tr><td>Architecture</td><td>Central server required</td><td class="green">Decentralized (peer-to-peer possible)</td></tr>
+  <tr><td>Complexity of implementation</td><td class="red">Very high (transform function is hard)</td><td class="yellow">High (mathematical correctness required)</td></tr>
+  <tr><td>Garbage collection</td><td>Server can GC old operations</td><td class="red">Tombstones accumulate</td></tr>
+  <tr><td>Memory efficiency</td><td class="green">Server maintains compact history</td><td class="red">State grows with operations</td></tr>
+  <tr><td>Server dependency</td><td class="red">Requires server for transformation</td><td class="green">Works offline, syncs later</td></tr>
+  <tr><td>Production usage</td><td>Google Docs, Google Sheets</td><td>Figma, Apple Notes, Riak</td></tr>
+  <tr><td>Latency</td><td>Round-trip to server</td><td>Local operations apply immediately</td></tr>
+  <tr><td>Consistency model</td><td>Eventual (server-ordered)</td><td>Eventual (convergence guaranteed)</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Industry trend:</strong> Newer collaborative systems increasingly favor CRDTs over OT. Figma uses CRDTs. Notion uses CRDTs. OT is still used by Google Docs (the original), but the complexity of implementing correct transform functions makes CRDTs more attractive for new systems.
+</div>
+
+<h2>Challenges with OT</h2>
+<ul>
+  <li><strong>Transform function correctness:</strong> The biggest challenge. There are dozens of edge cases, and getting all transform pairs correct is extremely difficult. Google's own OT implementation had subtle bugs that persisted for years.</li>
+  <li><strong>Operational composition:</strong> When the server groups multiple operations together, composing them and then transforming against individual client operations is complex.</li>
+  <li><strong>Undo/Redo:</strong> Standard undo/redo doesn't work directly with OT because the operations have been transformed. You need a special "inverse transform" for undo.</li>
+  <li><strong>Client-server sync protocol:</strong> Managing the sync state (pending ops, acknowledged ops, server revision) is complex. Race conditions between local and remote ops are tricky.</li>
+  <li><strong>Scalability:</strong> The server must process and transform every operation for every connected client, making it a bottleneck at scale.</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li><strong>"How does Google Docs handle concurrent edits?"</strong> -- Using Operational Transform. Each edit is an operation (insert/delete/format at a position). When concurrent edits arrive at the server, the server transforms them against each other to ensure consistency, then broadcasts the transformed versions to all clients.</li>
+  <li><strong>"What is the transform function in OT?"</strong> -- A function T(op1, op2) that takes two concurrent operations and produces transformed versions that, when applied in either order, produce the same result. It adjusts positions and parameters to account for concurrent changes.</li>
+  <li><strong>"Why does OT require a central server?"</strong> -- The server maintains the canonical operation history and provides a total ordering. Without a central authority, there's no consistent way to determine which operations are concurrent and how to transform them.</li>
+  <li><strong>"Compare OT and CRDTs for collaborative editing."</strong> -- OT requires a central server and has complex transform functions but is memory-efficient. CRDTs are decentralized and mathematically guaranteed to converge but use more memory. OT is used in Google Docs; CRDTs are used in Figma and newer collaborative tools.</li>
+  <li><strong>"How would you handle undo in an OT system?"</strong> -- Standard undo doesn't work because operations have been transformed. You need to compose an "undo operation" by inverting the original operation, then transform it against all operations that happened since.</li>
+  <li><strong>"What are the challenges of implementing OT?"</strong> -- The transform function has many edge cases (dozens of operation type combinations), undo/redo is non-trivial, the sync protocol is complex, and the server can become a bottleneck at scale.</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Depth to avoid in interviews:</strong>
+  <ul>
+    <li>Specific transform function implementations for formatting operations (bold, italic, etc.)</li>
+    <li>The Jupiter collaboration framework internals</li>
+    <li>Google Wave's operational transform protocol details</li>
+    <li>Formal proofs of TP1 and TP2 properties</li>
+    <li>Composition and decomposition of operations</li>
+    <li>Specific client-server sync protocol state machine details</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary References</div>
+  <ul>
+    <li>Operational Transformation in Real-Time Group Editors: Issues, Algorithms, and Achievements -- Chengzheng Sun (1998)</li>
+    <li>What You See Is What I Saw (WYSIWIS) -- Ellis & Gibbs (1987)</li>
+    <li>Google Docs: Architecture and Implementation -- various Google I/O talks</li>
+    <li>A Survey of Real-Time Collaborative Editing -- Nicolas et al. (2019)</li>
+    <li>OT vs CRDTs for Collaborative Editing -- Martin Kleppmann blog post / talk</li>
+    <li>Understanding and Improving Operational Transformation Algorithms -- Li & Li (2014)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="crdt.html">&larr; 5.5.2 CRDT</a>
+  <a href="merge-strategies.html">5.5.4 Merge Strategies &rarr;</a>
+</div>
+
+</body>
+</html>

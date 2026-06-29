@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.3.7 Read Your Writes</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">5 Distributed Systems</a> / <a href="../index.html">5.3 Consistency Models</a> / 5.3.7
+</div>
+
+<h1>5.3.7 Read Your Writes</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the <strong>read-your-writes</strong> consistency guarantee, common implementation strategies, its relationship to session consistency, and when it is the appropriate level of consistency for a system.</p>
+
+<h2>Definition</h2>
+<p><strong>Read-your-writes</strong> (RYW) guarantees that after a client writes a value, any subsequent read by the <strong>same client</strong> will reflect that write (or a more recent one). The guarantee applies only to the writing client — other clients may not immediately see the write.</p>
+
+<div class="callout">
+  <strong>Intuition:</strong> "After I update my profile picture, I immediately see the new picture. My friends might see the old one for a while, but I always see my own latest version." This is the read-your-writes guarantee — it is user-centric, not system-centric.
+</div>
+
+<h2>How It Works</h2>
+
+<div class="diagram">
+  Read-Your-Writes Scenario:
+
+  Client A writes name="Alice" ──→ Replica 1 (US-East)
+                                     │
+                                     ▼ async replication
+                                Replica 2 (EU-West) — still has old name
+
+  Client A reads name ──→ MUST go to Replica 1 (or wait for Replica 2 to sync)
+  → Returns "Alice" ✓ (saw own write)
+
+  Client B reads name ──→ Can go to Replica 2
+  → Returns old name ✗ (stale — OK under read-your-writes!)
+
+  === RYW only guarantees the WRITER sees their own writes ===
+
+  Violation of RYW:
+  Client A writes name="Alice" ──→ Replica 1
+  Client A reads name ──→ Replica 2 → returns old name ✗
+  → VIOLATION: Client A did not see their own write!
+</div>
+
+<h2>Implementation Strategies</h2>
+
+<h3>1. Route Writes and Reads to the Same Replica</h3>
+
+<div class="diagram">
+  Approach: Session affinity (sticky sessions)
+
+  Client A ──→ Load Balancer ──→ always Replica 1
+  Client B ──→ Load Balancer ──→ always Replica 2
+
+  Pros: Simple, no coordination
+  Cons: Unbalanced load, session breaks on replica failure
+</div>
+
+<h3>2. Read from the Leader</h3>
+
+<div class="diagram">
+  Approach: All reads go through the leader after a write
+
+  Client A writes ──→ Leader (Replica 1) → sync to followers
+  Client A reads  ──→ Leader (Replica 1) → guaranteed latest
+
+  Pros: Always correct, no session management
+  Cons: Leader bottleneck, higher latency for cross-region clients
+</div>
+
+<h3>3. Track Timestamps / Version Numbers</h3>
+
+<div class="diagram">
+  Approach: Client tracks its last write timestamp
+
+  Client A writes name="Alice" at t=100
+    → Server returns: { value: "Alice", timestamp: 100 }
+    → Client stores: last_write_ts = 100
+
+  Client A reads name:
+    → Client sends: read(name, min_timestamp=100)
+    → Replica must have applied all writes up to t=100 before responding
+    → If replica is behind, server waits or redirects
+
+  Pros: Works without sticky sessions, resilient to replica failure
+  Cons: Requires timestamp metadata, server must wait if replica is behind
+</div>
+
+<table>
+  <tr>
+    <th>Approach</th>
+    <th>Latency</th>
+    <th>Availability</th>
+    <th>Complexity</th>
+    <th>Best For</th>
+  </tr>
+  <tr>
+    <td>Sticky Sessions</td>
+    <td class="green">Low</td>
+    <td class="green">High</td>
+    <td class="green">Low</td>
+    <td>Web apps with stateful sessions</td>
+  </tr>
+  <tr>
+    <td>Read from Leader</td>
+    <td class="red">Higher</td>
+    <td class="red">Lower</td>
+    <td class="green">Low</td>
+    <td>Leader-based systems (etcd, MongoDB)</td>
+  </tr>
+  <tr>
+    <td>Timestamp Tracking</td>
+    <td>Medium</td>
+    <td>Medium</td>
+    <td class="red">Higher</td>
+    <td>Systems with version metadata (DynamoDB, Spanner)</td>
+  </tr>
+</table>
+
+<h2>Relationship to Other Consistency Models</h2>
+
+<div class="callout">
+  <strong>Hierarchy:</strong> Read-your-writes is implied by (and weaker than):
+  <ul>
+    <li><strong>Linearizability</strong> — all clients see latest (stronger than RYW)</li>
+    <li><strong>Causal consistency</strong> — all causal dependencies preserved (stronger than RYW)</li>
+    <li><strong>Session consistency</strong> — includes RYW plus monotonic reads/writes (stronger than RYW alone)</li>
+  </ul>
+  Read-your-writes is stronger than:
+  <ul>
+    <li><strong>Eventual consistency</strong> — no guarantees about when reads see writes</li>
+  </ul>
+</div>
+
+<div class="callout yellow">
+  <strong>Interview Tip:</strong> Read-your-writes is the most commonly needed consistency guarantee in practice. Most user-facing applications need RYW even when they do not need full strong consistency. When asked "what consistency does your system need?", start with RYW and explain whether you need more (causal, linearizable) or if RYW is sufficient.
+</div>
+
+<h2>Real-World Examples</h2>
+<ul>
+  <li><strong>DynamoDB:</strong> Supports read-your-writes when using ConsistentRead=true or reading from the leader</li>
+  <li><strong>MongoDB causal sessions:</strong> Tracks clusterTime per operation to guarantee RYW within a session</li>
+  <li><strong>Google Spanner:</strong> Reads at a timestamp at least as recent as the client's last write (bounded staleness reads)</li>
+  <li><strong>Git:</strong> After you push, your next fetch reflects your push (RYW)</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>"What is the read-your-writes consistency guarantee?"</li>
+  <li>"How would you implement read-your-writes in a distributed system?"</li>
+  <li>"Compare sticky sessions vs. read-from-leader for implementing RYW."</li>
+  <li>"Is read-your-writes enough for a banking system? Why or why not?"</li>
+  <li>"How does RYW relate to session consistency?"</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid in interviews:</strong>
+  <ul>
+    <li>Specific client SDK implementation details (how DynamoDB client tracks timestamps)</li>
+    <li>Session store implementation (Redis session management)</li>
+    <li>Cookie-based vs. token-based session management (web framework detail)</li>
+    <li>Read repair mechanism internals (beyond the concept)</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary Sources</div>
+  <ul>
+    <li>Terry, D. et al. "Session Guarantees for Weakly Consistent Replicated Data" (PDIS, 1994)</li>
+    <li>Kleppmann, M. <strong>Designing Data-Intensive Applications</strong>, Chapter 5</li>
+    <li>Vogels, W. "Eventually Consistent" (ACM Queue, 2009)</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Supplementary</div>
+  <ul>
+    <li>AWS DynamoDB Documentation: "Read Consistency"</li>
+    <li>MongoDB Documentation: "Causal Consistency Sessions"</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="session-consistency.html">&larr; 5.3.6 Session</a>
+  <a href="monotonic-reads.html">5.3.8 Monotonic Reads &rarr;</a>
+</div>
+
+</body>
+</html>

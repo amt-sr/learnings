@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>12.2.3 — Docker Containers</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">Cloud Architecture</a> / 12.2.3 Docker</div>
+<h1>Docker Containers</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐</span>
+  <span>Interview Frequency: ★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand Docker containers as a packaging and isolation mechanism, how images are layered, and how containers compare to virtual machines. This knowledge underpins all container orchestration topics (Kubernetes, pods, deployments).</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>Docker container</strong> is a lightweight, standalone, executable package that includes everything needed to run a piece of software: code, runtime, system tools, libraries, and settings. Containers are isolated from each other and the host system using OS-level virtualization (namespaces and cgroups), sharing the host kernel.
+</div>
+
+<p>Containers solve the "it works on my machine" problem by packaging the application with its entire dependency tree into an immutable artifact. The same container image runs identically on a developer's laptop, a CI server, and production.</p>
+
+<h2>Container vs Virtual Machine</h2>
+<div class="diagram">
+  Virtual Machine:                        Container:
+  ┌─────────────────────────────┐       ┌─────────────────────────────┐
+  │      App A    │    App B     │       │ App A  │  App B  │  App C   │
+  │    ┌───────┐  │ ┌────────┐ │       │ Bins/  │ Bins/  │ Bins/   │
+  │    │Bins/  │  │ │Bins/   │ │       │ Libs/  │ Libs/  │ Libs/   │
+  │    │Libs/  │  │ │Libs/   │ │       └────────┴────────┴─────────┘
+  │    │Guest OS│ │ │Guest OS│ │              │
+  │    └───────┘  │ └────────┘ │       ┌────────┴─────────────────────┐
+  │                          │       │        Docker Engine          │
+  │ ┌────────────────────────┴────┐ │       │         Host OS            │
+  │ │       Hypervisor            │ │       └─────────────────────────────┘
+  │ └─────────────────────────────┘ │       ┌─────────────────────────────┐
+  │ ┌─────────────────────────────┐ │       │        Host Kernel          │
+  │ │        Host OS               │ │       └─────────────────────────────┘
+  │ └─────────────────────────────┘ │
+  ┌─────────────────────────────────┐
+
+  VM: Full OS per guest (heavy)      Container: Shared kernel (lightweight)
+  Boot time: minutes                  Boot time: milliseconds
+  Size: GBs                           Size: MBs
+  Isolation: hardware-level           Isolation: OS-level (namespaces)
+</div>
+
+<table>
+  <tr><th>Dimension</th><th>VM</th><th>Container</th></tr>
+  <tr><td>Boot time</td><td>Minutes</td><td class="green">Milliseconds</td></tr>
+  <tr><td>Size</td><td>GBs</td><td class="green">MBs</td></tr>
+  <tr><td>Isolation</td><td class="green">Full hardware isolation</td><td>Process-level isolation</td></tr>
+  <tr><td>Resource overhead</td><td class="red">High (full OS)</td><td class="green">Low (shared kernel)</td></tr>
+  <tr><td>Density</td><td class="red">Low (tens per host)</td><td class="green">High (hundreds per host)</td></tr>
+  <tr><td>Security</td><td class="green">Stronger isolation</td><td>Weaker (shared kernel)</td></tr>
+  <tr><td>Portability</td><td>Depends on hypervisor</td><td class="green">Runs anywhere Docker runs</td></tr>
+</table>
+
+<h2>Image Layers</h2>
+<div class="diagram">
+  Docker Image (read-only layers):
+
+  ┌─────────────────────────────────┐
+  │  Layer 4: Application code       │  ← Changes most often
+  │  COPY app/ /app/                 │
+  ├─────────────────────────────────┤
+  │  Layer 3: Dependencies            │
+  │  RUN pip install -r requirements │
+  ├─────────────────────────────────┤
+  │  Layer 2: Runtime                 │
+  │  FROM python:3.11-slim           │
+  ├─────────────────────────────────┤
+  │  Layer 1: Base OS                 │
+  │  debian:bookworm-slim            │
+  └─────────────────────────────────┘
+
+  Container = Image layers (read-only) + Writable container layer (thin)
+  ┌─────────────────────────────────┐
+  │  Container Layer (writable)     │  ← Runtime state, logs, temp files
+  ├─────────────────────────────────┤
+  │  Image Layers (read-only)        │  ← Shared across all containers
+  │  (same as above)                 │     from this image
+  └─────────────────────────────────┘
+</div>
+
+<div class="callout yellow">
+  <strong>Caching insight:</strong> Docker caches each layer. If Layer 3 does not change, Docker reuses the cached layer. This is why you should order Dockerfile instructions from least to most frequently changing. Put OS and dependency installs before application code to maximize cache hits.
+</div>
+
+<h3>Optimized Dockerfile</h3>
+<pre>
+# BAD: rebuilds on every code change
+FROM node:20
+COPY . /app          # Invalidates ALL layers below
+RUN npm install
+
+# GOOD: dependencies cached separately
+FROM node:20-alpine
+WORKDIR /app
+COPY package*.json ./     # Only changes when package.json changes
+RUN npm ci --production   # Cached if package.json unchanged
+COPY . ./                 # Only this layer rebuilt on code change
+EXPOSE 3000
+CMD ["node", "server.js"]
+</pre>
+
+<h2>Dockerfile Best Practices</h2>
+<ul>
+  <li><strong>Use multi-stage builds:</strong> Build stage with full toolchain, runtime stage with only binaries. Reduces image from 1.2GB to 50MB.</li>
+  <li><strong>Use minimal base images:</strong> <code>alpine</code>, <code>slim</code>, or <code>distroless</code> instead of full OS images.</li>
+  <li><strong>Run as non-root:</strong> Add a non-root user to reduce attack surface.</li>
+  <li><strong>Pin versions:</strong> Never use <code>latest</code> tag in production. Pin to specific digest or version.</li>
+  <li><strong>Minimize layers:</strong> Combine RUN commands with <code>&&</code> to reduce layer count.</li>
+</ul>
+
+<h2>Isolation Mechanisms</h2>
+<table>
+  <tr><th>Feature</th><th>Linux Mechanism</th><th>What It Isolates</th></tr>
+  <tr><td><strong>Namespaces</strong></td><td>Mount, PID, Network, UTS, IPC, User</td><td>Process visibility, network interfaces, hostnames</td></tr>
+  <tr><td><strong>Cgroups</strong></td><td>Control groups</td><td>CPU, memory, I/O resource limits</td></tr>
+  <tr><td><strong>Seccomp</strong></td><td>Secure computing mode</td><td>System calls allowed/disallowed</td></tr>
+  <tr><td><strong>AppArmor/SELinux</strong></td><td>Mandatory access control</td><td>File access, capabilities</td></tr>
+</table>
+
+<div class="callout green">
+  <strong>Interview tip:</strong> When asked about containerization in a system design interview, focus on the "why": "Containers provide immutable, reproducible deployments that eliminate environment drift. Combined with orchestration (Kubernetes), they enable declarative infrastructure and self-healing systems."
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What is a Docker container and how is it different from a VM?</li>
+  <li>How do Docker image layers work and why do they matter?</li>
+  <li>How would you optimize a Dockerfile for fast builds?</li>
+  <li>What is container isolation and how does it work?</li>
+  <li>Why are containers important for microservices?</li>
+  <li>What is a multi-stage build and when would you use it?</li>
+  <li>How would you keep Docker images small and secure?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid diving into:</strong> Docker CLI command syntax, Docker Compose YAML, or container networking details (bridge, host, overlay networks). Focus on the conceptual model: images, layers, isolation, and why containers matter for deployment architecture.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Documentation</div>
+  <ul>
+    <li><strong>Docker Overview</strong> — docs.docker.com/get-started/overview/</li>
+    <li><strong>Docker Best Practices</strong> — docs.docker.com/develop/develop-images/dockerfile_best-practices/</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Articles</div>
+  <ul>
+    <li><strong>"Containers vs VMs: What's the Difference?"</strong> — redhat.com — Clear comparison</li>
+    <li><strong>"Docker Image Layers Explained"</strong> — containerjournal.com</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="service-discovery.html">&larr; Previous: Service Discovery</a>
+  <a href="kubernetes.html">Next: Kubernetes &rarr;</a>
+</div>
+</body>
+</html>

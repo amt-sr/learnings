@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.2.3 Records</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#3">3 Storage</a> / <a href="../index.html#3.2">3.2 Storage Layout</a> / 3.2.3
+</div>
+
+<h1>Records</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What a record (row/tuple) is and how it maps to database <a href="pages.html">pages</a></li>
+  <li>Row-oriented vs column-oriented storage and their tradeoffs</li>
+  <li>Fixed-length vs variable-length record formats</li>
+  <li>Record headers: what metadata is stored per record</li>
+  <li>Slotted pages: how variable-length records are packed efficiently</li>
+</ul>
+
+<h2>Definition</h2>
+<p>A record (also called a <strong>row or tuple</strong>) is a single logical entry in a table, containing values for all columns of that row. Records are the atomic unit of read/write for queries, but they are not the unit of I/O — multiple records are packed into a single database <a href="pages.html">page</a>, and I/O happens at page granularity.</p>
+
+<h2>Record to Page Mapping</h2>
+<div class="diagram">  Table: users (id INT, name VARCHAR, email VARCHAR, created_at TIMESTAMP)
+
+  A single record on disk:
+
+  ┌──────────────────────────────────────────┐
+  │ Record Header                             │
+  │  ├─ Transaction ID (xmin)                │
+  │  ├─ Transaction ID (xmax)                │
+  │  ├─ Command ID (cid)                      │
+  │  ├─ Combo CID / infomask2                 │
+  │  ├─ Infomask (null flags, etc.)          │
+  │  └─ Total header length (t_hoff)          │
+  ├──────────────────────────────────────────┤
+  │ Column Data                               │
+  │  ├─ id:     4 bytes (INT)                │
+  │  ├─ name:   [len][var] (VARCHAR)         │
+  │  ├─ email:  [len][var] (VARCHAR)         │
+  │  └─ created_at: 8 bytes (TIMESTAMP)      │
+  └──────────────────────────────────────────┘
+
+  Multiple records packed in one page:
+
+  Page 0 (8 KB)
+  ┌──────────────────────────────────────────┐
+  │  Page Header                              │
+  │  Item Pointers: [r0, r1, r2, r3]         │
+  │                                           │
+  │  Free Space                               │
+  │                                           │
+  │  Record #3: (user_id=43, ...)             │
+  │  Record #2: (user_id=42, ...)             │
+  │  Record #1: (user_id=41, ...)             │
+  │  Record #0: (user_id=40, ...)             │
+  └──────────────────────────────────────────┘</div>
+
+<h2>Row-Oriented vs Column-Oriented Storage</h2>
+<table>
+  <tr><th></th><th>Row-Oriented (OLTP)</th><th>Column-Oriented (OLAP)</th></tr>
+  <tr><td>Storage layout</td><td>All columns of a row stored together on the same page</td><td>All values of each column stored together</td></tr>
+  <tr><td>Point query (SELECT by id)</td><td class="green">Fast — one page read returns the full row</td><td class="red">Slow — must read from multiple column files</td></tr>
+  <tr><td>Range scan (full table)</td><td>Reads all columns, including unneeded ones</td><td class="green">Reads only needed columns (1/10th the I/O)</td></tr>
+  <tr><td>Aggregation (AVG, SUM)</td><td>Must decompress full rows to access one column</td><td class="green">Operates on compressed column data directly</td></tr>
+  <tr><td>Compression</td><td>Low — mixed data types per block</td><td class="green">High — homogeneous data enables run-length, dictionary encoding</td></tr>
+  <tr><td>INSERT / UPDATE</td><td class="green">Efficient — append or update in-place</td><td class="red">Expensive — must update every column file</td></tr>
+  <tr><td>Examples</td><td>PostgreSQL, MySQL, Oracle</td><td>ClickHouse, Amazon Redshift, Snowflake</td></tr>
+  <tr><td>Best for</td><td>OLTP (transactional, point lookups)</td><td>OLAP (analytics, aggregations, scans)</td></tr>
+</table>
+
+<div class="diagram">  Row-Oriented:
+  Page: [Row1: id|name|age|email] [Row2: id|name|age|email] [Row3: ...]
+         All columns together. Good for "SELECT * WHERE id = 42"
+
+  Column-Oriented:
+  id_col:    [1][2][3][4][5]...       ← sorted, compressed
+  name_col:  ["Alice"]["Bob"]["C"]...  ← dictionary-encoded
+  age_col:   [25][30][28][35]...       ← run-length encoded
+  email_col: ["a@"]["b@"]["c@"]...     ← prefix compressed
+
+  SELECT AVG(age) WHERE age > 25
+  → scan age_col ONLY (1/4 of the data, highly compressed)
+  → never touches id, name, or email columns</div>
+
+<h2>Fixed-Length vs Variable-Length Records</h2>
+<table>
+  <tr><th>Format</th><th>Description</th><th>Pros</th><th>Cons</th></tr>
+  <tr><td><strong>Fixed-length</strong></td><td>Every field has a known fixed size. Record size = sum of all field sizes.</td><td class="green">O(1) offset calculation: offset = record_index * record_size</td><td class="red">Wastes space for short variable values (VARCHAR(255) uses full 255 B)</td></tr>
+  <tr><td><strong>Variable-length</strong></td><td>Fields can be any length. Uses length prefix or offset array per field.</td><td class="green">Space-efficient — no wasted space for short strings</td><td>Cannot compute record offset directly; must follow pointer chain</td></tr>
+</table>
+
+<div class="diagram">  Fixed-Length Record (simple, predictable):
+
+  ┌──────┬──────────────┬───────┬───────────────┐
+  │ id   │ name (32 B)  │ age   │ created_at   │
+  │ 4 B  │ fixed alloc  │ 4 B   │ 8 B          │
+  └──────┴──────────────┴───────┴───────────────┘
+  Total: 48 bytes. Offset of record N = N * 48.
+
+  Variable-Length Record (space-efficient):
+
+  ┌──────┬──────┬─────────────┬──────┬──────────┐
+  │ id   │ name │             │ age  │ created_ │
+  │ 4 B  │ 2 B  │ "Alice"     │ 4 B  │ 8 B      │
+  │      │ len  │ (5 bytes)   │      │ at       │
+  └──────┴──────┴─────────────┴──────┴──────────┘
+  Total: 23 bytes. Must read length prefix before
+  reading each variable field. Cannot skip ahead.</div>
+
+<h2>Slotted Pages</h2>
+<p>Most real databases (PostgreSQL, MySQL InnoDB, SQLite) use <strong>slotted pages</strong> to handle variable-length records efficiently:</p>
+
+<div class="diagram">  Slotted Page Layout:
+
+  Low Address (start of page)
+  ┌────────────────────────────────────┐
+  │  Page Header (24 bytes)            │
+  │  ├─ LSN, checksum, flags           │
+  │  ├─ pd_lower (end of slot array)    │
+  │  └─ pd_upper (start of record area) │
+  ├────────────────────────────────────┤
+  │  Slot Array (Item Pointers)         │
+  │  Grows downward ↓                   │
+  │  ┌──────┐ ┌──────┐ ┌──────┐       │
+  │  │ #0   │ │ #1   │ │ #2   │ ...   │
+  │  │offset│ │offset│ │offset│       │
+  │  │len   │ │len   │ │len   │       │
+  │  └──────┘ └──────┘ └──────┘       │
+  │                                    │
+  │  ← Free Space ←                    │
+  │  pd_lower ... pd_upper             │
+  │                                    │
+  │  Record Area                       │
+  │  Grows upward ↑                    │
+  │  ┌────────────────────┐           │
+  │  │ Record #2 (var)    │           │
+  │  ├────────────────────┤           │
+  │  │ Record #1 (var)    │           │
+  │  ├────────────────────┤           │
+  │  │ Record #0 (var)    │           │
+  │  └────────────────────┘           │
+  └────────────────────────────────────┘
+  High Address (end of page)
+
+  Slot array points to each record by (offset, length).
+  Records grow from bottom; slots grow from top.
+  They meet when the page is full.</div>
+
+<h3>How Slotted Pages Handle Operations</h3>
+<ul>
+  <li><strong>INSERT</strong>: Allocate space for the new record at pd_upper (growing upward). Add a new slot entry at pd_lower (growing downward). If free space is insufficient, the page is full.</li>
+  <li><strong>DELETE</strong>: Set the slot's offset to 0 (or mark as dead). The record space becomes reclaimable only when the page is compacted. This avoids shifting other records.</li>
+  <li><strong>UPDATE</strong>: In PostgreSQL (MVCC), create a new version of the record. In MySQL InnoDB (in-place), overwrite if the new record fits; otherwise, store the overflow and redirect.</li>
+  <li><strong>Page full?</strong>: Allocate a new page from the table's file. The B-tree index is updated to point to the new page.</li>
+</ul>
+
+<h2>Record Headers</h2>
+<p>Every record carries a header with metadata needed by the storage engine:</p>
+<table>
+  <tr><th>Header Field</th><th>Purpose</th></tr>
+  <tr><td><strong>Transaction ID (xmin)</strong></td><td>The transaction that created this record version (for MVCC)</td></tr>
+  <tr><td><strong>Transaction ID (xmax)</strong></td><td>The transaction that deleted/updated this record (or 0 if current)</td></tr>
+  <tr><td><strong>Command ID (cid)</strong></td><td>Statement ordering within the transaction (for visibility)</td></tr>
+  <tr><td><strong>NULL bitmap / infomask</strong></td><td>Which columns are NULL (avoids storing NULL data)</td></tr>
+  <tr><td><strong>Record length</strong></td><td>Total byte length of the record (for slot array)</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Header overhead matters:</strong> A PostgreSQL tuple header is 23 bytes. A MySQL InnoDB record header is roughly 5–7 bytes plus per-column NULL flags. For a table with many small columns (e.g., 10 INT columns = 40 bytes of data), the header can be 30–50% of the total record size. This is why wide tables with many nullable columns waste significant space.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"How does a database find a specific record?"</strong><br>The B-tree index maps the search key to a (page_id, slot_number) tuple. The database reads the page from the <a href="buffer-pool.html">buffer pool</a> (or disk if not cached), then uses the slot array to locate the record within the page at the correct byte offset. The slot array provides O(1) lookup within the page.</li>
+  <li><strong>"Why are slotted pages used instead of fixed offsets?"</strong><br>Records are variable-length (VARCHAR, TEXT, NULL columns). Fixed offsets would require reserving maximum space for every field, wasting enormous amounts of disk. Slotted pages allow variable-length records to be packed tightly — the slot array maps logical slot numbers to physical byte offsets, supporting both efficient lookup and space-efficient storage.</li>
+  <li><strong>"Why do OLAP databases use column-oriented storage?"</strong><br>Analytics queries typically aggregate a few columns across millions of rows (e.g., SELECT AVG(revenue) BY region). Column storage reads only the needed columns (potentially 1/10th the I/O), and homogeneous data types enable much better compression (10–100x with run-length encoding, dictionary encoding). Row storage would read all columns for every row, wasting I/O on data the query never uses.</li>
+  <li><strong>"What happens when a record is deleted?"</strong><br>In a slotted page, the slot entry is marked as dead (offset set to 0), but the physical space is not immediately reclaimed. The space becomes reusable only when the page is compacted (all live records are rewritten contiguously). This avoids the cost of shifting other records on every delete.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>Exact byte-level format of PostgreSQL HeapTupleHeaderData or MySQL InnoDB record format</li>
+    <li>TOAST (The Oversized-Attribute Storage Technique) compression algorithms</li>
+    <li>PAX (Partition Attributes Across) hybrid storage format</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Database Internals" by Alex Petrov</strong> — Chapter 3 (B-Tree File Formats and Record Layout)</li>
+    <li><strong>"The Internals of PostgreSQL" — InterDB</strong> — interdb.jp/pg/pgsql05.html (Heap and Slotted Page Layout)</li>
+    <li><strong>"Designing Data-Intensive Applications" by Martin Kleppmann</strong> — Chapter 3 (Row vs Column Storage)</li>
+    <li><strong>"Architecture of a Database System" (Hellerstein et al.)</strong> — Sections on storage management</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="blocks.html">&larr; 3.2.2 Blocks</a>
+  <a href="buffer-pool.html">Next: 3.2.4 Buffer Pool &rarr;</a>
+</div>
+
+</body>
+</html>

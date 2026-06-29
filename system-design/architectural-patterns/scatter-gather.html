@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>13.7 — Scatter-Gather</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">Architectural Patterns</a> / 13.7 Scatter-Gather</div>
+<h1>Scatter-Gather</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the scatter-gather pattern for querying multiple services in parallel and aggregating results, handling timeouts, partial failures, and deduplication in a distributed search context.</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>Scatter-gather</strong> is a pattern where a request is scattered (dispatched in parallel) to multiple services or partitions, each processing a subset of the query, and the results are gathered (collected and merged) into a single response. It is the distributed computing version of map-reduce at the request level.
+</div>
+
+<p>Scatter-gather is used when no single service can answer a query completely. The query must be sent to multiple services, each contributing a partial result, and then combined. The classic example: a search engine that queries multiple index shards in parallel.</p>
+
+<h2>Architecture</h2>
+<div class="diagram">
+  Client: "Search for 'laptop' under $1000"
+
+                    SCATTER
+  ┌──────────────────────┼──────────────────────┐
+  ▼                      ▼                      ▼
+┌────────────┐  ┌────────────┐  ┌────────────┐
+│ Index Shard│  │ Index Shard│  │ Index Shard│
+│    A       │  │     B      │  │     C      │
+│ (laptops   │  │ (laptops   │  │ (accessories│
+│  category) │  │  under $1K)│  │  category)  │
+└─────┬──────┘  └─────┬──────┘  └─────┬──────┘
+      │               │               │
+      │  Results:     │  Results:     │  Results:
+      │  5 items      │  3 items      │  2 items
+      │               │               │
+      └───────────────┼───────────────┘
+                      ▼
+                    GATHER
+  ┌──────────────────────────────────────────┐
+  │  Aggregator                               │
+  │  1. Collect results from all shards        │
+  │  2. Deduplicate overlapping results        │
+  │  3. Sort by relevance / price / time       │
+  │  4. Apply pagination (top 10)               │
+  │  5. Return unified response                │
+  └──────────────────────┬───────────────────┘
+                         ▼
+  Client: 10 results, ranked by relevance
+</div>
+
+<h2>Key Properties</h2>
+<table>
+  <tr><th>Property</th><th>Description</th><th>Implementation</th></tr>
+  <tr><td><strong>Parallel execution</strong></td><td>All requests sent simultaneously to minimize latency</td><td>Concurrent futures, async/await</td></tr>
+  <tr><td><strong>Timeout per scatter</strong></td><td>Each downstream request has an individual timeout</td><td>Cancel outstanding requests after timeout</td></tr>
+  <tr><td><strong>Overall timeout</strong></td><td>Total request has an SLA-based timeout</td><td>Return partial results if exceeded</td></tr>
+  <tr><td><strong>Deduplication</strong></td><td>Remove duplicate results from overlapping shards</td><td>Unique IDs, content hashing</td></tr>
+  <tr><td><strong>Ranking/merging</strong></td><td>Sort combined results by relevance or other criteria</td><td>Heap sort, merge-sort across ranked lists</td></tr>
+  <tr><td><strong>Pagination</strong></td><td>Apply pagination after merging, not before</td><td>Each shard returns top N × factor, merge, take top N</td></tr>
+</table>
+
+<h2>Handling Failures</h2>
+<div class="callout yellow">
+  <strong>Critical design decision:</strong> What happens when one scatter target is unavailable? The pattern must define degradation behavior.
+</div>
+
+<ul>
+  <li><strong>Return partial results:</strong> Gather results from available shards, indicate "X of Y shards responded." Client sees fewer results but the service does not fail.</li>
+  <li><strong>Retry with backoff:</strong> Retry failed scatter requests with exponential backoff. Only if retries also fail, return partial results.</li>
+  <li><strong>Fail fast:</strong> If a critical shard fails, fail the entire request. Used when incomplete results are misleading (e.g., financial data).</li>
+  <li><strong>Fallback to cached:</strong> Serve cached/stale data from the failed shard while retrying in the background.</li>
+</ul>
+
+<h2>Scatter-Gather Variants</h2>
+<div class="diagram">
+  Variant 1: Search (parallel query)
+  Client ──scatter──▶ [Shard A, Shard B, Shard C] ──gather──▶ Client
+
+  Variant 2: Multi-service aggregation
+  Client ──scatter──▶ [Service A, Service B, Service C] ──gather──▶ Client
+
+  Variant 3: Multi-region scatter
+  Client ──scatter──▶ [US-East, US-West, EU-West] ──gather──▶ Client
+  (query nearest data center, gather fastest response)
+
+  Variant 4: Write fan-out + read scatter-gather
+  Write: fan-out to multiple datastores
+  Read: scatter to multiple datastores, gather with conflict resolution
+</div>
+
+<h2>Real-World Examples</h2>
+<ul>
+  <li><strong>Google Search:</strong> Scatters query to thousands of index servers, gathers and ranks results in milliseconds.</li>
+  <li><strong>Amazon Product Search:</strong> Queries multiple category-specific indexes in parallel.</li>
+  <li><strong>Elasticsearch:</strong> A query is scattered to all shards of an index, each returns its top N results, the coordinating node gathers, merges, and returns final results.</li>
+  <li><strong>Database sharding:</strong> Scatter a query to all relevant shards, gather partial results.</li>
+</ul>
+
+<div class="callout green">
+  <strong>Interview tip:</strong> "For a product search across multiple categories, I would use scatter-gather. The query is sent to category-specific index shards in parallel, each returning its top results. A gather service deduplicates, ranks by relevance, and applies pagination. Each shard request has a 200ms timeout; if a shard is slow, I return results from the other shards to avoid blocking the user."
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What is scatter-gather and when would you use it?</li>
+  <li>How does scatter-gather relate to fan-out and fan-in?</li>
+  <li>How do you handle timeouts and partial failures?</li>
+  <li>How does Elasticsearch implement scatter-gather?</li>
+  <li>How do you deduplicate results from multiple sources?</li>
+  <li>What is the latency characteristic of scatter-gather?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid diving into:</strong> Specific concurrency library APIs, merge-sort algorithm implementation, or ranking algorithm details. Focus on the architectural pattern, parallel execution, timeout/failure handling, and real-world use cases.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><strong>Designing Data-Intensive Applications</strong> (Kleppmann) — Scatter-gather in distributed search</li>
+    <li><strong>Elasticsearch: The Definitive Guide</strong> — search request lifecycle</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Patterns</div>
+  <ul>
+    <li><strong>"Scatter-Gather Pattern"</strong> — enterpriseintegrationpatterns.com</li>
+    <li><strong>"Multi-Service Search"</strong> — Microsoft Azure Architecture Center</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="fan-in.html">&larr; Previous: Fan-In</a>
+  <a href="backend-for-frontend.html">Next: Backend for Frontend &rarr;</a>
+</div>
+</body>
+</html>

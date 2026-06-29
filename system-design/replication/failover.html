@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.7.1 Failover</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">4 Replication</a> / 4.7 Recovery / 4.7.1
+</div>
+
+<h1>Failover</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the failover process in replicated systems &mdash; how a follower is promoted to leader when the primary fails, the challenges involved, and the techniques that make failover reliable and fast.</p>
+
+<h2>Definition</h2>
+<p><strong>Failover</strong> is the process of switching from a failed or unhealthy leader (primary) to a standby replica (follower) so that the system can continue accepting writes. The promoted replica takes over the leader role, and clients are re-routed to it.</p>
+
+<h2>Failover Process</h2>
+<div class="diagram">
+  Step 1: FAULT DETECTION
+  =========================
+  Monitor detects Leader is unhealthy
+  (heartbeat timeout, health check failure, unresponsive)
+
+  Step 2: LEADER DEMOTION
+  ======================
+  Old Leader marked as DOWN
+  (or fenced out via lease/token)
+
+  Step 3: FOLLOWER SELECTION
+  ==========================
+  Select best follower to promote
+  Criteria:
+    - Most up-to-date (least replication lag)
+    - On same AZ as old leader (if possible)
+    - Healthy disk, memory, CPU
+    - In majority partition (quorum)
+
+  Step 4: PROMOTION
+  =================
+  New Leader:
+    - Stop replication thread
+    - Apply any remaining WAL
+    - Accept writes
+    - Notify other followers to replicate from it
+
+  Step 5: CLIENT REROUTING
+  =======================
+  DNS, VIP, or proxy update:
+    - Point write traffic to new Leader
+    - Update read pool (new Leader + remaining Followers)
+    - Client retry on connection reset
+
+  Step 6: RECONCILIATION
+  =====================
+  Old Leader (if it recovers):
+    - Detected as stale (has old writes)
+    - Re-synced as Follower of new Leader
+    - Or wiped and re-seeded
+</div>
+
+<h2>Manual vs. Automatic Failover</h2>
+
+<table>
+  <tr>
+    <th>Aspect</th>
+    <th>Manual Failover</th>
+    <th>Automatic Failover</th>
+  </tr>
+  <tr>
+    <td>Trigger</td>
+    <td>Human operator decides</td>
+    <td>System detects failure and promotes</td>
+  </tr>
+  <tr>
+    <td>Speed</td>
+    <td>Minutes to hours (human decision time)</td>
+    <td>Seconds (detection + promotion)</td>
+  </tr>
+  <tr>
+    <td>False positive risk</td>
+    <td class="green">Low (human validates)</td>
+    <td class="red">High (brief glitch may trigger)</td>
+  </tr>
+  <tr>
+    <td>Data loss risk</td>
+    <td>Can verify follower is caught up</td>
+    <td>May promote lagging follower, losing recent writes</td>
+  </tr>
+  <tr>
+    <td>Operator load</td>
+    <td>High (requires on-call response)</td>
+    <td>Low (self-healing)</td>
+  </tr>
+  <tr>
+    <td>Common in</td>
+    <td>Semi-sync systems, small teams</td>
+    <td>Cloud-managed databases, large-scale systems</td>
+  </tr>
+</table>
+
+<h2>Problems with Failover</h2>
+
+<h3>1. Stale Follower Promoted (Data Loss)</h3>
+<p>If the promoted follower is behind the leader, any writes that the leader committed but the follower did not receive are permanently lost. This is the <strong>Recovery Point Objective (RPO)</strong> gap.</p>
+
+<div class="callout red">
+  <strong>Worst case:</strong> Leader commits 500 writes in the 10 seconds before crashing. Follower was 10 seconds behind. All 500 writes are lost. If those were financial transactions, this is catastrophic.
+</div>
+
+<p>Mitigations:</p>
+<ul>
+  <li><strong>Semi-synchronous replication:</strong> Leader waits for at least one follower to acknowledge receipt before committing. Guarantees at most one follower is fully up-to-date at all times.</li>
+  <li><strong>Synchronous replication:</strong> Leader waits for all followers before committing. Zero data loss but high write latency.</li>
+  <li><strong>Promote least-lagging follower:</strong> Always select the follower closest to the leader's position.</li>
+</ul>
+
+<h3>2. Split Brain During Failover</h3>
+<p>If the old leader is not truly dead (e.g., network partition) and the failover system promotes a new leader, both leaders may accept writes. See <a href="split-brain.html">4.6.4 Split Brain</a> for details.</p>
+
+<p>Mitigations:</p>
+<ul>
+  <li><strong>Fencing tokens:</strong> Old leader's writes are rejected by storage if its token is stale.</li>
+  <li><strong>Lease expiry:</strong> Old leader's lease expires before new leader is elected.</li>
+  <li><strong>STONITH:</strong> Power off or network-isolate the old leader before promotion.</li>
+</ul>
+
+<h3>3. Failover Duration (Downtime)</h3>
+<p>The time between failure and the new leader accepting writes. Components of failover latency:</p>
+
+<table>
+  <tr>
+    <th>Step</th>
+    <th>Typical Latency</th>
+    <th>Bottleneck</th>
+  </tr>
+  <tr>
+    <td>Fault detection (heartbeat timeout)</td>
+    <td>5-30 seconds</td>
+    <td>Conservative timeout vs. fast detection tradeoff</td>
+  </tr>
+  <tr>
+    <td>Leader election / consensus</td>
+    <td>1-5 seconds</td>
+    <td>Raft election: ~1 RTT for election, ~1 RTT for log replication</td>
+  </tr>
+  <tr>
+    <td>Client rerouting (DNS/VIP update)</td>
+    <td>1-30 seconds</td>
+    <td>DNS TTL (set to 5-10s for failover scenarios)</td>
+  </tr>
+  <tr>
+    <td>Application connection re-establishment</td>
+    <td>0.5-5 seconds</td>
+    <td>Connection pool drain and reconnect</td>
+  </tr>
+  <tr>
+    <td><strong>Total</strong></td>
+    <td><strong>10-60 seconds</strong></td>
+    <td></td>
+  </tr>
+</table>
+
+<h3>4. Cascading Failover (Failover Storm)</h3>
+<p>If multiple leaders fail simultaneously (common during a rack or AZ failure), failover of each node can overload the monitoring system, election system, and remaining nodes. Controllers compete for resources, causing additional failures.</p>
+
+<h2>Failover Techniques</h2>
+
+<h3>Raft Election</h3>
+<p>Used by etcd, CockroachDB, TiKV, Consul. When a follower does not receive heartbeats within the election timeout, it becomes a candidate and requests votes. A candidate needs votes from a majority to become leader. Term numbers prevent old leaders from committing writes.</p>
+
+<h3>Orchestrator-Based</h3>
+<p>A dedicated failover orchestrator (e.g., Orchestrator for MySQL, Patroni for PostgreSQL) monitors the cluster topology and executes failover decisions. The orchestrator runs as a separate service with its own quorum to avoid split brain in the orchestrator itself.</p>
+
+<div class="diagram">
+  Orchestrator-based Failover (Patroni pattern):
+
+  [Patroni-1]     [Patroni-2]     [Patroni-3]
+       |                |                |
+       +---- etcd/ZooKeeper quorum -----+
+                        |
+  [PostgreSQL Leader]   |
+       |                |
+       |  health check   |
+       v                |
+  Patroni detects: Leader unhealthy
+       |
+  Patroni contacts etcd: "Can I promote Node-2?"
+       |
+  etcd (quorum): "Yes, you have the lock"
+       |
+  Patroni promotes Node-2:
+    1. Stop replication
+    2. pg_ctl promote
+    3. Update etcd with new leader
+       |
+  Application proxy reads etcd: "New leader is Node-2"
+       |
+  Traffic rerouted
+</div>
+
+<h3>etcd Locks</h3>
+<p>Use etcd (or ZooKeeper) to hold a leader lock. The healthy leader holds a lease. If the lease expires, another node can acquire the lock and become leader. This avoids split brain because etcd guarantees only one node holds the lock at a time.</p>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li><strong>"Walk me through what happens when your database leader crashes."</strong> &mdash; Detection (heartbeat timeout), election/promotion (select best follower, promote), rerouting (update DNS/proxy), recovery (old leader rejoins as follower). Discuss RPO, split brain risk, and failover duration.</li>
+  <li><strong>"How do you minimize data loss during failover?"</strong> &mdash; Semi-sync replication (at least one follower confirms receipt), promote least-lagging follower, synchronous replication for critical data. Discuss RPO requirements with the interviewer.</li>
+  <li><strong>"How does Kubernetes etcd handle leader failover?"</strong> &mdash; etcd uses Raft. When the leader fails, followers time out and start an election. The candidate with the most up-to-date log wins. Failover takes 2-3 election timeouts (typically 5-10 seconds). Kubernetes API server re-establishes its watch on the new leader.</li>
+  <li><strong>"Design a failover system for a MySQL cluster."</strong> &mdash; Orchestrator monitors replication lag and health. On failure: (1) remove old leader from proxy config, (2) select most up-to-date follower, (3) promote via <code>SET GLOBAL read_only=0</code>, (4) update ProxySQL routing, (5) reconfigure remaining followers. Discuss semi-sync for RPO, Orchestrator's HA trio for orchestrator reliability.</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid virtual IP (VIP) takeover details:</strong> ARP cache, gratuitous ARP, VIP failover scripts are infrastructure details. Mention the concept but skip implementation.<br><br>
+  <strong>Avoid specific orchestrator configuration:</strong> Knowing that Orchestrator/Patroni exists is sufficient. Do not prepare YAML configurations.<br><br>
+  <strong>Avoid multi-datacenter failover:</strong> Cross-DC failover adds significant complexity (latency, split brain, consensus across WAN). Focus on single-DC failover unless asked about multi-DC specifically.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary References</div>
+  <ul>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em> &mdash; Chapter 5: Replication (section: "Handling node outages")</li>
+    <li>Diego Ongaro, <em>Raft: In Search of an Understandable Consensus Algorithm</em> (Raft paper, sections 5-6)</li>
+    <li>GitHub Orchestrator: <a href="https://github.com/openark/orchestrator">MySQL High Availability and Replication Management</a></li>
+    <li>Zalando Patroni: <a href="https://patroni.readthedocs.io/">PostgreSQL HA Solution Using etcd/Consul/ZooKeeper</a></li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="network-partition.html">&larr; 4.6.6 Network Partition</a>
+  <a href="failback.html">4.7.2 Failback &rarr;</a>
+</div>
+
+</body>
+</html>

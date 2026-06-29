@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.3.1 Strong Consistency</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">5 Distributed Systems</a> / <a href="../index.html">5.3 Consistency Models</a> / 5.3.1
+</div>
+
+<h1>5.3.1 Strong Consistency</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand what <strong>strong consistency</strong> means, how it is implemented, its cost in distributed systems, and when to choose it over weaker consistency models.</p>
+
+<h2>Definition</h2>
+<p><strong>Strong consistency</strong> (also called <strong>linearizability</strong> or <strong>strict consistency</strong>) guarantees that once a write completes, all subsequent reads return that value or a more recent one. The system behaves as if there is a single copy of the data — equivalent to <strong>single-copy semantics</strong>.</p>
+
+<div class="callout">
+  <strong>Single-Copy Semantics:</strong> A strongly consistent system with N replicas behaves identically to a system with exactly 1 replica. Clients cannot distinguish (in terms of observable behavior) whether they are talking to one node or many.
+</div>
+
+<h2>How Strong Consistency Works</h2>
+
+<div class="diagram">
+  Client A writes X=1 ────────────────────────────→ t0
+  Client B writes X=2 ────────────────────────────→ t1 (t1 > t0)
+  Client C reads  X ──────────────────────────────→ t2 (t2 > t1)
+
+  Strong Consistency Guarantee:
+  Client C reads X=2 (the most recent write at the time of read)
+
+  Implementation with Leader:
+  ┌──────────────────────────────────────────────────────┐
+  │                    Leader Node                        │
+  │  ┌────────────────────────────────────────────┐      │
+  │  │ Write X=1  ← Client A      (t0)            │      │
+  │  │ Replicate to F1, F2, F3    (wait for ACK)   │      │
+  │  │ Write X=2  ← Client B      (t1)            │      │
+  │  │ Replicate to F1, F2, F3    (wait for ACK)   │      │
+  │  │ Read  X    → Client C      (t2)            │      │
+  │  │ Return X=2 (leader has latest)               │      │
+  │  └────────────────────────────────────────────┘      │
+  │       │              │              │                │
+  │       ▼              ▼              ▼                │
+  │   Follower 1    Follower 2    Follower 3             │
+  │   X=2 (sync)    X=2 (sync)    X=2 (sync)             │
+  └──────────────────────────────────────────────────────┘
+</div>
+
+<h2>Real-World Examples</h2>
+
+<table>
+  <tr>
+    <th>System</th>
+    <th>Strong Consistency Mechanism</th>
+  </tr>
+  <tr>
+    <td>Google Spanner</td>
+    <td>TrueTime API (GPS + atomic clocks) + Paxos for globally consistent transactions</td>
+  </tr>
+  <tr>
+    <td>ZooKeeper</td>
+    <td>ZAB protocol (leader-based) — all reads go through leader for linearizability</td>
+  </tr>
+  <tr>
+    <td>etcd</td>
+    <td>Raft consensus — leader serializes all reads and writes</td>
+  </tr>
+  <tr>
+    <td>MongoDB (primary)</td>
+    <td>Primary node handles all writes; reads can go to secondaries with configurable acknowledgment</td>
+  </tr>
+  <tr>
+    <td>CockroachDB</td>
+    <td>Raft per-range; serializable isolation with distributed transactions</td>
+  </tr>
+</table>
+
+<h2>Cost of Strong Consistency</h2>
+
+<table>
+  <tr>
+    <th>Aspect</th>
+    <th>Impact</th>
+    <th>Why</th>
+  </tr>
+  <tr>
+    <td>Latency</td>
+    <td class="red">Higher</td>
+    <td>Writes must be replicated to a quorum before ACK; reads may need to consult leader</td>
+  </tr>
+  <tr>
+    <td>Throughput</td>
+    <td class="red">Lower</td>
+    <td>Coordination limits parallelism; single-leader bottleneck</td>
+  </tr>
+  <tr>
+    <td>Availability</td>
+    <td class="red">Lower</td>
+    <td>Cannot serve writes (or reads) during leader election / partition</td>
+  </tr>
+  <tr>
+    <td>Geographic Reach</td>
+    <td class="red">Limited</td>
+    <td>Cross-region round-trips add latency (Spanner mitigates with TrueTime)</td>
+  </tr>
+  <tr>
+    <td>Correctness</td>
+    <td class="green">Maximum</td>
+    <td>All clients always see the latest data</td>
+  </tr>
+  <tr>
+    <td>Reasoning</td>
+    <td class="green">Simple</td>
+    <td>Programmers can reason as if there is a single copy</td>
+  </tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Interview Tip:</strong> When designing a system, always ask: "Do I need strong consistency everywhere, or only for specific operations?" Many systems use strong consistency for critical paths (payments, inventory) and weaker consistency for non-critical paths (user profiles, analytics). This mixed approach is practical and shows nuanced thinking.
+</div>
+
+<h2>Strong vs. Eventual Consistency</h2>
+
+<div class="diagram">
+  Strong Consistency:
+    Write(X=5) ──→ ALL replicas ACK ──→ Read(X) = 5  (guaranteed)
+    Timeline:    ══════════════════════════════════════
+                 write → replicate → ACK → read = latest
+
+  Eventual Consistency:
+    Write(X=5) ──→ ONE replica ACK ──→ Read(X) = 5 or stale  (maybe)
+    Timeline:    ══════════════════════════════════════
+                 write → local ACK → read = maybe latest, maybe old
+                                         │
+                                    (replication happens async)
+                                         │
+                                    ══════════════→ eventually all replicas have X=5
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>"What is strong consistency and how does it differ from eventual consistency?"</li>
+  <li>"How do you implement strong consistency in a distributed system?"</li>
+  <li>"What is the cost of strong consistency?"</li>
+  <li>"Name systems that provide strong consistency and explain their approach."</li>
+  <li>"When would you NOT choose strong consistency?"</li>
+  <li>"Can you have strong consistency across datacenters? How?"</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid in interviews:</strong>
+  <ul>
+    <li>Deep details of specific consensus protocols (Raft/ZAB internals — covered in consensus section)</li>
+    <li>TrueTime implementation details (GPS clock sync, clock uncertainty bounds)</li>
+    <li>Serializability vs. linearizability formal distinction (beyond the basic definition)</li>
+    <li>Specific ZooKeeper session management or watcher mechanics</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary Sources</div>
+  <ul>
+    <li>Kleppmann, M. <strong>Designing Data-Intensive Applications</strong>, Chapter 9 (Consistency and Consensus)</li>
+    <li>Corbett, J. et al. "Spanner: Google's Globally-Distributed Database" (OSDI, 2012)</li>
+    <li>Hunt, P. et al. "ZooKeeper: Wait-free Coordination for Internet-scale Systems" (USENIX ATC, 2010)</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Supplementary</div>
+  <ul>
+    <li>Ongaro, D. &amp; Ousterhout, J. "In Search of an Understandable Consensus Algorithm" (USENIX ATC, 2014)</li>
+    <li>Lamport, L. "Time, Clocks, and the Ordering of Events in a Distributed System" (CACM, 1978)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="pacelc.html">&larr; 5.2 PACELC</a>
+  <a href="eventual-consistency.html">5.3.2 Eventual Consistency &rarr;</a>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>15.7 Chat System — System Design</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../">Handbook</a> / <a href="../">System Design</a> / 15. Design Problems / 15.7 Chat System</p>
+
+<h1>Chat System</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Design a real-time messaging system similar to WhatsApp or Slack. The system must support one-on-one and group chats, message history, online status, read receipts, and message delivery guarantees with low latency across millions of concurrent connections.</p>
+
+<h2>Functional Requirements</h2>
+<ul>
+  <li>Send and receive messages in real-time (1:1 and group chats)</li>
+  <li>View message history with pagination</li>
+  <li>Display online/offline status of users</li>
+  <li>Support read receipts (message seen by recipient)</li>
+  <li>Support message types: text, image, video, file, emoji reactions</li>
+  <li>Search message history</li>
+  <li>Message delivery guarantees (at-least-once, no message loss)</li>
+</ul>
+
+<h2>Non-Functional Requirements</h2>
+<ul>
+  <li><strong>Real-time:</strong> message delivery &lt; 500ms p99</li>
+  <li><strong>High concurrency:</strong> 5M+ simultaneous WebSocket connections</li>
+  <li><strong>Scalability:</strong> horizontal scaling of WebSocket servers</li>
+  <li><strong>Reliability:</strong> at-least-once delivery with message ordering</li>
+  <li><strong>Storage:</strong> persistent message storage with efficient retrieval</li>
+</ul>
+
+<h3>Capacity Estimates</h3>
+<table>
+  <tr><th>Metric</th><th>Estimate</th><th>Notes</th></tr>
+  <tr><td>Daily active users</td><td>50M</td><td>DAU</td></tr>
+  <tr><td>Concurrent connections</td><td>5M</td><td>Peak online users</td></tr>
+  <tr><td>Messages/day</td><td>10B</td><td>~115K messages/sec average</td></tr>
+  <tr><td>Average message size</td><td>200 bytes</td><td>Text message</td></tr>
+  <tr><td>Storage (1 year)</td><td>~700 TB</td><td>10B * 365 * 200 bytes</td></tr>
+  <tr><td>WebSocket servers</td><td>100</td><td>5M / 50K connections per server</td></tr>
+  <tr><td>Group chats</td><td>100M</td><td>Average 10 members each</td></tr>
+</table>
+
+<h2>API Design</h2>
+<pre>
+# WebSocket connection
+WS /ws?token={jwt}&device_id={uuid}
+  → {"type": "message", "conversation_id": "conv_123", "content": "Hello!"}
+  ← {"type": "message", "msg_id": "msg_456", "sender_id": "789", "content": "Hi!", "ts": "..."}
+
+# REST API
+POST   /api/v1/conversations
+Body:  { "type": "group", "name": "Team Chat", "member_ids": [1,2,3] }
+
+GET    /api/v1/conversations/{conversation_id}/messages?cursor=msg_last&limit=50
+Resp:  { "messages": [...], "next_cursor": "msg_prev", "has_more": true }
+
+POST   /api/v1/messages
+Body:  { "conversation_id": "conv_123", "content": "Hello!" }
+Resp:  { "message_id": "msg_456", "timestamp": "..." }
+
+GET    /api/v1/users/{user_id}/status
+Resp:  { "status": "online", "last_seen": "2026-06-28T10:00:00Z" }
+</pre>
+
+<h2>High-Level Design</h2>
+<div class="diagram">
+  ┌────────┐  ┌────────┐  ┌────────┐
+  │Client A│  │Client B│  │Client C│
+  └───┬────┘  └───┬────┘  └───┬────┘
+      │WS         │WS         │WS
+      ▼           ▼           ▼
+  ┌────────┐ ┌────────┐ ┌────────┐
+  │ WS Srv  │ │ WS Srv  │ │ WS Srv  │
+  │ (Node 1)│ │ (Node 2)│ │ (Node 3)│
+  └───┬─────┘ └───┬─────┘ └───┬─────┘
+      │            │            │
+      └────────────┼────────────┘
+                   │
+          ┌────────▼────────┐
+          │  Presence Svc   │
+          │  (Redis Pub/Sub  │
+          │   + Key-Value)   │
+          └────────┬────────┘
+                   │
+      ┌────────────┼────────────┐
+      │            │            │
+  ┌───▼────┐ ┌────▼─────┐ ┌───▼────┐
+  │ Msg    │ │ History  │ │ Search  │
+  │ Queue  │ │ Service  │ │ Service │
+  │(Kafka) │ │          │ │(Elastic)│
+  └───┬────┘ └────┬─────┘ └────────┘
+      │           │
+  ┌───▼────┐ ┌────▼─────┐
+  │ Message│ │ File     │
+  │ Store  │ │ Storage  │
+  │(Cassandra)│ │ (S3)   │
+  └────────┘ └──────────┘
+</div>
+
+<h2>Deep Dive: Message Delivery Flow</h2>
+<ol>
+  <li><strong>Send:</strong> Client sends message via WebSocket to its connected server.</li>
+  <li><strong>Validate &amp; Persist:</strong> WS server validates, assigns a message ID (Snowflake), writes to the message store (Cassandra), and publishes to Kafka.</li>
+  <li><strong>Fan-out:</strong> A fan-out service consumes from Kafka. For each recipient, looks up their connected WS server via the presence service, and publishes to that server's Redis channel.</li>
+  <li><strong>Deliver:</strong> The target WS server receives the message from Redis Pub/Sub and pushes it to the client via WebSocket.</li>
+  <li><strong>Acknowledge:</strong> Client sends an ack back via WebSocket. If no ack within timeout, the message is marked as undelivered for later retrieval.</li>
+</ol>
+
+<div class="callout yellow">
+  <strong>Message ordering:</strong> Use a per-conversation sequence number (monotonically increasing) to maintain message order. Each message is assigned a sequence ID within its conversation. Clients request messages with sequence numbers greater than their last seen. This decouples ordering from the distributed system's clock.
+</div>
+
+<h2>Deep Dive: Presence Service</h2>
+<p>Track which users are online and which WebSocket server they are connected to.</p>
+
+<pre>
+# Redis presence data
+# Map: user_id → {server_id, last_heartbeat}
+HSET presence:user:12345 server_id "ws_server_3" last_heartbeat 1701234567
+
+# Presence TTL: 30 seconds (renewed by heartbeat)
+EXPIRE presence:user:12345 30
+
+# Online friends of user 12345
+SUNION online_friends:user:12345
+  → {456, 789, 1011, ...}
+
+# When user 12345 comes online:
+SADD online_friends:user:456 12345
+SADD online_friends:user:789 12345
+# Fan-out online status to all friends via Redis Pub/Sub
+PUBLISH presence:user:12345 '{"type": "online", "user_id": 12345}'
+</pre>
+
+<div class="callout">
+  <strong>Heartbeat mechanism:</strong> Clients send a heartbeat ping every 15 seconds. The server updates the Redis TTL on each heartbeat. If the TTL expires (server crash, network failure), the user is automatically marked offline. This avoids explicit "logout" dependency.
+</div>
+
+<h2>Deep Dive: Message Storage</h2>
+<p>Use Cassandra for message storage due to its high write throughput and natural partitioning by conversation.</p>
+
+<table>
+  <tr><th>Column</th><th>Type</th><th>Notes</th></tr>
+  <tr><td>conversation_id</td><td>UUID</td><td>Partition key</td></tr>
+  <tr><td>message_id</td><td>UUID / BIGINT</td><td>Clustering key (time-ordered)</td></tr>
+  <tr><td>sender_id</td><td>BIGINT</td><td></td></tr>
+  <tr><td>content</td><td>TEXT</td><td>Message body</td></tr>
+  <tr><td>content_type</td><td>ENUM</td><td>text, image, video, file</td></tr>
+  <tr><td>created_at</td><td>TIMESTAMP</td><td></td></tr>
+  <tr><td>media_url</td><td>TEXT</td><td>S3 URL for media messages</td></tr>
+</table>
+
+<div class="callout green">
+  <strong>Why Cassandra?</strong> Messages are write-heavy (10B/day), need to be partitioned by conversation for efficient retrieval, and have a natural access pattern (time-ordered within a partition). Cassandra handles this well with its wide-row model and tunable consistency.
+</div>
+
+<h2>Deep Dive: Group Chat Fan-out</h2>
+<p>For group chats with many members, fan-out is expensive. Two strategies:</p>
+
+<table>
+  <tr><th>Strategy</th><th>Description</th><th>Best For</th></tr>
+  <tr><td>Fan-out on delivery</td><td>Store one copy per conversation. Deliver to all members when they connect.</td><td>Small groups (&lt;100 members)</td></tr>
+  <tr><td>Fan-out on write</td><td>Write one copy per recipient. Each user has their own inbox.</td><td>Large groups (1000+ members) with selective read</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Hybrid approach:</strong> For groups &lt; 100 members, fan-out on delivery (one row per conversation). For groups &gt; 100, use fan-out on write (one row per recipient) to avoid reading the full conversation for each user. Threshold is configurable based on read:write ratio.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>How do you handle message delivery when the recipient is offline? <em>A: Store messages in the recipient's inbox (fan-out on write). When they come online, send all pending messages since their last seen sequence number. Use push notifications for a subset (last message, unread count).</em></li>
+  <li>How do you prevent message duplication? <em>A: Use idempotent message IDs. Client includes a client-side generated message ID. Server deduplicates using this ID. On reconnect, client sends last acknowledged message ID.</em></li>
+  <li>How do you handle WebSocket server scaling? <em>A: Stateless WebSocket servers behind a load balancer. Use Redis Pub/Sub for cross-server message routing. Presence service maps user_id to server_id for direct routing.</em></li>
+  <li>How do you support message search? <em>A: Index messages in Elasticsearch. Use a firehose from Kafka to Elasticsearch. Support full-text search with filters (sender, date range, conversation).</em></li>
+  <li>How do you handle read receipts at scale? <em>A: Read receipts are separate lightweight events. Batch them (e.g., send a read receipt for the latest message, not every individual message). Store per-user last_read_seq per conversation.</em></li>
+  <li>What happens during a network partition? <em>A: Messages are buffered in Kafka. Presence may become stale (show online users as offline). Accept eventual consistency for presence. Message delivery resumes when partition heals.</em></li>
+</ul>
+
+<div class="callout red">
+  <strong>What to Skip:</strong>
+  <ul>
+    <li>Don't design end-to-end encryption (mention it as a feature, don't implement)</li>
+    <li>Don't design the full media upload pipeline — mention S3 and move on</li>
+    <li>Don't implement specific WebSocket protocol details (ping/pong framing)</li>
+    <li>Don't design user profiles, contacts, or friend management unless asked</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><em>System Design Interview Vol 2</em> — Alex Xu, Ch. 4: Design Chat System</li>
+    <li><em>Designing Data-Intensive Applications</em> — Martin Kleppmann (replication, partitioning)</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Articles</div>
+  <ul>
+    <li>WhatsApp Engineering Blog: "How WhatsApp scales to billions of messages" (whatsapp.com/blog)</li>
+    <li>Slack Engineering: "How Slack Works" (slack.engineering)</li>
+    <li>Meta Engineering: "Scaling the Meta Messaging Backend"</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="notification-system.html">&larr; Previous: Notification System</a>
+  <a href="news-feed.html">Next: News Feed &rarr;</a>
+</div>
+
+</body>
+</html>

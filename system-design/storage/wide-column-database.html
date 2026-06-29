@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.10.4 Wide-Column Database</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#3">3 Storage</a> / <a href="../index.html#3.10">3.10 Database Models</a> / 3.10.4
+</div>
+
+<h1>Wide-Column Database</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What a wide-column database is: partition key + sort key + column families</li>
+  <li>How it differs from document and relational databases</li>
+  <li>Why Cassandra achieves massive write throughput using <a href="lsm-tree.html">LSM trees</a></li>
+  <li>Data modeling with partition keys and clustering keys</li>
+</ul>
+
+<h2>Definition</h2>
+<p>A <strong>wide-column database stores data in tables with rows identified by a partition key and optionally a clustering key, where each row can have a variable number of columns</strong>. Unlike relational databases where rows have a fixed set of columns, wide-column databases allow rows to have different columns. Data is organized by partition keys (which determine data distribution across nodes) and clustering keys (which determine sort order within a partition).</p>
+
+<div class="diagram">  Wide-Column Database — Cassandra Data Model
+
+  Keyspace: ecommerce
+  Table: orders_by_user
+
+  ┌─────────────────┬────────────────────────────────────────────────────────┐
+  │  Partition Key   │  Row (sorted by clustering key = order_date)           │
+  │  (user_id)       │                                                         │
+  ├─────────────────┼────────────────────────────────────────────────────────┤
+  │                 │  order_date    │ order_id │ total  │ status   │ items   │
+  │  user:42         │  2024-01-15   │  ORD-101 │ $150   │ shipped  │ [...]    │
+  │                 │  2024-01-20   │  ORD-105 │ $89    │ pending  │ [...]    │
+  │                 │  2024-02-03   │  ORD-112 │ $234   │ complete │ [...]    │
+  │                 │  2024-02-14   │  ORD-120 │ $67    │ complete │ [...]    │
+  ├─────────────────┼────────────────────────────────────────────────────────┤
+  │  user:99         │  2024-01-10   │  ORD-200 │ $45    │ complete │ [...]    │
+  │                 │  2024-03-01   │  ORD-205 │ $310   │ shipped  │ [...]    │
+  └─────────────────┴────────────────────────────────────────────────────────┘
+
+  Query: SELECT * FROM orders_by_user WHERE user_id = 'user:42'
+         → fetches entire partition (all rows for user:42)
+
+  Query: SELECT * FROM orders_by_user
+         WHERE user_id = 'user:42'
+         AND order_date >= '2024-02-01'
+         AND order_date < '2024-03-01'
+         → uses clustering key for efficient range scan within partition</div>
+
+<h2>Data Model: Keys</h2>
+<table>
+  <tr><th>Key Type</th><th>Purpose</th><th>Example</th></tr>
+  <tr><td><strong>Partition Key</strong></td><td>Determines which node(s) store the data. All rows with the same partition key are co-located.</td><td><code>user_id</code> — all orders for a user on the same node</td></tr>
+  <tr><td><strong>Clustering Key (Sort Key)</strong></td><td>Determines sort order within a partition. Enables efficient range queries.</td><td><code>order_date</code> — orders sorted by date within a user's partition</td></tr>
+  <tr><td><strong>Composite Partition Key</strong></td><td>Multiple columns form the partition key for finer-grained distribution.</td><td><code>(tenant_id, user_id)</code> — distribute across more nodes</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Critical rule:</strong> In Cassandra, you can only query by partition key (fast, single-node) or by partition key + clustering key range (fast, sorted scan). You CANNOT query by an arbitrary column unless you create a secondary index or a materialized view. This means <strong>data modeling is query-driven</strong> — you model your tables around how data will be accessed.
+</div>
+
+<h2>Query-Driven Data Modeling</h2>
+<p>Unlike relational databases where you model entities and write queries to join them, in Cassandra you model each query pattern as a separate table:</p>
+
+<div class="diagram">  Relational approach:                    Cassandra approach:
+
+  One "orders" table:                     Multiple query-specific tables:
+
+  SELECT * FROM orders                     Table: orders_by_user
+  WHERE user_id = 42;                     (PK: user_id, CK: order_date)
+
+  SELECT * FROM orders                     Table: orders_by_date
+  WHERE order_date > '2024-01-01'         (PK: order_date, CK: order_id)
+
+  SELECT * FROM orders                     Table: orders_by_product
+  WHERE product_id = 7;                   (PK: product_id, CK: order_date)
+
+  1 table, 3 queries (using indexes)      3 tables, 3 queries (no indexes needed)
+
+  In Cassandra: denormalize and duplicate data to make each
+  query pattern a simple primary key lookup. Writes are cheap
+  (append-only LSM tree), reads are optimized.</div>
+
+<h2>Why High Write Throughput</h2>
+<p>Wide-column databases achieve massive write throughput because:</p>
+
+<ol>
+  <li><strong>LSM tree storage engine</strong> — Writes are sequential appends (see <a href="lsm-tree.html">LSM Tree</a>). No in-place updates, no page splits.</li>
+  <li><strong>Append-only architecture</strong> — No read-before-write. Each write is a single sequential disk operation.</li>
+  <li><strong>No cross-partition transactions</strong> — Writes go to a single partition (single node). No distributed locking needed.</li>
+  <li><strong>Tunable consistency</strong> — Write acknowledged after W replicas (configurable). Lower W = faster writes.</li>
+  <li><strong>Log-structured replication</strong> — Replication via commit log shipping, efficient for high-throughput.</li>
+</ol>
+
+<pre>  Write throughput comparison:
+
+  Cassandra:  100K-500K writes/sec per node (LSM tree, sequential I/O)
+  PostgreSQL: 10K-50K   writes/sec per node (B+ tree, random I/O)
+  MySQL:      20K-100K   writes/sec per node (InnoDB, random I/O)
+
+  At cluster level with 100 nodes:
+  Cassandra:  10M-50M writes/sec
+  PostgreSQL: ~500K writes/sec (limited by replication overhead)</pre>
+
+<h2>Cassandra Architecture</h2>
+<div class="diagram">  Cassandra Ring (simplified)
+
+  Client
+    │
+    ▼
+  ┌───────────────────────────────────────────────────┐
+  │               Gossip Protocol Ring                 │
+  │                                                   │
+  │   Node A (token 0-85)     ←── partition key hash  │
+  │   Node B (token 85-170)   ←── partition key hash  │
+  │   Node C (token 170-255)  ←── partition key hash  │
+  │   Node D (token 255-340)                         │
+  │   Node E (token 340-425)                         │
+  │   ...                                             │
+  │                                                   │
+  │   Replication Factor = 3:                         │
+  │   Each partition is stored on 3 nodes.            │
+  │   Node A is "coordinator" for token 50.           │
+  │   Writes go to A (primary), B, C (replicas).      │
+  │                                                   │
+  │   Consistency Level:                               │
+  │   QUORUM  = floor(RF/2) + 1 = 2 (for RF=3)       │
+  │   LOCAL_QUORUM = same rack                        │
+  │   ONE     = any 1 replica                         │
+  │   ALL     = all replicas                          │
+  └───────────────────────────────────────────────────┘</div>
+
+<h2>Cassandra vs Other Databases</h2>
+<table>
+  <tr><th></th><th>Cassandra</th><th><a href="document-database.html">MongoDB</a></th><th><a href="relational-database.html">PostgreSQL</a></th></tr>
+  <tr><td><strong>Write throughput</strong></td><td class="green">Very high (LSM, sequential)</td><td>Moderate</td><td>Moderate (B+ tree, random)</td></tr>
+  <tr><td><strong>Read flexibility</strong></td><td class="red">Low (query-driven modeling)</td><td class="green">Good (secondary indexes)</td><td class="green">Excellent (SQL, joins)</td></tr>
+  <tr><td><strong>Scaling</strong></td><td class="green">Linear, masterless</td><td>Sharding (configurable)</td><td class="red">Vertical or read replicas</td></tr>
+  <tr><td><strong>Consistency</strong></td><td class="yellow">Tunable (eventual to strong)</td><td class="yellow">Tunable (eventual/strong)</td><td class="green">Strong (ACID)</td></tr>
+  <tr><td><strong>Data model</strong></td><td>Partition key + clustering key</td><td>JSON documents, collections</td><td>Tables, rows, columns, SQL</td></tr>
+  <tr><td><strong>Best for</strong></td><td>Time-series, IoT, messaging, high-write systems</td><td>Content, user profiles, catalogs</td><td>Financial, transactions, complex relationships</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What is a wide-column database?"</strong><br>A database that stores data in tables where rows are identified by a partition key (determines node placement) and a clustering key (determines sort order within a partition). Each row can have different columns. Cassandra is the most popular example. Designed for massive write throughput using LSM tree storage and masterless, ring-based architecture.</li>
+  <li><strong>"How does Cassandra data modeling differ from relational?"</strong><br>Relational: model entities, normalize, use JOINs. Cassandra: model queries — create one table per query pattern, denormalize data, use partition key for distribution and clustering key for sorting. You can only efficiently query by partition key or partition key + clustering key range. No ad-hoc queries without secondary indexes (which are expensive).</li>
+  <li><strong>"Why can Cassandra handle more writes than MySQL?"</strong><br>LSM tree storage converts random writes to sequential appends (no page reads before writes, no page splits). Masterless architecture means no single write bottleneck. No cross-node transactions means writes go to a single partition on a single node. Tunable consistency means you can write to fewer replicas for speed.</li>
+  <li><strong>"When would you choose Cassandra?"</strong><br>High write throughput (time-series, IoT telemetry, event logging, messaging), large datasets that don't fit a single node, need for linear horizontal scaling, and when your query patterns are known and predictable. Avoid when you need complex ad-hoc queries, strong ACID transactions, or multi-table JOINs.</li>
+</ul>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Designing Data-Intensive Applications" — Chapters 3, 5, 6</strong> (Kleppmann)</li>
+    <li><strong>"Cassandra: The Definitive Guide"</strong> — O'Reilly</li>
+    <li><strong>DataStax Academy — Data Modeling</strong> — academy.datastax.com</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="document-database.html">&larr; document-database.html</a>
+  <a href="graph-database.html">Next: graph-database.html &rarr;</a>
+</div>
+
+</body>
+</html>

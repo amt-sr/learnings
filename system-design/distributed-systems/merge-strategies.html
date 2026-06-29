@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.5.4 Merge Strategies</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb"><a href="#">System Design</a> / <a href="#">5 Distributed Systems</a> / <a href="#">5.5 Conflict Resolution</a> / 5.5.4</div>
+<h1>Merge Strategies</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand custom application-level merge strategies -- the approach taken when generic mechanisms like LWW, CRDTs, and OT are not sufficient. Learn three-way merge, version vectors with merge functions, and how real systems implement domain-specific conflict resolution.</p>
+
+<h2>Definition</h2>
+<p>A <strong>merge strategy</strong> is a custom, application-defined function that resolves conflicts between concurrent writes. Unlike <a href="last-write-wins.html">LWW</a> (which blindly picks one winner) or <a href="crdt.html">CRDTs</a> (which use generic mathematical merging), merge strategies use <strong>domain-specific logic</strong> to combine conflicting updates intelligently. They are the most flexible but also the most complex approach to conflict resolution.</p>
+
+<div class="callout">
+  <strong>Key insight:</strong> Merge strategies sit at the top of the sophistication spectrum for conflict resolution. LWW is the simplest (pick one). CRDTs are data-structure-aware (merge mathematically). OT is operation-aware (transform operations). Merge strategies are <strong>application-semantic-aware</strong> (use business logic to combine).
+</div>
+
+<h2>Three-Way Merge</h2>
+<p>The most common merge pattern, borrowed from version control systems like Git:</p>
+
+<div class="diagram">       Base (common ancestor)
+        /              \
+       /                \
+  Branch A            Branch B
+  (User 1 edits)     (User 2 edits)
+       \                /
+        \              /
+       Three-Way Merge
+       (detect conflicts, apply merge function)
+
+
+Algorithm:
+  1. Find the common ancestor version (Base)
+  2. Compare Branch A with Base → changes_A
+  3. Compare Branch B with Base → changes_B
+  4. If changes_A and changes_B don't overlap → merge both
+  5. If changes_A and changes_B overlap → conflict → apply merge function
+
+Example: Merging user profiles
+
+  Base:    {name: "Alice", email: "alice@old.com", role: "admin"}
+  Branch A: {name: "Alice Smith", email: "alice@old.com", role: "admin"}
+  Branch B: {name: "Alice", email: "alice@new.com", role: "editor"}
+
+  changes_A: name changed ("Alice" → "Alice Smith")
+  changes_B: email changed ("alice@old.com" → "alice@new.com"), role changed
+
+  No overlapping fields → clean merge:
+  Result: {name: "Alice Smith", email: "alice@new.com", role: "editor"}</div>
+
+<h3>Conflict Detection in Three-Way Merge</h3>
+<p>A conflict occurs when both branches modified the <strong>same field to different values</strong>:</p>
+
+<pre>  Base:      {name: "Alice", email: "alice@old.com"}
+  Branch A:  {name: "Alice Smith", email: "alice@old.com"}
+  Branch B:  {name: "Alice B", email: "alice@new.com"}
+
+  Both changed "name" to different values → CONFLICT on "name"
+  email: only B changed → merge B's change
+
+  Merge result: {name: ???CONFLICT???, email: "alice@new.com"}
+
+  → Application must resolve the conflict (prompt user, apply custom logic)</pre>
+
+<div class="callout yellow">
+  <strong>Git analogy:</strong> Three-way merge in distributed systems works exactly like Git merge. The "common ancestor" is the last synchronized version. Branches are concurrent updates from different replicas. The merge function is like a .gitattributes merge driver customized for your data type.
+</div>
+
+<h2>Version Vectors + Merge Function</h2>
+<p>A practical pattern combining <a href="vector-clock.html">version vectors</a> for conflict detection with custom merge functions for resolution:</p>
+
+<div class="diagram">  Data record: {
+    key: "shopping_cart:user_42",
+    value: {
+      items: [
+        {sku: "A100", qty: 2},
+        {sku: "B200", qty: 1}
+      ],
+      total: 59.99
+    },
+    version: [replica1: 5, replica2: 3, replica3: 2]
+  }
+
+  Replica 1 update: user adds sku "C300", qty=1
+    version: [replica1: 6, replica2: 3, replica3: 2]
+
+  Replica 2 update: user removes sku "B200"
+    version: [replica1: 5, replica2: 4, replica3: 2]
+
+  Sync:
+    [6,3,2] vs [5,4,2] → INCOMPARABLE → CONCURRENT
+
+    Merge function (application-defined):
+    - For each SKU: keep the max qty across versions
+    - If item exists in one but removed in another:
+      use "tombstone wins" or "add wins" based on business rules
+    - Recalculate total
+
+    Result:
+    items: [{sku: "A100", qty: 2}, {sku: "C300", qty: 1}]
+    total: 39.99
+    version: [replica1: 6, replica2: 4, replica3: 2]</div>
+
+<h2>Common Merge Strategies by Domain</h2>
+
+<h3>Numerical Values</h3>
+<table>
+  <tr><th>Strategy</th><th>Behavior</th><th>Use Case</th></tr>
+  <tr><td>Max</td><td>result = max(v1, v2)</td><td>High-water mark, latest version number</td></tr>
+  <tr><td>Min</td><td>result = min(v1, v2)</td><td>Lowest price, earliest deadline</td></tr>
+  <tr><td>Sum</td><td>result = v1 + v2</td><td>Counters, totals (essentially a PN-Counter)</td></tr>
+  <tr><td>Average</td><td>result = (v1 + v2) / 2</td><td>Sensor readings, averaged metrics</td></tr>
+  <tr><td>Last wins</td><td>result = newer value (by timestamp)</td><td>Fallback when domain logic can't combine</td></tr>
+</table>
+
+<h3>Collection/Map Values</h3>
+<table>
+  <tr><th>Strategy</th><th>Behavior</th><th>Use Case</th></tr>
+  <tr><td>Union</td><td>result = v1 UNION v2</td><td>Tags, permissions, friend lists (G-Set)</td></tr>
+  <tr><td>Union with tombstones</td><td>result = merge keeping delete markers</td><td>Group membership (OR-Set)</td></tr>
+  <tr><td>Per-key merge</td><td>For each key: apply merge function recursively</td><td>Nested structures, shopping carts</td></tr>
+  <tr><td>Append-only</td><td>result = v1 + v2 (concatenate)</td><td>Logs, event streams</td></tr>
+</table>
+
+<h3>Text/String Values</h3>
+<table>
+  <tr><th>Strategy</th><th>Behavior</th><th>Use Case</th></tr>
+  <tr><td><a href="operational-transform.html">OT</a></td><td>Transform operations against concurrent ops</td><td>Rich text, collaborative documents</td></tr>
+  <tr><td>Line-based merge</td><td>Three-way merge at line granularity</td><td>Code, configuration files</td></tr>
+  <tr><td>Concatenate with separator</td><td>result = v1 + "\n" + v2</td><td>Comments, notes (both preserved)</td></tr>
+</table>
+
+<h2>Real-World Examples</h2>
+
+<h3>Git: The Gold Standard</h3>
+<p>Git's merge is the most widely understood three-way merge:</p>
+<ul>
+  <li>Uses content-addressable storage to find the common ancestor (merge base)</li>
+  <li>Line-by-line diff to detect conflicts</li>
+  <li>Automatic merge for non-overlapping changes</li>
+  <li>Manual resolution for conflicts (conflict markers in the file)</li>
+  <li>Custom merge drivers (e.g., for .po files, lock files)</li>
+</ul>
+
+<h3>Dynamo/Cassandra: Application-Level Merge</h3>
+<p>When version vectors detect a conflict (concurrent siblings), the application is responsible for merging:</p>
+<ul>
+  <li>Dynamo returns all conflicting versions to the client</li>
+  <li>Client applies domain-specific logic to merge</li>
+  <li>Client writes back the merged result with a new version vector</li>
+  <li>Example: shopping cart merge adds items from both versions, removes items with tombstones</li>
+</ul>
+
+<h3>Apache CouchDB: Revision-Based Merge</h3>
+<ul>
+  <li>Every document has a revision history (revision tree)</li>
+  <li>Conflicts create branches in the revision tree</li>
+  <li>Application reads all leaf revisions and merges them</li>
+  <li>Write the merged document as a new revision on a new branch</li>
+  <li>Old conflicting revisions can be deleted after merge</li>
+</ul>
+
+<h3>iCloud: Three-Way Merge for Contacts/Notes</h3>
+<ul>
+  <li>Each device syncs via a central iCloud server</li>
+  <li>Server maintains version vectors per record</li>
+  <li>On conflict, server stores both versions and flags them</li>
+  <li>On next sync, device downloads both and performs three-way merge</li>
+  <li>Merge function is per-field: take newer value for each field independently</li>
+</ul>
+
+<h2>Designing a Merge Strategy: Decision Framework</h2>
+<div class="diagram">  1. What is the data type?
+     ├── Primitive (number, string, boolean)
+     │   → Can you define a merge operation? (max, min, sum, concat)
+     │   → If yes: use that. If no: fall back to LWW.
+     │
+     ├── Collection (set, list, map)
+     │   → Can elements be merged independently?
+     │   │   → Yes: per-element merge (like shopping cart SKUs)
+     │   │   → No: need CRDT or OT
+     │   └── Is order significant?
+     │       → No: CRDT set or map
+     │       → Yes: CRDT sequence (RGA) or OT
+     │
+     └── Complex object (nested structure)
+         → Can fields be merged independently?
+         │   → Yes: per-field merge with version vectors
+         │   → No: whole-object merge (three-way merge)
+         └→ Business rules determine the right strategy
+
+  2. What is the conflict frequency?
+     ├── Very low: LWW is probably fine (simpler)
+     ├── Moderate: Three-way merge with custom logic
+     └── Very high: CRDTs (automated, no manual resolution)
+
+  3. What is the cost of a wrong merge?
+     ├── Low: LWW or simple auto-merge
+     ├── Medium: Three-way merge with conflict queue for review
+     └── High (data loss, financial): Strong consistency (no merge needed)</div>
+
+<h2>Conflict Resolution Spectrum</h2>
+<table>
+  <tr><th>Strategy</th><th>Complexity</th><th>Data Safety</th><th>Requires Coordination?</th><th>Example</th></tr>
+  <tr><td><a href="last-write-wins.html">LWW</a></td><td class="green">Low</td><td class="red">Low (data loss)</td><td>No</td><td>Cassandra default</td></tr>
+  <tr><td>Three-way merge</td><td class="yellow">Medium</td><td class="yellow">Medium</td><td>Client-side</td><td>Git, iCloud</td></tr>
+  <tr><td><a href="crdt.html">CRDT</a></td><td class="yellow">Medium</td><td class="green">High</td><td>No</td><td>Riak, Redis-CRDT</td></tr>
+  <tr><td><a href="operational-transform.html">OT</a></td><td class="red">High</td><td class="green">High</td><td>Server</td><td>Google Docs</td></tr>
+  <tr><td>Custom merge function</td><td class="red">High</td><td class="green">High</td><td>Varies</td><td>Dynamo cart merge</td></tr>
+  <tr><td>Strong consistency</td><td class="red">High</td><td class="green">Highest</td><td class="red">Yes (consensus)</td><td>Spanner, ZooKeeper</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li><strong>"How would you handle conflicts in a shopping cart system?"</strong> -- Use version vectors to detect concurrent updates. Merge function: for each SKU, take the max quantity across versions. Handle add/remove with business rules (add-wins or remove-wins depending on requirements). This is the Dynamo shopping cart merge pattern.</li>
+  <li><strong>"Explain three-way merge."</strong> -- Find the common ancestor, compute diffs from both branches, merge non-overlapping changes automatically, flag overlapping changes as conflicts for resolution. Analogous to Git merge.</li>
+  <li><strong>"When would you use a custom merge strategy vs CRDTs?"</strong> -- Use custom merge when the data has complex business rules that don't fit standard CRDT operations (e.g., "if item is on sale, use sale price; otherwise, use the price the customer saw at add-time"). CRDTs are better when the merge is purely mathematical (counters, sets).</li>
+  <li><strong>"How does Dynamo handle shopping cart conflicts?"</strong> -- Version vectors detect concurrent writes. All conflicting versions are returned to the client. The client merges: adds items from both versions, respects tombstones for removals, takes max quantity per SKU. Writes back merged result with new version vector.</li>
+  <li><strong>"Compare three-way merge with OT."</strong> -- Three-way merge operates at the data level (comparing states). OT operates at the operation level (transforming operations). Three-way merge needs a common ancestor; OT needs a transformation function. Three-way merge is simpler but coarser-grained.</li>
+  <li><strong>"How would you design merge for a contact book?"</strong> -- Per-field merge with version vectors. For non-conflicting fields, take the newer value. For conflicting fields (e.g., both users changed phone number), either take the newer one or flag for manual resolution. Add phone numbers to the set (union merge). Remove by tombstone.</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Depth to avoid in interviews:</strong>
+  <ul>
+    <li>Git's specific merge algorithms (recursive merge, octopus merge, etc.)</li>
+    <li>Darcs' patch theory (an alternative to OT with interesting theoretical properties)</li>
+    <li>Patience merge, weave merge, and other Git merge strategies</li>
+    <li>CouchDB revision tree internals (B-tree format of revision history)</li>
+    <li>Specific .gitattributes merge driver syntax</li>
+    <li>Three-way merge for binary files (images, PDFs)</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary References</div>
+  <ul>
+    <li>Dynamo: Amazon's Highly Available Key-value Store -- DeCandia et al. (2007), Section on Vector Clocks and Conflict Resolution</li>
+    <li>Version Control with Git -- Jon Loeliger, chapters on merge mechanics</li>
+    <li>Pro Git -- Scott Chacon & Ben Straub, Chapter on Git Internals (merge strategies)</li>
+    <li>CouchDB: The Definitive Guide -- J. C. Anderson et al., chapters on conflict management</li>
+    <li>Merge Strategies for Distributed Version Control Systems -- practical comparison papers</li>
+    <li>The Trouble with Timestamps -- Martin Kleppmann (2016) -- includes discussion of merge strategies</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="operational-transform.html">&larr; 5.5.3 Operational Transform</a>
+  <a href="why-consensus.html">5.6.1 Why Consensus &rarr;</a>
+</div>
+
+</body>
+</html>

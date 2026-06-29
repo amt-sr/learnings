@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>9.1.1 Two Phase Commit (2PC)</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb"><a href="../">System Design</a> / <a href="./">Section 9: Distributed Transactions</a> / 9.1.1 Two Phase Commit</div>
+
+<h1>Two Phase Commit (2PC)</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the two-phase commit protocol as the foundational atomic commit protocol for distributed transactions, including its flow, failure modes, and the fundamental blocking problem that limits its practical use at scale.</p>
+
+<h2>Definition</h2>
+<p>Two-Phase Commit (2PC) is a distributed atomic commit protocol where a <strong>coordinator</strong> node ensures all <strong>participants</strong> either commit or abort a transaction atomically. It provides atomicity across multiple nodes but sacrifices availability under certain failure conditions, making it a classic example of the CAP theorem tradeoffs.</p>
+
+<div class="callout">
+  <strong>Key Insight:</strong> 2PC is a blocking protocol. If the coordinator crashes after participants vote "yes" but before sending the final decision, participants must block (hold locks) until the coordinator recovers. This is the single most important thing to understand about 2PC.
+</div>
+
+<h2>Protocol Phases</h2>
+
+<h3>Phase 1: Prepare (Voting Phase)</h3>
+<ol>
+  <li>Coordinator sends <code>PREPARE</code> to all participants</li>
+  <li>Each participant acquires locks on required resources, writes undo/redo logs, and votes:
+    <ul>
+      <li><strong>YES</strong> &mdash; participant is ready to commit (locks held)</li>
+      <li><strong>NO</strong> &mdash; participant cannot commit (aborts locally, releases locks)</li>
+    </ul>
+  </li>
+  <li>If any participant votes NO, coordinator decides to ABORT</li>
+</ol>
+
+<h3>Phase 2: Commit (Decision Phase)</h3>
+<ol>
+  <li>Coordinator collects all votes</li>
+  <li>If all votes are YES, coordinator sends <code>COMMIT</code> to all participants</li>
+  <li>If any vote is NO, coordinator sends <code>ABORT</code> to all participants</li>
+  <li>Participants execute the decision and release locks</li>
+  <li>Participants send <code>ACK</code> back to coordinator</li>
+</ol>
+
+<div class="diagram">
+  <strong>2PC Protocol Flow</strong>
+
+    Client              Coordinator           Participant A           Participant B
+      |                     |                       |                       |
+      |-- TxCfg Begin ----->|                       |                       |
+      |                     |                       |                       |
+      |   <strong>--- PHASE 1: PREPARE (Voting) ---</strong>                        |
+      |                     |                       |                       |
+      |                     |-- PREPARE ----------->|                       |
+      |                     |                       |-- acquire locks       |
+      |                     |                       |-- write log           |
+      |                     |<-- VOTE YES ----------|                       |
+      |                     |                       |                       |
+      |                     |-- PREPARE ---------------------------------->|
+      |                     |                       |                       |-- acquire locks
+      |                     |                       |                       |-- write log
+      |                     |<-- VOTE YES ----------------------------------|
+      |                     |                       |                       |
+      |   <strong>--- PHASE 2: COMMIT (Decision) --</strong>                        |
+      |                     |                       |                       |
+      |                     |  (all YES --> COMMIT) |                       |
+      |                     |-- COMMIT ------------>|                       |
+      |                     |                       |-- commit              |
+      |                     |                       |-- release locks       |
+      |                     |<-- ACK --------------|                       |
+      |                     |                       |                       |
+      |                     |-- COMMIT ---------------------------------->|
+      |                     |                       |                       |-- commit
+      |                     |                       |                       |-- release locks
+      |                     |<-- ACK -------------------------------------|
+      |                     |                       |                       |
+      |-- Tx Complete <------|                       |                       |
+</div>
+
+<h2>Three Possible Outcomes</h2>
+
+<table>
+  <tr><th>Outcome</th><th>Condition</th><th>Result</th></tr>
+  <tr><td class="green">Commit</td><td>All participants vote YES</td><td>Coordinator sends COMMIT to all; transaction applied</td></tr>
+  <tr><td class="red">Abort</td><td>Any participant votes NO</td><td>Coordinator sends ABORT to all; transaction rolled back</td></tr>
+  <tr><td style="color:#d29922">Block</td><td>Coordinator crashes after Phase 1</td><td>Participants hold locks indefinitely; cannot decide alone</td></tr>
+</table>
+
+<h2>The Blocking Problem</h2>
+<p>The blocking problem is the critical weakness of 2PC. Once a participant votes YES in Phase 1, it cannot unilaterally decide to commit or abort. It must wait for the coordinator's decision. If the coordinator crashes:</p>
+
+<ul>
+  <li>Participants cannot release locks (commit or abort might happen)</li>
+  <li>Resources remain unavailable to other transactions</li>
+  <li>System throughput degrades under coordinator failures</li>
+  <li>Only recovery after coordinator restart resolves the block</li>
+</ul>
+
+<div class="diagram">
+  <strong>Blocking Scenario: Coordinator Crash</strong>
+
+    Coordinator              Participant A
+         |                       |
+         |-- PREPARE ----------->|
+         |<-- VOTE YES ----------|    (Participant A: locks held, waiting)
+         |                       |
+        [X] COORDINATOR CRASHES  |
+         |                       |
+         |        ...            |    (Participant A: still holding locks)
+         |        ...            |    (Cannot commit or abort on its own)
+         |                       |
+    Coordinator restarts         |
+         |                       |
+         |-- COMMIT ----------->|    (Finally resolves)
+</div>
+
+<h2>Failure Handling</h2>
+
+<table>
+  <tr><th>Failure</th><th>Phase</th><th>Recovery Action</th></tr>
+  <tr><td>Participant crash before voting</td><td>Phase 1</td><td>Coordinator timeouts; aborts transaction</td></tr>
+  <tr><td>Participant crash after voting YES</td><td>Phase 1</td><td>Participant recovers from log; waits for coordinator decision</td></tr>
+  <tr><td>Coordinator crash before sending decision</td><td>Phase 1-2</td><td><strong>BLOCKING:</strong> Participants wait for coordinator recovery</td></tr>
+  <tr><td>Coordinator crash after sending decision</td><td>Phase 2</td><td>Participants already committed/aborted; coordinator catches up on restart</td></tr>
+  <tr><td>Network partition</td><td>Any</td><td>Timeouts trigger abort; if partial commit, recovery from logs</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Interview Tip:</strong> When asked about 2PC in an interview, always mention the blocking problem first. Then discuss how real systems mitigate it: persistent transaction logs, coordinator election, and why most production systems prefer Saga or eventual consistency over 2PC.
+</div>
+
+<h2>Where 2PC Appears in Real Systems</h2>
+<ul>
+  <li><strong>X/Open XA:</strong> Standard API for distributed transactions (used by Java EE, JTA)</li>
+  <li><strong>Database internal replication:</strong> Raft and Paxos use 2PC-like protocols for log replication commits</li>
+  <li><strong>Spanner:</strong> Uses 2PC (TrueTime-assisted) for cross-database transactions</li>
+  <li><strong>MySQL XA:</strong> Supports XA transactions across storage engines</li>
+  <li><strong>Oracle/Microsoft DTC:</strong> Distributed Transaction Coordinators</li>
+</ul>
+
+<h2>2PC in System Design Interviews</h2>
+
+<div class="callout">
+  <strong>Common Design Pattern:</strong> In an interview, if you propose 2PC, the interviewer will likely challenge you on availability and latency. Use 2PC only when you can justify the tradeoff: small number of participants, low-latency network, and strong consistency is a hard requirement (e.g., money transfers between accounts).
+</div>
+
+<ul>
+  <li>Money transfer between two banks: atomic debit and credit</li>
+  <li>Order fulfillment: inventory deduction + payment processing</li>
+  <li>Inventory held across multiple warehouses (few participants)</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What happens when the coordinator crashes after Phase 1? How do participants recover?</li>
+  <li>Why is 2PC considered a blocking protocol? What does blocking mean here?</li>
+  <li>How does 2PC relate to the CAP theorem? What does it sacrifice?</li>
+  <li>Compare 2PC with the Saga pattern. When would you choose one over the other?</li>
+  <li>How would you design a money transfer system using 2PC? What are the failure modes?</li>
+  <li>How does 2PC affect system throughput? Why doesn't it scale?</li>
+  <li>What is the XA protocol and how does it implement 2PC?</li>
+  <li>How do databases like Spanner or CockroachDB use 2PC?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>For L5/L6/Staff interviews, skip:</strong>
+  <ul>
+    <li>Deep implementation details of XA transaction manager APIs (JTA interfaces, XAResource)</li>
+    <li>Legacy protocols like LU 6.2 syncpoint or CICS recovery</li>
+    <li>Exotic variants (presumed abort, presumed commit optimizations) unless asked</li>
+    <li>Formal proofs of 2PC correctness (FLP impossibility not needed here)</li>
+    <li>Two-phase locking (2PL) concurrency control -- different concept, don't confuse them</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><em>Designing Data-Intensive Applications</em> (Martin Kleppmann) -- Chapter 7: Transactions, Section "Distributed Transactions and Consensus"</li>
+    <li><em>Distributed Systems: Principles and Paradigms</em> (Tanenbaum & Van Steen) -- Chapter 8: Distributed Transactions</li>
+    <li><em>Database Systems: The Complete Book</em> (Garcia-Molina et al.) -- Chapter 19: Distributed Databases</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Papers</div>
+  <ul>
+    <li>"Consensus on Transaction Commit" (Jim Gray &amp; Lamport, 2006)</li>
+    <li>"The Transaction Concept: Virtues and Limitations" (Jim Gray, 1981)</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Online</div>
+  <ul>
+    <li><a href="https://martin.kleppmann.com/2015/05/11 please-reject-jepsen.html">Jepsen series on distributed transaction systems</a></li>
+    <li><a href="https://cloud.google.com/spanner/docs/true-time-external-consistency">Google Spanner: TrueTime and external consistency</a></li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="../messaging/idempotency.html">&larr; 8.4.5 Idempotency</a>
+  <a href="three-phase-commit.html">9.1.2 Three Phase Commit &rarr;</a>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.4.5 Idempotency - System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">8 Messaging</a> / <a href="index.html">8.4 Reliability</a> / 8.4.5
+</div>
+
+<h1>Idempotency</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand idempotency as a core pattern for building reliable message consumers. Be able to design idempotent consumers using deduplication keys, database constraints, and idempotency key stores, and articulate why idempotency is essential when using at-least-once delivery.</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>Idempotency</strong> means that executing the same operation multiple times produces the same result as executing it once. An idempotent consumer can safely process a duplicate message without corrupting state or causing side effects (e.g., charging a credit card twice, sending a notification twice, or incrementing a counter twice).
+</div>
+
+<h2>Why Idempotency Matters in Messaging</h2>
+
+<div class="diagram">
+  Producer sends msg A
+       │
+       ├─ Broker receives msg A, writes to partition
+       │
+       ├─ Consumer processes msg A → SUCCESS
+       │
+       └─ ACK lost in network (consumer crash before commit)
+            │
+            └─ Consumer restarts, reads msg A again (at-least-once)
+                 │
+                 ├─ WITHOUT idempotency: duplicate side effect (double charge!)
+                 └─ WITH idempotency: detected as duplicate, skipped
+</div>
+
+<div class="callout yellow">
+  <strong>Core principle:</strong> At-least-once delivery (the default and most common guarantee) implies that duplicates are not just possible but expected. Idempotent consumers are the standard mechanism for handling this -- either via application-level deduplication or infrastructure-level exactly-once semantics.
+</div>
+
+<h2>Idempotency in Practice: Design Patterns</h2>
+
+<h3>1. Natural Idempotency</h3>
+<p>Some operations are inherently idempotent by their nature. No additional mechanism needed.</p>
+
+<table>
+  <tr>
+    <th>Operation</th>
+    <th>Idempotent?</th>
+    <th>Reason</th>
+  </tr>
+  <tr>
+    <td>SET x = 10</td>
+    <td class="green">Yes</td>
+    <td>Same value regardless of how many times executed</td>
+  </tr>
+  <tr>
+    <td>INSERT ... ON CONFLICT DO NOTHING</td>
+    <td class="green">Yes</td>
+    <td>Duplicate insert is a no-op</td>
+  </tr>
+  <tr>
+    <td>UPSERT (key, value)</td>
+    <td class="green">Yes</td>
+    <td>Same final state regardless of retries</td>
+  </tr>
+  <tr>
+    <td>INCREMENT counter by 1</td>
+    <td class="red">No</td>
+    <td>Each execution changes the value</td>
+  </tr>
+  <tr>
+    <td>CHARGE credit card $50</td>
+    <td class="red">No</td>
+    <td>Each execution charges the customer again</td>
+  </tr>
+  <tr>
+    <td>SEND email</td>
+    <td class="red">No</td>
+    <td>Each execution sends another email</td>
+  </tr>
+</table>
+
+<h3>2. Database Unique Constraints</h3>
+<p>Use a unique constraint on a deduplication key to make non-idempotent operations idempotent.</p>
+
+<pre>
+-- Deduplication table
+CREATE TABLE processed_events (
+  event_id     VARCHAR(128) PRIMARY KEY,   -- idempotency key
+  entity_type  VARCHAR(64),
+  entity_id    VARCHAR(128),
+  processed_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Consumer logic (pseudocode):
+INSERT INTO processed_events (event_id)
+VALUES ('evt-abc-123')
+ON CONFLICT (event_id) DO NOTHING
+RETURNING event_id;
+
+-- If no row returned → first time seeing this event → process business logic
+-- If row returned (conflict) → duplicate → skip
+</pre>
+
+<div class="callout green">
+  <strong>Why this works:</strong> The database's unique constraint provides atomic check-and-set semantics. Two concurrent consumers processing the same message cannot both insert the same <code>event_id</code> -- one succeeds, one gets a constraint violation and skips.
+</div>
+
+<h3>3. Distributed Idempotency Key Store</h3>
+<p>For systems that cannot rely on a single database, use a distributed store (Redis, DynamoDB, Memcached) to track processed message IDs.</p>
+
+<div class="diagram">
+  Consumer processes message
+       │
+       ├─ Extract idempotency key (message ID, dedup header, etc.)
+       │
+       ├─ CHECK: EXISTS(idempotency_key) in Redis
+       │    ├─ EXISTS → skip (duplicate)
+       │    └─ NOT EXISTS → SET idempotency_key with TTL
+       │                        │
+       │                        ├─ SET NX succeeded → process business logic
+       │                        └─ SET NX failed (race) → skip (duplicate)
+       │
+       └─ Business logic: write to DB, call API, etc.
+</div>
+
+<pre>
+-- Redis: atomic check-and-set
+result = redis.set("dedup:evt-abc-123", "1", NX, EX 86400)
+if result == "OK":
+    process_message()    # first time
+else:
+    return               # duplicate, skip
+
+-- DynamoDB: conditional write
+dynamodb.put_item(
+    table="processed_events",
+    item={"event_id": "evt-abc-123", "processed_at": now()},
+    condition="attribute_not_exists(event_id)"
+)
+</pre>
+
+<h3>4. Idempotency Key Design</h3>
+<p>The choice of idempotency key is critical. It must be unique per logical operation.</p>
+
+<table>
+  <tr>
+    <th>Scenario</th>
+    <th>Good Idempotency Key</th>
+    <th>Why</th>
+  </tr>
+  <tr>
+    <td>Payment processing</td>
+    <td><code>payment_id</code> (generated by client)</td>
+    <td>Each payment attempt gets a unique ID; retries use the same ID</td>
+  </tr>
+  <tr>
+    <td>Order status update</td>
+    <td><code>order_id:version</code></td>
+    <td>Same order, different update versions are distinct operations</td>
+  </tr>
+  <tr>
+    <td>User profile update</td>
+    <td><code>user_id:timestamp</code> or <code>user_id:request_id</code></td>
+    <td>Distinguishes between retries of the same update vs. new updates</td>
+  </tr>
+  <tr>
+    <td>Event sourcing</td>
+    <td><code>event_id</code> (UUID or ULID)</td>
+    <td>Every event has a globally unique identifier</td>
+  </tr>
+  <tr>
+    <td>Kafka message</td>
+    <td><code>topic:partition:offset</code></td>
+    <td>Natural position-based key, but changes on re-consumption</td>
+  </tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Warning:</strong> Using <code>topic:partition:offset</code> as the idempotency key works for simple cases but breaks on consumer group rebalancing (offsets reset), topic compaction (offsets change), or reprocessing from a DLQ (new offset). Prefer application-level keys like <code>event_id</code> or <code>request_id</code>.
+</div>
+
+<h2>TTL and Cleanup</h2>
+<p>Idempotency key stores grow unboundedly. A TTL (time-to-live) policy is essential.</p>
+
+<table>
+  <tr>
+    <th>System</th>
+    <th>TTL Mechanism</th>
+    <th>Typical TTL</th>
+  </tr>
+  <tr>
+    <td>Redis</td>
+    <td>Key expiry (<code>EX</code> flag)</td>
+    <td>24 hours - 7 days</td>
+  </tr>
+  <tr>
+    <td>DynamoDB</td>
+    <td>TTL attribute on table</td>
+    <td>24 hours - 7 days</td>
+  </tr>
+  <tr>
+    <td>PostgreSQL</td>
+    <td>Background <code>DELETE WHERE processed_at &lt; now() - interval '7 days'</code></td>
+    <td>7 - 30 days</td>
+  </tr>
+  <tr>
+    <td>Memcached</td>
+    <td>Per-key expiration</td>
+    <td>24 hours</td>
+  </tr>
+</table>
+
+<div class="callout red">
+  <strong>Risk:</strong> If the TTL expires before all retries are complete, a legitimate retry will be treated as a new message and cause a duplicate side effect. Set TTL significantly longer than your maximum retry window (including DLQ reprocessing time).
+</div>
+
+<h2>Idempotency vs. Exactly-Once</h2>
+<div class="callout">
+  <strong>Relationship:</strong> Kafka's exactly-once semantics (idempotent producer + transactions) prevent duplicates at the broker level. But if the consumer writes to an external system (MySQL, DynamoDB, third-party API), the broker's EOS does not help. You still need consumer-side idempotency for the downstream write. In most real-world systems, <strong>both</strong> are used: EOS at the broker for internal consistency, and idempotent consumers for external writes.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What is idempotency and why is it essential for at-least-once delivery?</li>
+  <li>Design an idempotent consumer for a payment processing system. What data structures and mechanisms would you use?</li>
+  <li>How would you choose an idempotency key for different types of operations?</li>
+  <li>What is the trade-off between using database unique constraints vs. a distributed key store (Redis) for deduplication?</li>
+  <li>How do you handle TTL expiry of idempotency keys? What happens if a retry arrives after the key expires?</li>
+  <li>Design an idempotency solution that works across multiple consumers in a consumer group.</li>
+  <li>How does Kafka's idempotent producer relate to consumer-side idempotency?</li>
+  <li>A user clicks "Submit Payment" twice quickly. How does idempotency prevent double charges?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>In an interview, avoid:</strong>
+  <ul>
+    <li>Assuming at-least-once delivery is sufficient without idempotency. It is not -- duplicates are guaranteed eventually.</li>
+    <li>Using Kafka offsets as idempotency keys without acknowledging the limitations (offset reset, compaction, reprocessing).</li>
+    <li>Proposing an idempotency key store without a TTL strategy. The store grows without bound.</li>
+    <li>Confusing producer idempotence (Kafka's PID + sequence number) with consumer idempotency (deduplication of business logic). They solve different problems.</li>
+    <li>Ignoring the race condition: two consumers processing the same message concurrently. Use atomic check-and-set (SET NX, conditional insert) -- never separate read-then-write.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary Sources</div>
+  <ul>
+    <li>Kafka Documentation -- <a href="https://kafka.apache.org/documentation/#semantics">Idempotent Producer</a></li>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em>, Chapter 11 (idempotency and exactly-once)</li>
+    <li>Stripe -- <a href="https://stripe.com/docs/api/idempotent_requests">Idempotent Requests</a> (practical example of idempotency keys in a payment API)</li>
+    <li>AWS -- <a href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDB.TransactionSupport.html">DynamoDB Conditional Writes</a></li>
+    <li>Redis -- <a href="https://redis.io/commands/set/">SET command (NX, EX options)</a></li>
+    <li>Google SRE Book, Chapter 4 -- <a href="https://sre.google/sre-book/handling-overload/">Handling Overload</a></li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="ordering.html">&larr; 8.4.4 Ordering</a>
+  <a href="../distributed-transactions/two-phase-commit.html">9.1.1 Two Phase Commit &rarr;</a>
+</div>
+
+</body>
+</html>

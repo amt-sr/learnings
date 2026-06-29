@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.2.1 Database Pages</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#3">3 Storage</a> / <a href="../index.html#3.2">3.2 Storage Layout</a> / 3.2.1
+</div>
+
+<h1>Database Pages</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>Why databases organize data into fixed-size pages</li>
+  <li>Common page sizes: 4KB, 8KB, 16KB — and the tradeoffs</li>
+  <li>Page as the fundamental unit of I/O in the <a href="buffer-pool.html">buffer pool</a></li>
+  <li>Internal page structure: header, slot array, records, free space</li>
+  <li>How page size choice affects B-tree height and scan performance</li>
+</ul>
+
+<h2>Definition</h2>
+<p>A database page (also called a <strong>block or data page</strong>) is the <strong>fundamental unit of storage and I/O for a database engine</strong>. All reads and writes between disk and the <a href="buffer-pool.html">buffer pool</a> happen in whole pages. A page typically contains multiple <a href="records.html">records</a> along with metadata for managing those records.</p>
+
+<h2>Page Size by Database</h2>
+<table>
+  <tr><th>Database</th><th>Default Page Size</th><th>Configurable?</th></tr>
+  <tr><td><strong>PostgreSQL</strong></td><td>8 KB</td><td>Yes (compile-time only: 4, 8, 16, 32 KB)</td></tr>
+  <tr><td><strong>MySQL (InnoDB)</strong></td><td>16 KB</td><td>Yes (4, 8, 16 KB at startup)</td></tr>
+  <tr><td><strong>SQL Server</strong></td><td>8 KB</td><td>No</td></tr>
+  <tr><td><strong>Oracle</strong></td><td>8 KB</td><td>Yes (2, 4, 8, 16, 32 KB)</td></tr>
+  <tr><td><strong>SQLite</strong></td><td>4 KB</td><td>Yes (512–65536, power of 2)</td></tr>
+  <tr><td><strong>MongoDB (WiredTiger)</strong></td><td>8 KB (compressed)</td><td>Yes (512 B – 64 KB)</td></tr>
+</table>
+
+<h2>Internal Page Structure</h2>
+<div class="diagram">  Typical Database Page Layout (e.g., PostgreSQL 8 KB):
+
+  ┌──────────────────────────────────────────┐
+  │  Page Header (24 bytes)                   │
+  │  ├─ Page type (data, index, overflow...)  │
+  │  ├─ Free space offset                     │
+  │  ├─ Number of tuples (records)            │
+  │  └─ Special space pointer                 │
+  ├──────────────────────────────────────────┤
+  │                                          │
+  │  Item Pointers (Slot Array)              │
+  │  ┌─────┐ ┌─────┐ ┌─────┐               │
+  │  │ #1  │ │ #2  │ │ #3  │  ...           │
+  │  │off,len│off,len│off,len│               │
+  │  └─────┘ └─────┘ └─────┘               │
+  │                                          │
+  │  Free Space (grows/shrinks)              │
+  │  ████████████████████████████████        │
+  │                                          │
+  │  Tuples (Records) — grow from bottom up   │
+  │  ┌──────────────────────────────┐       │
+  │  │  Record #3                   │       │
+  │  ├──────────────────────────────┤       │
+  │  │  Record #2                   │       │
+  │  ├──────────────────────────────┤       │
+  │  │  Record #1                   │       │
+  │  └──────────────────────────────┘       │
+  └──────────────────────────────────────────┘
+
+  Records grow upward from the bottom.
+  Slot array grows downward from the top.
+  They meet in the middle when the page is full.</div>
+
+<h2>Page Size Tradeoffs</h2>
+<table>
+  <tr><th>Factor</th><th>Smaller Page (4 KB)</th><th>Larger Page (16 KB)</th></tr>
+  <tr><td>B-tree fanout</td><td class="red">Lower (more levels)</td><td class="green">Higher (fewer levels)</td></tr>
+  <tr><td>Index depth</td><td class="red">Deeper tree (more I/O for lookup)</td><td class="green">Shallower tree (fewer I/O)</td></tr>
+  <tr><td>Wasted space (fragmentation)</td><td class="green">Less waste per page</td><td class="red">More waste per page</td></tr>
+  <tr><td>Point query (single record)</td><td class="green">Less data read from disk</td><td class="red">More data read (full page)</td></tr>
+  <tr><td>Range scan (sequential)</td><td class="red">More page reads for same data</td><td class="green">Fewer page reads (more records/page)</td></tr>
+  <tr><td>Concurrent updates</td><td class="green">Less contention per page</td><td class="red">More contention (more rows share a page)</td></tr>
+  <tr><td>Fit with OS <a href="blocks.html">block</a> size</td><td class="green">1:1 match with 4 KB OS blocks</td><td>Spans multiple OS blocks (4x 4 KB blocks)</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Choosing page size:</strong> OLTP workloads (point queries, high concurrency) favor smaller pages — less contention, less wasted I/O per lookup. OLAP workloads (range scans, batch processing) favor larger pages — fewer I/O operations for scanning large amounts of data. This is why MySQL InnoDB defaults to 16 KB (targeting mixed workloads) while PostgreSQL defaults to 8 KB.
+</div>
+
+<h2>Page as the I/O Unit</h2>
+<p>Even if you need a single 100-byte <a href="records.html">record</a>, the database reads the entire page containing it:</p>
+<div class="diagram">  Read Request Flow:
+
+  Query: SELECT * FROM users WHERE id = 42
+
+  1. B-tree index lookup finds: Record is in Page #1,234
+  2. Check <a href="buffer-pool.html">buffer pool</a>: Is Page #1,234 in RAM?
+     ├─ YES → Read directly from memory (~100 ns)
+     └─ NO  → Read entire 8 KB page from disk (~100 &mu;s SSD)
+  3. Find record within page using slot array offset
+  4. Return the single record
+
+  Key: You always read a full page, never partial pages.
+  This is why the buffer pool caches pages, not individual records.</div>
+
+<h2>Page Types</h2>
+<p>A database file contains multiple types of pages:</p>
+<table>
+  <tr><th>Page Type</th><th>Purpose</th></tr>
+  <tr><td><strong>Data Page</strong></td><td>Stores actual table rows (<a href="records.html">records</a>)</td></tr>
+  <tr><td><strong>Index Page</strong></td><td>Stores B-tree or B+tree index entries</td></tr>
+  <tr><td><strong>Overflow Page</strong></td><td>Stores large values that do not fit on the main page (TOAST in PostgreSQL)</td></tr>
+  <tr><td><strong>Free Space Map</strong></td><td>Tracks which pages have available space for new records</td></tr>
+  <tr><td><strong>Visibility Map</strong></td><td>Tracks which pages contain only committed-visible rows (helps vacuum/Index-only scans)</td></tr>
+  <tr><td><strong>WAL Page</strong></td><td>Contains <a href="write-ahead-log.html">write-ahead log</a> records</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"Why do databases use pages instead of reading individual rows?"</strong><br>Pages align with the OS <a href="blocks.html">block size</a> and <a href="ssd.html">SSD</a> erase/write units. Reading aligned, fixed-size chunks is more efficient than variable-size reads. Pages also provide a natural unit for the <a href="buffer-pool.html">buffer pool</a> to cache, manage, and evict.</li>
+  <li><strong>"How does page size affect B-tree performance?"</strong><br>Larger pages = more keys per page = higher fanout = shallower B-tree = fewer disk reads for point lookups. A B-tree with 16 KB pages might need 3 levels to index 1 billion rows, while 4 KB pages might need 5 levels. However, each level reads more data (16 KB vs 4 KB). The tradeoff is tree height vs page read size.</li>
+  <li><strong>"How many records fit in a page?"</strong><br>Depends on record size. An 8 KB page with 200-byte records holds roughly ~35 records (8192 / 200, minus header and slot array overhead). Wider records mean fewer per page, more pages to scan, and more disk I/O. This is why selecting only needed columns (avoiding <code>SELECT *</code>) can reduce I/O in some engines through covering indexes.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>Page-level compression algorithm internals (LZ4, ZSTD implementation details)</li>
+    <li>Specific page format byte layouts for each database vendor</li>
+    <li>Heap-only tuple (HOT) chain internals in PostgreSQL</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Database Internals" by Alex Petrov</strong> — Chapter 3 (B-Tree Pages and File Formats)</li>
+    <li><strong>"The Internals of PostgreSQL" — InterDB</strong> — interdb.jp/pg/pgsql05.html (Page layout)</li>
+    <li><strong>MySQL InnoDB Source: fil/fil0fil.cc</strong> — Page I/O routines</li>
+    <li><strong>"Designing Data-Intensive Applications" by Martin Kleppmann</strong> — Chapter 3</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="ram.html">&larr; 3.1.3 RAM</a>
+  <a href="blocks.html">Next: 3.2.2 OS Blocks &rarr;</a>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.7.5 Health Checks</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#2">2 Networking</a> / <a href="../index.html#2.7">2.7 Load Balancing</a> / 2.7.5
+</div>
+
+<h1>Health Checks</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What health checks are and why they are essential for load balancing</li>
+  <li>Active vs passive health checks and when to use each</li>
+  <li>Configuration parameters: interval, timeout, threshold, unhealthy detection</li>
+  <li>Circuit breaker pattern at the load balancer level</li>
+</ul>
+
+<h2>Definition</h2>
+<p>A <strong>health check is a mechanism where the load balancer periodically probes backend servers to determine if they are healthy and capable of serving traffic</strong>. When a server is detected as unhealthy, the load balancer stops routing requests to it. When it recovers, the LB gradually reintroduces traffic. Without health checks, a failing backend would receive traffic and cause errors for clients.</p>
+
+<div class="diagram">  Health Check Flow:
+
+  Load Balancer                Backend Servers
+       │                    ┌──────────────┐
+       │── GET /health ──▶│ Server A     │── 200 OK     → Healthy ✓
+       │                    └──────────────┘
+       │                    ┌──────────────┐
+       │── GET /health ──▶│ Server B     │── 503 Error   → Unhealthy ✗
+       │                    └──────────────┘
+       │                    ┌──────────────┐
+       │── GET /health ──▶│ Server C     │── Timeout     → Unhealthy ✗
+       │                    └──────────────┘
+
+  Traffic routing after health check:
+  Server A  ████████████████████  → Receives all traffic
+  Server B  ────────────────────  → Drained (no traffic)
+  Server C  ────────────────────  → Drained (no traffic)</div>
+
+<h2>Active Health Checks</h2>
+<p>The load balancer <strong>proactively sends requests to each backend on a schedule</strong> to verify it is healthy. This is the most common approach.</p>
+
+<h3>HTTP Health Check</h3>
+<pre># Health check endpoint on your application
+GET /health
+Response: 200 OK {"status": "healthy", "db": "up", "cache": "up"}
+
+GET /health/ready       → Deep health check (checks DB, Redis, etc.)
+GET /health/live        → Liveness check (process is running)
+
+# HAProxy active health check configuration
+backend api_backend
+    balance roundrobin
+    server api1 10.0.1.10:8080 check inter 5s fall 3 rise 2
+    server api2 10.0.1.11:8080 check inter 5s fall 3 rise 2
+    server api3 10.0.1.12:8080 check inter 5s fall 3 rise 2
+
+    option httpchk GET /health
+    http-check expect status 200</pre>
+
+<h3>TCP Health Check</h3>
+<p>The LB attempts to establish a TCP connection to the backend. If the connection succeeds, the server is healthy. Useful for non-HTTP services like databases and caches.</p>
+
+<h2>Passive Health Checks</h2>
+<p>The load balancer <strong>monitors actual client traffic to detect failures</strong> without sending dedicated probes. If a backend returns too many 5xx errors or takes too long to respond, the LB marks it as unhealthy.</p>
+
+<div class="callout yellow">
+  <strong>Trade-off:</strong> Passive health checks are zero-overhead but have slower detection (depends on client traffic volume). If traffic is low, a failing server might not be detected quickly. Active checks add overhead but detect failures immediately regardless of traffic patterns. In production, use both together.
+</div>
+
+<h2>Active vs Passive Health Checks</h2>
+<table>
+  <tr><th>Aspect</th><th>Active</th><th>Passive</th></tr>
+  <tr><td><strong>How it works</strong></td><td>LB sends probe requests periodically</td><td>LB monitors real client traffic</td></tr>
+  <tr><td><strong>Detection speed</strong></td><td class="green">Fast (configurable interval)</td><td class="red">Slow (depends on traffic volume)</td></tr>
+  <tr><td><strong>Overhead</strong></td><td class="red">Adds request load on backends</td><td class="green">No additional overhead</td></tr>
+  <tr><td><strong>Traffic dependency</strong></td><td class="green">Works even with zero traffic</td><td class="red">Requires traffic to detect failures</td></tr>
+  <tr><td><strong>Failure detection</strong></td><td>Timeout, bad status code</td><td>High error rate, slow responses</td></tr>
+  <tr><td><strong>Best for</strong></td><td>Critical services, low-traffic services</td><td>High-traffic services, supplementary</td></tr>
+</table>
+
+<h2>Configuration Parameters</h2>
+<table>
+  <tr><th>Parameter</th><th>Meaning</th><th>Typical Value</th></tr>
+  <tr><td><strong>Interval</strong></td><td>How often the LB sends a health check</td><td>5-30 seconds</td></tr>
+  <tr><td><strong>Timeout</strong></td><td>How long to wait for a response before marking failed</td><td>2-5 seconds</td></tr>
+  <tr><td><strong>Unhealthy threshold</strong></td><td>Consecutive failures before marking server unhealthy</td><td>2-3 failures</td></tr>
+  <tr><td><strong>Healthy threshold</strong></td><td>Consecutive successes before marking server healthy</td><td>2-3 successes</td></tr>
+  <tr><td><strong>Success codes</strong></td><td>HTTP status codes considered healthy</td><td>200, or 200-399</td></tr>
+  <tr><td><strong>Check path</strong></td><td>URL path for the health check request</td><td>/health, /healthz, /ready</td></tr>
+</table>
+
+<pre># AWS Target Group health check configuration:
+# HealthCheckPath:     /health
+# HealthCheckInterval: 30 seconds
+# HealthCheckTimeout:  5 seconds
+# HealthyThreshold:    3 consecutive successes
+# UnhealthyThreshold:  2 consecutive failures
+# Matcher:             HTTP 200
+
+# Nginx health check (nginx-plus):
+# health_check interval=10s fails=3 passes=2 match=status_ok;
+#
+# Default behavior:
+# Check every 10 seconds
+# Mark unhealthy after 3 failures (30 seconds to detect)
+# Mark healthy after 2 successes (20 seconds to recover)</pre>
+
+<div class="callout">
+  <strong>Design your health check endpoint carefully:</strong> A /health endpoint should be fast (under 100ms), lightweight (no expensive queries), and check only the essentials. Separate <strong>liveness</strong> (am I running?) from <strong>readiness</strong> (am I ready to serve?) — Kubernetes uses this pattern. A server that is alive but not ready should be removed from the LB pool until it becomes ready (e.g., waiting for cache warmup or DB migration).
+</div>
+
+<h2>Circuit Breaker at LB Level</h2>
+<p>A <strong>circuit breaker</strong> is an advanced form of health checking where the load balancer stops sending traffic to a backend after detecting a failure pattern, without waiting for explicit health check failures.</p>
+
+<div class="diagram">  Circuit Breaker States:
+
+  ┌───────────┐     failures exceed    ┌───────────┐
+  │   CLOSED  │ ──── threshold ──────▶│   OPEN    │
+  │ (normal)  │                        │ (blocking)│
+  └───────────┘                        └───────────┘
+       ▲                                    │
+       │         timeout expires            │
+       │     (half-open test)               │
+       └────────────────────────────────────┘
+
+  CLOSED:    Traffic flows normally. Track failure rate.
+  OPEN:      All traffic is rejected/circuit-broken. No requests to backend.
+  HALF-OPEN: Allow a few test requests. If they succeed → CLOSED.
+             If they fail → back to OPEN.
+
+  Example thresholds:
+  - Trip circuit: 50% error rate in last 10 seconds
+  - Reset timeout: 30 seconds
+  - Half-open: allow 3 test requests</div>
+
+<div class="callout green">
+  <strong>Why circuit breakers matter:</strong> Without a circuit breaker, when a backend is struggling, the LB keeps sending requests that fail. This wastes resources, increases latency for clients, and can cascade failures. A circuit breaker "fails fast" — it immediately rejects requests or routes to fallback, giving the struggling backend time to recover.
+</div>
+
+<h2>Graceful Draining</h2>
+<p>When a server needs to be taken offline (deploy, scaling down), the LB should <strong>drain</strong> it gracefully:</p>
+<ol>
+  <li>Mark the server as <strong>draining</strong> (no new sessions/connections)</li>
+  <li>Allow in-flight requests to complete (with a timeout)</li>
+  <li>After the drain timeout, remove the server from the pool</li>
+</ol>
+<pre># Nginx graceful drain:
+# 1. Set server to draining mode
+# 2. Existing connections complete
+# 3. No new connections are routed to this server
+
+# Kubernetes pod termination:
+# 1. Send SIGTERM to pod
+# 2. Pod marks itself not-ready (readiness probe fails)
+# 3. LB stops routing new traffic
+# 4. Pod finishes in-flight requests (grace period: 30s default)
+# 5. Pod exits</pre>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What is a health check and why is it important?"</strong><br>The LB periodically probes backends to verify they can serve traffic. If a backend fails health checks, the LB stops routing to it. Without health checks, a crashing server would continue receiving requests and returning errors to clients.</li>
+  <li><strong>"Active vs passive health checks — when would you use each?"</strong><br>Active checks send dedicated probes on a schedule — fast detection but adds overhead. Passive checks monitor real traffic — no overhead but slow to detect failures on low-traffic services. In production, use both: active for guaranteed detection speed, passive for supplementary coverage.</li>
+  <li><strong>"How would you design a health check endpoint?"</strong><br>Separate /health/live (lightweight — process running check) from /health/ready (deep check — DB, Redis, external deps). The readiness check should be fast (&lt;100ms). Return 200 for healthy, 503 for unhealthy. The LB should use the readiness endpoint so it routes away from servers that are alive but unable to serve requests.</li>
+  <li><strong>"Explain the circuit breaker pattern."</strong><br>Monitor the error rate from a backend. When it exceeds a threshold (e.g., 50% errors), trip the circuit to OPEN — stop sending traffic. After a timeout, allow a few test requests (HALF-OPEN). If they succeed, close the circuit. If they fail, keep it open. This prevents cascading failures and gives struggling servers time to recover.</li>
+  <li><strong>"How do you handle deployments without downtime?"</strong><br>Rolling update: deploy new version one server at a time. Each server is drained from the LB before the new version starts. Health checks ensure the new version is healthy before moving to the next server. Blue/green deployment: maintain two identical environments; switch LB traffic from blue to green after health checks pass on green.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>Specific health check response body formats</li>
+    <li>DNS-based health checking (SRV records)</li>
+    <li>Gossip protocols for health checking (SWIM, Serf)</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Circuit Breaker Pattern"</strong> — Microsoft Azure Architecture Center</li>
+    <li><strong>AWS Target Group Health Checks</strong> — docs.aws.amazon.com/elasticloadbalancing</li>
+    <li><strong>"Kubernetes Probes"</strong> — kubernetes.io/docs/tasks/configure-pod-container</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="l7-load-balancer.html">&larr; 2.7.4 L7 Load Balancer</a>
+  <a href="sticky-sessions.html">Next: 2.7.6 Sticky Sessions &rarr;</a>
+</div>
+
+</body>
+</html>

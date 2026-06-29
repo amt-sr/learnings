@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.2.5 Producer — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">8. Messaging</a> / 8.2.5 Producer</p>
+
+<h1>8.2.5 Producer</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+
+<p>Understand how Kafka producers publish messages, including key-based partitioning, acknowledgment levels, idempotent producers, and batching strategies.</p>
+
+<h2>Definition</h2>
+
+<p>A <strong>Kafka producer</strong> is a client application that publishes messages (records) to Kafka topics. The producer determines which partition each message goes to, manages acknowledgment of successful writes, and can batch multiple messages together for efficiency.</p>
+
+<h2>Producer Workflow</h2>
+
+<div class="diagram">
+  Application              Producer Client              Kafka Broker
+  ┌──────────┐         ┌──────────────────┐         ┌──────────┐
+  │ send(key, │         │  1. Serialize    │         │          │
+  │  value)   │────────►│  2. Partition    │────────►│  Topic   │
+  │          │         │     Selection    │         │ (partition│
+  └──────────┘         │  3. Batch        │         │  leader)  │
+                       │  4. Compress     │◄────────│  ACK      │
+                       │  5. Send        │         └──────────┘
+                       └──────────────────┘
+                                │
+                                ▼
+                     6. Receive ACK (or handle error)
+                     7. Retry if configured
+</div>
+
+<h2>Partition Selection</h2>
+
+<p>When a producer sends a message, it must decide which partition to route it to:</p>
+
+<table>
+  <tr><th>Scenario</th><th>Strategy</th><th>Ordering</th></tr>
+  <tr><td>Key is provided</td><td><code>hash(key) % num_partitions</code></td><td class="green">All messages with same key → same partition → ordered</td></tr>
+  <tr><td>No key provided</td><td>Round-robin (sticky batching)</td><td class="red">No ordering guarantee</td></tr>
+  <tr><td>Custom partitioner</td><td>User-defined logic</td><td>Depends on implementation</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Sticky Partitioner:</strong> Kafka's default round-robin "sticky" partitioner batches messages to a single partition until the batch is full or a timeout expires, then switches. This improves batching efficiency compared to strict round-robin.
+</div>
+
+<h2>Acknowledgment Levels (acks)</h2>
+
+<p>The <code>acks</code> configuration controls how many replicas must acknowledge the write before the producer considers it successful:</p>
+
+<table>
+  <tr><th>Setting</th><th>Behavior</th><th>Durability</th><th>Latency</th></tr>
+  <tr><td><code>acks=0</code></td><td>Fire-and-forget. Producer does not wait for any acknowledgment.</td><td class="red">Lowest — data can be lost if broker fails</td><td class="green">Lowest</td></tr>
+  <tr><td><code>acks=1</code></td><td>Wait for leader to write. Does not wait for follower replication.</td><td>Moderate — leader may fail before followers replicate</td><td>Moderate</td></tr>
+  <tr><td><code>acks=all</code> (or <code>-1</code>)</td><td>Wait for leader + all ISR replicas to acknowledge.</td><td class="green">Highest — data survives leader failure</td><td class="red">Highest</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Interview Tip:</strong> The "acks=1 vs. acks=all" trade-off is a frequent question. The critical nuance: acks=1 acknowledges when the leader writes to its log, but followers may not have replicated yet. If the leader crashes immediately after ack, the follower (now new leader) may not have the message. acks=all requires the leader and all in-sync replicas to acknowledge, preventing this data loss scenario.
+</div>
+
+<h2>Idempotent Producer</h2>
+
+<p>When a producer retries a send (e.g., due to a timeout), the message may have been written but the acknowledgment was lost. Without idempotency, retries cause duplicates.</p>
+
+<pre>
+enable.idempotence=true  (requires acks=all)
+</pre>
+
+<p>With idempotent producer enabled, Kafka assigns each producer a <strong>Producer ID (PID)</strong> and tracks a sequence number per partition. If the broker detects a duplicate sequence number (same PID + sequence), it silently discards the duplicate.</p>
+
+<div class="diagram">
+  Without Idempotence:
+  Producer ──send(msg1)──► Broker (writes msg1) ──ack lost──► Producer
+  Producer ──retry(msg1)────────────────────────────► Broker (writes msg1 AGAIN)
+  Result: msg1 appears twice in the partition
+
+  With Idempotence:
+  Producer ──send(PID=42, seq=0, msg1)──► Broker (writes msg1) ──ack lost──► Producer
+  Producer ──retry(PID=42, seq=0, msg1)────────────────────► Broker
+  Broker: "I already have PID=42, seq=0" → discard duplicate
+  Result: msg1 appears exactly once
+</div>
+
+<div class="callout green">
+  <strong>Important:</strong> Idempotent producer prevents duplicates <em>within a single producer instance</em>. It does not prevent duplicates across different producer instances or after a producer restart (new PID is assigned).
+</div>
+
+<h2>Batching</h2>
+
+<p>Producers batch messages to reduce the number of round-trips to the broker:</p>
+
+<ul>
+  <li><strong><code>linger.ms</code>:</strong> Wait up to N milliseconds to accumulate messages before sending. Default: 0 (send immediately). Increasing to 5-20ms significantly improves throughput.</li>
+  <li><strong><code>batch.size</code>:</strong> Maximum batch size in bytes. Default: 16KB. When the batch is full, it is sent immediately regardless of linger.ms.</li>
+  <li><strong>Compression:</strong> Producers can compress batches (gzip, snappy, lz4, zstd). Compression reduces network bandwidth and storage but adds CPU overhead.</li>
+</ul>
+
+<h2>Error Handling &amp; Retries</h2>
+
+<table>
+  <tr><th>Configuration</th><th>Default</th><th>Purpose</th></tr>
+  <tr><td><code>retries</code></td><td>Integer.MAX_VALUE</td><td>Number of retry attempts for retriable errors</td></tr>
+  <tr><td><code>retry.backoff.ms</code></td><td>100ms</td><td>Delay between retries</td></tr>
+  <tr><td><code>max.in.flight.requests.per.connection</code></td><td>5</td><td>Max unacknowledged requests per connection</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Retries + Ordering:</strong> If you need strict ordering per key and retries are enabled, set <code>max.in.flight.requests.per.connection=1</code> (with idempotent producer, you can use up to 5). Otherwise, a retry for message B may succeed before the original send of message A, violating ordering.
+</div>
+
+<h2>Common Interview Questions</h2>
+
+<ol>
+  <li>"How does a Kafka producer decide which partition to send a message to?"</li>
+  <li>"Explain the three ack levels and their trade-offs."</li>
+  <li>"What is an idempotent producer and how does it work?"</li>
+  <li>"How does producer batching improve throughput?"</li>
+  <li>"What happens when a producer send fails?"</li>
+  <li>"How do you ensure ordering with producer retries?"</li>
+  <li>"When would you use acks=0 vs. acks=all?"</li>
+  <li>"How does producer compression affect performance?"</li>
+</ol>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Do not dive into:</strong>
+  <ul>
+    <li>Producer buffer pool internals (RecordAccumulator, ByteBuffer allocation).</li>
+    <li>Network client thread model details (Selector, NIO internals).</li>
+    <li>Transaction coordinator internals unless specifically asked about Kafka transactions.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source>
+  <div class="source-label">Books &amp; Guides</div>
+  <ul>
+    <li><a href="https://kafka.apache.org/documentation/#producerconfigs">Kafka Documentation — Producer Configs</a> — All producer configuration options</li>
+    <li><a href="https://www.confluent.io/learn/kafka-producer/">Confluent — Apache Kafka Producer</a> — Architecture and best practices</li>
+    <li><a href="https://kafka.apache.org/0100/documentation.html#producerapi">Kafka Producer API Guide</a> — Producer semantics and delivery guarantees</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="offset.html">&larr; 8.2.4 Offset</a>
+  <a href="consumer.html">8.2.6 Consumer &rarr;</a>
+</div>
+
+</body>
+</html>

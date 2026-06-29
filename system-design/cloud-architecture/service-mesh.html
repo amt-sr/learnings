@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>12.2.10 — Service Mesh</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">Cloud Architecture</a> / 12.2.10 Service Mesh</div>
+<h1>Service Mesh</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the service mesh pattern, how sidecar proxies (Envoy) handle cross-cutting networking concerns, mTLS for inter-service encryption, and traffic management capabilities like canary deployments and circuit breaking.</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>Service mesh</strong> is an infrastructure layer that handles service-to-service communication (east-west traffic) transparently. It uses a sidecar proxy (typically Envoy) injected into each pod that intercepts all network traffic, adding mTLS, retries, circuit breaking, observability, and traffic management without changing application code.
+</div>
+
+<p>A service mesh decouples networking concerns from application code. Developers write business logic; the mesh handles the networking infrastructure: encryption, load balancing, retries, timeouts, rate limiting, and telemetry collection.</p>
+
+<h2>Architecture: Sidecar Pattern</h2>
+<div class="diagram">
+  ┌──────────────────────────────────────────────────────────┐
+  │                    Service Mesh (Control Plane)           │
+  │  ┌─────────────────────────────────────────────────────┐  │
+  │  │ Istiod (or similar): config distribution, cert       │  │
+  │  │ management, discovery                                │  │
+  │  └─────────────────────────────────────────────────────┘  │
+  └──────────────────────────────────────────────────────────┘
+
+  Data Plane (per-pod sidecars):
+
+  ┌─── Pod: Service A ────────────────────────────────┐
+  │ ┌──────────────┐     ┌──────────────────────────┐│
+  │ │   App Code    │────▶│  Envoy Sidecar            ││
+  │ │ (no networking│◀────│  - mTLS terminate          ││
+  │ │   libraries)  │     │  - Retry / timeout         ││
+  │ │               │     │  - Circuit breaker         ││
+  │ │               │     │  - Metrics collection      ││
+  │ │               │     │  - Distributed tracing      ││
+  │ └──────────────┘     └──────────────────────────┘│
+  └────────────────────────────────────────────────────┘
+                         │ mTLS
+                         ▼
+  ┌─── Pod: Service B ────────────────────────────────┐
+  │ ┌──────────────┐     ┌──────────────────────────┐│
+  │ │   App Code    │────▶│  Envoy Sidecar            ││
+  │ │               │◀────│  - mTLS terminate          ││
+  │ └──────────────┘     └──────────────────────────┘│
+  └────────────────────────────────────────────────────┘
+                         │ mTLS
+                         ▼
+  ┌─── Pod: Service C ────────────────────────────────┐
+  │ ┌──────────────┐     ┌──────────────────────────┐│
+  │ │   App Code    │────▶│  Envoy Sidecar            ││
+  │ └──────────────┘     └──────────────────────────┘│
+  └────────────────────────────────────────────────────┘
+
+  App code sends to localhost → Envoy intercepts →
+  Envoy handles: encryption, load balancing, retries, tracing →
+  Forwards to destination Envoy → destination Envoy decrypts →
+  Forwards to destination app via localhost
+</div>
+
+<h2>What a Service Mesh Provides</h2>
+<table>
+  <tr><th>Capability</th><th>What It Does</th><th>Without Mesh</th></tr>
+  <tr><td><strong>mTLS</strong></td><td>Automatic encryption for all inter-service traffic</td><td>Implement TLS in every service (error-prone)</td></tr>
+  <tr><td><strong>Traffic management</strong></td><td>Canary deployments, A/B testing, traffic splitting</td><td>Custom header-based routing or separate infrastructure</td></tr>
+  <tr><td><strong>Retries and timeouts</strong></td><td>Automatic retry with configurable backoff</td><td>Library per language or manual implementation</td></tr>
+  <tr><td><strong>Circuit breaking</strong></td><td>Stop sending traffic to unhealthy services</td><td>Library per language (Hystrix, Resilience4j)</td></tr>
+  <tr><td><strong>Observability</strong></td><td>Automatic metrics, distributed traces, access logs</td><td>Instrument every service individually</td></tr>
+  <tr><td><strong>Load balancing</strong></td><td>Client-side LB with multiple algorithms</td><td>Server-side LB or library</td></tr>
+  <tr><td><strong>Rate limiting</strong></td><td>Per-service rate limits</td><td>Custom middleware</td></tr>
+  <tr><td><strong>Fault injection</strong></td><td>Inject delays/errors for chaos testing</td><td>Custom test infrastructure</td></tr>
+</table>
+
+<h2>mTLS (Mutual TLS)</h2>
+<div class="callout">
+  <strong>mTLS</strong> requires both the client and server to present certificates. The service mesh control plane (Istiod) automatically issues and rotates short-lived certificates for every sidecar. All inter-service traffic is encrypted without application code changes.
+</div>
+
+<div class="diagram">
+  Without mTLS:
+  App A ──plaintext──▶ App B   ← anyone on the network can read this
+
+  With mTLS:
+  App A → Envoy (encrypt) ──TLS──▶ Envoy (decrypt) → App B
+  Both Envoy sides verify each other's certificates
+
+  Certificate lifecycle (Istio/Envoy):
+  1. Envoy sidecar starts → requests cert from Istiod
+  2. Istiod issues short-lived cert (24h, auto-rotated)
+  3. Envoy presents cert on every outbound connection
+  4. Receiving Envoy validates cert against Istiod CA
+  5. Traffic flows encrypted between sidecars
+
+  Security modes:
+  - STRICT:  mTLS required for all traffic (reject non-mTLS)
+  - PERMISSIVE: Accept both mTLS and plaintext (migration mode)
+</div>
+
+<h2>When to Use (and Not Use) a Service Mesh</h2>
+<div class="callout green">
+  <strong>Use a service mesh when:</strong> You have 20+ services, need mTLS for compliance, want zero-trust networking, need traffic splitting for canary deployments, or have polyglot services needing consistent networking behavior.
+</div>
+<div class="callout red">
+  <strong>Do not use a service mesh when:</strong> You have fewer than 10 services, all in one language (use a library instead), or your team cannot handle the operational complexity. A service mesh adds latency (sidecar hop), CPU overhead (~2-5%), and significant debugging complexity.
+</div>
+
+<h2>Trade-offs</h2>
+<table>
+  <tr><th>Advantage</th><th>Disadvantage</th></tr>
+  <tr><td class="green">Zero-code networking (language-agnostic)</td><td class="red">Adds ~2-5ms latency per hop (sidecar proxy)</td></tr>
+  <tr><td class="green">Automatic mTLS</td><td class="red">CPU/memory overhead per sidecar (~50MB RAM, ~50m CPU each)</td></tr>
+  <tr><td class="green">Rich traffic management (canary, mirroring)</td><td class="red">Complex to debug (app error vs Envoy error?)</td></tr>
+  <tr><td class="green">Consistent observability across all services</td><td class="red">Operational complexity (control plane management)</td></tr>
+  <tr><td class="green">No per-language networking libraries</td><td class="red">Another moving part that can fail</td></tr>
+</table>
+
+<div class="callout green">
+  <strong>Interview tip:</strong> "For a system with 50+ microservices, I would use a service mesh (Istio/Envoy) for automatic mTLS and traffic management. This gives me zero-trust networking and canary deployments without modifying application code. For a smaller system, I would use language-specific libraries for retries and circuit breaking instead."
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What is a service mesh and what problem does it solve?</li>
+  <li>How does the sidecar proxy pattern work?</li>
+  <li>What is mTLS and why does a service mesh make it easier?</li>
+  <li>Compare service mesh with API gateway — what is the difference?</li>
+  <li>What are the trade-offs of using a service mesh?</li>
+  <li>When would you NOT use a service mesh?</li>
+  <li>How does Istio handle traffic management for canary deployments?</li>
+  <li>What is the latency overhead of a service mesh?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid diving into:</strong> Istio configuration YAML (VirtualService, DestinationRule), Envoy filter chain configuration, or specific mesh implementations (Linkerd, Consul Connect). Focus on the architectural concept: sidecar proxy, control plane vs data plane, and the capabilities it provides.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Documentation</div>
+  <ul>
+    <li><strong>Istio Documentation</strong> — istio.io/latest/docs/concepts/what-is-istio/</li>
+    <li><strong>Envoy Proxy</strong> — envoyproxy.io — The data plane proxy</li>
+    <li><strong>"Service Mesh" — CNCF</strong> — landscapes.cncf.io/items/service-mesh/</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Articles</div>
+  <ul>
+    <li><strong>"A Service Mesh for Kubernetes"</strong> — buoyant.io — Original service mesh explanation</li>
+    <li><strong>"The Service Mesh Era"</strong> — redhat.com — When and why to adopt</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="autoscaling.html">&larr; Previous: Autoscaling</a>
+  <a href="../architectural-patterns/event-driven-architecture.html">Next: Event-Driven Architecture &rarr;</a>
+</div>
+</body>
+</html>

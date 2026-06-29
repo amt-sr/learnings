@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.1.5 Reliability</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.8;
+    padding: 2rem;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:visited { color: #a371f7; }
+
+  .breadcrumb {
+    margin-bottom: 1.5rem;
+    font-size: 0.85rem;
+    color: #8b949e;
+  }
+  .breadcrumb a { color: #8b949e; }
+  .breadcrumb a:hover { color: #58a6ff; }
+
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta {
+    display: flex; gap: 1.5rem; flex-wrap: wrap;
+    margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e;
+  }
+
+  h2 {
+    font-size: 1.2rem; color: #f0f6fc;
+    margin: 2.5rem 0 0.75rem;
+    padding-bottom: 0.35rem;
+    border-bottom: 1px solid #21262d;
+  }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  h4 { font-size: 0.9rem; color: #c9d1d9; margin: 1rem 0 0.4rem; }
+  p { margin-bottom: 0.75rem; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+
+  .callout {
+    background: #161b22;
+    border-left: 3px solid #58a6ff;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0 1.5rem;
+    border-radius: 0 6px 6px 0;
+  }
+  .callout.red { border-left-color: #f85149; }
+  .callout.green { border-left-color: #3fb950; }
+  .callout.yellow { border-left-color: #d29922; }
+  .callout strong { color: #f0f6fc; }
+
+  pre {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+    margin: 1rem 0 1.5rem;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: #79c0ff;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0 1.5rem;
+    font-size: 0.9rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid #21262d;
+  }
+  th { color: #8b949e; font-weight: 600; }
+  td.red { color: #f85149; }
+  td.green { color: #3fb950; }
+
+  .source {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0 1.5rem;
+  }
+  .source-label {
+    font-size: 0.8rem; font-weight: 600;
+    color: #58a6ff; text-transform: uppercase;
+    letter-spacing: 0.5px; margin-bottom: 0.5rem;
+  }
+
+  .formula {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0 1.5rem;
+    text-align: center;
+    font-size: 1.1rem;
+    color: #79c0ff;
+  }
+  .formula small { display: block; text-align: left; color: #8b949e; font-size: 0.8rem; margin-top: 0.75rem; }
+
+  .diagram {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 1.25rem;
+    margin: 1rem 0 1.5rem;
+    font-family: monospace;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    white-space: pre;
+    color: #c9d1d9;
+  }
+
+  .nav {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #30363d;
+  }
+  .nav a {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    color: #c9d1d9;
+    font-size: 0.9rem;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#1">1 Fundamentals</a> / <a href="../index.html#1.1">1.1 System Design Basics</a> / 1.1.5
+</div>
+
+<h1>Reliability</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<!-- Goal -->
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What reliability means and how it differs from availability and durability</li>
+  <li>How to measure reliability quantitatively (MTBF, MTTR, failure rate, R(t))</li>
+  <li>Architectural patterns that make systems reliable</li>
+  <li>How failures are classified and how to design for each type</li>
+  <li>How to reason about reliability in system design interviews</li>
+</ul>
+
+<!-- Definition -->
+<h2>Definition</h2>
+<p>Reliability is the <strong>probability that a system performs its intended function correctly over a specified period of time under stated conditions</strong>.</p>
+<div class="formula">
+  Reliability = Probability(system works correctly at time t)
+  <small>Often measured as R(t), the reliability function</small>
+</div>
+
+<div class="callout yellow">
+  <strong>Intuitive definition:</strong> If I use this system for a year, what is the chance it will give me the correct answer every time? A system can be 99.99% available (always reachable) but unreliable (returns wrong data).
+</div>
+
+<div class="callout">
+  <strong>Real-world analogy:</strong> A car that always starts when you turn the key (available) but sometimes takes you to the wrong address (unreliable). Availability is about reachability. Reliability is about correctness.
+</div>
+
+<!-- Why This Concept Exists -->
+<h2>Why Reliability Matters</h2>
+<p>Without reliability, users cannot trust the system. A banking system that occasionally shows the wrong balance is worse than one that is occasionally down.</p>
+
+<div class="callout red">
+  <strong>The cost of unreliability:</strong> In 2023, Stripe lost transaction history due to corrupted backups. In 2017, GitLab accidentally deleted a production database and lost 6 hours of data. Reliability failures directly translate to financial loss, reputational damage, and user trust erosion.
+</div>
+
+<!-- Reliability vs Availability vs Durability -->
+<h2>Reliability vs Availability vs Durability</h2>
+<p>These three concepts are constantly confused in interviews. Know the differences cold.</p>
+<table>
+  <tr><th></th><th>Reliability</th><th>Availability</th><th>Durability</th></tr>
+  <tr><td>Question</td><td>"Does it work correctly?"</td><td>"Can I reach it?"</td><td>"Will my data survive?"</td></tr>
+  <tr><td>Measures</td><td>Correctness over time</td><td>Uptime proportion</td><td>Data persistence after failures</td></tr>
+  <tr><td>Metric</td><td>MTBF / MTTR / R(t)</td><td>Uptime percentage</td><td>RPO / replication factor</td></tr>
+  <tr><td>Failure mode</td><td>Returns wrong data</td><td>System is unreachable</td><td>Data is lost</td></tr>
+  <tr><td>Example</td><td>Stale reads, calculation errors</td><td>Server down, 503 errors</td><td>Uncommitted data lost on crash</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Interview trap:</strong> A system can be available but not reliable (always up, returns wrong data). A system can be reliable but not available (correct when up, but down frequently). Most interview questions require both.
+</div>
+
+<!-- Core Metrics -->
+<h2>Core Metrics</h2>
+
+<h3>MTBF — Mean Time Between Failures</h3>
+<p>The average time the system operates correctly between two consecutive failures.</p>
+<div class="formula">
+  MTBF = Total Uptime / Number of Failures
+  <small>Higher is better. A system with MTBF of 30 days fails on average once per month.</small>
+</div>
+
+<h3>MTTR — Mean Time To Repair</h3>
+<p>The average time it takes to restore the system to working order after a failure.</p>
+<div class="formula">
+  MTTR = Total Downtime / Number of Failures
+  <small>Lower is better. If MTTR is 5 minutes, the system is back quickly.</small>
+</div>
+
+<h3>Reliability Function R(t)</h3>
+<p>The probability that the system operates correctly from time 0 to time t without failure.</p>
+<div class="formula">
+  R(t) = e^(-&lambda;t)  (for constant failure rate &lambda;)
+  <small>&lambda; = 1 / MTBF. This is the exponential distribution model.</small>
+</div>
+
+<pre>Example: MTBF = 720 hours (30 days)
+&lambda; = 1/720 = 0.00139 failures/hour
+
+R(24h) = e^(-0.00139 * 24) = e^(-0.0333) = 0.967 = 96.7%
+  → 96.7% chance the system runs correctly for a full day
+
+R(720h) = e^(-0.00139 * 720) = e^(-1) = 0.368 = 36.8%
+  → Only 36.8% chance it runs for 30 days without failure
+
+Adding redundancy in parallel increases R(t) significantly.</pre>
+
+<h3>Failure Rate</h3>
+<div class="formula">
+  Failure Rate = 1 / MTBF = &lambda;
+  <small>Measured in failures per unit time. Common unit: FIT (failures per 10^9 hours) for hardware.</small>
+</div>
+
+<div class="callout">
+  <strong>Key relationship:</strong> Reliability improves when MTBF increases (fail less often) or MTTR decreases (recover faster). Most engineering effort goes into increasing MTBF through redundancy, <a href="../replication/leader-follower.html">replication</a>, and <a href="fault-tolerance.html">fault tolerance</a>. SRE effort goes into decreasing MTTR through automated recovery, monitoring, and runbooks.
+</div>
+
+<!-- How to Measure Reliability -->
+<h2>How to Measure Reliability</h2>
+
+<h3>SLIs for Reliability</h3>
+<ul>
+  <li><strong>Request success rate:</strong> Ratio of successful (2xx/3xx) responses to total requests</li>
+  <li><strong>Error budget:</strong> 100% - SLO. If SLO is 99.95%, error budget is 0.05%</li>
+  <li><strong>Data consistency lag:</strong> Time between a write and it being visible on all replicas</li>
+  <li><strong>Stale read rate:</strong> Percentage of reads returning data older than the latest write</li>
+  <li><strong>Retry rate:</strong> Percentage of requests requiring retries — high rates signal underlying problems</li>
+  <li><strong>Circuit breaker open rate:</strong> How often <a href="../reliability/circuit-breaker.html">circuit breakers</a> trip</li>
+</ul>
+
+<div class="callout green">
+  <strong>Google's rule:</strong> Set your SLO so you are occasionally in danger of missing it. If you never come close to violating your SLO, you are over-investing in reliability. The error budget tells you how much risk you can take.
+</div>
+
+<!-- Reliability Patterns -->
+<h2>Reliability Patterns</h2>
+
+<h3>1. Redundancy</h3>
+<p>Run multiple copies of every critical component. A single server is a single point of failure.</p>
+<div class="diagram">  Without:    Client → [Server] → [DB]
+  With:       Client → [LB] → [Server A]
+                           → [Server B]
+                           → [Server C]
+                                ↓
+                           [DB Primary]
+                           [DB Replica]</div>
+
+<h3>2. Replication</h3>
+<p>Copy data across nodes so a single node failure does not cause data loss.</p>
+<div class="diagram">  Synchronous:  Client → [Primary] ──ack after──→ [Replica]
+  Asynchronous: Client → [Primary] → ack immediately
+                             └──async──→ [Replica]</div>
+
+<h3>3. Failover</h3>
+<p>Automatically switch from a failed component to a healthy one.</p>
+<pre>Primary fails → Health check detects (seconds) → Replica promoted → Traffic rerouted
+Hot standby:    Always ready, 0s cold start, highest cost
+Warm standby:   Running idle, ~10-60s recovery
+Cold standby:  Off, ~minutes to start, cheapest</pre>
+
+<h3>4. Circuit Breakers</h3>
+<p>Prevent cascading failures by failing fast when a dependency is unhealthy.</p>
+<div class="diagram">  CLOSED ──failures exceed threshold──→ OPEN (fail fast)
+     ↑                                    │ after timeout
+     └───────request succeeds────── HALF-OPEN (test one)</div>
+
+<h3>5. Bulkheads</h3>
+<p>Isolate failures so one failing dependency cannot take down the entire system.</p>
+<pre>Without Bulkhead:  Shared thread pool → Service B slow → all threads blocked → app down
+With Bulkhead:     Pool A → Service A (isolated)
+                   Pool B → Service B (isolated, slow but contained)
+                   Pool C → Service C (unaffected)</pre>
+
+<h3>6. Retries with Exponential Backoff</h3>
+<pre>Request fails → Wait 1s + jitter → Retry → fails → Wait 2s + jitter → Retry → fails → Wait 4s + jitter
+Formula: delay = base * 2^attempt + random(0, jitter_ms)
+Max retries: 3-5. MUST have jitter to avoid thundering herd.</pre>
+
+<div class="callout yellow">
+  <strong>Retries require idempotency.</strong> If a payment is retried, you must not charge twice. Use idempotency keys.
+</div>
+
+<h3>7. Health Checks</h3>
+<p>Continuous monitoring to detect failures and trigger automated recovery. Liveness (alive?), readiness (can serve?), startup (initialized?).</p>
+
+<h3>8. Graceful Degradation</h3>
+<pre>Normal:   Full search with filters, autocomplete, recommendations
+Level 1:  Basic search (autocomplete down)
+Level 2:  Cached results only (search service down)
+Level 3:  "Search unavailable" + popular results</pre>
+
+<!-- Failure Classification -->
+<h2>Failure Classification</h2>
+<table>
+  <tr><th>Type</th><th>Description</th><th>Example</th><th>Mitigation</th></tr>
+  <tr><td>Hardware</td><td>Disk crashes, memory errors, power outages</td><td>AWS EBS failure (2011)</td><td><a href="../replication/leader-follower.html">Replication</a>, redundancy, failover</td></tr>
+  <tr><td>Software</td><td>Bugs, memory leaks, race conditions</td><td>Cloudflare regex CPU exhaustion (2019)</td><td>Testing, canary deploys, <a href="../reliability/circuit-breaker.html">circuit breakers</a></td></tr>
+  <tr><td>Network</td><td>Packet loss, DNS failures, BGP hijacks</td><td>Facebook BGP outage (2021)</td><td>Retries, timeouts, multi-region</td></tr>
+  <tr><td>Data corruption</td><td>Silent bit rot, write corruption</td><td>Stripe backup corruption (2023)</td><td>Checksums, <a href="durability.html">replication</a>, backup verification</td></tr>
+  <tr><td>Human errors</td><td>Misconfigurations, accidental deletions</td><td>GitLab prod DB deletion (2017)</td><td>Immutable infra, canary deploys, blast radius limits</td></tr>
+  <tr><td>Cascading</td><td>One failure triggers domino effect</td><td>Slow DB → connection exhaustion → all apps crash</td><td><a href="../reliability/circuit-breaker.html">Circuit breakers</a>, <a href="../reliability/bulkhead.html">bulkheads</a>, timeouts</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Interview tip:</strong> When asked "What could go wrong?" walk through each failure type systematically. This shows structured thinking.
+</div>
+
+<!-- Real World Examples -->
+<h2>Real World Examples</h2>
+<ul>
+  <li><strong>Google (Borg):</strong> Every job runs multiple replicas across failure domains. Scheduler anti-affines tasks so a single machine/rack failure never takes down a service. Automated restart within seconds.</li>
+  <li><strong>Netflix (Chaos Engineering):</strong> Chaos Monkey randomly kills production instances. Hystrix for <a href="../reliability/circuit-breaker.html">circuit breakers</a>. Bulkheads via thread pool isolation. Serve cached content when backends fail.</li>
+  <li><strong>Amazon (Cell-based):</strong> Each service runs in isolated cells. A failure in one cell does not propagate. "Failure as a normal operational event."</li>
+</ul>
+
+<!-- Common Interview Questions -->
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"How would you make this system reliable?"</strong><br>Identify failure modes → Add redundancy → <a href="../replication/leader-follower.html">Replicate</a> data → Automated failover → <a href="../reliability/circuit-breaker.html">Circuit breakers</a> + <a href="../reliability/bulkhead.html">bulkheads</a> → Idempotent operations → <a href="../reliability/graceful-degradation.html">Graceful degradation</a> → Set SLIs/SLOs.</li>
+  <li><strong>"Reliability vs availability — which is more important?"</strong><br>Depends on the system. Banking: reliability (correct amounts). CDN: availability (content served). Always ask the interviewer what matters for their specific system.</li>
+  <li><strong>"Third-party API is unreliable. How do you handle it?"</strong><br><a href="../reliability/circuit-breaker.html">Circuit breaker</a> → Cache previous responses → <a href="../reliability/graceful-degradation.html">Graceful degradation</a> → Tight timeouts → Retry with backoff → Monitor error rates → Fallback provider.</li>
+  <li><strong>"How do retries avoid thundering herd?"</strong><br>Exponential backoff with jitter: <code>delay = min(base * 2^n + random(0, jitter_ms), max_delay)</code>. Jitter spreads retries randomly.</li>
+  <li><strong>"What is an error budget?"</strong><br>100% - SLO. If SLO is 99.95%, budget is 0.05%. Spent on incidents AND new releases. When budget is exhausted, slow down deploys, focus on reliability.</li>
+  <li><strong>"System returns wrong data intermittently. How to diagnose?"</strong><br>Check race conditions → <a href="../replication/read-replica.html">Replication lag</a> → Cache staleness → Clock skew → Add request tracing → Route critical reads to primary.</li>
+</ul>
+
+<!-- Reliability Killers -->
+<h2>Reliability Killers</h2>
+<table>
+  <tr><th>Killer</th><th>Why It Kills Reliability</th><th>Mitigation</th></tr>
+  <tr><td>Single points of failure</td><td>One component failure = total system failure</td><td>Redundancy at every layer</td></tr>
+  <tr><td>Tight coupling</td><td>One service's failure drags down dependents</td><td><a href="../reliability/circuit-breaker.html">Circuit breakers</a>, async messaging</td></tr>
+  <tr><td>Shared infrastructure</td><td>Noisy neighbor impacts everyone</td><td><a href="../reliability/bulkhead.html">Bulkheads</a>, resource quotas</td></tr>
+  <tr><td>Missing timeouts</td><td>Hung connection blocks thread → cascading failure</td><td>Explicit connect/read/write timeouts on every call</td></tr>
+  <tr><td>Non-idempotent ops</td><td>Retries cause duplicate side effects</td><td>Idempotency keys, PUT instead of POST</td></tr>
+  <tr><td>Shared databases</td><td>One team's query degrades all services</td><td>Database per service, API-only communication</td></tr>
+</table>
+
+<!-- What to Skip -->
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>ITIL processes and frameworks</li>
+    <li>FMEA / FTA (manufacturing reliability engineering)</li>
+    <li>Weibull distribution, hardware-specific MTBF calculations</li>
+    <li>Specific SRE tooling (Prometheus/Grafana configs)</li>
+  </ul>
+  <p>Focus on architectural patterns and quantitative reasoning.</p>
+</div>
+
+<!-- Reading Sources -->
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>Designing Data-Intensive Applications</strong> — Chapter 1: Reliable, Scalable, Maintainable</li>
+    <li><strong>Google SRE Book</strong> — Chapters 1, 4 (SLOs), 6 (Incidents)</li>
+    <li><strong>System Design Interview Vol. 1 (Alex Xu)</strong> — Reliability patterns chapter</li>
+    <li><strong>Chaos Engineering (Rosenthal &amp; Jones)</strong> — Netflix's failure injection philosophy</li>
+  </ol>
+</div>
+
+<div class="source">
+  <div class="source-label">Supplementary</div>
+  <ul>
+    <li><strong>AWS Well-Architected Framework</strong> — <a href="https://docs.aws.amazon.com/wellarchitected/latest/framework/welcome.html" target="_blank">Reliability Pillar</a></li>
+    <li><strong>"Release It!" (Michael Nygard)</strong> — Stability patterns: circuit breakers, bulkheads, timeouts</li>
+  </ul>
+</div>
+
+<!-- Navigation -->
+<div class="nav">
+  <a href="availability.html">&larr; 1.1.4 Availability</a>
+  <a href="durability.html">Next: 1.1.6 Durability &rarr;</a>
+</div>
+
+</body>
+</html>

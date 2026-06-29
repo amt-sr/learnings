@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.1 Why Replication</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">4 Replication</a> / 4.1
+</div>
+
+<h1>4.1 Why Replication</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand why replication is a foundational primitive in distributed systems, what problems it solves, and the fundamental tradeoffs it introduces. This topic is the gateway to understanding every replication model, consistency guarantee, and partition tolerance decision that follows.</p>
+
+<h2>Definition</h2>
+
+<div class="callout">
+  <strong>Replication</strong> means maintaining multiple copies of data across different nodes or data centers. Each copy is called a <strong>replica</strong>. The process of keeping these copies in sync is called <strong>replication</strong>.
+</div>
+
+<p>Replication is not an optional feature in distributed systems -- it is a <strong>structural necessity</strong>. Any system that stores data on more than one machine (which is every system that scales) must decide how to keep those copies consistent. The choices made here cascade through every other aspect of system design.</p>
+
+<h2>Why Replicate Data?</h2>
+
+<h3>1. High Availability</h3>
+<p>A single machine will eventually fail. Disk dies, network partitions, kernel panics, entire racks lose power. With replication, when one node fails, others continue serving requests.</p>
+
+<div class="diagram">
+  Without Replication:
+  ┌──────────┐
+  │  Client   │──▶ ┌──────────┐
+  └──────────┘    │ Node A   │  ◀── 💥 CRASH = SYSTEM DOWN
+                  │ (single) │
+                  └──────────┘
+
+  With Replication:
+  ┌──────────┐
+  │  Client   │──▶ ┌──────────┐
+  └──────────┘    │ Node A   │  ◀── 💥 CRASH
+                  └──────────┘
+                  ┌──────────┐
+                  │ Node B   │  ◀── Continues serving requests
+                  └──────────┘
+</div>
+
+<div class="callout green">
+  <strong>Interview Tip:</strong> When asked "how would you make this system highly available?", replication is almost always the first answer. Frame it as: "We replicate data across multiple nodes so that no single point of failure can bring down the system."
+</div>
+
+<h3>2. Read Scalability</h3>
+<p>Writes are hard to scale because they require coordination and ordering. Reads, however, are embarrassingly parallel. By replicating data, you can distribute read traffic across multiple nodes.</p>
+
+<div class="diagram">
+  ┌─────────┐     ┌──────────┐
+  │Client 1 │──▶  │ Node A   │ ◀── Handles writes + reads
+  └─────────┘     └──────────┘
+  ┌─────────┐     ┌──────────┐
+  │Client 2 │──▶  │ Node B   │ ◀── Handles reads only
+  └─────────┘     └──────────┘
+  ┌─────────┐     ┌──────────┐
+  │Client 3 │──▶  │ Node C   │ ◀── Handles reads only
+  └─────────┘     └──────────┘
+
+  Write:  Node A only (1 node)
+  Read:   Node A + B + C (3 nodes)
+  Read throughput: 3x improvement
+</div>
+
+<p>This is why most web applications have read-heavy workloads (typically 80-95% reads). Replication lets you scale reads almost linearly by adding more replicas, while writes still go through the coordination path.</p>
+
+<h3>3. Geographic Locality</h3>
+<p>Speed of light is the ultimate latency floor. A request from Tokyo to a data center in Virginia takes roughly 150-200ms round trip. By placing replicas closer to users, you can reduce latency dramatically.</p>
+
+<div class="diagram">
+  Global Replication for Latency:
+
+  Tokyo DC     Europe DC     US-East DC     US-West DC
+  ┌────────┐   ┌────────┐   ┌────────┐    ┌────────┐
+  │Replica │   │Replica │   │Replica │    │Replica │
+  │   A    │   │   B    │   │   C    │    │   D    │
+  └───┬────┘   └───┬────┘   └───┬────┘    └───┬────┘
+      │            │            │              │
+      ▼            ▼            ▼              ▼
+  Users in     Users in      Users in       Users in
+  Asia (5ms)   Europe (5ms)  US-East (5ms)  US-West (5ms)
+
+  vs. all users hitting US-East (150-200ms for Asia/Europe)
+</div>
+
+<h3>4. Disaster Recovery</h3>
+<p>Entire data centers can fail -- natural disasters, power grid failures, network provider outages. Cross-DC replication ensures data survives catastrophic events.</p>
+
+<table>
+  <tr><th>Failure Scenario</th><th>Without Replication</th><th>With Cross-DC Replication</th></tr>
+  <tr><td>Single node failure</td><td class="red">Downtime until recovery</td><td class="green">Failover in seconds</td></tr>
+  <tr><td>Rack failure</td><td class="red">Multiple nodes lost</td><td class="green">Replicas spread across racks</td></tr>
+  <tr><td>Entire DC failure</td><td class="red">Catastrophic data loss</td><td class="green">Other DCs take over</td></tr>
+  <tr><td>Region-wide disaster</td><td class="red">Complete outage</td><td class="green">Remote region survives</td></tr>
+</table>
+
+<h2>The Fundamental Tradeoff</h2>
+
+<div class="callout yellow">
+  <strong>Replication forces you to choose:</strong> Do you want strong consistency (all replicas always show the same data) or high availability (the system is always responsive)? You cannot perfectly have both in the presence of network partitions. This is the <strong>CAP theorem</strong> in action.
+</div>
+
+<div class="diagram">
+              Strong Consistency
+                     ▲
+                     │
+                     │
+                     │         Replication
+                     │         Tradeoff Space
+                     │
+                     │
+  ┌──────────────────┼──────────────────┐
+  │                  │                  │
+  │   Eventual       │   Causal         │
+  │   Consistency    │   Consistency    │
+  │                  │                  │
+  │   ●  DynamoDB    │   ●  Google      │
+  │   ●  Cassandra   │      Spanner     │
+  │                  │   ●  CockroachDB │
+  │   ●  S3          │                  │
+  │                  │                  │
+  └──────────────────┴──────────────────┘
+                     │
+                     │
+                     ▼
+              High Availability
+</div>
+
+<p>When you design a replicated system, you are implicitly choosing a point on this spectrum:</p>
+
+<ul>
+  <li><strong>Strong consistency:</strong> Every read returns the most recent write. Achieved via synchronous replication, consensus protocols (Paxos, Raft). Tradeoff: higher latency, lower availability during partitions.</li>
+  <li><strong>Eventual consistency:</strong> Replicas converge over time but may serve stale reads temporarily. Tradeoff: low latency, high availability, but clients may see outdated data.</li>
+  <li><strong>Causal consistency:</strong> A middle ground. If operation B causally depends on operation A, every replica sees A before B. Good for collaborative systems.</li>
+</ul>
+
+<h2>Real-World Examples</h2>
+
+<table>
+  <tr><th>System</th><th>Replication Purpose</th><th>Model</th></tr>
+  <tr><td>Google Spanner</td><td>Global consistency + HA</td><td>Paxos-based, synchronous</td></tr>
+  <tr><td>Amazon DynamoDB</td><td>High availability + low latency</td><td>Leaderless, quorum-based</td></tr>
+  <tr><td>MySQL (typical setup)</td><td>Read scaling + HA</td><td>Single-leader, async</td></tr>
+  <tr><td>PostgreSQL (streaming)</td><td>Read scaling + HA</td><td>Single-leader, async/sync</td></tr>
+  <tr><td>Cassandra</td><td>Write availability + multi-DC</td><td>Leaderless, tunable consistency</td></tr>
+  <tr><td>Redis Cluster</td><td>Read scaling + HA</td><td>Single-leader, async</td></tr>
+  <tr><td>Google Bigtable</td><td>Throughput + durability</td><td>Single-leader (per tablet), sync</td></tr>
+</table>
+
+<h2>Replication as Foundation of Distributed Systems</h2>
+
+<p>Replication is not just a storage concern. It touches every layer of a distributed system:</p>
+
+<ul>
+  <li><strong>Load balancing:</strong> Replicas give you more backend targets to distribute traffic to.</li>
+  <li><strong>Caching:</strong> Caches are essentially ephemeral, volatile replicas.</li>
+  <li><strong>Sharding:</strong> Each shard is typically replicated for fault tolerance.</li>
+  <li><strong>Consensus:</strong> Protocols like Raft and Paxos exist primarily to solve the replication ordering problem.</li>
+  <li><strong>Message queues:</strong> Replicated logs (like Kafka) ensure no data loss on broker failure.</li>
+</ul>
+
+<div class="callout">
+  <strong>Key Insight:</strong> Almost every system design interview question implicitly involves replication. Designing a URL shortener? You need replication for the database. Designing a chat system? You need replication for message durability. Designing a notification system? You need replication for delivery guarantees. Understanding replication deeply is one of the highest-ROI investments for interview preparation.
+</div>
+
+<h2>Common Interview Questions</h2>
+
+<ol>
+  <li><strong>"Why do you need replication in your design?"</strong><br>
+  Answer: "Replication serves four purposes: (1) High availability -- no single node failure causes downtime. (2) Read scalability -- distribute read traffic across replicas. (3) Geographic locality -- serve users from nearby data centers. (4) Disaster recovery -- survive entire data center failures. For this system, the primary driver is [X], which is why I chose [Y] replication model."</li>
+
+  <li><strong>"What is the CAP theorem and how does it relate to replication?"</strong><br>
+  Answer: "In the presence of a network partition, you must choose between consistency and availability. Replication inherently creates a consistency challenge because you have multiple copies of data. Synchronous replication favors consistency (C), asynchronous replication favors availability (A). For [this system], I'd choose [C or A] because [rationale]."</li>
+
+  <li><strong>"How would you decide between strong and eventual consistency?"</strong><br>
+  Answer: "It depends on the use case. Financial transactions require strong consistency -- you cannot double-spend. Social media feeds can tolerate eventual consistency -- a slightly stale feed is acceptable. I would analyze each data type in the system and choose consistency per-key, not per-system."</li>
+
+  <li><strong>"What happens during a network partition with replicated data?"</strong><br>
+  Answer: "During a partition, some replicas cannot communicate. You face a choice: stop serving writes to maintain consistency (CP) or continue serving writes and resolve conflicts later (AP). The resolution strategy depends on the replication model -- leader-follower typically stops non-leader writes, leaderless systems use quorum and conflict resolution."</li>
+</ol>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Do not go deep into:</strong>
+  <ul>
+    <li>Specific replication protocols (Raft, Paxos, Viewstamped Replication) -- these are covered in the Consensus chapter. Know what they do, not how the internals work.</li>
+    <li>Multi-master conflict resolution details (CRDT internals, operational transforms) -- save for the Multi-Leader section.</li>
+    <li>Storage engine internals (LSM trees, B-trees in the context of replication) -- keep the focus on the replication logic itself.</li>
+    <li>Specific database configuration syntax (e.g., MySQL binlog settings) unless you have deep operational experience.</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Reading Sources</div>
+  <ul>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em>, Chapter 5: "Replication" -- sections 5.1 (Leaders and Followers) and the introduction on why replication matters.</li>
+    <li>Google Cloud, <em>Spanner: TrueTime and External Consistency</em> -- for understanding how a real global replication system achieves strong consistency.</li>
+    <li>Amazon, <em>Dynamo: Amazon's Highly Available Key-value Store</em> -- for understanding the availability-first approach to replication.</li>
+    <li>Alex Petrov, <em>Data Intensive Applications</em>, Chapter 10: "Replication and Immutability".</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="../storage/sql-vs-nosql.html">&larr; 3.11 SQL vs NoSQL</a>
+  <a href="leader-follower.html">4.2.1 Leader-Follower &rarr;</a>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.2.9 ISR — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">8. Messaging</a> / 8.2.9 ISR</p>
+
+<h1>8.2.9 ISR (In-Sync Replicas)</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+
+<p>Understand the ISR (In-Sync Replicas) concept in Kafka, how it relates to data durability and availability, and how <code>min.insync.replicas</code> provides a safety net.</p>
+
+<h2>Definition</h2>
+
+<p>The <strong>ISR (In-Sync Replicas)</strong> is the set of all replicas for a partition that are fully caught up with the leader. A replica is considered "in-sync" if it has fetched all messages up to the leader's current end-of-log offset within a configured time window. The leader is always part of the ISR.</p>
+
+<div class="callout">
+  <strong>Key Insight:</strong> The ISR is the set of replicas that are trusted to have the latest data. When <code>acks=all</code>, the producer waits for acknowledgments from all ISR members. Only replicas in the ISR are eligible to become leader during leader election. The ISR shrinks and grows dynamically as followers catch up or fall behind.
+</div>
+
+<h2>How ISR Works</h2>
+
+<div class="diagram">
+  Partition 0 (replication factor = 3)
+
+  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+  │ Broker 1    │    │ Broker 2    │    │ Broker 3    │
+  │ LEADER      │    │ FOLLOWER    │    │ FOLLOWER    │
+  │ offset: 100 │    │ offset: 98  │    │ offset: 65  │
+  └──────┬──────┘    └──────┬──────┘    └──────┬──────┘
+         │                  │                  │
+         │    ISR = {Broker 1, Broker 2}       │
+         │    Broker 3 NOT in ISR (offset 65,  │
+         │    too far behind leader's 100)      │
+         │                                    │
+         ▼                                    │
+  ┌──────────────────────────────────────────┐│
+  │ Leader tracks:                           ││
+  │ ISR = [Broker 1 (leader), Broker 2]     ││
+  │                                          ││
+  │ Broker 3 is catching up:                ││
+  │   offset 65 → 70 → 75 → 80 → 90 → 98    ││
+  │                                          ││
+  │ Once Broker 3 reaches offset 100:        ││
+  │ ISR = [Broker 1 (leader), Broker 2,     ││
+  │        Broker 3]                         ││
+  └──────────────────────────────────────────┘│
+                                               │
+  Broker 3 catches up → added back to ISR ────┘
+</div>
+
+<h2>ISR Dynamics</h2>
+
+<h3>Removing from ISR</h3>
+<p>A follower is removed from the ISR if it falls behind the leader by more than the configured threshold. The primary mechanism is the <code>replica.lag.time.max.ms</code> configuration (default: 10 seconds). If a follower has not sent a fetch request or has not caught up within this time, it is shrunk out of the ISR.</p>
+
+<h3>Adding Back to ISR</h3>
+<p>When a follower catches up to the leader's log end offset, it is added back into the ISR. This happens automatically as the follower continues to pull messages from the leader.</p>
+
+<h2>min.insync.replicas</h2>
+
+<p>This topic-level configuration defines the minimum number of ISR replicas (including the leader) that must acknowledge a write for it to be considered successful. It works in conjunction with <code>acks=all</code>:</p>
+
+<table>
+  <tr><th>Config</th><th>Value</th><th>Behavior</th></tr>
+  <tr><td><code>acks=all</code></td><td>-</td><td>Producer waits for all ISR replicas to ack</td></tr>
+  <tr><td><code>min.insync.replicas</code></td><td>2 (recommended)</td><td>Require at least 2 ISR replicas to proceed</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Critical Interaction:</strong> If <code>min.insync.replicas=2</code> and the ISR shrinks to 1 (only the leader remains), Kafka <strong>rejects</strong> all writes to that partition. This prevents data loss by refusing to accept writes when there are not enough replicas to guarantee durability.
+</div>
+
+<div class="diagram">
+  Normal operation (ISR = 3):
+  min.insync.replicas = 2, acks = all
+  Producer ──write──► Leader ──► F1 ACK, F2 ACK
+  ✓ Write succeeds (3 >= 2 in-sync replicas)
+
+  One follower falls behind (ISR = 2):
+  ISR = {Leader, F1}, F2 removed
+  Producer ──write──► Leader ──► F1 ACK
+  ✓ Write succeeds (2 >= 2 in-sync replicas)
+
+  Another follower falls behind (ISR = 1):
+  ISR = {Leader only}, F1 removed
+  Producer ──write──► Leader
+  ✗ Write REJECTED (1 < 2 min.insync.replicas)
+  → Producer receives NotEnoughReplicasException
+  → Partition is unavailable for writes until ISR recovers
+</div>
+
+<h2>Recommended Configuration</h2>
+
+<pre>
+# Topic-level configuration for high durability:
+acks=all                        # Wait for all ISR replicas
+min.insync.replicas=2           # Require at least 2 (leader + 1 follower)
+replication.factor=3            # 3 total copies (leader + 2 followers)
+
+# Broker-level:
+replica.lag.time.max.ms=10000   # Remove follower from ISR after 10s behind
+unclean.leader.election.enable=false  # Never elect a non-ISR replica
+</pre>
+
+<div class="callout green">
+  <strong>Production Best Practice:</strong> Set <code>min.insync.replicas=2</code> with <code>replication.factor=3</code> and <code>acks=all</code>. This gives you: durability (data written to leader + at least 1 follower before ack), availability (can tolerate 1 broker failure), and safety (writes rejected if ISR drops below 2).
+</div>
+
+<h2>ISR and Data Durability</h2>
+
+<table>
+  <tr><th>Scenario</th><th>ISR Size</th><th>min.insync</th><th>Result</th></tr>
+  <tr><td>All replicas healthy</td><td>3</td><td>2</td><td class="green">Writes succeed, full redundancy</td></tr>
+  <tr><td>1 follower behind</td><td>2</td><td>2</td><td class="green">Writes succeed, still safe</td></tr>
+  <tr><td>2 followers behind</td><td>1</td><td>2</td><td class="red">Writes rejected — data safety over availability</td></tr>
+  <tr><td>Leader fails (ISR had 3)</td><td>2 (after election)</td><td>2</td><td class="green">New leader elected, writes continue</td></tr>
+  <tr><td>Leader fails (ISR had 2)</td><td>1 (after election)</td><td>2</td><td class="red">New leader elected, but writes rejected</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+
+<ol>
+  <li>"What is the ISR in Kafka and why is it important?"</li>
+  <li>"When is a follower removed from the ISR?"</li>
+  <li>"What is min.insync.replicas and how does it work with acks=all?"</li>
+  <li>"What happens when the ISR drops below min.insync.replicas?"</li>
+  <li>"How do you configure Kafka for high durability vs. high availability?"</li>
+  <li>"What is unclean leader election and how does ISR relate to it?"</li>
+  <li>"How would you monitor ISR health in production?"</li>
+</ol>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Do not dive into:</strong>
+  <ul>
+    <li>ZooKeeper/KRaft znode structures for ISR tracking.</li>
+    <li>Replica fetcher thread internals and detailed lag calculation.</li>
+    <li>High water mark vs. leader epoch internals — mention briefly if asked but do not go deep.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Books &amp; Guides</div>
+  <ul>
+    <li><a href="https://kafka.apache.org/documentation/#replication">Kafka Documentation — Replication</a> — ISR and replication concepts</li>
+    <li><a href="https://www.confluent.io/learn/kafka-replication/">Confluent — Kafka Replication</a> — ISR dynamics and min.insync.replicas</li>
+    <li><a href="https://kafka.apache.org/documentation/#topicconfigs">Kafka Documentation — Topic Configs</a> — min.insync.replicas, replication.factor</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="replication.html">&larr; 8.2.8 Replication</a>
+  <a href="at-most-once.html">8.3.1 At Most Once &rarr;</a>
+</div>
+
+</body>
+</html>

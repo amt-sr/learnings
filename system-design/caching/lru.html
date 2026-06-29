@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.5.1 LRU (Least Recently Used)</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">7 Caching</a> / <a href="index.html">7.5 Eviction</a> / 7.5.1
+</div>
+
+<h1>LRU (Least Recently Used)</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the LRU eviction policy well enough to reason about when it works, when it fails, and how to implement it in O(1) time. Expect to discuss trade-offs against LFU and FIFO at the whiteboard and to sketch the data-structure internals during coding rounds.</p>
+
+<h2>Definition</h2>
+<p><strong>LRU (Least Recently Used)</strong> is a cache eviction policy that removes the item that has not been accessed for the longest time. Every read or write to a cache entry promotes it to the "most recently used" position. When the cache is full, the entry at the tail of the recency list is evicted.</p>
+
+<div class="callout">
+  <strong>Key insight:</strong> LRU approximates temporal locality -- it assumes that data accessed recently is likely to be accessed again soon. This works well for workloads with strong recency patterns (e.g., social-media feeds, session data).
+</div>
+
+<h2>How LRU Works</h2>
+<p>LRU maintains a total ordering of all cache entries by last access time. On every cache hit, the accessed entry is moved to the head of the list. On eviction, the entry at the tail is removed.</p>
+
+<div class="diagram">
+ LRU Doubly-Linked List + HashMap (capacity = 3)
+
+ Access order (MRU ... LRU):    [D] ←→ [A] ←→ [C]
+   HashMap:  { D→NodeD, A→NodeA, C→NodeC }
+
+ Step 1 — get(E) → cache miss, insert E:
+   [E] ←→ [D] ←→ [A] ←→ [C]          (E at head)
+   HashMap: { E→NodeE, D→NodeD, A→NodeA, C→NodeC }
+
+ Step 2 — Cache full (capacity=3), evict C (LRU tail):
+   [E] ←→ [D] ←→ [A]
+   HashMap: { E→NodeE, D→NodeD, A→NodeA }
+
+ Step 3 — get(A) → cache hit, promote A to head:
+   [A] ←→ [E] ←→ [D]
+   HashMap: { A→NodeA, E→NodeE, D→NodeD }
+</div>
+
+<h2>O(1) Implementation</h2>
+<p>Achieving O(1) for both <code>get</code> and <code>put</code> requires two cooperating data structures:</p>
+
+<table>
+  <tr><th>Data Structure</th><th>Role</th><th>Operations</th></tr>
+  <tr><td>HashMap (key → Node)</td><td>O(1) lookup</td><td>get(key), put(key, value)</td></tr>
+  <tr><td>Doubly-Linked List</td><td>Ordered access tracking</td><td>Move to head, remove tail</td></tr>
+</table>
+
+<ul>
+  <li><strong>get(key):</strong> HashMap lookup → if hit, detach node from list, prepend to head. O(1).</li>
+  <li><strong>put(key, value):</strong> HashMap lookup → if exists, update value + move to head. If new and at capacity, detach tail node, remove from hashmap, then prepend new node. O(1).</li>
+</ul>
+
+<pre>
+class LRUCache:
+    def __init__(self, capacity: int):
+        self.cap = capacity
+        self.map = {}          # key → node
+        self.head = Node()      # dummy head
+        self.tail = Node()      # dummy tail
+        self.head.next = self.tail
+        self.tail.prev = self.head
+
+    def get(self, key: int) -> int:
+        if key not in self.map: return -1
+        node = self.map[key]
+        self._remove(node)
+        self._add_to_head(node)
+        return node.val
+
+    def put(self, key: int, value: int) -> None:
+        if key in self.map:
+            node = self.map[key]
+            node.val = value
+            self._remove(node)
+            self._add_to_head(node)
+        else:
+            if len(self.map) == self.cap:
+                lru = self.tail.prev
+                self._remove(lru)
+                del self.map[lru.key]
+            node = Node(key, value)
+            self.map[key] = node
+            self._add_to_head(node)
+</pre>
+
+<h2>The One-Time Scan Problem</h2>
+<div class="callout red">
+  <strong>LRU weakness -- one-time scan:</strong> A sequential scan of a large dataset that exceeds cache capacity will evict <em>every</em> previously cached item, replacing it with data that is only accessed once. After the scan completes, the cache is cold and subsequent requests experience 100% misses.
+</div>
+
+<div class="diagram">
+ Scenario: cache capacity = 3, keys A-D are hot
+
+   Before scan: [C] ←→ [A] ←→ [B]   (all hot keys cached)
+
+   Sequential scan of X, Y, Z (each accessed once):
+     [Z] ←→ [Y] ←→ [X]              (A, B, C all evicted)
+
+   After scan -- A requested → cache miss!
+     [A] ←→ [Z] ←→ [Y]              (rebuilding from scratch)
+</div>
+
+<div class="callout yellow">
+  <strong>Mitigation:</strong> Use <strong>LRU-K</strong> (track last K accesses) or <strong>2Q</strong> (two-queue: a small FIFO admission queue before the main LRU). These prevent one-time scans from polluting the main cache. Redis uses a variant of LRU with a sampling-based eviction to reduce this effect.
+</div>
+
+<h2>Real-World Usage</h2>
+<table>
+  <tr><th>System</th><th>LRU Role</th><th>Details</th></tr>
+  <tr><td>Redis</td><td>Default eviction policy</td><td><code>maxmemory-policy allkeys-lru</code>; uses approximate LRU with a pool of sampled keys to avoid full-scan overhead</td></tr>
+  <tr><td>Memcached</td><td>Only eviction policy</td><td>Pure LRU via a slab allocator with per-slab LRU queues</td></tr>
+  <tr><td>OS Page Cache (Linux)</td><td>Page reclaim</td><td>Uses a variant (Clock/LRU hybrid) via the Active/Inactive LRU lists in the kernel</td></tr>
+  <tr><td>CPUs</td><td>Cache line eviction</td><td>L1/L2 caches typically use pseudo-LRU (PLRU) for hardware simplicity</td></tr>
+  <tr><td>CDN (Varnish, Cloudflare)</td><td>Object eviction</td><td>LRU is the default policy for evicting cached assets when disk/memory is full</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>Design an LRU cache with O(1) get and put. (LeetCode 146 -- expect this as a coding exercise.)</li>
+  <li>How would you implement LRU in a distributed cache with millions of entries?</li>
+  <li>What happens when a sequential scan hits an LRU cache? How do you prevent cache pollution?</li>
+  <li>Compare LRU vs LFU for a social-media feed vs a video recommendation system.</li>
+  <li>How does Redis implement approximate LRU? Why not exact LRU?</li>
+  <li>What is the time complexity of evicting N entries in a single LRU operation?</li>
+  <li>How would you make LRU thread-safe in a high-concurrency environment?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Skip in interviews:</strong>
+  <ul>
+    <li>Detailed locking strategies for the doubly-linked list (mention thread-safety at a high level, don't descend into read-write lock internals unless asked).</li>
+    <li>Off-topic data structures like skip lists or splay trees -- stick to HashMap + DLL.</li>
+    <li>Optimizations like batching moves (lazy promotion) unless the interviewer signals deeper interest.</li>
+    <li>Full Redis source-code internals of the LRU eviction sampling algorithm -- state the concept, don't re-implement.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Primary</div>
+  <ul>
+    <li><a href="https://redis.io/docs/manual/eviction/">Redis Eviction Policies</a> -- official docs on allkeys-lru and sampling-based LRU</li>
+    <li><a href="https://leetcode.com/problems/lru-cache/">LeetCode 146 -- LRU Cache</a> -- canonical coding interview problem</li>
+    <li><a href="https://en.wikipedia.org/wiki/Cache_replacement_policies#Least_Recently_Used_(LRU)">Wikipedia: Cache Replacement Policies -- LRU</a> -- formal definition and variants</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Supplementary</div>
+  <ul>
+    <li><a href="https://cs61a.org/assets/pdf/61A-LRU.pdf">CS 61A -- LRU Cache Lecture Notes</a> -- pedagogical walkthrough of the data structure</li>
+    <li><a href="https://memcached.org/blog/modern-lru/">Memcached: Modern LRU</a> -- how Memcached handles LRU with slab allocation</li>
+    <li><a href="https://www.kernel.org/doc/Documentation/vm/page_reclaim.rst">Linux Page Reclaim</a> -- Active/Inactive LRU lists in the kernel</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="../cache-avalanche.html">&larr; 7.4.3 Cache Avalanche</a>
+  <a href="lfu.html">7.5.2 LFU &rarr;</a>
+</div>
+
+</body>
+</html>

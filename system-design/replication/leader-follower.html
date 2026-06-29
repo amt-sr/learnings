@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.2.1 Leader-Follower (Single-Leader Replication)</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">4 Replication</a> / <a href="why-replication.html">4.2 Replication Models</a> / 4.2.1
+</div>
+
+<h1>4.2.1 Leader-Follower (Single-Leader Replication)</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the most widely used replication model in production systems. Know how writes flow through the leader, how followers stay synchronized, what consistency guarantees exist, and how failover works. This model is the default for most relational databases and is frequently referenced in system design interviews.</p>
+
+<h2>Definition</h2>
+
+<div class="callout">
+  <strong>Single-leader replication</strong> (also called <strong>primary-replica</strong>, <strong>active-passive</strong>, or <strong>master-slave</strong>) is a replication model where one node is designated as the <strong>leader</strong> (or primary). All write operations must go through the leader. The leader then propagates these writes to one or more <strong>follower</strong> (replica) nodes. Followers handle read operations.
+</div>
+
+<p>This is the simplest replication model and, consequently, the most common. Its simplicity comes from a single ordering point: the leader determines the canonical order of all writes.</p>
+
+<h2>How It Works</h2>
+
+<h3>The Write Path</h3>
+
+<div class="diagram">
+  Client
+   │
+   │  WRITE: UPDATE users SET balance = 100 WHERE id = 42
+   │
+   ▼
+  ┌────────────────────────────────────────────────────────┐
+  │                    LEADER (Primary)                     │
+  │                                                        │
+  │  1. Receive write request                               │
+  │  2. Write to local WAL (Write-Ahead Log)                │
+  │  3. Apply to local storage engine                       │
+  │  4. Append to replication log (binlog)                  │
+  │  5. Send ACK to client                                  │
+  │                                                        │
+  │  ┌─────────────────────────────────────┐               │
+  │  │       Replication Log (binlog)      │               │
+  │  │  seq 1: UPDATE users SET ...       │               │
+  │  │  seq 2: INSERT orders ...           │               │
+  │  │  seq 3: UPDATE users SET ... ◀──────│── current     │
+  │  └──────┬──────────────┬───────────────┘               │
+  └─────────│──────────────│───────────────────────────────┘
+            │              │
+            ▼              ▼
+  ┌──────────────┐  ┌──────────────┐
+  │ FOLLOWER A   │  │ FOLLOWER B   │
+  │  (Replica 1) │  │  (Replica 2) │
+  │              │  │              │
+  │ Apply log    │  │ Apply log    │
+  │ seq 1,2,3   │  │ seq 1,2,3   │
+  │              │  │              │
+  │ SERVES READS │  │ SERVES READS │
+  └──────────────┘  └──────────────┘
+</div>
+
+<h3>Replication Methods</h3>
+<p>The leader can propagate changes to followers using different mechanisms:</p>
+
+<table>
+  <tr><th>Method</th><th>How It Works</th><th>Examples</th><th>Granularity</th></tr>
+  <tr><td><strong>Statement-based</strong></td><td>Leader sends the SQL/operation statement itself</td><td>MySQL (binlog format=STATEMENT)</td><td>Coarse; can have non-determinism issues</td></tr>
+  <tr><td><strong>Write-ahead log (WAL) shipping</strong></td><td>Leader sends its write-ahead log to followers</td><td>PostgreSQL (streaming replication)</td><td>Storage-level; tight coupling</td></tr>
+  <tr><td><strong>Logical (row-based) log</strong></td><td>Leader writes row-level changes in a DB-agnostic format</td><td>MySQL (binlog format=ROW), Oracle GoldenGate</td><td>Row-level; flexible, supports heterogenous replicas</td></tr>
+  <tr><td><strong>Trigger-based</strong></td><td>Application-level triggers capture changes</td><td>Custom CDC implementations, Postgres triggers</td><td>Flexible; highest overhead</td></tr>
+</table>
+
+<h3>Read Path</h3>
+
+<div class="diagram">
+  READ Request (SELECT * FROM users WHERE id = 42)
+  ─────────────────────────────────────────
+         │
+         │  Load Balancer / Proxy
+         ▼
+  ┌──────────────┬──────────────┬──────────────┐
+  │ FOLLOWER A   │ FOLLOWER B   │  LEADER      │
+  │ (replica)     │ (replica)     │ (primary)    │
+  │              │              │              │
+  │ balance=100  │ balance=100  │ balance=100  │
+  │              │              │              │
+  └──────────────┴──────────────┴──────────────┘
+       ▲             ▲             ▲
+       │             │             │
+  95% of reads   5% of reads  (if read-after-write
+  go to replicas  go to leader  consistency needed)
+</div>
+
+<div class="callout green">
+  <strong>Interview Tip:</strong> When designing with leader-follower, always mention that reads can go to followers for scalability, but note the <strong>replica lag</strong> problem: a follower may not yet have the latest write. This is a key tension to articulate in interviews.
+</div>
+
+<h2>Read-Your-Writes Consistency</h2>
+
+<p>One of the most common problems with leader-follower replication is the <strong>stale read</strong> problem. A client writes to the leader, then immediately reads from a follower, and gets an old value because the follower has not yet applied the write.</p>
+
+<div class="diagram">
+  Timeline of Events:
+
+  t=0ms    Client writes "name = Alice" to LEADER
+  t=1ms    Leader commits write, sends ACK
+  t=2ms    Replication log entry sent to followers
+  t=2ms    Client reads "name" from FOLLOWER A
+           └──▶ Returns "name = Bob" (STALE!)
+  t=15ms   FOLLOWER A applies replication log entry
+  t=16ms   If client reads again, gets "name = Alice" ✓
+
+  The 2ms-15ms window is the replica lag window.
+</div>
+
+<p>Solutions to this problem:</p>
+
+<ol>
+  <li><strong>Read from leader for critical reads:</strong> After a write, route the next read to the leader. Simple but increases leader load.</li>
+  <li><strong>Track replication progress:</strong> The leader tracks how far each follower has progressed in applying the replication log. If a follower is up-to-date, route reads there; otherwise, use the leader or another follower.</li>
+  <li><strong>Client-side timestamp:</strong> The client remembers the timestamp of its last write and includes it in read requests. Followers that have applied all writes up to that timestamp can serve the read.</li>
+  <li><strong>Monotonic reads:</strong> Ensure a client always reads from the same replica (or one that is at least as up-to-date as the last read). Prevents the "time going backwards" anomaly.</li>
+</ol>
+
+<h2>Failover Process</h2>
+
+<p>When the leader fails, one of the followers must be promoted to become the new leader. This is a critical and surprisingly complex operation:</p>
+
+<div class="diagram">
+  Failover Process:
+  ──────────────────
+
+  1. FAILURE DETECTION
+     ┌──────────┐      ┌──────────┐      ┌──────────┐
+     │ LEADER   │      │Follow. A │      │Follow. B │
+     │  💥 DOWN │      │  (alive) │      │  (alive) │
+     └──────────┘      └──────────┘      └──────────┘
+          │
+          ▼
+  2. DETECTION (timeout: no heartbeat for N seconds)
+     Follower A: "Leader is unresponsive!"
+     Follower B: "Leader is unresponsive!"
+
+  3. LEADER ELECTION
+     Option A:  Manual operator promotes Follower A
+     Option B:  Consensus (Raft/Paxos) elects new leader
+     Option C:  ZooKeeper/etcd selects new leader
+
+  4. PROMOTION
+     ┌──────────┐      ┌──────────┐      ┌──────────┐
+     │ (dead)   │      │ LEADER A │      │Follow. B │
+     │          │      │ (NEW)    │      │          │
+     └──────────┘      └──────────┘      └──────────┘
+
+  5. RECONFIGURATION
+     - Route all writes to new leader A
+     - Update all clients and proxies
+     - Re-replicate from new leader to B
+
+  6. OLD LEADER RECOVERY (if it comes back)
+     ┌──────────┐      ┌──────────┐      ┌──────────┐
+     │ OLD LDR  │      │ LEADER A │      │Follow. B │
+     │  (confused)│   │          │      │          │
+     └──────────┘      └──────────┘      └──────────┘
+     - Must be demoted to follower
+     - May need to discard unreplicated writes
+     - RISK: split-brain if old leader thinks it's still leader
+</div>
+
+<div class="callout red">
+  <strong>Danger: Split-Brain.</strong> The biggest risk in failover is <strong>split-brain</strong>: two nodes both believe they are the leader. If the old leader recovers but has not been informed it was replaced, it may accept writes that conflict with the new leader. This causes data corruption that is extremely hard to detect and resolve. Solutions include fencing tokens, STONITH ("Shoot The Other Node In The Head"), and lease-based approaches.
+</div>
+
+<h2>Real-World Examples</h2>
+
+<table>
+  <tr><th>System</th><th>Default Replication</th><th>Replication Log Format</th><th>Failover</th></tr>
+  <tr><td><strong>MySQL</strong></td><td>Single-leader (async default)</td><td>Binary log (statement or row-based)</td><td>MHA, Orchestrator, or manual</td></tr>
+  <tr><td><strong>PostgreSQL</strong></td><td>Single-leader (streaming replication)</td><td>WAL shipping (physical or logical)</td><td>Patroni, repmgr, or manual</td></tr>
+  <tr><td><strong>MongoDB</strong></td><td>Single-leader (replica set)</td><td>Oplog (operations log)</td><td>Automatic election via Raft-like protocol</td></tr>
+  <tr><td><strong>Oracle</strong></td><td>Single-leader (Data Guard)</td><td>Redo log shipping</td><td>Fast-Start Failover (broker-managed)</td></tr>
+  <tr><td><strong>Kafka</strong></td><td>Single-leader per partition</td><td>Append-only commit log</td><td>Controller elects new leader via ZooKeeper/KRaft</td></tr>
+</table>
+
+<h2>Pros and Cons</h2>
+
+<table>
+  <tr><th>Advantages</th><th>Disadvantages</th></tr>
+  <tr>
+    <td class="green">Simple to understand and reason about</td>
+    <td class="red">Single write bottleneck (all writes through leader)</td>
+  </tr>
+  <tr>
+    <td class="green">Natural write ordering (leader serializes all writes)</td>
+    <td class="red">Failover is complex and error-prone</td>
+  </tr>
+  <tr>
+    <td class="green">Easy to implement read scaling</td>
+    <td class="red">Replica lag causes stale reads</td>
+  </tr>
+  <tr>
+    <td class="green">No write conflicts (single writer)</td>
+    <td class="red">Leader failure causes write unavailability during failover</td>
+  </tr>
+  <tr>
+    <td class="green">Well-supported by most databases</td>
+    <td class="red">Not suitable for multi-region writes (cross-DC latency)</td>
+  </tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+
+<ol>
+  <li><strong>"Explain leader-follower replication."</strong><br>
+  Answer: "One node is the leader that accepts all writes. It writes changes to a replication log and sends this log to follower nodes. Followers apply the log entries in the same order, maintaining identical copies. Reads can be served by followers for scalability. The key challenge is handling leader failure through failover and managing replica lag for read-after-write consistency."</li>
+
+  <li><strong>"What happens when the leader fails?"</strong><br>
+  Answer: "First, followers detect the failure via heartbeat timeout. Then a new leader is elected -- either manually by an operator, or automatically via a consensus protocol. The elected follower starts accepting writes. The critical concern is split-brain prevention: the old leader must be fenced out. Common fencing mechanisms include fencing tokens in storage (e.g., increasing an epoch number that the storage layer checks), or network-level STONITH. After the old leader is confirmed dead or demoted, it can be brought back as a follower."</li>
+
+  <li><strong>"How do you handle read-after-write consistency?"</strong><br>
+  Answer: "The simplest approach is to route reads to the leader immediately after a write. For better scalability, track replication progress per follower and route reads to a follower that has applied all writes up to the client's last write timestamp. This requires the leader to track each follower's replication position and for the client to remember its write timestamp. In practice, many systems use a session-based approach: after writing, the client's session is 'sticky' to the leader for a short window."</li>
+
+  <li><strong>"What is split-brain and how do you prevent it?"</strong><br>
+  Answer: "Split-brain occurs when two nodes both believe they are the leader, typically after a network partition causes both the old and new leaders to accept writes independently. Prevention strategies include: (1) Fencing tokens -- a monotonically increasing number stored in a separate service; the higher number wins. (2) Resource fencing -- the old leader's storage access is revoked at the storage layer (e.g., SCSI reservations, cloud API calls to detach disks). (3) Leases with timeouts -- the leader must renew its lease; if it cannot, it steps down voluntarily."</li>
+</ol>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Do not go deep into:</strong>
+  <ul>
+    <li>Raft/Paxos internals -- these are covered in the Consensus chapter. Know that they solve leader election, not the byte-level details.</li>
+    <li>Database-specific replication configuration syntax (e.g., MySQL GTID settings, PostgreSQL recovery.conf).</li>
+    <li>Physical vs. logical replication internals for PostgreSQL -- the distinction matters for operations but not for system design interviews.</li>
+    <li>Specific failover tool implementations (MHA, Patroni internals) unless you have hands-on experience.</li>
+    <li>Replication topology variants (circular, chained) -- these are rarely used in practice and add complexity without much interview value.</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Reading Sources</div>
+  <ul>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em>, Chapter 5, Section "Leaders and Followers" -- comprehensive coverage of single-leader replication, replication methods, and replication lag problems.</li>
+    <li>High Availability MySQL Cookbook (O'Reilly) -- for practical understanding of MySQL replication and failover.</li>
+    <li>MongoDB Replica Set documentation -- for understanding how MongoDB implements automatic leader election and failover.</li>
+    <li>PostgreSQL Streaming Replication documentation -- for understanding WAL-based replication.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="why-replication.html">&larr; 4.1 Why Replication</a>
+  <a href="multi-leader.html">4.2.2 Multi-Leader &rarr;</a>
+</div>
+
+</body>
+</html>

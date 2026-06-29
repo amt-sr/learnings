@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.2.5 Page Cache</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#3">3 Storage</a> / <a href="../index.html#3.2">3.2 Storage Layout</a> / 3.2.5
+</div>
+
+<h1>Page Cache</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What the OS page cache is — the kernel's built-in file data cache</li>
+  <li>OS page cache vs database <a href="buffer-pool.html">buffer pool</a> — and the double buffering problem</li>
+  <li>Direct I/O (O_DIRECT) to bypass the page cache</li>
+  <li>When to rely on the OS page cache vs the database buffer pool</li>
+  <li>Trade-offs between the two caching strategies</li>
+</ul>
+
+<h2>Definition</h2>
+<p>The OS page cache (also called the <strong>buffer cache or file cache</strong>) is the <strong>Linux kernel's in-memory cache of file data blocks</strong>. Whenever the kernel reads a file, it keeps the data in RAM as CPU pages. Subsequent reads of the same file data are served directly from memory, avoiding disk I/O. The OS manages this cache automatically using reclaimed memory — no application configuration required.</p>
+
+<h2>OS Page Cache vs Database Buffer Pool</h2>
+<div class="diagram">  WITHOUT O_DIRECT (double buffering):
+
+  Application          Database Buffer Pool       OS Page Cache         Disk
+  ┌────────┐       ┌────────────────────┐    ┌──────────────┐    ┌──────┐
+  │ Query  │──────→│ Page #42 (clean)    │───→│ OS cache:    │───→│ SSD  │
+  │        │←──────│ Page #87 (dirty)   │←───│ Block for    │←───│      │
+  └────────┘       └────────────────────┘    │ page #42     │    └──────┘
+                                            │              │
+                                            │ Block for    │
+                                            │ page #87     │
+                                            └──────────────┘
+  Page #42 is cached TWICE:
+  1. In the buffer pool (database managed)
+  2. In the OS page cache (kernel managed)
+  = Wasted memory
+
+  WITH O_DIRECT (single copy):
+
+  Application          Database Buffer Pool              Disk
+  ┌────────┐       ┌────────────────────┐          ┌──────┐
+  │ Query  │──────→│ Page #42 (clean)    │────────→│ SSD  │
+  │        │←──────│ Page #87 (dirty)   │←────────│      │
+  └────────┘       └────────────────────┘          └──────┘
+                                             OS page cache
+                                             is BYPASSED
+  Page #42 is cached ONCE:
+  1. In the buffer pool only
+  = No wasted memory, but no OS caching benefit</div>
+
+<h2>The Double Buffering Problem</h2>
+<p>When a database reads a file through the standard OS read()/write() syscalls, the data passes through the OS page cache AND the database <a href="buffer-pool.html">buffer pool</a>. The same page exists in memory twice:</p>
+
+<table>
+  <tr><th>Aspect</th><th>Double Buffering (No O_DIRECT)</th><th>Direct I/O (O_DIRECT)</th></tr>
+  <tr><td>Copies in memory</td><td class="red">2 (buffer pool + page cache)</td><td class="green">1 (buffer pool only)</td></tr>
+  <tr><td>Memory efficiency</td><td class="red">Wasted memory — same data stored twice</td><td class="green">Efficient — single copy</td></tr>
+  <tr><td>OS-level caching</td><td class="green">Available for non-DB processes, fsync fast</td><td class="red">Lost — only DB benefits</td></tr>
+  <tr><td>Write path</td><td>DB buffer pool → OS page cache → disk</td><td>DB buffer pool → disk (bypasses OS)</td></tr>
+  <tr><td>fsync cost</td><td class="green">Fast (page already in OS cache)</td><td class="red">Slower (forces physical disk write)</td></tr>
+  <tr><td>Read-ahead</td><td class="green">OS provides automatic read-ahead</td><td>Database must implement own read-ahead</td></tr>
+  <tr><td>Used by</td><td>PostgreSQL (default), SQLite</td><td>MySQL InnoDB (default), Oracle</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Double buffering is not always bad:</strong> PostgreSQL intentionally uses double buffering because it trusts the OS page cache's LRU algorithm, which benefits from seeing access patterns across the entire system. The OS page cache provides additional caching beyond shared_buffers, effectively giving PostgreSQL two layers of cache. The tradeoff is less memory efficiency.
+</div>
+
+<h2>Direct I/O (O_DIRECT)</h2>
+<p>O_DIRECT is a Linux flag (passed to <code>open()</code>) that tells the kernel to <strong>bypass the page cache</strong> for file I/O:</p>
+<ul>
+  <li>Reads go directly from disk to the application's buffer (the <a href="buffer-pool.html">buffer pool</a> page frames)</li>
+  <li>Writes go directly from the application's buffer to disk</li>
+  <li>The data never enters the OS page cache</li>
+  <li>Requirements: buffer address must be page-aligned, file offset must be block-aligned, size must be multiple of block size</li>
+</ul>
+
+<div class="callout yellow">
+  <strong>Important nuance:</strong> O_DIRECT on Linux is a hint, not a guarantee. The kernel may still cache data internally in some cases. For strict bypass, combine O_DIRECT with O_SYNC or use <code>fdatasync()</code>. On macOS, the equivalent is F_NOCACHE. On Windows, it is FILE_FLAG_NO_BUFFERING.
+</div>
+
+<h3>When to Use Each Strategy</h3>
+<table>
+  <tr><th>Scenario</th><th>Recommended Approach</th><th>Why</th></tr>
+  <tr><td>OLTP database on dedicated server</td><td class="green">O_DIRECT (large buffer pool)</td><td>Eliminate double buffering; the DB controls its own cache</td></tr>
+  <tr><td>Database sharing a server with other apps</td><td>Page cache (no O_DIRECT)</td><td>OS can dynamically balance memory between DB and other processes</td></tr>
+  <tr><td>Read-heavy analytics workload</td><td>Page cache (no O_DIRECT)</td><td>OS read-ahead and shared caching across multiple queries</td></tr>
+  <tr><td>Write-heavy workload (lots of WAL)</td><td class="green">O_DIRECT for data files</td><td>WAL writes are sequential anyway; avoid caching write-once data</td></tr>
+  <tr><td>Embedded database (SQLite)</td><td>Page cache (no O_DIRECT)</td><td>Simple setup; rely on OS for all caching</td></tr>
+</table>
+
+<h2>Page Cache Internals</h2>
+<p>The Linux page cache is organized as a set of page structures in kernel memory:</p>
+<ul>
+  <li><strong>Address space (address_space)</strong>: Each open file has an address_space object that tracks all cached pages for that file.</li>
+  <li><strong>Radix tree / xarray</strong>: Maps file offsets to cached page frames. O(log N) lookup.</li>
+  <li><strong>LRU lists</strong>: Active list (recently accessed) and inactive list (candidates for eviction). Similar to the <a href="buffer-pool.html">buffer pool</a>'s two-list approach.</li>
+  <li><strong>Dirty writeback</strong>: The kernel periodically flushes dirty pages via pdflush/flush threads (controlled by <code>vm.dirty_ratio</code> and <code>vm.dirty_background_ratio</code>).</li>
+</ul>
+
+<div class="callout green">
+  <strong>sysadmin tip:</strong> You can see page cache usage with <code>free -h</code> (the "buff/cache" column), clear it with <code>echo 3 > /proc/sys/vm/drop_caches</code> (for testing), and tune dirty page flushing thresholds with <code>vm.dirty_ratio</code> and <code>vm.dirty_background_ratio</code>.
+</div>
+
+<h2>Impact on Database Design</h2>
+<p>The choice of caching strategy affects how you size memory for a database server:</p>
+
+<div class="diagram">  Memory Layout — PostgreSQL (double buffering):
+
+  Total RAM: 64 GB
+  ┌──────────────────────────────────────────┐
+  │ shared_buffers: 16 GB (25%)             │ ← DB buffer pool
+  │ OS page cache: ~30 GB (46%)              │ ← Kernel file cache
+  │ OS + connections + work_mem: ~18 GB       │ ← Everything else
+  └──────────────────────────────────────────┘
+  Effective DB cache: ~46 GB (shared_buffers + page cache)
+  DB controls 16 GB; OS controls the rest dynamically
+
+  Memory Layout — MySQL InnoDB (O_DIRECT):
+
+  Total RAM: 64 GB
+  ┌──────────────────────────────────────────┐
+  │ innodb_buffer_pool_size: 48 GB (75%)     │ ← DB buffer pool
+  │ OS + connections + sort buffers: ~16 GB   │ ← Everything else
+  └──────────────────────────────────────────┘
+  Effective DB cache: 48 GB (buffer pool only)
+  DB controls all caching; OS cache is minimal</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What is the OS page cache?"</strong><br>The OS page cache is the kernel's built-in file data cache. When any process reads a file, the kernel stores the data in memory (as CPU pages). Subsequent reads of the same file data are served from memory. The kernel manages this automatically using a modified LRU algorithm with active/inactive lists.</li>
+  <li><strong>"What is double buffering and why is it a problem?"</strong><br>When a database reads file data through normal OS syscalls (without O_DIRECT), the data is stored in both the database <a href="buffer-pool.html">buffer pool</a> and the OS page cache. This wastes memory — the same page exists twice in RAM. On a server with 64 GB RAM, if the buffer pool uses 32 GB and the OS page cache also caches 32 GB of the same data, effectively only 32 GB of unique data is cached, not 64 GB.</li>
+  <li><strong>"What is O_DIRECT and when should you use it?"</strong><br>O_DIRECT bypasses the OS page cache for file I/O. The database reads and writes directly to/from disk without the kernel caching the data. This eliminates double buffering, making memory usage more efficient. MySQL InnoDB uses O_DIRECT by default. Use it when the database has a large dedicated buffer pool and the server runs no other significant workloads.</li>
+  <li><strong>"Why does PostgreSQL NOT use O_DIRECT?"</strong><br>PostgreSQL relies on the OS page cache as an extension of its buffer pool. The OS cache is dynamically shared — when the DB needs more memory, the OS shrinks the page cache. When other processes need memory, the OS shrinks the page cache too. This provides flexible memory management on shared servers. The cost is double buffering (same data cached twice).</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>Linux page cache radix tree / xarray implementation details</li>
+    <li>pdflush / flush-kthread daemon internals</li>
+    <li>POSIX_FADV_DONTNEED and posix_fallocate() for cache management</li>
+    <li>macOS F_NOCACHE and Windows FILE_FLAG_NO_BUFFERING specifics</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Database Internals" by Alex Petrov</strong> — Chapter 4 (Buffer Management, OS vs DB caching)</li>
+    <li><strong>"Designing Data-Intensive Applications" by Martin Kleppmann</strong> — Chapter 3</li>
+    <li><strong>"Understanding the Linux Kernel" (Bovet &amp; Cesati)</strong> — Chapter 16 (The Page Cache)</li>
+    <li><strong>Linux man pages: open(2) — O_DIRECT flag</strong></li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="buffer-pool.html">&larr; 3.2.4 Buffer Pool</a>
+  <a href="write-ahead-log.html">Next: 3.3.1 WAL &rarr;</a>
+</div>
+
+</body>
+</html>

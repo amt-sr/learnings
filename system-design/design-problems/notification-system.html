@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>15.6 Notification System — System Design</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../">Handbook</a> / <a href="../">System Design</a> / 15. Design Problems / 15.6 Notification System</p>
+
+<h1>Notification System</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Design a multi-channel notification system that sends notifications to users via email, SMS, push notifications (iOS/Android), and in-app notifications. The system must support templating, user preferences, delivery tracking, and high throughput across all channels.</p>
+
+<h2>Functional Requirements</h2>
+<ul>
+  <li>Send notifications via multiple channels: email, SMS, push, in-app</li>
+  <li>Support notification templates with dynamic content (user name, action, link)</li>
+  <li>Allow users to configure channel preferences (opt-in/opt-out per channel per category)</li>
+  <li>Track delivery status (sent, delivered, read, failed) and support retry logic</li>
+  <li>Support scheduled notifications and batch sending (marketing campaigns)</li>
+  <li>Rate limit notifications per user to prevent spam</li>
+</ul>
+
+<h2>Non-Functional Requirements</h2>
+<ul>
+  <li><strong>High throughput:</strong> handle 10M+ notifications/hour</li>
+  <li><strong>Low latency:</strong> push/in-app &lt; 1s, email &lt; 5s, SMS &lt; 10s</li>
+  <li><strong>Reliability:</strong> at-least-once delivery guarantee with deduplication</li>
+  <li><strong>Scalability:</strong> independent scaling per channel</li>
+  <li><strong>Fault tolerance:</strong> retry failed deliveries with exponential backoff</li>
+</ul>
+
+<h3>Capacity Estimates</h3>
+<table>
+  <tr><th>Metric</th><th>Estimate</th><th>Notes</th></tr>
+  <tr><td>Notifications/day</td><td>100M</td><td>Across all channels</td></tr>
+  <tr><td>Peak notifications/sec</td><td>10K</td><td>With 3x burst factor</td></tr>
+  <tr><td>Email vs SMS vs Push</td><td>50% / 10% / 40%</td><td>Channel distribution</td></tr>
+  <tr><td>Delivery success rate</td><td>99.5%</td><td>Target across all channels</td></tr>
+  <tr><td>Template count</td><td>1K</td><td>Different notification types</td></tr>
+  <tr><td>Storage (1 year)</td><td>~10 TB</td><td>Notification metadata + audit logs</td></tr>
+</table>
+
+<h2>API Design</h2>
+<pre>
+POST   /api/v1/notifications/send
+Body:  { "user_id": "12345", "template_id": "order_shipped",
+         "channels": ["email", "push"], "data": { "order_id": "9876" } }
+Resp:  { "notification_id": "notif_abc123", "status": "queued" }
+
+PUT    /api/v1/notifications/preferences/{user_id}
+Body:  { "email": { "marketing": true, "transactions": true },
+         "sms": { "marketing": false, "transactions": true },
+         "push": { "all": true } }
+
+GET    /api/v1/notifications/{notification_id}/status
+Resp:  { "notification_id": "notif_abc123", "status": "delivered",
+         "channels": { "email": "delivered", "push": "delivered" },
+         "timestamps": { "sent": "...", "delivered": "..." } }
+</pre>
+
+<h2>High-Level Design</h2>
+<div class="diagram">
+                    ┌──────────────┐
+    Services ───────►│ Notification │
+    (Order, Social,  │    API       │
+     Payment)       └──────┬───────┘
+                            │
+                     ┌──────▼───────┐
+                     │   Message    │
+                     │   Queue      │
+                     │  (Kafka)     │
+                     └──────┬───────┘
+                            │
+              ┌─────────────┼─────────────┐
+              │             │             │
+       ┌──────▼─────┐ ┌────▼────┐ ┌─────▼──────┐
+       │  Email      │ │  SMS    │ │  Push      │
+       │  Worker     │ │ Worker  │ │  Worker    │
+       └──────┬─────┘ └────┬────┘ └─────┬──────┘
+              │             │            │
+       ┌──────▼─────┐ ┌────▼────┐ ┌─────▼──────┐
+       │  Email      │ │ Twilio  │ │ FCM/APNs   │
+       │  Provider   │ │ /SNS   │ │ Provider   │
+       │  (SES,SMTP) │ │         │ │            │
+       └────────────┘ └─────────┘ └────────────┘
+
+  Supporting services:
+  ┌─────────────┐  ┌──────────────┐  ┌─────────────┐
+  │  Template    │  │ Preferences  │  │  Delivery   │
+  │  Service     │  │  Service     │  │  Tracking   │
+  └─────────────┘  └──────────────┘  └─────────────┘
+</div>
+
+<h2>Deep Dive: Notification Flow</h2>
+<ol>
+  <li><strong>Trigger:</strong> A service posts a notification event to Kafka with user_id, template_id, channel hints, and template data.</li>
+  <li><strong>Router:</strong> A consumer reads from Kafka, resolves user preferences (which channels are enabled), selects the delivery channels, and routes to per-channel topics.</li>
+  <li><strong>Template rendering:</strong> Template service renders the notification using the template_id and data. Produces a subject, body, and optional metadata per channel.</li>
+  <li><strong>Delivery:</strong> Channel-specific workers pull from their respective Kafka topics and send via external providers (SES for email, Twilio for SMS, FCM/APNs for push).</li>
+  <li><strong>Tracking:</strong> Delivery tracking service records status (sent, delivered, bounced, read) from provider webhooks/callbacks.</li>
+</ol>
+
+<div class="callout">
+  <strong>Why Kafka between stages?</strong> Decouples producers from consumers, enables independent scaling per channel, provides buffering during provider outages, and ensures at-least-once delivery semantics. If a downstream provider (e.g., Twilio) is down, messages accumulate in Kafka and are processed when it recovers.
+</div>
+
+<h2>Deep Dive: Template System</h2>
+<p>Templates use a placeholder system for dynamic content. Store templates in a database with versioned content.</p>
+
+<pre>
+Template: "order_shipped" (v2)
+  Email subject: "Your order #{{order_id}} has shipped!"
+  Email body:    "Hi {{user.name}}, your order #{{order_id}} was shipped via
+                  {{carrier}}. Track it here: {{tracking_url}}"
+  Push title:    "Order Shipped"
+  Push body:     "Your order #{{order_id}} is on its way!"
+  SMS body:      "Your order #{{order_id}} has shipped. Track: {{tracking_url}}"
+</pre>
+
+<div class="callout yellow">
+  <strong>Template versioning:</strong> Support multiple versions of templates for A/B testing and gradual rollouts. Store the template version in the notification metadata for auditability. When a user reports a notification issue, you can reproduce exactly what was sent.
+</div>
+
+<h2>Deep Dive: Retry and Deduplication</h2>
+<ul>
+  <li><strong>Retry strategy:</strong> Exponential backoff with jitter. Retry 3 times for transient failures (timeout, 5xx). Do not retry for permanent failures (invalid email, unsubscribed). Increase delay: 1s, 5s, 30s.</li>
+  <li><strong>Dead letter queue:</strong> After max retries, move failed notifications to a DLQ topic. Manual inspection and reprocessing via an operations dashboard.</li>
+  <li><strong>Deduplication:</strong> Generate a deterministic notification ID based on (event_type, user_id, entity_id). Store in a Redis set with a TTL equal to the dedup window (e.g., 5 minutes). Check before sending to prevent duplicate notifications from at-least-once delivery.</li>
+</ul>
+
+<h2>Deep Dive: User Preferences</h2>
+<table>
+  <tr><th>Category</th><th>Email</th><th>SMS</th><th>Push</th><th>In-App</th></tr>
+  <tr><td>Transactions</td><td class="green">ON</td><td class="green">ON</td><td class="green">ON</td><td class="green">ON</td></tr>
+  <tr><td>Social (likes, comments)</td><td class="green">ON</td><td class="red">OFF</td><td class="green">ON</td><td class="green">ON</td></tr>
+  <tr><td>Marketing</td><td>Opt-in</td><td class="red">OFF</td><td>Opt-in</td><td class="red">OFF</td></tr>
+  <tr><td>Security alerts</td><td class="green">ON</td><td class="green">ON</td><td class="green">ON</td><td class="green">ON</td></tr>
+</table>
+
+<div class="callout green">
+  <strong>Security notifications override:</strong> Security-related notifications (password change, login from new device, 2FA code) should bypass user opt-out settings. These are never optional — store them as a separate, non-overridable category.
+</div>
+
+<h2>Data Model</h2>
+<table>
+  <tr><th>Table</th><th>Column</th><th>Type</th><th>Notes</th></tr>
+  <tr><td rowspan="6">notifications</td><td>notification_id</td><td>UUID</td><td>PRIMARY KEY</td></tr>
+  <tr><td>user_id</td><td>BIGINT</td><td>Recipient</td></tr>
+  <tr><td>template_id</td><td>VARCHAR(100)</td><td>Template used</td></tr>
+  <tr><td>status</td><td>ENUM</td><td>queued, sent, delivered, failed, read</td></tr>
+  <tr><td>channels</td><td>JSONB</td><td>Per-channel delivery status</td></tr>
+  <tr><td>created_at</td><td>TIMESTAMP</td><td></td></tr>
+  <tr><td>preferences</td><td>user_id</td><td>BIGINT</td><td>PK</td></tr>
+  <tr><td></td><td>settings</td><td>JSONB</td><td>Category-channel matrix</td></tr>
+  <tr><td>templates</td><td>template_id</td><td>VARCHAR(100)</td><td>PK</td></tr>
+  <tr><td></td><td>version</td><td>INT</td><td>Template version</td></tr>
+  <tr><td></td><td>content</td><td>JSONB</td><td>Subject, body per channel</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>How do you handle rate limiting for notifications? <em>A: Per-user daily caps per channel (e.g., max 10 push notifications/hour, max 5 emails/day for marketing). Use Redis counters with TTL. Enforce in the router before queuing.</em></li>
+  <li>What happens when an email provider (SES) is down? <em>A: Messages accumulate in the Kafka topic. Configure alerting on consumer lag. Auto-retry with backoff. If outage is extended, use a backup provider.</em></li>
+  <li>How do you ensure notifications are not lost? <em>A: At-least-once delivery with Kafka (producer acks=all, consumer manual commit). Deduplication on the consumer side using notification IDs. Dead letter queue for permanent failures.</em></li>
+  <li>How would you support real-time (in-app) notifications? <em>A: WebSocket connection per user. Maintain a connection manager that maps user_id to WebSocket server. Use a pub/sub system (Redis Pub/Sub or Kafka) to broadcast to the correct server. Client reconnects with exponential backoff.</em></li>
+  <li>How do you handle notification localization? <em>A: Store the user's locale preference. Templates have locale variants. The router selects the appropriate template version based on locale. Fallback to English if locale template is missing.</em></li>
+</ul>
+
+<div class="callout red">
+  <strong>What to Skip:</strong>
+  <ul>
+    <li>Don't implement the actual email sending (SMTP, DKIM) — assume a provider like SES</li>
+    <li>Don't design the user authentication or profile system</li>
+    <li>Don't get deep into push notification certificate management</li>
+    <li>Don't over-design the template editor — a simple placeholder system suffices</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><em>System Design Interview Vol 2</em> — Alex Xu, Ch. 12: Design Notification System</li>
+    <li><em>Designing Data-Intensive Applications</em> — Martin Kleppmann (messaging and stream processing)</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Articles</div>
+  <ul>
+    <li>Uber Engineering: "How We Built Uber's Notification Platform" (eng.uber.com)</li>
+    <li>Netflix Tech Blog: "Building a Notification Platform at Scale"</li>
+    <li>Amazon SES documentation: Best practices for high-volume sending</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="rate-limiter.html">&larr; Previous: Rate Limiter</a>
+  <a href="chat-system.html">Next: Chat System &rarr;</a>
+</div>
+
+</body>
+</html>

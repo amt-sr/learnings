@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.4.2 Atomicity</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="index.html">System Design</a> / <a href="index.html">3 Storage</a> / <a href="index.html">3.4 Transactions</a> / 3.4.2
+</div>
+
+<h1>3.4.2 Atomicity</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<ul>
+  <li>Define atomicity precisely as "all or nothing" semantics for transaction processing</li>
+  <li>Explain how atomicity is implemented via Write-Ahead Logging and undo logs</li>
+  <li>Differentiate between commit (all changes persist) and rollback (all changes reverted)</li>
+  <li>Understand atomicity in distributed systems through Two-Phase Commit (2PC)</li>
+  <li>Identify atomicity failure modes and their consequences in production systems</li>
+</ul>
+
+<h2>Definition</h2>
+<p><strong>Atomicity</strong> guarantees that a transaction is treated as a single, indivisible unit of work. Either all operations within the transaction are applied to the database (commit), or none of them are (rollback). There is no intermediate state where some operations succeed and others fail. This prevents the database from entering an inconsistent state due to partial updates.</p>
+
+<div class="callout">
+  <strong>Think of it this way:</strong> Atomicity is the database's guarantee that your money transfer either fully completes (debit A + credit B) or does not happen at all. You will never be in a state where money was debited from account A but never credited to account B.
+</div>
+
+<h2>How Atomicity Works: The Mechanism</h2>
+
+<div class="diagram">
+  Transaction: Transfer $100 from Account A to Account B
+  ────────────────────────────────────────────────────────
+
+  Step 1: Write BEGIN record to WAL
+           WAL: [LSN 001: BEGIN TXN-42]
+
+  Step 2: Debit Account A (write to buffer pool + WAL)
+           WAL: [LSN 002: TXN-42 | UPDATE accounts SET balance=900
+                 WHERE id='A' | before: 1000, after: 900]
+
+  Step 3: Credit Account B (write to buffer pool + WAL)
+           WAL: [LSN 003: TXN-42 | UPDATE accounts SET balance=1100
+                 WHERE id='B' | before: 1000, after: 1100]
+
+  Step 4a: COMMIT -- write commit record + fsync WAL
+           WAL: [LSN 004: COMMIT TXN-42]
+           → ACK to client. All changes are permanent.
+
+  OR
+
+  Step 4b: ROLLBACK -- reverse all changes using before-images
+           Read WAL backward from LSN 003:
+             LSN 003: revert B's balance to 1000 (before-image)
+             LSN 002: revert A's balance to 1000 (before-image)
+           WAL: [LSN 005: ROLLBACK TXN-42]
+           → ACK to client. Database unchanged from before TXN.
+</div>
+
+<h3>The Write-Ahead Log as the Atomicity Engine</h3>
+<p>The WAL is the fundamental mechanism that enables atomicity. Before any modification is written to the actual data pages, the corresponding log record (containing both before-image and after-image) is written to the WAL. This creates a complete audit trail that can be used for both redo (replaying after-images) and undo (reverting before-images).</p>
+
+<table>
+  <tr><th>Component</th><th>Role in Atomicity</th></tr>
+  <tr><td>Before-image in WAL</td><td>Stores old values needed to reverse changes during rollback or crash recovery</td></tr>
+  <tr><td>After-image in WAL</td><td>Stores new values needed to replay changes during crash recovery</td></tr>
+  <tr><td>Commit record</td><td>Marks the decision point: before this record, transaction can be undone; after, it is permanent</td></tr>
+  <tr><td>Prev-LSN chain</td><td>Links all records of a transaction for sequential undo during rollback</td></tr>
+  <tr><td>fsync on commit</td><td>Ensures the commit decision is durable before acknowledging the client</td></tr>
+</table>
+
+<h2>Commit vs. Rollback</h2>
+
+<div class="diagram">
+  ┌────────────────────────────────────────────────────────────────────┐
+  │                         TRANSACTION LIFECYCLE                       │
+  ├────────────────────────────────────────────────────────────────────┤
+  │                                                                     │
+  │   BEGIN ──── Execute Operations ──── Decision Point                 │
+  │                                        │                            │
+  │                              ┌─────────┴─────────┐                  │
+  │                              │                   │                  │
+  │                              ▼                   ▼                  │
+  │                           COMMIT             ROLLBACK               │
+  │                              │                   │                  │
+  │                              ▼                   ▼                  │
+  │                     fsync WAL to disk     Reverse all changes       │
+  │                     Write commit record   using before-images       │
+  │                     ACK to client          Write rollback record     │
+  │                                           ACK to client             │
+  │                              │                   │                  │
+  │                              ▼                   ▼                  │
+  │                     All changes PERSIST    All changes DISCARDED    │
+  │                                                                     │
+  └────────────────────────────────────────────────────────────────────┘
+
+  CRASH SCENARIOS:
+  ────────────────
+  Crash before commit → Recovery finds TXN in Active TXN list → UNDO all changes
+  Crash during commit  → If commit record is NOT on disk → UNDO all changes
+  Crash during commit  → If commit record IS on disk     → REDO any unflushed changes
+  Crash after commit   → REDO any changes not yet flushed to data pages
+</div>
+
+<h3>Implicit vs. Explicit Rollback</h3>
+<p>Rollback can occur in several ways:</p>
+<ul>
+  <li><strong>Explicit rollback:</strong> Application calls ROLLBACK due to business logic error</li>
+  <li><strong>Constraint violation:</strong> Database detects a rule violation (unique key, FK, check constraint) and automatically rolls back the statement or transaction</li>
+  <li><strong>Deadlock detection:</strong> Database selects one transaction as the deadlock victim and rolls it back</li>
+  <li><strong>Timeout:</strong> Transaction exceeds its configured timeout (e.g., <code>statement_timeout</code> in PostgreSQL) and is automatically rolled back</li>
+  <li><strong>Crash recovery:</strong> After restart, uncommitted transactions are rolled back using WAL undo</li>
+</ul>
+
+<div class="callout yellow">
+  <strong>Performance note:</strong> Rollback is expensive. Long-running transactions that roll back have to undo potentially thousands of changes by reading the WAL backward and applying before-images. This is why it is critical to keep transactions short and avoid nested operations that increase the rollback window.
+</div>
+
+<h2>Atomicity in Distributed Systems: Two-Phase Commit (2PC)</h2>
+<p>When a transaction spans multiple nodes or databases, atomicity requires coordination. <strong>Two-Phase Commit (2PC)</strong> is the standard protocol:</p>
+
+<div class="diagram">
+  Phase 1: PREPARE (Voting Phase)
+  ──────────────────────────────────
+  Coordinator                 Participants
+       │                          │
+       │──── PREPARE TXN-42 ─────►│ Node A: Write to WAL, vote YES
+       │──── PREPARE TXN-42 ─────►│ Node B: Write to WAL, vote YES
+       │                          │
+       │◄─── VOTE_COMMIT (A) ─────│
+       │◄─── VOTE_COMMIT (B) ─────│
+       │                          │
+  Phase 2: COMMIT (Decision Phase)
+  ─────────────────────────────────
+       │                          │
+       │  All votes = COMMIT       │
+       │                          │
+       │──── COMMIT TXN-42 ──────►│ Node A: Write commit, fsync, ACK
+       │──── COMMIT TXN-42 ──────►│ Node B: Write commit, fsync, ACK
+       │                          │
+       │◄─── ACK (A) ─────────────│
+       │◄─── ACK (B) ─────────────│
+       │                          │
+
+  IF ANY VOTE = ABORT:
+  ─────────────────────
+       │──── ROLLBACK TXN-42 ────►│ Node A: Undo changes
+       │──── ROLLBACK TXN-42 ────►│ Node B: Undo changes
+</div>
+
+<h3>2PC Failure Scenarios</h3>
+
+<table>
+  <tr><th>Failure</th><th>What Happens</th><th>Recovery</th></tr>
+  <tr><td>Participant crashes before voting</td><td>Coordinator times out, aborts transaction</td><td>Participant recovers, finds no outcome, queries coordinator</td></tr>
+  <tr><td>Participant crashes after voting YES</td><td>Coordinator may or may not have decided</td><td>Participant must block until coordinator outcome is known</td></tr>
+  <tr><td>Coordinator crashes after Phase 1</td><td>Participants have voted but no decision was sent</td><td>Participants block indefinitely until coordinator recovers (blocking problem)</td></tr>
+  <tr><td>Network partition during Phase 2</td><td>Some participants commit, others do not</td><td>Coordinator retries until all participants ACK</td></tr>
+</table>
+
+<div class="callout red">
+  <strong>The 2PC blocking problem:</strong> A participant that voted YES but does not receive the coordinator's decision must block, holding locks and resources, until the coordinator recovers. This is a fundamental limitation of 2PC. Systems like Spanner use Paxos groups to eliminate this blocking, replacing 2PC with a consensus-based approach where any replica can act as coordinator.
+</div>
+
+<h2>Alternatives to 2PC in Distributed Atomicity</h2>
+
+<table>
+  <tr><th>Approach</th><th>Mechanism</th><th>Trade-off</th></tr>
+  <tr><td>Saga pattern</td><td>Sequence of local transactions with compensating actions</td><td>No distributed locks, but provides only semantic atomicity (requires compensation logic)</td></tr>
+  <tr><td>Outbox pattern</td><td>Write to local table + outbox table atomically, then publish asynchronously</td><td>Eventual atomicity across services, requires a poller or CDC stream</td></tr>
+  <tr><td>Paxos/Raft-based commit</td><td>Consensus protocol replaces coordinator, eliminating single point of failure</td><td>Higher latency (multiple round trips), but no blocking problem</td></tr>
+  <tr><td>Best-effort 1PC</td><td>Optimistic single-phase commit with conflict detection</td><td>Very fast when conflicts are rare, but requires full rollback on conflict</td></tr>
+</table>
+
+<div class="callout green">
+  <strong>Interview tip for L6+:</strong> At Staff level, expect to discuss the Saga pattern and Outbox pattern as pragmatic alternatives to 2PC in microservices architectures. Be able to explain when semantic atomicity (sagas) is sufficient vs. when true atomicity (2PC or consensus) is required (e.g., financial transfers, inventory management).
+</div>
+
+<h2>Atomicity Failure Modes in Production</h2>
+
+<div class="callout yellow">
+  <strong>Common production issues:</strong>
+  <ul>
+    <li><strong>Orphaned transactions:</strong> Application crashes without sending COMMIT or ROLLBACK. Database holds locks indefinitely. Mitigation: transaction timeouts, connection pool cleanup.</li>
+    <li><strong>Commit but no ACK:</strong> Transaction commits successfully but network failure prevents ACK from reaching client. Client retries, potentially causing duplicate operations. Mitigation: idempotency keys.</li>
+    <li><strong>Partial 2PC commit:</strong> Coordinator sends COMMIT to some participants but crashes before reaching all. System is in an inconsistent state until coordinator recovers. Mitigation: use consensus-based coordination (Raft).</li>
+  </ul>
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What does atomicity mean? Give me a concrete example where atomicity prevents data corruption.</li>
+  <li>How does the database guarantee atomicity? Walk me through the mechanism.</li>
+  <li>What is the role of the before-image in the WAL for atomicity?</li>
+  <li>What happens to in-flight transactions when the database crashes?</li>
+  <li>Explain Two-Phase Commit. What is the blocking problem?</li>
+  <li>How would you implement atomicity across two different microservices that use separate databases?</li>
+  <li>What is the Saga pattern? When is it appropriate vs. 2PC?</li>
+  <li>Why is rollback expensive? How do you minimize rollback cost in a high-throughput system?</li>
+  <li>Design a money transfer system between two banks. How do you ensure atomicity?</li>
+  <li>What happens if the coordinator crashes in 2PC? How do modern systems solve this?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>In an interview setting, skip:</strong>
+  <ul>
+    <li>Exact WAL record byte layouts for specific databases</li>
+    <li>Three-Phase Commit (3PC) -- it is theoretically interesting but never used in production</li>
+    <li>Savepoints and nested transaction syntax -- rarely used in production systems</li>
+    <li>Low-level undo log implementation details beyond the concept of before-images</li>
+    <li>Specific ORM transaction API details (e.g., SQLAlchemy session.commit())</li>
+  </ul>
+</div>
+
+<h2>Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ul>
+    <li>"Designing Data-Intensive Applications" (Martin Kleppmann) -- Chapter 7: Transactions (atomicity section with distributed examples)</li>
+    <li>"Database System Concepts" (Silberschatz, Korth, Sudarshan) -- Chapters 16-17: Transaction management and concurrency control</li>
+    <li>"Transaction Processing: Concepts and Techniques" (Gray &amp; Reuter) -- Comprehensive treatment of atomicity, 2PC, and recovery</li>
+    <li>"Microservices Patterns" (Chris Richardson) -- Saga pattern, outbox pattern for distributed atomicity</li>
+    <li>Gray, J. (1981) "The Transaction Concept: Virtues and Limitations" -- Classic paper on transaction properties</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="acid.html">&larr; 3.4.1 ACID</a>
+  <a href="consistency.html">Next: 3.4.3 Consistency &rarr;</a>
+</div>
+
+</body>
+</html>

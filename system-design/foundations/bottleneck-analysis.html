@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.1.11 Bottleneck Analysis</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .formula { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; text-align: center; font-size: 1.1rem; color: #79c0ff; }
+  .formula small { display: block; text-align: left; color: #8b949e; font-size: 0.8rem; margin-top: 0.75rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#1">1 Fundamentals</a> / <a href="../index.html#1.1">1.1 System Design Basics</a> / 1.1.11
+</div>
+
+<h1>Bottleneck Analysis</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What a bottleneck is and why every system has one</li>
+  <li>The typical order in which bottlenecks appear as you scale</li>
+  <li>How to identify and eliminate each type</li>
+  <li>How to estimate bottlenecks without running the system</li>
+</ul>
+
+<h2>Definition</h2>
+<p>A bottleneck is the <strong>component that limits overall system throughput or performance</strong>. Like the narrowest section of a pipe — regardless of how wide the rest is, flow is limited at that point.</p>
+
+<div class="callout">
+  <strong>The fundamental truth:</strong> Optimization is iterative. You fix one bottleneck, another emerges. This is the normal engineering cycle. Understanding this pattern is what separates experienced architects from novices.
+</div>
+
+<h2>Common Bottlenecks in Web Systems</h2>
+<table>
+  <tr><th>Resource</th><th>Symptoms</th><th>Mitigation</th></tr>
+  <tr><td>CPU</td><td>100% utilization, high load avg, GC pauses</td><td>Horizontal scaling, <a href="../caching/cache-aside.html">caching</a>, optimize hot paths</td></tr>
+  <tr><td>Memory</td><td>OOM kills, high swap usage</td><td>Add RAM, reduce per-request memory, memory pooling</td></tr>
+  <tr><td>Disk I/O</td><td>High iowait, slow queries, seek latency</td><td>SSD, <a href="../caching/cache-aside.html">cache</a>, <a href="../replication/read-replica.html">read replicas</a>, connection pooling</td></tr>
+  <tr><td>Network</td><td>Bandwidth saturation, high retransmit</td><td><a href="latency.html">CDN</a>, compression, <a href="latency.html">HTTP/2</a>, multiple paths</td></tr>
+  <tr><td>Database</td><td>Slow queries, lock contention, N+1 queries</td><td>Indexes, <a href="../partitioning/hash-sharding.html">sharding</a>, <a href="../caching/cache-aside.html">caching</a>, query optimization</td></tr>
+  <tr><td>Connections</td><td>"Too many connections" error, queue buildup</td><td>Connection pooling, async I/O, more servers</td></tr>
+</table>
+
+<h2>The Bottleneck Hierarchy</h2>
+<p>In a typical web application, bottlenecks appear in a predictable order as you scale.</p>
+<div class="diagram">  Scale Stage 1: Single server — everything is the bottleneck
+  Scale Stage 2: CPU/memory optimized → Database becomes the bottleneck
+  Scale Stage 3: Read replicas added → Database writes become the bottleneck
+  Scale Stage 4: Write sharding added → Network becomes the bottleneck
+  Scale Stage 5: Multi-region → Cross-region latency is the bottleneck
+  Scale Stage 6: Extreme scale → Cost becomes the bottleneck</div>
+
+<div class="callout yellow">
+  <strong>Interview tip:</strong> When asked "what's the bottleneck?", start from the top. Most systems hit the database first. The specific bottleneck depends on read/write ratio, query patterns, and data size.
+</div>
+
+<h2>Database Bottlenecks (Most Common)</h2>
+<h3>Too many reads</h3>
+<p>Symptoms: High database CPU, slow queries even with indexes.</p>
+<pre>Mitigation:  Add <a href="../replication/read-replica.html">read replicas</a>
+           Add <a href="../caching/cache-aside.html">Redis/Memcached cache</a> layer
+           Use <a href="../storage/clustered-index.html">covering indexes</a></pre>
+
+<h3>Too many writes</h3>
+<p>Symptoms: Write latency increasing, lock contention, replication lag growing.</p>
+<pre>Mitigation: <a href="../partitioning/hash-sharding.html">Shard the data</a> by key
+           Use write buffering / message queue (<a href="../messaging/kafka.html">Kafka</a>)
+           Batch writes where possible
+           Use <a href="../storage/acid.html">optimistic locking</a> instead of pessimistic</pre>
+
+<h3>Slow queries</h3>
+<p>Symptoms: Specific queries taking seconds.</p>
+<pre>Mitigation: EXPLAIN ANALYZE to find slow queries
+           Add appropriate <a href="../storage/secondary-index.html">indexes</a>
+           Rewrite queries to avoid full table scans
+           Consider denormalization for frequently-joined data</pre>
+
+<h3>Connection exhaustion</h3>
+<p>Symptoms: "Too many connections" errors, connection queue buildup.</p>
+<pre>Mitigation: Increase max_connections in database config
+           Use connection pooling (HikariCP, PgBouncer)
+           Reduce connection holding time (faster queries)</pre>
+
+<h2>Network Bottlenecks</h2>
+<ul>
+  <li><strong>DNS latency:</strong> Uncached DNS adds 1-100ms per hop. Use cached DNS or mDNS.</li>
+  <li><strong>TCP handshake overhead:</strong> Each new connection costs 1 RTT. Use <a href="latency.html">connection pooling</a> and <a href="latency.html">HTTP/2</a>.</li>
+  <li><strong>TLS overhead:</strong> 1-2 extra RTTs. Connection reuse and session resumption reduce this.</li>
+  <li><strong>Bandwidth saturation:</strong> Large payloads or high QPS exceed available bandwidth. Use compression, <a href="latency.html">CDN</a>.</li>
+</ul>
+
+<h2>The "Fix One, Find Next" Principle</h2>
+<div class="diagram">  Step 1: CPU at 95% → Optimize hot code
+    Step 2: CPU drops to 30% → Database becomes bottleneck
+    Step 3: Add read replicas → DB reads solved, writes bottlenecked
+    Step 4: Shard writes → Network bandwidth becomes bottleneck
+    Step 5: Add multi-AZ → Cross-region latency is the bottleneck
+
+  This never ends — you just move to harder problems.
+  Which is the whole point of <a href="trade-offs.html">system design</a>.</div>
+
+<h2>Back-of-Envelope Bottleneck Estimation</h2>
+<pre>Example: "100K QPS, each request does 1 DB read (5ms)"
+
+  Concurrent DB connections needed: 100,000 × 0.005 = 500 connections
+  If max_connections = 100 → bottleneck!
+
+  Solution: Add connection pool or reduce per-request DB calls.
+  Cache the DB reads → 500 connections × (5ms / 100ms with cache) = 25 needed.</pre>
+
+<h2>Real World Examples</h2>
+<ul>
+  <li><strong>Stack Overflow:</strong> Started on a single SQL Server. Moved to CQRS architecture with separate read/write stores. Used Redis for caching. Now handles billions of requests/month.</li>
+  <li><strong>WhatsApp:</strong> Rewrote server in Erlang to handle 2M+ concurrent connections per server. Each connection uses ~300KB → 2M × 300KB = 600GB RAM per server.</li>
+  <li><strong>Discord:</strong> Elixir + Rust backend for real-time chat. Moved from 100% Go to hybrid. Cron jobs offloaded to Rust workers.</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What's the bottleneck in your proposed design?"</strong><br>Walk through the hierarchy: "App servers can handle 50K QPS, but the database is maxed at 10K writes/sec, so the write path is the bottleneck. We'd shard by user ID."</li>
+  <li><strong>"How do you identify bottlenecks?"</strong><br>Monitor CPU, memory, disk I/O, network I/O, queue lengths. Use APM tools (Datadog, New Relic). Look for resource saturation and queue buildup.</li>
+  <li><strong>"What happens when the database becomes the bottleneck?"</strong><br>Add read replicas → Cache frequently-accessed data → Shard writes → Offload heavy queries to a separate analytical DB.</li>
+  <li><strong>"How do you handle a bottleneck you can't eliminate?"</strong><br>Accept the limit and design around it. Rate limit to stay within capacity. Prioritize critical paths. Use <a href="reliability.html">graceful degradation</a>.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>Profiler tool specifics (perf, Flame Graphs, dtrace)</li>
+    <li>Kernel-level tuning (sysctl, /proc settings)</li>
+    <li>Hardware performance counters</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>Designing Data-Intensive Applications</strong> — Chapter 1 (Scalability), Chapter 3 (Storage)</li>
+    <li><strong>System Design Interview (Alex Xu)</strong> — Each design chapter identifies and addresses bottlenecks</li>
+    <li><strong>Google SRE Book</strong> — Chapter 4 (Monitoring and SLOs)</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="capacity-planning.html">&larr; 1.1.10 Capacity Planning</a>
+  <a href="trade-offs.html">Next: 1.1.12 Trade-offs &rarr;</a>
+</div>
+
+</body>
+</html>

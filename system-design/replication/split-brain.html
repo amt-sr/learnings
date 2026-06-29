@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.6.4 Split Brain</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">4 Replication</a> / 4.6 Replication Problems / 4.6.4
+</div>
+
+<h1>Split Brain</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the split brain problem &mdash; one of the most dangerous failure modes in distributed systems &mdash; how it occurs during network partitions, its consequences, and the mechanisms used to prevent it.</p>
+
+<h2>Definition</h2>
+<p><strong>Split brain</strong> occurs when two (or more) nodes in a distributed system both believe they are the leader simultaneously. After a network partition, each side of the partition can independently decide to promote a leader, resulting in two leaders that both accept writes. Since they cannot communicate, their data diverges &mdash; creating irreconcilable conflicts.</p>
+
+<div class="callout red">
+  <strong>Why interviewers love this topic:</strong> Split brain is one of the few problems that can cause silent data corruption in production without any errors being returned to clients. Both leaders respond to writes successfully, but the data is inconsistent and may be impossible to merge.
+</div>
+
+<h2>How Split Brain Happens</h2>
+<div class="diagram">
+  NORMAL OPERATION:
+
+  [Leader A] <--- heartbeat ---> [Follower B]
+       |                              |
+  Clients in AZ-1               Clients in AZ-2
+  All reads/writes -> A         All reads -> B
+
+
+  NETWORK PARTITION:
+
+  [Leader A] <===X===X===X===> [Follower B]
+       |                              |
+       |  "B is not responding!"      |  "A is not responding!"
+       |  Keep serving as leader      |
+       v                              v
+  A stays leader (still          B's failover timer expires
+  has heartbeat timeout)          B promotes itself to leader
+
+       |                              |
+  Clients in AZ-1               Clients in AZ-2
+  Write: balance=200            Write: balance=150
+       |                              |
+  A's state: balance=200        B's state: balance=150
+       |                              |
+       |      SPLIT BRAIN:            |
+       |   Two leaders, two truths,    |
+       |   data has diverged!         |
+</div>
+
+<h2>Consequences of Split Brain</h2>
+
+<table>
+  <tr>
+    <th>Impact</th>
+    <th>Description</th>
+    <th>Severity</th>
+  </tr>
+  <tr>
+    <td>Data divergence</td>
+    <td>Each leader writes different data for the same keys. When the partition heals, there is no automatic way to merge.</td>
+    <td class="red">Critical</td>
+  </tr>
+  <tr>
+    <td>Write conflicts</td>
+    <td>Auto-increment IDs collide, unique constraints violate, referential integrity breaks.</td>
+    <td class="red">Critical</td>
+  </tr>
+  <tr>
+    <td>Lost writes</td>
+    <td>When partition heals, one side must be demoted. All writes accepted by the demoted leader may be discarded.</td>
+    <td class="red">Critical</td>
+  </tr>
+  <tr>
+    <td>Split brain undetected</td>
+    <td>Both sides return success to clients. No errors, no alerts. The problem is discovered later during reconciliation.</td>
+    <td class="red">Critical</td>
+  </tr>
+  <tr>
+    <td>Cascading failures</td>
+    <td>Diverged data causes application errors downstream (order processing, inventory, billing).</td>
+    <td class="red">Critical</td>
+  </tr>
+</table>
+
+<h2>Prevention Mechanisms</h2>
+
+<h3>1. Quorum-Based Leader Election</h3>
+<p>Require a majority (quorum) of nodes to agree before a node becomes leader. With 5 nodes, quorum is 3. During a network partition, at most one side can achieve quorum.</p>
+
+<div class="diagram">
+  5-node cluster, quorum = 3
+
+  Partition splits into 3 + 2:
+  Side A: [Node1, Node2, Node3] -> quorum=3 -> CAN elect leader
+  Side B: [Node4, Node5]         -> quorum=2 -> CANNOT elect leader (2 < 3)
+  Result: SAFE. Only one leader.
+
+  Partition splits into 2 + 2 + 1:
+  Side A: [Node1, Node2] -> quorum=2 -> CANNOT elect leader (2 < 3)
+  Side B: [Node3, Node4] -> quorum=2 -> CANNOT elect leader (2 < 3)
+  Side C: [Node5]         -> quorum=1 -> CANNOT elect leader (1 < 3)
+  Result: SAFE. No leader (system is unavailable, but consistent).
+</div>
+
+<div class="callout green">
+  <strong>Raft and Paxos</strong> use quorum-based election by design. A leader needs votes from a majority of nodes. During a network partition, only the majority partition can elect a leader. This is why odd-numbered clusters (3, 5, 7) are preferred.
+</div>
+
+<h3>2. Fencing Tokens</h3>
+<p>Assign monotonically increasing tokens to leaders. Every write must carry the current fencing token. Storage layers reject writes with tokens lower than the highest they have seen.</p>
+
+<div class="diagram">
+  Coordinator assigns fencing tokens:
+
+  t=0:  Leader A gets fencing_token=1
+        A writes to disk: { key="x", value=10, token=1 }
+
+  t=1:  Network partition occurs
+        B promotes itself, gets fencing_token=2
+
+  t=2:  B writes: { key="x", value=20, token=2 }
+
+  t=3:  Network heals
+        A (still thinks it's leader) writes: { key="x", value=30, token=1 }
+        Disk rejects: "token=1 < last_seen_token=2, REJECTED"
+
+  B wins. A's stale write is fenced out.
+</div>
+
+<div class="callout yellow">
+  <strong>Important:</strong> Fencing tokens must be checked at the storage layer, not just in memory. A stale leader that has been isolated can still write to its local disk. The disk (or a shared storage like S3) must enforce the token check.
+</div>
+
+<h3>3. Lease and Heartbeat Timeouts</h3>
+<p>The leader holds a time-bound lease. If it cannot renew its lease (heartbeat from majority of nodes), it steps down. The lease is granted by a consensus system (etcd, ZooKeeper, Chubby).</p>
+
+<ul>
+  <li><strong>Lease duration:</strong> Must be longer than the expected heartbeat round-trip time + jitter.</li>
+  <li><strong>Lease expiry:</strong> If leader cannot contact a majority within the lease period, it voluntarily steps down.</li>
+  <li><strong>New election:</strong> Only after the old lease expires can a new leader be elected.</li>
+</ul>
+
+<h3>4. Generation Numbers (Epochs)</h3>
+<p>Each leader election increments a generation number (epoch). Write operations include the epoch. Nodes reject writes from a previous epoch, effectively fencing out old leaders. This is the mechanism used by Raft (term numbers) and ZooKeeper (zxid epochs).</p>
+
+<h2>Real-World Examples</h2>
+
+<table>
+  <tr>
+    <th>Incident</th>
+    <th>Year</th>
+    <th>What Happened</th>
+  </tr>
+  <tr>
+    <td>GitHub MySQL split brain</td>
+    <td>2017</td>
+    <td>A network event caused GitHub's active-passive MySQL pair to both become active. The passive node accepted writes that conflicted with the active. Required manual reconciliation.</td>
+  </tr>
+  <tr>
+    <td>Stack Overflow outage</td>
+    <td>2018</td>
+    <td>Network partition between primary and secondary data centers. Both sides promoted leaders. Data diverged across multiple database clusters.</td>
+  </tr>
+  <tr>
+    <td>AWS us-east-1 Kinesis</td>
+    <td>2020</td>
+    <td>Control plane partition caused multiple stream consumers to believe they held the lease. Duplicate processing and reordering occurred.</td>
+  </tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li><strong>"What is split brain and how do you prevent it?"</strong> &mdash; Two nodes both think they're the leader after network partition. Prevention: quorum-based election, fencing tokens, lease/heartbeat timeouts, generation numbers. Explain why odd-numbered clusters matter.</li>
+  <li><strong>"Design a leader election system that avoids split brain."</strong> &mdash; Use Raft or a lease-based system with etcd. Leader must get votes from a majority. Fencing tokens prevent stale writes. Discuss the tradeoff between availability and consistency during partition.</li>
+  <li><strong>"What happens if you use a simple heartbeat-based failover without quorum?"</strong> &mdash; Split brain. Both sides can decide the other is dead and promote themselves. A 2-node cluster is fundamentally unsafe for split-brain prevention.</li>
+  <li><strong>"How does ZooKeeper prevent split brain?"</strong> &mdash; ZK uses ZAB (ZooKeeper Atomic Broadcast), which is similar to Paxos. Leaders must get a quorum of followers to acknowledge their leadership. zxid (transaction ID) includes an epoch that prevents old leaders from committing writes.</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid Byzantine fault tolerance:</strong> BFT (handling malicious nodes) is a different problem. Split brain assumes nodes are well-behaved but disconnected.<br><br>
+  <strong>Avoid Raft log replication details:</strong> The log replication mechanism is important but separate. Focus on the leader election and fencing aspects.<br><br>
+  <strong>Avoid STONITH details:</strong> "Shoot the other node in the head" (IPMI power control) is a hardware-level fencing technique. Mention it briefly but do not go into IPMI or fencing agents.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary References</div>
+  <ul>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em> &mdash; Chapter 5: Replication (section: "Leader election and split brain")</li>
+    <li>Diego Ongaro, <em>In Search of an Understandable Consensus Algorithm</em> (Raft paper) &mdash; Section 5.2: Election restriction</li>
+    <li>GitHub Engineering Blog: <a href="https://github.blog/">Post-incident analysis of database split brain</a></li>
+    <li>Flavio Junqueira &amp; Benjamin Reed, <em>ZooKeeper: Distributed Process Coordination</em> &mdash; Chapter 4: ZAB protocol</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="read-after-write.html">&larr; 4.6.3 Read After Write</a>
+  <a href="divergence.html">4.6.5 Divergence &rarr;</a>
+</div>
+
+</body>
+</html>

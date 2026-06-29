@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.1.8 Latency</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .formula { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; text-align: center; font-size: 1.1rem; color: #79c0ff; }
+  .formula small { display: block; text-align: left; color: #8b949e; font-size: 0.8rem; margin-top: 0.75rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#1">1 Fundamentals</a> / <a href="../index.html#1.1">1.1 System Design Basics</a> / 1.1.8
+</div>
+
+<h1>Latency</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>The difference between latency, response time, and processing time</li>
+  <li>Latency numbers every engineer should memorize</li>
+  <li>Why percentiles matter more than averages</li>
+  <li>How latency compounds in distributed systems</li>
+  <li>Techniques to reduce latency</li>
+</ul>
+
+<h2>Definition</h2>
+<p>Latency is the <strong>time elapsed between initiating a request and receiving a response</strong>.</p>
+
+<div class="callout yellow">
+  <strong>Key distinction — Latency vs Response Time:</strong>
+  Latency = time for a single operation (network round-trip).<br>
+  Response Time = total time from user's perspective (includes queuing, processing, rendering).<br>
+  A single request may have 50ms latency but 200ms response time due to a queue.
+</div>
+
+<h2>Latency Numbers Every Engineer Should Know</h2>
+<p>This table is <strong>essential interview knowledge</strong>. Memorize it.</p>
+<table>
+  <tr><th>Operation</th><th>Time</th><th>Relative Scale</th></tr>
+  <tr><td>L1 cache reference</td><td>~1 ns</td><td></td></tr>
+  <tr><td>L2 cache reference</td><td>~4 ns</td><td>4x L1</td></tr>
+  <tr><td>L3 cache reference</td><td>~12 ns</td><td>12x L1</td></tr>
+  <tr><td>Main memory reference</td><td>~100 ns</td><td></td></tr>
+  <tr><td>SSD random read</td><td>~100 &mu;s</td><td class="red">1,000x memory</td></tr>
+  <tr><td>HDD random read</td><td>~10 ms</td><td class="red">100,000x memory</td></tr>
+  <tr><td>Read 1 MB sequentially from SSD</td><td>~1 ms</td><td></td></tr>
+  <tr><td>Read 1 MB sequentially from HDD</td><td>~20 ms</td><td></td></tr>
+  <tr><td>Same datacenter (1 hop)</td><td>~0.5 ms</td><td></td></tr>
+  <tr><td>Same datacenter (multiple hops)</td><td>~1 ms</td><td></td></tr>
+  <tr><td>Cross-region (US East → US West)</td><td>~30-50 ms</td><td></td></tr>
+  <tr><td>Cross-region (US → Europe)</td><td>~80-120 ms</td><td></td></tr>
+  <tr><td>Cross-region (US → Asia)</td><td>~150-200 ms</td><td></td></tr>
+  <tr><td>Client → server (typical)</td><td>~50-150 ms</td><td></td></tr>
+</table>
+
+<div class="callout">
+  <strong>Intuition:</strong> Memory is ~10,000x faster than disk. Network within a datacenter is ~100x faster than cross-region. Every network hop within a datacenter adds ~0.5ms. Every cross-region hop adds ~50-200ms. This is why <a href="capacity-planning.html">capacity planning</a> and <a href="../partitioning/hash-sharding.html">data locality</a> matter.
+</div>
+
+<h2>Percentiles (P50, P90, P99, P99.9)</h2>
+<p><strong>Averages lie.</strong> Always use percentiles for latency.</p>
+<pre>Service A:  P50 = 50ms, P99 = 200ms, P99.9 = 5000ms
+Service B:  P50 = 60ms, P99 = 70ms, P99.9 = 80ms
+
+Average (both):  ~75ms
+
+Service A looks better on average, but 0.1% of requests take 5 seconds.
+Service B is consistently fast. Service B is the better system for users.
+
+At 1M requests/day, 0.1% = 1,000 users getting 5-second responses per day.
+That's a terrible user experience hidden by the average.</pre>
+
+<div class="callout yellow">
+  <strong>Interview tip:</strong> When asked about latency targets, always specify a percentile. "P99 latency under 200ms" is a proper SLO. "Average latency under 200ms" is not.
+</div>
+
+<table>
+  <tr><th>Percentile</th><th>Meaning</th><th>Interview Usage</th></tr>
+  <tr><td>P50 (Median)</td><td>50% of requests are faster than this</td><td>Good for overall feel</td></tr>
+  <tr><td>P90</td><td>90% of requests are faster</td><td>Good for most users</td></tr>
+  <tr><td>P95</td><td>95% of requests are faster</td><td>Common SLO target</td></tr>
+  <tr><td>P99</td><td>99% of requests are faster</td><td>The standard interview target</td></tr>
+  <tr><td>P99.9</td><td>99.9% of requests are faster</td><td>Critical for high-value systems (payments, ads)</td></tr>
+</table>
+
+<h2>Tail Latency</h2>
+<p>Tail latency is the latency experienced by the slowest requests. In distributed systems, tail latency compounds.</p>
+<div class="formula">
+  If each of N services has 99% chance of being fast:
+  Overall P99 = 1 - 0.99^N
+  <small>10 services in series: 0.99^10 = 0.90 → Only 90% of requests are fast overall</small>
+</div>
+<pre>Example: 10 microservices, each P99 = 50ms
+Individual P99: 50ms (each service is fast)
+End-to-end P99: much worse because the tail compounds —
+  one slow service can make the entire chain slow
+
+This is why "microservices aren't always faster" is a valid critique.</pre>
+
+<h2>Sources of Latency</h2>
+<div class="diagram">  Client request lifecycle:
+
+  DNS Lookup:     1-100ms (cached ~0ms)
+  TCP Handshake:   1 RTT (~1ms same DC, ~50ms cross-region)
+  TLS Handshake:   1-2 RTTs
+  Server Process: 1-500ms (varies wildly)
+  Database Query: 1ms-10s (cached vs disk)
+  Response:       same path in reverse
+
+  Total: 50-200ms (typical) to several seconds (problematic)</div>
+
+<h2>Latency in Distributed Systems</h2>
+<p>Every hop in a distributed system adds latency.</p>
+<div class="diagram">  Client → [API Gateway] → [Service A] → [Service B] → [Database]
+
+  Each → adds ~1-5ms network + processing time
+  Total: single request can touch 20-100ms just in network hops
+
+  Cross-region calls make this dramatically worse:
+  Client (US) → Service A (US) → Service B (EU) → DB (EU)
+  Added latency: ~80-120ms per cross-region hop</div>
+
+<h2>Techniques to Reduce Latency</h2>
+<table>
+  <tr><th>Technique</th><th>Latency Impact</th><th>Cost</th></tr>
+  <tr><td><a href="../caching/cache-aside.html">Caching (Redis/Memcached)</a></td><td class="green">Microsecond reads</td><td>Staleness, memory cost</td></tr>
+  <tr><td><a href="../networking/edge-servers.html">CDN</a></td><td class="green">Serve from edge</td><td>Cache management</td></tr>
+  <tr><td><a href="../replication/read-replica.html">Read replicas</a></td><td class="green">Read locally</td><td>Replication lag</td></tr>
+  <tr><td><a href="../networking/http2.html">HTTP/2 multiplexing</a></td><td class="green">Fewer connections</td><td></td></tr>
+  <tr><td>Connection pooling</td><td class="green">No connection setup per request</td><td>Pool management</td></tr>
+  <tr><td>Denormalization</td><td class="green">No JOINs needed</td><td>Write complexity</td></tr>
+  <tr><td>Batching</td><td class="yellow">Amortizes overhead</td><td>Higher per-item latency</td></tr>
+  <tr><td>Async processing</td><td class="green">Immediate response</td><td>Eventual consistency</td></tr>
+  <tr><td>Data locality (<a href="../partitioning/hash-sharding.html">sharding</a>)</td><td class="green">Data in same region</td><td>Operational complexity</td></tr>
+</table>
+
+<h2>HTTP Request Lifecycle Breakdown</h2>
+<pre>DNS (cached):         0-1ms
+TCP handshake:           1 RTT  (~1ms same DC)
+TLS handshake:           1-2 RTTs
+Server processing:       5-500ms
+Response:                Same path back
+
+Total for cached DNS, same DC:
+  ~3-7ms network + 5-500ms processing = ~10-500ms total
+
+HTTP/2 eliminates the head-of-line blocking problem and supports multiplexing,
+reducing the connection overhead for multiple requests.</pre>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What latency numbers should I know?"</strong><br>L1:1ns, Memory:100ns, SSD:100&mu;s, HDD:10ms, Same DC:0.5-1ms, Cross-region:50-200ms. This table.</li>
+  <li><strong>"Why are percentiles better than averages for latency?"</strong><br>Averages hide tail latency. P99 shows the experience of the worst 1% of users. At scale, those users represent thousands of real people.</li>
+  <li><strong>"How does adding microservices affect latency?"</strong><br>Each hop adds network + processing time. Serial service calls compound latency. Cross-region calls add 50-200ms. Trade scalability benefits for latency costs.</li>
+  <li><strong>"How would you reduce latency for a slow API?"</strong><br>Cache responses → Add <a href="../replication/read-replica.html">read replicas</a> → Check for N+1 queries → Add <a href="../caching/cache-aside.html">Redis cache</a> → Use <a href="../networking/http2.html">HTTP/2</a> → Consider denormalization.</li>
+  <li><strong>"What's the difference between latency and throughput?"</strong><br>Latency: time for one operation. Throughput: operations per unit time. High latency doesn't always mean low throughput (batching). See: <a href="throughput.html">Throughput</a>.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>Hardware timing diagrams and CPU pipeline details</li>
+    <li>Kernel-level latency tuning (sysctl parameters)</li>
+    <li>HTTP/3 QUIC protocol internals (unless specifically asked)</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Latency Numbers Every Programmer Should Know"</strong> — Jeff Dean (Google) — the original and definitive source</li>
+    <li><strong>Designing Data-Intensive Applications</strong> — Chapter 1</li>
+    <li><strong>Google SRE Book</strong> — Chapter 5 (Distributed System Failures)</li>
+    <li><strong>HNP Notes</strong> — <a href="https://gist.github.com/jboner/6ee62c2767c936755617ff0b6bc660d4" target="_blank">Latency Numbers Gist</a></li>
+  </ol>
+</div>
+
+<div class="source">
+  <div class="source-label">YouTube</div>
+  <ul>
+    <li><strong>"Latency Numbers Every Programmer Should Know"</strong> — Martin Kleppmann — Cambridge lecture</li>
+    <li><strong>"Systems Performance" course</strong> — Brendan Gregg — USE method for latency analysis</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="fault-tolerance.html">&larr; 1.1.7 Fault Tolerance</a>
+  <a href="throughput.html">Next: 1.1.9 Throughput &rarr;</a>
+</div>
+
+</body>
+</html>

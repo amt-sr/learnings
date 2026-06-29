@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.1.3 Functional Partitioning</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="../index.html">6 Partitioning</a> / <a href="index.html">6.1 Partitioning</a> / 6.1.3</p>
+
+<h1>Functional Partitioning</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand how to partition a system by business function rather than by data structure, and why this is the foundation of microservices architecture. Learn when functional partitioning is the right approach and what tradeoffs it introduces.</p>
+
+<h2>Definition</h2>
+<p>Functional partitioning divides a system into self-contained units based on <strong>business capability or domain function</strong>. Each function owns its data, logic, and infrastructure independently. This is the architectural principle behind microservices — the "users" service, "orders" service, and "payments" service each have their own database and can scale, deploy, and fail independently.</p>
+
+<div class="diagram">
+  Monolithic Database:                    Functionally Partitioned:
+
+  ┌──────────────────────────────┐
+  │  Single Database             │
+  │  ┌─────┬──────┬───────────┐  │
+  │  │users│orders│ payments  │  │    ┌──────────┐   ┌──────────┐   ┌──────────┐
+  │  │table│table │ table     │  │    │ Users DB │   │ Orders DB│   │Payments DB│
+  │  ├─────┼──────┼───────────┤  │    │          │   │          │   │           │
+  │  │all  │ all  │ all       │  │───▶│ users    │   │ orders   │   │ payments  │
+  │  │data │ data │ data      │  │    │ sessions │   │ line_items│   │ transactions│
+  │  └─────┴──────┴───────────┘  │    └──────────┘   └──────────┘   └──────────┘
+  └──────────────────────────────┘       Users Svc       Orders Svc      Payments Svc
+  Single point of failure               Scale: 3x       Scale: 5x       Scale: 2x
+</div>
+
+<h2>Microservices as Functional Partitioning</h2>
+<p>Every microservice architecture is an exercise in functional partitioning. The key principle: <strong>each service owns its data exclusively</strong> — no other service may directly access another service's database. All cross-service data access happens through APIs or events.</p>
+
+<div class="callout green">
+  <strong>Core rule:</strong> If two services share a database, they are not functionally partitioned — they are a distributed monolith sharing storage. True functional partitioning requires database-per-service.
+</div>
+
+<h2>Bounded Contexts</h2>
+<p>The concept comes from Domain-Driven Design (DDD). A bounded context defines the boundary within which a particular domain model applies. The same entity means different things in different contexts:</p>
+
+<table>
+  <tr>
+    <th>Entity</th>
+    <th>Users Service Context</th>
+    <th>Orders Service Context</th>
+    <th>Analytics Service Context</th>
+  </tr>
+  <tr>
+    <td>User</td>
+    <td>Profile, credentials, preferences</td>
+    <td>Customer with order history</td>
+    <td>Row in events table, no PII</td>
+  </tr>
+  <tr>
+    <td>Product</td>
+    <td>Searchable catalog item</td>
+    <td>SKU with price and inventory</td>
+    <td>Aggregate sales metrics</td>
+  </tr>
+</table>
+
+<h2>Independent Scaling Per Function</h2>
+<p>The primary operational benefit: each function can scale according to its own load. A checkout flow during Black Friday might need 10x more order-service capacity but the user-profile service sees normal traffic.</p>
+
+<div class="diagram">
+  Load Pattern (Black Friday):
+
+  Users Service:     ████░░░░░░░░  Normal (4 instances)
+  Orders Service:   ████████████  Peak  (16 instances)  ← Scale out
+  Payments Service:  ██████░░░░░░  Moderate (8 instances)
+  Notifications Svc: ████████████  Peak  (12 instances)  ← Scale out
+
+  Each service independently autoscaled based on its own metrics.
+</div>
+
+<h2>Tradeoffs</h2>
+
+<table>
+  <tr>
+    <th>Advantage</th>
+    <th>Tradeoff</th>
+  </tr>
+  <tr>
+    <td class="green">Independent deployment</td>
+    <td class="red">Network latency for cross-service calls</td>
+  </tr>
+  <tr>
+    <td class="green">Technology heterogeneity (right tool per job)</td>
+    <td class="red">Operational complexity (N services to monitor)</td>
+  </tr>
+  <tr>
+    <td class="green">Team autonomy and ownership</td>
+    <td class="red">Data consistency requires distributed transactions / sagas</td>
+  </tr>
+  <tr>
+    <td class="green">Fault isolation (payment outage does not crash browsing)</td>
+    <td class="red"> harder to debug (request spans multiple services)</td>
+  </tr>
+  <tr>
+    <td class="green">Targeted scaling reduces cost</td>
+    <td class="red">Data duplication across services (eventual consistency)</td>
+  </tr>
+</table>
+
+<h2>When Functional Partitioning is the Right Choice</h2>
+<ul>
+  <li>Clear domain boundaries exist between functions (e.g., payments vs catalog vs shipping)</li>
+  <li>Different functions have vastly different scaling requirements or SLAs</li>
+  <li>Separate teams own different business functions</li>
+  <li>The system is large enough that a monolith creates deployment bottlenecks</li>
+</ul>
+
+<div class="callout yellow">
+  <strong>Interview tip:</strong> When asked to design a system, start by identifying functional boundaries early. "I would split this into a User Service, Order Service, and Payment Service, each with its own database." This shows architectural maturity. But also acknowledge when a monolith is the right answer for early-stage systems.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>What is functional partitioning and how does it relate to microservices?</li>
+  <li>Why should each microservice own its own database?</li>
+  <li>How do you handle cross-service transactions (sagas, event sourcing)?</li>
+  <li>When is a monolith better than functionally partitioned microservices?</li>
+  <li>How do you maintain data consistency across functionally partitioned services?</li>
+  <li>Design an e-commerce system — what services would you create and why?</li>
+</ul>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Do not turn this into a microservices architecture lecture.</strong> Keep the focus on <em>partitioning by function</em> as a data/system decomposition strategy. Skip deep dives into service mesh (Istio, Linkerd), API gateway configuration, or container orchestration unless specifically asked. The interviewer wants to see you understand the <em>why</em>, not deploy Kubernetes YAML.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Recommended Reading</div>
+  <ul>
+    <li><a href="https://martinfowler.com/bliki/BoundedContext.html">"BoundedContext" — Martin Fowler</a></li>
+    <li><a href="https://microservices.io/patterns/data/database-per-service.html">"Database per Service" — Microservices.io Pattern</a></li>
+    <li><a href="https://martin.kleppmann.com/book/">"Designing Data-Intensive Applications" — Martin Kleppmann, Ch. 7 (Transactions)</a></li>
+    <li><a href="https://www.oreilly.com/library/view/building-microservices/9781491950357/">"Building Microservices" — Sam Newman, 2nd Edition</a></li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="vertical-partitioning.html">&larr; 6.1.2 Vertical Partitioning</a>
+  <a href="geo-partitioning.html">6.1.4 Geo Partitioning &rarr;</a>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.4.2 Dead Letter Queue (DLQ) - System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">8 Messaging</a> / <a href="index.html">8.4 Reliability</a> / 8.4.2
+</div>
+
+<h1>Dead Letter Queue (DLQ)</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the role of dead letter queues as a safety net for messages that exhaust all retry attempts. Be able to design DLQ topology, monitoring, alerting, and manual reprocessing workflows.</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>Dead Letter Queue (DLQ)</strong> is a dedicated queue (or topic) that holds messages that have failed processing after the maximum number of retry attempts. These messages require human intervention, code fixes, or upstream data correction before they can be successfully processed.
+</div>
+
+<h2>Where the DLQ Fits in the Processing Pipeline</h2>
+
+<div class="diagram">
+  Producer ──► Main Queue (orders)
+                    │
+                    └─► Consumer Group
+                          │
+                          ├─ SUCCESS ──► commit offset, write to DB
+                          │
+                          └─ FAILURE
+                               │
+                               ├─ Attempt retry (backoff)
+                               │     └─ FAIL again? ──► retry again...
+                               │
+                               └─ Max retries exhausted
+                                     │
+                                     └─► DLQ (orders-dlq)
+                                           │
+                                           ├─ Store original message
+                                           ├─ Store error metadata (exception, timestamp, retry count)
+                                           └─ Trigger alert
+</div>
+
+<h2>What Should the DLQ Contain?</h2>
+<p>An effective DLQ stores not just the failed message, but enough context to diagnose and reprocess:</p>
+
+<table>
+  <tr>
+    <th>Field</th>
+    <th>Purpose</th>
+  </tr>
+  <tr>
+    <td>Original message payload</td>
+    <td>The message that failed processing</td>
+  </tr>
+  <tr>
+    <td>Error / exception details</td>
+    <td>Stack trace, error code, error message</td>
+  </tr>
+  <tr>
+    <td>Failure timestamp</td>
+    <td>When the final failure occurred</td>
+  </tr>
+  <tr>
+    <td>Retry count</td>
+    <td>Number of attempts before landing in DLQ</td>
+  </tr>
+  <tr>
+    <td>Source topic / queue</td>
+    <td>Which topic the message came from</td>
+  </tr>
+  <tr>
+    <td>Consumer group ID</td>
+    <td>Which consumer failed</td>
+  </tr>
+  <tr>
+    <td>Partition / offset</td>
+    <td>Original position for potential re-injection</td>
+  </tr>
+  <tr>
+    <td>Message headers</td>
+    <td>Trace ID, correlation ID, tenant ID</td>
+  </tr>
+</table>
+
+<h2>DLQ Topology Patterns</h2>
+
+<h3>1. Single Shared DLQ</h3>
+<div class="diagram">
+  orders-topic  ──► consumer ──┐
+  payments-topic ──► consumer ─┼──► shared-dlq
+  inventory-topic ──► consumer ┘
+</div>
+<p>Simple to set up. Harder to manage -- no isolation between failure domains, one toxic message can clog alerting for all services.</p>
+
+<h3>2. Per-Topic DLQ</h3>
+<div class="diagram">
+  orders-topic  ──► consumer ──► orders-dlq
+  payments-topic ──► consumer ──► payments-dlq
+  inventory-topic ──► consumer ──► inventory-dlq
+</div>
+<p>Better isolation. Each team manages their own DLQ. Recommended for most production systems.</p>
+
+<h3>3. Per-Error-Type DLQ</h3>
+<div class="diagram">
+  orders-topic ──► consumer ──┬──► orders-dlq-validation   (400, schema mismatch)
+                               ├──► orders-dlq-timeout      (downstream timeout)
+                               └──► orders-dlq-permission   (403, auth failure)
+</div>
+<p>Advanced pattern. Routes to different DLQ topics based on error classification, enabling specialized handling per failure type.</p>
+
+<h2>Monitoring and Alerting</h2>
+<div class="callout red">
+  <strong>A DLQ with no monitoring is worse than no DLQ at all.</strong> Messages silently accumulate, data silently degrades, and no one knows until a customer reports missing data weeks later.
+</div>
+
+<p>Essential monitoring:</p>
+<ul>
+  <li><strong>DLQ depth (message count):</strong> Alert when depth exceeds a threshold (e.g., > 0 for critical topics, > 100 for non-critical).</li>
+  <li><strong>DLQ ingestion rate:</strong> Alert when new messages land at a rate exceeding N/minute.</li>
+  <li><strong>DLQ age:</strong> Alert when oldest message in DLQ exceeds SLA (e.g., 1 hour for P1, 24 hours for P2).</li>
+  <li><strong>Error type distribution:</strong> Dashboard showing breakdown by error code helps identify systemic issues.</li>
+  <li><strong>DLQ consumer health:</strong> Ensure the DLQ itself has active consumers/monitors.</li>
+</ul>
+
+<h2>Reprocessing Workflow</h2>
+
+<div class="diagram">
+  DLQ (orders-dlq)
+       │
+       ├─ Investigate: inspect message + error metadata
+       │
+       ├─ Classify failure:
+       │    ├─ Transient (service was down, now recovered) ──► reprocess automatically
+       │    ├─ Data issue (bad payload) ──► fix data, reprocess manually
+       │    ├─ Code bug (consumer crash) ──► fix code, deploy, then reprocess
+       │    └─ Poison message (unrecoverable) ──► discard with audit trail
+       │
+       └─ Reprocess:
+            ├─ Re-inject to main topic (preferred for Kafka)
+            ├─ Replay via consumer group offset reset
+            └─ Direct API call (for single-message fixes)
+</div>
+
+<h2>Use Cases</h2>
+
+<table>
+  <tr>
+    <th>System</th>
+    <th>DLQ Use</th>
+  </tr>
+  <tr>
+    <td>Kafka</td>
+    <td>Default DLQ suffix: <code>{original-topic}.DLT</code> (Spring Kafka), or custom routing via <code>DeadLetterPublishingRecoverer</code></td>
+  </tr>
+  <tr>
+    <td>AWS SQS</td>
+    <td>Redrive policy: specify source queue, max receive count, and DLQ ARN</td>
+  </tr>
+  <tr>
+    <td>RabbitMQ</td>
+    <td>Dead letter exchange (DLX) with routing key, TTL-based expiry to DLX</td>
+  </tr>
+  <tr>
+    <td>Azure Service Bus</td>
+    <td>Built-in dead-lettering on max delivery count or TTL expiry</td>
+  </tr>
+  <tr>
+    <td>Google Cloud Pub/Sub</td>
+    <td>Dead letter topic configured per subscription with max delivery attempts</td>
+  </tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What is a dead letter queue and when would you use one?</li>
+  <li>How would you design monitoring for a DLQ to prevent silent data loss?</li>
+  <li>A payment processing consumer keeps sending messages to the DLQ. How do you diagnose the issue?</li>
+  <li>Describe the workflow for reprocessing messages from a DLQ back into the main pipeline.</li>
+  <li>What metadata should you store in a DLQ message and why?</li>
+  <li>How do you handle a "poison message" that crashes every consumer that attempts it?</li>
+  <li>Compare DLQ patterns across Kafka, RabbitMQ, and SQS.</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>In an interview, avoid:</strong>
+  <ul>
+    <li>Designing a system without a DLQ. Every at-least-once consumer needs one.</li>
+    <li>Proposing to silently drop failed messages. Even if the message is "not important," you need observability.</li>
+    <li>Ignoring the reprocessing workflow. A DLQ is not a graveyard -- you must explain how messages get rescued.</li>
+    <li>Storing DLQ messages without error context. Without the exception, stack trace, and retry count, diagnosis is nearly impossible.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary Sources</div>
+  <ul>
+    <li>Spring Kafka -- <a href="https://docs.spring.io/spring-kafka/reference/html/#dead-letters">Dead Letter Publishing</a></li>
+    <li>AWS SQS -- <a href="https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-dead-letter-queues.html">Amazon SQS Dead-Letter Queues</a></li>
+    <li>RabbitMQ -- <a href="https://www.rabbitmq.com/dlx.html">Dead Letter Exchanges</a></li>
+    <li>Google Cloud Pub/Sub -- <a href="https://cloud.google.com/pubsub/docs/dead-letter-topics">Dead Letter Topics</a></li>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em>, Chapter 11 (exactly-once and error handling)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="retry.html">&larr; 8.4.1 Retry</a>
+  <a href="exponential-backoff.html">8.4.3 Exponential Backoff &rarr;</a>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>12.2.8 — Ingress</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">Cloud Architecture</a> / 12.2.8 Ingress</div>
+<h1>Ingress</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand Kubernetes Ingress as an L7 HTTP(S) router, how it provides path-based routing, TLS termination, and why it is more efficient than exposing every service via a LoadBalancer.</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>Ingress</strong> is a Kubernetes resource that defines HTTP/S routing rules for external access to services within a cluster. It acts as an L7 (application layer) reverse proxy that routes traffic based on hostnames and paths, handles TLS termination, and provides a single entry point for multiple services.
+</div>
+
+<p>Ingress solves the problem of needing a separate LoadBalancer per service. Instead of exposing 20 services each with their own cloud load balancer (expensive), one Ingress controller with one LoadBalancer handles all HTTP routing.</p>
+
+<h2>Architecture</h2>
+<div class="diagram">
+  Internet
+     │
+     ▼
+  ┌──────────────────────────────────────────────────────────┐
+  │  Cloud Load Balancer (single IP, one per Ingress class)    │
+  └───────────────────────────┬──────────────────────────────┘
+                              ▼
+  ┌──────────────────────────────────────────────────────────┐
+  │            Ingress Controller                             │
+  │  (NGINX / Traefik / Envoy / AWS ALB Ingress)              │
+  │                                                           │
+  │  Ingress Rules:                                           │
+  │                                                           │
+  │  api.example.com/*  ──▶ order-service:80     (ClusterIP) │
+  │  example.com/api/*  ──▶ user-service:80      (ClusterIP) │
+  │  example.com/app/*  ──▶ frontend-service:80   (ClusterIP) │
+  │  example.com/auth/* ──▶ auth-service:80      (ClusterIP) │
+  │                                                           │
+  │  TLS: terminates HTTPS here, forwards HTTP to services     │
+  │  (services use ClusterIP, no TLS needed internally)         │
+  └──────────────────────────────────────────────────────────┘
+                              │
+              ┌───────────────┼───────────────┐
+              ▼               ▼               ▼
+      ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+      │Order Service │ │User Service  │ │Auth Service  │
+      │ (ClusterIP)  │ │(ClusterIP)   │ │(ClusterIP)   │
+      └──────────────┘ └──────────────┘ └──────────────┘
+</div>
+
+<h2>Path-Based and Host-Based Routing</h2>
+<pre>
+# Ingress rules:
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: main-ingress
+spec:
+  rules:
+    - host: api.example.com
+      http:
+        paths:
+          - path: /orders
+            pathType: Prefix
+            backend:
+              service:
+                name: order-service
+                port:
+                  number: 80
+          - path: /users
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 80
+    - host: www.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend-service
+                port:
+                  number: 80
+</pre>
+
+<h2>TLS Termination</h2>
+<div class="diagram">
+  Client ──HTTPS──▶ Ingress Controller ──HTTP──▶ Service
+
+  1. Client connects to https://api.example.com (port 443)
+  2. Ingress Controller handles TLS handshake
+  3. Decrypts traffic, inspects HTTP host + path
+  4. Routes to appropriate backend service over HTTP (ClusterIP)
+  5. Backend services do not need TLS certificates
+
+  TLS cert stored in K8s Secret:
+  ┌────────────────────────────┐
+  │ apiVersion: v1             │
+  │ kind: Secret               │
+  │ type: kubernetes.io/tls    │
+  │ data:                      │
+  │   tls.crt: (base64 cert)  │
+  │   tls.key: (base64 key)   │
+  └────────────────────────────┘
+</div>
+
+<div class="callout yellow">
+  <strong>Security note:</strong> If you need encryption within the cluster (defense in depth), use TLS between Ingress and Services as well. Many compliance frameworks (PCI, HIPAA) require this. Also, mTLS via a service mesh provides end-to-end encryption.
+</div>
+
+<h2>Ingress vs LoadBalancer Service</h2>
+<table>
+  <tr><th>Dimension</th><th>Ingress</th><th>LoadBalancer Service</th></tr>
+  <tr><td>Layer</td><td>L7 (HTTP/HTTPS routing)</td><td>L4 (TCP/UDP forwarding)</td></tr>
+  <tr><td>Routing</td><td>Path-based, host-based</td><td>Port-based only</td></tr>
+  <tr><td>Cost</td><td class="green">1 LB for N services</td><td class="red">N LBs for N services</td></tr>
+  <tr><td>TLS</td><td class="green">Terminates TLS, manages certs</td><td>Passes through (or terminates one cert)</td></tr>
+  <tr><td>Protocols</td><td>HTTP/HTTPS only</td><td>Any TCP/UDP protocol</td></tr>
+  <tr><td>Best for</td><td>Web services, APIs</td><td>Non-HTTP (gRPC native, TCP, WebSocket)</td></tr>
+</table>
+
+<h2>Ingress Controller Implementations</h2>
+<table>
+  <tr><th>Controller</th><th>Characteristics</th><th>Best For</th></tr>
+  <tr><td><strong>NGINX Ingress</strong></td><td>Most popular, mature, YAML-based config</td><td>General use, Kubernetes standard</td></tr>
+  <tr><td><strong>Traefik</strong></td><td>Auto-discovery, native Docker/K8s support</td><td>Dynamic environments, developers</td></tr>
+  <tr><td><strong>AWS ALB Ingress</strong></td><td>Uses AWS Application Load Balancer directly</td><td>AWS-native deployments</td></tr>
+  <tr><td><strong>Envoy Gateway</strong></td><td>Proxy-based, extensible, CNCF project</td><td>Modern stacks, multi-cloud</td></tr>
+</table>
+
+<div class="callout green">
+  <strong>Interview tip:</strong> When asked how external traffic reaches services in your system, explain: "I would use an Ingress Controller for HTTP routing with TLS termination. This gives me one entry point with path-based routing to all backend services, avoiding the cost of a LoadBalancer per service."
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What is Kubernetes Ingress and how does it work?</li>
+  <li>Compare Ingress with LoadBalancer Service.</li>
+  <li>How does TLS termination work with Ingress?</li>
+  <li>Why not expose every service as a LoadBalancer?</li>
+  <li>What is an Ingress Controller and which ones exist?</li>
+  <li>How would you route different paths to different services?</li>
+  <li>How does Ingress relate to the API Gateway pattern?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid diving into:</strong> Specific Ingress controller configuration (NGINX annotations, Traefik dynamic config), Ingress class details, or pathType matching rules (Exact vs Prefix vs ImplementationSpecific). Focus on the L7 routing concept and why it is more efficient than multiple LoadBalancers.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Documentation</div>
+  <ul>
+    <li><strong>Kubernetes Ingress</strong> — kubernetes.io/docs/concepts/services-networking/ingress/</li>
+    <li><strong>Ingress Controllers</strong> — kubernetes.io/docs/concepts/services-networking/ingress-controllers/</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="services.html">&larr; Previous: Services</a>
+  <a href="autoscaling.html">Next: Autoscaling &rarr;</a>
+</div>
+</body>
+</html>

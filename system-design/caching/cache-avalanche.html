@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.4.3 Cache Avalanche — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb"><a href="../../../">System Design</a> / <a href="../">7 Caching</a> / <a href="#">7.4 Cache Problems</a> / 7.4.3</div>
+
+<h1>7.4.3 Cache Avalanche</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<div class="callout green">
+  <strong>Goal:</strong> Understand the cache avalanche problem — when a large portion of cached data expires simultaneously, overwhelming the database with misses. Learn the common causes and three main solutions: jittered TTL, multi-layer caching, and circuit breakers.
+</div>
+
+<h2>Definition</h2>
+
+<p>A Cache Avalanche occurs when a <strong>large number of cache entries expire at approximately the same time</strong>, causing a massive surge of cache misses that all hit the database simultaneously. Unlike cache stampede (which affects a single popular key), an avalanche affects many keys across the cache, potentially representing a significant portion of the cache's working set.</p>
+
+<div class="callout yellow">
+  <strong>Avalanche vs. Stampede vs. Penetration:</strong>
+  <ul>
+    <li><strong>Stampede (7.4.1):</strong> Many requests for <em>one key</em> that just expired.</li>
+    <li><strong>Penetration (7.4.2):</strong> Requests for <em>nonexistent keys</em> that always miss.</li>
+    <li><strong>Avalanche (this section):</strong> Many requests for <em>many different keys</em> that all expired at the same time.</li>
+  </ul>
+</div>
+
+<h2>Causes</h2>
+
+<h3>Cause 1: Mass Expiration with Same TTL</h3>
+
+<p>The most common cause: a batch process or bulk import caches thousands of entries with the same TTL. When the TTL elapses, all entries expire simultaneously.</p>
+
+<div class="diagram">
+  Time ──────────────────────────────────────────────────────>
+
+  Batch process at T=0 caches 10,000 entries, all with TTL=3600s
+
+  T=0 (cache warm):
+  Key 0001: [CACHED] TTL=3600
+  Key 0002: [CACHED] TTL=3600
+  Key 0003: [CACHED] TTL=3600
+  ...
+  Key 9999: [CACHED] TTL=3600
+
+  T=3600 (all expire simultaneously):
+  Key 0001: [EXPIRED] ────> DB query
+  Key 0002: [EXPIRED] ────> DB query
+  Key 0003: [EXPIRED] ────> DB query
+  ...
+  Key 9999: [EXPIRED] ────> DB query
+
+  Database: Suddenly handles 10,000 queries that were previously cached
+</div>
+
+<h3>Cause 2: Cache Server Restart / Failure</h3>
+
+<p>When a Redis or Memcached node restarts or crashes, its entire in-memory cache is lost. All requests that were previously cache hits now become cache misses and hit the database until the cache is repopulated.</p>
+
+<div class="diagram">
+  Normal:     Cache handles 95% of reads, DB handles 5%
+                ┌──────────────┐
+  Requests ──> │ Cache (95%)  │ ──> Return data
+                │              │
+                │ DB    (5%)   │ ──> Return data
+                └──────────────┘
+
+  After restart: Cache is empty, ALL requests hit DB
+                ┌──────────────┐
+  Requests ──> │ Cache (0%)   │ ──> MISS
+                │              │
+                │ DB  (100%)   │ ──> OVERWHELMED!
+                └──────────────┘
+
+  Recovery time depends on:
+  - How quickly requests repopulate the cache
+  - How many unique keys are accessed
+  - Whether DB can handle the surge without timing out
+</div>
+
+<h3>Cause 3: Network Partition Between App and Cache</h3>
+
+<p>If the network connection between application servers and the cache cluster is interrupted, all cache reads fail, and requests fall through to the database. This is similar to a cache restart but transient (assuming the network recovers).</p>
+
+<h2>Solutions</h2>
+
+<h3>Solution 1: Jittered TTL (Randomized Expiration)</h3>
+
+<p>Add random jitter to each cache entry's TTL so that entries do not expire simultaneously. Instead of all entries expiring at T+3600, they expire uniformly between T+3600 and T+4200 (with a 10-minute jitter).</p>
+
+<pre>
+# Pseudocode — Jittered TTL
+import random
+
+BASE_TTL = 3600          # 1 hour base TTL
+JITTER   = 600           # 10 minutes of random jitter
+
+def getJitteredTTL():
+    return BASE_TTL + random.randint(0, JITTER)
+
+# When caching data:
+cache.set("user:123", data, TTL=getJitteredTTL())   # TTL: 3600-4200s
+cache.set("user:456", data, TTL=getJitteredTTL())   # TTL: 3600-4200s
+cache.set("user:789", data, TTL=getJitteredTTL())   # TTL: 3600-4200s
+
+# Entries expire over a 10-minute window instead of all at once
+</pre>
+
+<div class="callout">
+  <strong>Pros:</strong> Simple to implement, no additional infrastructure, effectively spreads expiration over a time window. <strong>Cons:</strong> Some entries expire earlier than necessary (slightly lower average TTL), does not protect against cache server restarts.
+</div>
+
+<h3>Solution 2: Multi-Layer Caching</h3>
+
+<p>Deploy caching at multiple levels so that if one layer fails or expires, the next layer provides protection. The layers act as fallbacks.</p>
+
+<div class="diagram">
+  Layer 1: In-Process Cache (per app instance, LRU cache)
+      │           TTL: 60 seconds
+      │           Capacity: 1000 entries
+      ▼
+  Layer 2: Distributed Cache (Redis cluster)
+      │           TTL: 1 hour (jittered)
+      │           Capacity: 50 GB
+      ▼
+  Layer 3: Database
+              Source of truth
+
+  If Redis restarts:
+    - Layer 1 still serves hot data for up to 60 seconds
+    - DB handles the rest, but only Layer 1 misses (limited set)
+    - Redis gradually repopulates from DB via Layer 1 misses
+</div>
+
+<table>
+  <tr><th>Layer</th><th>Technology</th><th>TTL</th><th>Role</th></tr>
+  <tr><td>L1</td><td>Guava Cache, Caffeine (in-process)</td><td>Short (30–120s)</td><td>Absorb brief cache outages, reduce Redis calls</td></tr>
+  <tr><td>L2</td><td>Redis / Memcached (distributed)</td><td>Medium (minutes to hours)</td><td>Primary cache layer, shared across app instances</td></tr>
+  <tr><td>L3</td><td>CDN</td><td>Long (hours to days)</td><td>Edge caching for static or semi-static content</td></tr>
+</table>
+
+<h3>Solution 3: Circuit Breaker</h3>
+
+<p>Implement a circuit breaker that detects when the database is under excessive load (due to cache avalanche or other causes) and temporarily rejects requests or serves degraded responses.</p>
+
+<div class="diagram">
+  Normal state:
+    Requests → Cache → (miss) → DB → Response
+
+  DB under stress (circuit breaker opens):
+    Requests → Cache → (miss) → Circuit Breaker → Fallback response
+                                  (reject / stale data /
+                                   queue for retry)
+</div>
+
+<pre>
+# Pseudocode — Circuit Breaker
+class CircuitBreaker:
+    CLOSED:     # Normal — requests pass through
+    OPEN:       # Failing — requests rejected
+    HALF_OPEN:  # Testing — allow some requests to test DB health
+
+def getUser(userId):
+    data = cache.get("user:" + userId)
+    if data is not null:
+        return data
+
+    # Cache miss — check circuit breaker
+    if circuitBreaker.state == OPEN:
+        # DB is under stress — serve fallback
+        return getFallbackResponse(userId)
+
+    try:
+        data = db.query("SELECT * FROM users WHERE id = ?", userId)
+        cache.set("user:" + userId, data, TTL=3600)
+        circuitBreaker.recordSuccess()
+        return data
+    catch (DBTimeout):
+        circuitBreaker.recordFailure()
+        return getFallbackResponse(userId)
+</pre>
+
+<div class="callout">
+  <strong>Pros:</strong> Protects database from cascading failure. <strong>Cons:</strong> Degrades user experience during avalanche (serving fallback data), requires tuning of failure thresholds and recovery timing.
+</div>
+
+<h3>Solution 4: Graceful Degradation with Stale Data</h3>
+
+<p>When the database is overwhelmed, serve stale cached data even if the TTL has expired. This is the stale-while-revalidate pattern (covered in <a href="ttl.html">7.3.3 TTL</a>) applied at the system level.</p>
+
+<pre>
+# Keep expired entries in cache (marked as stale)
+# Serve stale data when DB is under pressure
+
+def getUser(userId):
+    data, expired = cache.getWithExpiry("user:" + userId)
+    if data is not null:
+        if expired and dbIsHealthy():
+            asyncRefresh(userId)
+        return data    # Serve data (fresh or stale)
+
+    # No data at all — query DB (may be rejected by circuit breaker)
+    ...
+</pre>
+
+<h2>Comparing the Three Cache Problems</h2>
+
+<table>
+  <tr><th>Problem</th><th>Scope</th><th>Trigger</th><th>Primary Solution</th></tr>
+  <tr><td>Cache Stampede</td><td>One key</td><td>Popular key expires</td><td>Mutex lock, probabilistic expiration, background refresh</td></tr>
+  <tr><td>Cache Penetration</td><td>Nonexistent keys</td><td>Queries for missing data</td><td>Cache null values, Bloom filter, rate limiting</td></tr>
+  <tr><td>Cache Avalanche</td><td>Many keys</td><td>Mass expiration or cache restart</td><td>Jittered TTL, multi-layer caching, circuit breaker</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+
+<ul>
+  <li>What is a cache avalanche? How does it differ from cache stampede?</li>
+  <li>What are the common causes of cache avalanche?</li>
+  <li>How does jittered TTL prevent cache avalanche?</li>
+  <li>How does multi-layer caching protect against cache avalanche?</li>
+  <li>What is a circuit breaker? How does it help during a cache avalanche?</li>
+  <li>How would you handle a Redis cluster restart in a production system?</li>
+  <li>Compare and contrast cache stampede, penetration, and avalanche.</li>
+</ul>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>For a system design interview, skip:</strong>
+  <ul>
+    <li>Circuit breaker library configuration (e.g., Hystrix, Resilience4j settings and internals).</li>
+    <li>Redis persistence mechanisms (RDB/AOF) as a recovery strategy for cache restarts — that is a different topic.</li>
+    <li>Mathematical analysis of TTL jitter distribution (uniform vs. Gaussian).</li>
+    <li>Specific CDN failover mechanisms (e.g., Cloudflare origin shield internals).</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Books &amp; Papers</div>
+  <ul>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em> — Chapter 4: Encoding and Evolution</li>
+    <li>Alex Xu, <em>System Design Interview Vol. 1</em> — Chapter 8: Design a News Feed System</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Online Resources</div>
+  <ul>
+    <li>Netflix Hystrix (Circuit Breaker) — <a href="https://github.com/Netflix/Hystrix">github.com/Netflix/Hystrix</a></li>
+    <li>Resilience4j — <a href="https://resilience4j.readme.io/">resilience4j.readme.io</a></li>
+    <li>Redis High Availability — <a href="https://redis.io/docs/management/sentinel/">redis.io/docs/management/sentinel</a></li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="cache-penetration.html">← 7.4.2 Cache Penetration</a>
+  <a href="lru.html">7.5.1 LRU →</a>
+</div>
+
+</body>
+</html>

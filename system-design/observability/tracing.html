@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>11.3 — Tracing</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">Observability</a> / 11.3 Tracing</div>
+<h1>Tracing</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand how distributed tracing tracks a single request as it flows through multiple services, the span model, context propagation between services, and how OpenTelemetry standardizes instrumentation.</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>Distributed tracing</strong> tracks the journey of a single request across multiple services, recording each operation as a "span" with timing, metadata, and causality. A trace is the complete tree of spans for one request; a span represents a single unit of work within that trace.
+</div>
+
+<p>Tracing fills the gap between metrics (aggregated) and logs (per-event) by showing the end-to-end path and timing of an individual request. It is the primary tool for identifying latency bottlenecks, understanding service dependencies, and debugging cascading failures.</p>
+
+<h2>Trace and Span Model</h2>
+<div class="diagram">
+  TRACE ID: abc123def456
+  │
+  ├── SPAN 1: API Gateway           [0ms ──── 45ms]    (total 45ms)
+  │   └── SPAN 2: Auth Service      [2ms ── 20ms]     (18ms)
+  │   └── SPAN 3: User Service      [22ms ── 85ms]    (63ms)
+  │       └── SPAN 4: Cache Lookup  [25ms ── 28ms]    (3ms)
+  │       └── SPAN 5: DB Query      [30ms ── 82ms]    (52ms) ← BOTTLENECK
+  │   └── SPAN 6: Order Service     [88ms ── 120ms]   (32ms)
+  │       └── SPAN 7: Inventory Svc  [92ms ── 105ms]   (13ms)
+  │       └── SPAN 8: Payment Svc   [108ms ── 118ms]  (10ms)
+  └── SPAN 9: Response Serialize     [121ms ── 123ms]  (2ms)
+
+  Total trace: 123ms
+  Critical path: Gateway → User Svc → DB Query (52ms) → Order Svc
+</div>
+
+<h3>Span Anatomy</h3>
+<table>
+  <tr><th>Field</th><th>Description</th></tr>
+  <tr><td><strong>Trace ID</strong></td><td>Unique identifier shared across all spans in the request</td></tr>
+  <tr><td><strong>Span ID</strong></td><td>Unique identifier for this specific span</td></tr>
+  <tr><td><strong>Parent Span ID</strong></td><td>The span that created this span (empty for root)</td></tr>
+  <tr><td><strong>Operation Name</strong></td><td>Human-readable name: "HTTP GET /api/users/:id"</td></tr>
+  <tr><td><strong>Start / End Time</strong></td><td>Timestamps with nanosecond precision</td></tr>
+  <tr><td><strong>Tags / Attributes</strong></td><td>Key-value metadata: http.status_code, db.statement, user.id</td></tr>
+  <tr><td><strong>Events (Logs)</strong></td><td>Timestamped events within the span: "cache miss", "retry attempt 2"</td></tr>
+  <tr><td><strong>Status</strong></td><td>OK, ERROR, UNSET</td></tr>
+  <tr><td><strong>Service Name</strong></td><td>The service that produced this span</td></tr>
+</table>
+
+<h2>Context Propagation</h2>
+<p>When Service A calls Service B, the trace context (trace ID, span ID, flags) must be propagated via wire protocols. This is called context propagation.</p>
+
+<pre>
+# HTTP headers (W3C Trace Context standard)
+traceparent: 00-abc123def456789012345678901234-5678901234567890-01
+                │  │                         │             │
+                │  trace-id (32 hex)         span-id (16)  │
+                version (00)                               trace-flags
+
+# Also carried in:
+# - gRPC metadata
+# - Kafka message headers
+# - AMQP properties
+# - Custom binary protocols
+</pre>
+
+<div class="callout yellow">
+  <strong>Propagation is the hardest part:</strong> Every internal call (HTTP, gRPC, message queue, database client) must propagate the trace context. A single missed propagation point creates a "gap" in the trace that hides latency and errors. This is why auto-instrumentation libraries (OpenTelemetry) are critical.
+</div>
+
+<h2>OpenTelemetry</h2>
+<div class="diagram">
+  ┌──────────────────────────────────────────────────┐
+  │              OpenTelemetry Architecture           │
+  │                                                   │
+  │  ┌──────────┐   ┌───────────────┐                │
+  │  │   API    │──▶│   SDK         │                │
+  │  │(contracts)│   │ (implements, │                │
+  │  └──────────┘   │  sampling,    │                │
+  │                  │  processing)  │                │
+  │  ┌──────────┐   └───────┬───────┘                │
+  │  │  Semantic │           │                        │
+  │  │ Conventions│          │  OTLP                  │
+  │  │(standard  │           │  (protocol)            │
+  │  │ attribute │           ▼                        │
+  │  │  names)  │   ┌───────────────┐               │
+  │  └──────────┘   │  Collector    │               │
+  │                  │  (receives,   │               │
+  │  ┌──────────┐   │  processes,   │               │
+  │  │ Auto-    │   │  exports)     │               │
+  │  │ Instru-  │   └───┬───┬───┬───┘               │
+  │  │ mentation│       │   │   │                    │
+  │  │ (agents) │       ▼   ▼   ▼                    │
+  │  └──────────┘    Jaeger Tempo Zipkin              │
+  └──────────────────────────────────────────────────┘
+</div>
+
+<h3>OpenTelemetry Components</h3>
+<ul>
+  <li><strong>API:</strong> Language-agnostic interfaces for traces, metrics, logs. Defines types like Tracer, Span, Meter.</li>
+  <li><strong>SDK:</strong> Actual implementation that handles context propagation, sampling, batching, and exporting.</li>
+  <li><strong>Collector:</strong> Vendor-neutral intermediary. Receives telemetry in OTLP format, processes (filter, enrich, transform), and exports to one or more backends.</li>
+  <li><strong>Auto-instrumentation:</strong> Zero-code libraries that automatically create spans for HTTP, gRPC, database calls, Redis, Kafka, etc.</li>
+  <li><strong>Semantic Conventions:</strong> Standard attribute names (<code>http.method</code>, <code>db.system</code>, <code>messaging.system</code>) for consistency across services.</li>
+</ul>
+
+<h2>Sampling Strategies</h2>
+<table>
+  <tr><th>Strategy</th><th>Description</th><th>Pros</th><th>Cons</th></tr>
+  <tr><td><strong>Always On</strong></td><td>Record every trace</td><td class="green">Complete visibility</td><td class="red">Unsustainable at scale</td></tr>
+  <tr><td><strong>Always Off</strong></td><td>Record nothing</td><td class="green">Zero overhead</td><td class="red">No observability</td></tr>
+  <tr><td><strong>Probability</strong></td><td>Sample N% of traces (e.g., 1%)</td><td class="green">Predictable volume</td><td class="red">May miss rare errors</td></tr>
+  <tr><td><strong>Rate Limiting</strong></td><td>Sample up to N traces per second</td><td class="green">Bounded cost</td><td class="red">Proportional to volume, not errors</td></tr>
+  <tr><td><strong>Tail-based</strong></td><td>Buffer all spans, decide after seeing full trace</td><td class="green">Keep error traces always</td><td class="red">Complex, resource-intensive</td></tr>
+  <tr><td><strong>Adaptive</strong></td><td>Adjust rate based on traffic and error rate</td><td class="green">Best of both worlds</td><td class="red">Most complex to implement</td></tr>
+</table>
+
+<div class="callout green">
+  <strong>Interview tip:</strong> When asked about observability, always mention the three pillars: logs (what happened), metrics (how much/often), traces (where it happened and why). Then explain how OpenTelemetry unifies them.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What is distributed tracing and why is it needed?</li>
+  <li>Explain the relationship between a trace and a span.</li>
+  <li>How does context propagation work across service boundaries?</li>
+  <li>What is OpenTelemetry and why does it matter?</li>
+  <li>How would you decide on a sampling strategy?</li>
+  <li>How do you identify a latency bottleneck using traces?</li>
+  <li>What is the difference between head-based and tail-based sampling?</li>
+  <li>How do traces relate to logs and metrics?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid diving into:</strong> OpenTelemetry SDK configuration code, specific backend setup (Jaeger deployment YAML), or trace storage format details. Focus on the conceptual model (trace/span/propagation) and architectural decisions (sampling, auto-instrumentation vs manual).
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Documentation</div>
+  <ul>
+    <li><strong>OpenTelemetry Docs</strong> — opentelemetry.io/docs/concepts/ — Architecture, signals, context propagation</li>
+    <li><strong>W3C Trace Context</strong> — w3.org/TR/trace-context — Standard for trace context propagation</li>
+    <li><strong>Jaeger Documentation</strong> — jaegertracing.io — Architecture and best practices</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Articles</div>
+  <ul>
+    <li><strong>Google Dapper Paper</strong> — research.google.com/pubs/pub36356.html — Origin of modern distributed tracing</li>
+    <li><strong>Uber Engineering: Distributed Tracing</strong> — eng.uber.com/jaeger — Real-world tracing at scale</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="metrics.html">&larr; Previous: Metrics</a>
+  <a href="distributed-tracing.html">Next: Distributed Tracing &rarr;</a>
+</div>
+</body>
+</html>

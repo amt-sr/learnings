@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.7.1 Read Quorum - System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">5 Distributed Systems</a> / <a href="index.html">5.7 Quorums</a> / 5.7.1
+</div>
+
+<h1>5.7.1 Read Quorum</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<div class="callout green">
+  <strong>Goal:</strong> Understand what a read quorum is, why the R + W > N rule ensures consistency, and how to tune read/write quorums for different consistency and performance requirements. Be able to apply quorum reasoning to real systems like DynamoDB and Cassandra, and explain the tradeoffs to interviewers.
+</div>
+
+<h2>Definition</h2>
+
+<p>A <strong>read quorum</strong> is the minimum number of replicas (R) that must respond to a read request before the value is returned to the client. In a system with N replicas, configuring R controls the tradeoff between read latency (fewer replicas needed = faster reads) and read consistency (more replicas needed = more likely to read the latest value).</p>
+
+<h2>The R + W > N Rule</h2>
+
+<p>The fundamental quorum rule for strong consistency is:</p>
+
+<div class="callout">
+  <strong>R + W &gt; N</strong>
+
+  <p>Where:</p>
+  <ul>
+    <li><strong>N</strong> = total number of replicas for a data item</li>
+    <li><strong>R</strong> = number of replicas that must respond to a read</li>
+    <li><strong>W</strong> = number of replicas that must acknowledge a write</li>
+  </ul>
+
+  <p>When R + W &gt; N, every read is guaranteed to overlap with at least one replica that has the most recent write. This ensures <strong>strong consistency</strong> (no stale reads).</p>
+</div>
+
+<div class="diagram">
+  Quorum Overlap Guarantee (N=5, W=3, R=3)
+
+  Replicas: [R1] [R2] [R3] [R4] [R5]
+
+  Write to 3 replicas (W=3):
+  [R1] ✓  [R2] ✓  [R3] ✓  [R4] ✗  [R5] ✗
+  ─────────────────────────────────────────
+  3 out of 5 replicas have the latest value
+
+  Read from 3 replicas (R=3):
+  [R1] ✓  [R2] ✓  [R3] ✓  [R4] ✗  [R5] ✗
+  ─────────────────────────────────────────
+  3 out of 5 replicas queried
+
+  Overlap: At least one replica with latest data
+  R + W = 3 + 3 = 6 > N = 5  →  Consistent read guaranteed! ✓
+
+  Minimum overlap = R + W - N = 3 + 3 - 5 = 1 replica
+  At least 1 replica will have both the write AND be read.
+</div>
+
+<h3>Proof of the Guarantee</h3>
+
+<p>The set of replicas written to (W) and the set of replicas read from (R) each have at most N total replicas. Since R + W &gt; N, the two sets must overlap in at least one replica. That overlapping replica was written to (so it has the latest value) and is read from (so its value is considered in the read response). Therefore, the read will see the latest write.</p>
+
+<h2>Quorum Configuration Tradeoffs</h2>
+
+<table>
+  <tr>
+    <th>Configuration</th>
+    <th>R</th>
+    <th>W</th>
+    <th>Consistency</th>
+    <th>Read Latency</th>
+    <th>Write Latency</th>
+    <th>Availability</th>
+  </tr>
+  <tr>
+    <td>Strong consistent (default)</td>
+    <td>N/2 + 1</td>
+    <td>N/2 + 1</td>
+    <td class="green">Strong</td>
+    <td class="red">Higher</td>
+    <td class="red">Higher</td>
+    <td class="red">Lower</td>
+  </tr>
+  <tr>
+    <td>Read-optimized</td>
+    <td>1</td>
+    <td>N</td>
+    <td class="green">Strong</td>
+    <td class="green">Low</td>
+    <td class="red">High</td>
+    <td class="red">Lower</td>
+  </tr>
+  <tr>
+    <td>Write-optimized</td>
+    <td>N</td>
+    <td>1</td>
+    <td class="green">Strong</td>
+    <td class="red">High</td>
+    <td class="green">Low</td>
+    <td class="red">Lower</td>
+  </tr>
+  <tr>
+    <td>Eventual consistent</td>
+    <td>1</td>
+    <td>1</td>
+    <td class="red">Eventual</td>
+    <td class="green">Low</td>
+    <td class="green">Low</td>
+    <td class="green">High</td>
+  </tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Key insight:</strong> When R + W &le; N, the read and write sets may not overlap. This means a read could return stale data (a value that was overwritten by a more recent write on a different set of replicas). This is <em>eventual consistency</em> -- the system will eventually converge, but reads are not guaranteed to see the latest write.
+</div>
+
+<h2>DynamoDB Quorum Configuration</h2>
+
+<p>DynamoDB allows developers to configure read and write consistency on a per-operation basis:</p>
+
+<table>
+  <tr>
+    <th>Read Mode</th>
+    <th>R</th>
+    <th>Consistency</th>
+    <th>Latency</th>
+    <th>Use Case</th>
+  </tr>
+  <tr>
+    <td><strong>Eventually Consistent Read</strong></td>
+    <td>1 (reads from 2 AZs, returns first)</td>
+    <td>Eventual (may read stale)</td>
+    <td class="green">Lowest</td>
+    <td>Carts, sessions, counters</td>
+  </tr>
+  <tr>
+    <td><strong>Strongly Consistent Read</strong></td>
+    <td>N/2 + 1</td>
+    <td>Strong (reads latest write)</td>
+    <td class="red">Higher (cross-AZ round trip)</td>
+    <td>Banking, configuration, inventory</td>
+  </tr>
+</table>
+
+<div class="diagram">
+  DynamoDB: N=3 (across 3 Availability Zones)
+
+  Strongly Consistent Read:
+  Client → [AZ-1] → [AZ-2] → [AZ-3]
+           read     read     read
+           │
+           └── Returns value only after 2 of 3 respond with same version
+
+  Eventually Consistent Read:
+  Client → [AZ-1] → [AZ-2]
+           read     read
+           │
+           └── Returns first response (may be stale if AZ-1 is behind)
+
+  Write (default, W=2):
+  Client → [AZ-1] → [AZ-2]
+           write    write
+           │
+           └── Returns success after 2 of 3 acknowledge
+</div>
+
+<h2>Quorum in Cassandra</h2>
+
+<p>Cassandra provides explicit control over quorum levels through the <strong>consistency level</strong> (CL) setting on each query:</p>
+
+<table>
+  <tr>
+    <th>Consistency Level</th>
+    <th>R/W</th>
+    <th>Description</th>
+  </tr>
+  <tr>
+    <td><strong>ONE</strong></td>
+    <td>1</td>
+    <td>Return after one replica responds (fastest, least consistent)</td>
+  </tr>
+  <tr>
+    <td><strong>QUORUM</strong></td>
+    <td>N/2 + 1</td>
+    <td>Return after majority of replicas respond (strong consistency)</td>
+  </tr>
+  <tr>
+    <td><strong>ALL</strong></td>
+    <td>N</td>
+    <td>Return after all replicas respond (strongest consistency, lowest availability)</td>
+  </tr>
+  <tr>
+    <td><strong>LOCAL_QUORUM</strong></td>
+    <td>N_DC/2 + 1</td>
+    <td>Quorum within local datacenter only</td>
+  </tr>
+</table>
+
+<h2>Read Repair and Hinted Handoff</h2>
+
+<p>Even with quorum reads, replicas may become inconsistent over time. Two mechanisms help maintain consistency:</p>
+
+<h3>Read Repair</h3>
+<p>When a read query contacts multiple replicas and discovers inconsistencies (different versions of the same data), it triggers a read repair: the replicas reconcile their data to the most recent version. This happens transparently during normal read operations.</p>
+
+<h3>Hinted Handoff</h3>
+<p>When a write succeeds on W replicas but one of the N-W replicas is down, the coordinator stores a "hint" -- a record of the write. When the down replica comes back online, the coordinator replays the hinted write. This reduces the window of inconsistency.</p>
+
+<div class="callout">
+  <strong>Interview tip:</strong> When asked "how would you design a system that balances consistency and performance?", quorum configuration is often the right answer. Explain that you can adjust R and W per operation based on the use case: strong consistency for critical operations (payments, configuration), eventual consistency for less critical operations (caching, analytics).
+</div>
+
+<h2>Edge Cases and Failure Scenarios</h2>
+
+<ul>
+  <li><strong>Sloppy quorum:</strong> When a data center is down and not enough replicas are available, some systems use "sloppy quorum" -- temporarily writing to alternative nodes. Data is later repaired when the original replicas come back.</li>
+  <li><strong>Hierarchical quorum:</strong> In multi-DC deployments, quorums can be defined hierarchically (e.g., 2 of 3 DCs must respond, and within each DC, a quorum must respond). This prevents a single DC from dominating the quorum.</li>
+  <li><strong>Weighted quorum:</strong> Replicas can be assigned different weights based on their reliability or capacity. A quorum is reached when the total weight of responding replicas exceeds a threshold.</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+
+<ul>
+  <li>What is a read quorum and why is it important?</li>
+  <li>Explain the R + W > N rule and why it guarantees consistency.</li>
+  <li>How would you configure quorum for a system that needs fast reads but strong consistency?</li>
+  <li>What happens if R + W <= N?</li>
+  <li>How does DynamoDB implement quorum reads and writes?</li>
+  <li>What is read repair and when is it triggered?</li>
+  <li>What is a sloppy quorum and why would you use it?</li>
+  <li>How would you design a multi-DC quorum system?</li>
+  <li>What is the tradeoff between R=1 and R=N/2+1?</li>
+  <li>How does hinted handoff work?</li>
+</ul>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Do NOT deep-dive into DynamoDB's internal anti-entropy mechanisms</strong> (Merkle tree repair, gossip-based anti-entropy) -- these are covered in other sections. Skip the mathematical proofs of quorum intersection. Do not memorize every Cassandra consistency level beyond the common ones (ONE, QUORUM, ALL, LOCAL_QUORUM). Skip quorum systems in the context of Byzantine fault tolerance (BFT quorums require 3f+1 nodes, not N/2+1).
+</div>
+
+<div class="source">
+  <div class="source-label">Reading Sources</div>
+  <ul>
+    <li>Dynamo: Amazon's Highly Available Key-value Store (DeCandia et al., 2007) -- Original quorum design</li>
+    <li>Designing Data-Intensive Applications (Kleppmann) -- Chapter 5, Quorum Consistency</li>
+    <li>DynamoDB Developer Guide -- Consistency and Quorum Configuration</li>
+    <li>Cassandra Documentation -- Consistency Levels and Tunable Consistency</li>
+    <li>Distributed Systems: Principles and Paradigms (Tanenbaum &amp; Van Steen) -- Quorum-based protocols</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="paxos.html">&larr; 5.6.8 Paxos</a>
+  <a href="write-quorum.html">5.7.2 Write Quorum &rarr;</a>
+</div>
+
+</body>
+</html>

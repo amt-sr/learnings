@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>15.17 YouTube — System Design</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../">Handbook</a> / <a href="../">System Design</a> / 15. Design Problems / 15.17 YouTube</p>
+
+<h1>YouTube</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Design a video streaming platform similar to YouTube that handles video upload, transcoding, storage, streaming via CDN, thumbnail generation, search, and personalized recommendations. The system must handle massive bandwidth for video delivery and a high-throughput upload/transcode pipeline.</p>
+
+<h2>Functional Requirements</h2>
+<ul>
+  <li>Upload videos of various sizes and formats (up to 10GB, 12 hours)</li>
+  <li>Transcode uploaded videos into multiple resolutions (360p, 480p, 720p, 1080p, 4K)</li>
+  <li>Stream videos with adaptive bitrate (DASH/HLS) based on network conditions</li>
+  <li>Generate thumbnails at multiple timestamps for video preview</li>
+  <li>Search videos by title, description, and metadata</li>
+  <li>Personalized recommendation feed</li>
+  <li>Support likes, comments, view count, and video statistics</li>
+</ul>
+
+<h2>Non-Functional Requirements</h2>
+<ul>
+  <li><strong>High bandwidth:</strong> support 1M+ concurrent video streams</li>
+  <li><strong>Low latency for upload:</strong> start processing within seconds of upload completion</li>
+  <li><strong>Smooth streaming:</strong> adaptive bitrate, no buffering for most connections</li>
+  <li><strong>Scalability:</strong> 800M+ videos, 500 hours uploaded per minute</li>
+  <li><strong>Cost efficiency:</strong> minimize storage and bandwidth costs via CDN and transcoding</li>
+</ul>
+
+<h3>Capacity Estimates</h3>
+<table>
+  <tr><th>Metric</th><th>Estimate</th><th>Notes</th></tr>
+  <tr><td>Total videos</td><td>800M</td><td>YouTube-scale</td></tr>
+  <tr><td>Daily views</td><td>5B</td><td>~58K views/sec</td></tr>
+  <tr><td>Uploads/day</td><td>720K</td><td>500 hours/min * 60 min/hr * 24 hr / 1000 avg min/video</td></tr>
+  <tr><td>Upload bandwidth</td><td>20 Gbps</td><td>Peak upload</td></tr>
+  <tr><td>Streaming bandwidth</td><td>50 Tbps</td><td>5B views * 5 min avg * 3 Mbps avg / 86400</td></tr>
+  <tr><td>Video storage</td><td>~5 PB</td><td>800M videos * 100MB avg (multi-resolution)</td></tr>
+  <tr><td>Concurrent streams</td><td>1M</td><td>Peak</td></tr>
+  <tr><td>Transcoding throughput</td><td>720K videos/day</td><td>~8 videos/sec</td></tr>
+</table>
+
+<h2>API Design</h2>
+<pre>
+# Upload (initiate multipart upload)
+POST   /api/v1/videos/upload
+Body:  { "title": "My Video", "description": "...", "visibility": "public",
+         "file_size": 536870912, "content_type": "video/mp4" }
+Resp:  { "upload_id": "upl_abc123", "presigned_urls": {
+          "part_1": "https://storage.example.com/upload/upl_abc123/part/1?sig=...",
+          "part_2": "https://storage.example.com/upload/upl_abc123/part/2?sig=..."
+        }}
+
+# Complete upload
+POST   /api/v1/videos/upload/{upload_id}/complete
+
+# Stream video
+GET    /api/v1/videos/{video_id}/stream
+Resp:  HLS master playlist (.m3u8)
+
+GET    /api/v1/videos/{video_id}/stream/{quality}/{segment_index}.ts
+Resp:  Video segment (binary)
+
+# Video metadata
+GET    /api/v1/videos/{video_id}
+Resp:  { "video_id": "...", "title": "...", "views": 1500000,
+         "likes": 45000, "channel": {...}, "available_qualities": ["360p","720p","1080p"] }
+
+# Recommendations
+GET    /api/v1/feed/recommended?page_token=token&limit=20
+Resp:  { "videos": [...], "next_page_token": "..." }
+</pre>
+
+<h2>High-Level Design</h2>
+<div class="diagram">
+  ┌──────────────────────────────────────────────────────────────┐
+  │                         Client                               │
+  └──────┬──────────────────┬──────────────────┬───────────────┘
+         │ Upload           │ Stream           │ Search/Feed
+         ▼                  ▼                  ▼
+  ┌─────────────┐   ┌──────────────┐  ┌──────────────────┐
+  │ Upload Svc   │   │  CDN Edge    │  │  Video Service   │
+  │ (metadata +  │   │  (HLS/DASH   │  │  (metadata,      │
+  │  presigned)  │   │   segments)  │  │   search, feed)  │
+  └──────┬──────┘   └──────▲───────┘  └──────┬───────────┘
+         │                 │                  │
+         │     ┌───────────┴───────────┐      │
+         │     │      CDN Origin       │      │
+         │     │  (multi-resolution   │      │
+         │     │   video storage)     │      │
+         │     └───────────┬───────────┘      │
+         │                 │                  │
+  ┌──────▼─────────────────▼──────────────────▼──────┐
+  │                  Transcode Pipeline               │
+  │                                                   │
+  │  ┌──────────┐  ┌──────────┐  ┌──────────────────┐ │
+  │  │ Message  │  │Transcoder│  │ Thumbnail        │ │
+  │  │ Queue    │→ │ Workers  │→ │ Generator         │ │
+  │  │ (Kafka)  │  │(FFmpeg)  │  │ (frame extraction)│ │
+  │  └──────────┘  └──────────┘  └──────────────────┘ │
+  │                                                   │
+  │  ┌──────────┐  ┌──────────────────────────────┐  │
+  │  │ Metadata  │  │  Video Storage (Object/S3)   │  │
+  │  │ Database  │  │  Original + transcoded +      │  │
+  │  │(PostgreSQL│  │  thumbnails                 │  │
+  │  │+ Redis)   │  │                              │  │
+  │  └──────────┘  └──────────────────────────────┘  │
+  └──────────────────────────────────────────────────┘
+</div>
+
+<h2>Deep Dive: Upload Pipeline</h2>
+<ol>
+  <li><strong>Request:</strong> Client calls the upload API with video metadata (title, size, format).</li>
+  <li><strong>Presigned URLs:</strong> Server generates pre-signed URLs for each part of a multipart upload to the object storage (S3). Client uploads directly to S3, bypassing the application server.</li>
+  <li><strong>Complete:</strong> Client confirms all parts uploaded. Server triggers the transcode pipeline.</li>
+  <li><strong>Metadata:</strong> Store video metadata in the database: title, description, channel, upload time, status (processing/ready).</li>
+</ol>
+
+<div class="callout green">
+  <strong>Direct-to-S3 upload:</strong> Never route large video files through the application server. Use pre-signed URLs so the client uploads directly to object storage. This avoids saturating the application server's bandwidth and allows S3 to handle the upload at scale.
+</div>
+
+<h2>Deep Dive: Transcoding Pipeline</h2>
+<p>Convert uploaded video (typically one format/resolution) into multiple resolutions and formats for adaptive streaming.</p>
+
+<div class="diagram">
+  Upload: video.mp4 (1080p, 30fps, H.264, 500MB)
+       │
+       ▼
+  Transcode Workers (FFmpeg, running on GPU instances)
+       │
+       ├──► 360p  (HLS segments, ~50MB)
+       ├──► 480p  (HLS segments, ~100MB)
+       ├──► 720p  (HLS segments, ~200MB)
+       ├──► 1080p (HLS segments, ~500MB)
+       └──► 4K    (HLS segments, ~1.5GB)  (if uploaded in 4K)
+
+  Also generate:
+  ├──► Thumbnails: frame at 0s, 10s, 30s, midpoint (3 thumbnails)
+  ├──► Preview GIF: 3-second animated preview
+  └──► Metadata: duration, resolution, bitrate, codec
+</div>
+
+<pre>
+# Transcode with FFmpeg (example for 720p HLS)
+ffmpeg -i input.mp4 \
+  -c:v libx264 -preset fast -b:v 2.5M -maxrate 2.5M \
+  -bufsize 5M -vf "scale=1280:720" \
+  -c:a aac -b:a 128k -ac 2 \
+  -f hls -hls_time 10 -hls_list_size 0 \
+  -hls_segment_filename "720p_seg_%03d.ts" \
+  720p_master.m3u8
+</pre>
+
+<div class="callout yellow">
+  <strong>Transcoding at scale:</strong> Use a distributed task queue (Kafka + worker pool) for transcoding jobs. Scale horizontally by adding GPU-optimized worker instances. Priority queue: popular videos and recently uploaded videos get priority. Use auto-scaling to handle upload spikes.
+</div>
+
+<h2>Deep Dive: Adaptive Streaming (HLS/DASH)</h2>
+<p>Video is split into small segments (typically 2-10 seconds each). The player downloads segments one at a time and can switch quality mid-stream.</p>
+
+<div class="diagram">
+  Master Playlist (.m3u8):
+  ┌─────────────────────────────────────────────────┐
+  │ #EXTM3U                                         │
+  │ #EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=640x360 │
+  │ 360p/playlist.m3u8                             │
+  │ #EXT-X-STREAM-INF:BANDWIDTH=1400000,RESOLUTION=854x480│
+  │ 480p/playlist.m3u8                             │
+  │ #EXT-X-STREAM-INF:BANDWIDTH=2500000,RESOLUTION=1280x720│
+  │ 720p/playlist.m3u8                             │
+  │ #EXT-X-STREAM-INF:BANDWIDTH=5000000,RESOLUTION=1920x1080│
+  │ 1080p/playlist.m3u8                            │
+  └─────────────────────────────────────────────────┘
+
+  Player logic:
+  1. Fetch master playlist
+  2. Start with 720p (based on estimated bandwidth)
+  3. Measure actual download speed for each segment
+  4. If bandwidth drops → switch to lower quality
+  5. If bandwidth increases → switch to higher quality
+  6. All switching is seamless (no buffering)
+</div>
+
+<h2>Deep Dive: CDN Strategy</h2>
+<ul>
+  <li><strong>Origin shielding:</strong> All CDN edge nodes fetch from a single origin shield node (not directly from S3). This prevents multiple edge nodes from duplicating origin requests for the same content.</li>
+  <li><strong>Cache hierarchy:</strong> Edge cache (1-5 minutes TTL for hot segments) → Regional cache (1 hour TTL) → Origin (S3).</li>
+  <li><strong>Pre-warming:</strong> For highly anticipated content (new popular video), pre-populate CDN edge caches before the traffic arrives.</li>
+  <li><strong>P2P assist:</strong> For live streaming, use WebRTC-based P2P between viewers to reduce CDN bandwidth. This is an advanced optimization.</li>
+</ul>
+
+<div class="callout">
+  <strong>Cache key design:</strong> Use content-hash-based URLs for video segments. This ensures cache consistency (same content = same URL) and enables browser-level caching. Example: <code>/videos/{video_id}/1080p/seg_{hash}.ts</code>.
+</div>
+
+<h2>Deep Dive: Recommendation System</h2>
+<p>YouTube's recommendation is one of the most sophisticated ML systems. At a high level:</p>
+
+<ol>
+  <li><strong>Candidate generation:</strong> From billions of videos, narrow down to hundreds of candidates using collaborative filtering (users who watched X also watched Y), content-based filtering (similar tags/topics), and trending signals.</li>
+  <li><strong>Ranking:</strong> Score each candidate using a deep learning model that considers: watch probability, expected watch time, user satisfaction prediction, diversity, and freshness.</li>
+  <li><strong>Re-ranking:</strong> Apply business rules: freshness boost, diversity (avoid showing 10 similar videos in a row), deduplication, and policy filters (content safety).</li>
+</ol>
+
+<div class="callout red">
+  <strong>What to Skip:</strong> In an interview, describe the recommendation system at a high level. Don't design the ML model architecture or the training pipeline. Focus on the system integration: how candidates flow through the pipeline and how the feed API serves results.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>How do you handle video uploads from mobile devices with unreliable networks? <em>A: Resumable multipart upload. Client uploads parts independently. If a part fails, retry only that part. Track progress locally. Resume from the last successfully uploaded part on reconnection.</em></li>
+  <li>How do you prevent copyrighted content from being uploaded? <em>A: Content ID system — fingerprint uploaded videos against a database of copyrighted content. Use audio fingerprinting (Audio ID) and video fingerprinting. Flag matching content for review or block. This is a separate, complex system.</em></li>
+  <li>How do you handle the transcoding queue during traffic spikes? <em>A: Priority queue: paid/premium content first, then recently uploaded, then standard. Auto-scale transcoder workers based on queue depth. Use spot/preemptible GPU instances for cost efficiency.</em></li>
+  <li>How do you count views accurately? <em>A: Count views in a streaming aggregator (Kafka Streams/Flink) with a deduplication window. A "view" requires watching at least 30 seconds or 50% of the video (whichever is shorter). Use HyperLogLog for approximate unique viewer counts at scale.</em></li>
+  <li>What resolution/codec choices do you make for transcoding? <em>A: H.264 for broad compatibility (all devices). VP9/AV1 for efficiency (30-50% bandwidth savings) served to compatible browsers. Store multiple codecs; the player selects based on device capability.</em></li>
+</ul>
+
+<div class="callout red">
+  <strong>What to Skip:</strong>
+  <ul>
+    <li>Don't design the actual video player (JavaScript/ExoPlayer) — assume a standard HLS player</li>
+    <li>Don't design the monetization/advertising system</li>
+    <li>Don't design content moderation or the copyright system in detail</li>
+    <li>Don't implement the recommendation ML model — describe the pipeline at a high level</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Articles</div>
+  <ul>
+    <li>YouTube Engineering: "How YouTube Recommends Videos" (youtube.com/press)</li>
+    <li>Netflix Tech Blog: "Per-Title Encode Optimization" (netflixtechblog.com)</li>
+    <li>ByteByteGo: "Design YouTube" (bytebytego.com)</li>
+    <li>Apple Developer: "HTTP Live Streaming" (developer.apple.com/streaming)</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><em>System Design Interview Vol 1</em> — Alex Xu, Ch. 7: Design YouTube</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="uber.html">&larr; Previous: Uber</a>
+  <a href="amazon-s3.html">Next: Amazon S3 &rarr;</a>
+</div>
+
+</body>
+</html>

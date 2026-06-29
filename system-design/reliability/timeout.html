@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Timeout — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">System Design</a> / <a href="./index.html">Reliability</a> / 10.2.3 Timeout</div>
+
+<h1>Timeout</h1>
+<div class="meta">
+  <span>Difficulty ⭐⭐</span>
+  <span>Interview Frequency ★★★★</span>
+</div>
+
+<div class="callout">
+  <strong>Goal:</strong> Understand timeout budgets across connection/read/write phases, cascading timeout chains, deadline propagation, and how to set appropriate timeout values.
+</div>
+
+<h2>Definition</h2>
+<p>A <strong>timeout</strong> is a maximum duration allowed for an operation to complete before it is forcibly terminated and considered failed. Timeouts are the most basic fault-tolerance mechanism — without them, a single slow or dead dependency can hang all upstream callers indefinitely, exhausting threads and connections.</p>
+
+<h2>Types of Timeouts</h2>
+
+<table>
+  <tr><th>Timeout Type</th><th>What It Covers</th><th>Typical Values</th></tr>
+  <tr><td><strong>Connection Timeout</strong></td><td>Time to establish TCP connection (SYN/ACK)</td><td>1-5 seconds</td></tr>
+  <tr><td><strong>DNS Resolution Timeout</strong></td><td>Time to resolve hostname to IP</td><td>1-3 seconds</td></tr>
+  <tr><td><strong>Read/Response Timeout</strong></td><td>Time to receive response data after connection is established</td><td>5-30 seconds (varies by operation)</td></tr>
+  <tr><td><strong>Write/Request Timeout</strong></td><td>Time to send request data to the server</td><td>5-15 seconds</td></tr>
+  <tr><td><strong>Overall/Total Timeout</strong></td><td>Hard cap on the entire operation from start to finish</td><td>30-60 seconds</td></tr>
+</table>
+
+<h2>Timeout Budget</h2>
+<p>When a request chains through multiple services, the total timeout budget must be allocated across each hop. This is called <strong>deadline propagation</strong> — the caller's remaining time is passed downstream.</p>
+
+<div class="diagram">
+  Client Request (total budget: 5 seconds)
+  │
+  ├── API Gateway        Budget: 5000ms
+  │     Remaining: 5000ms → calls AuthService with deadline = now + 4500ms
+  │
+  ├── AuthService        Budget: 4500ms
+  │     Connection: 500ms
+  │     Processing: 1000ms
+  │     Remaining: 3000ms → calls UserDB with deadline = now + 2500ms
+  │
+  ├── UserDB Query       Budget: 2500ms
+  │     Connection: 200ms
+  │     Read: 1000ms
+  │     Remaining: 1300ms → success
+  │
+  └── Total elapsed: 2700ms (within 5000ms budget)
+</div>
+
+<div class="callout yellow">
+  <strong>Key Rule:</strong> Each service must reserve some of its budget for its own processing and for returning the response upstream. If a service uses the entire remaining budget, the upstream caller cannot receive the response before its own timeout.
+</div>
+
+<h2>Cascading Timeouts</h2>
+<p>The most common timeout mistake is setting equal or larger timeouts for downstream services than upstream ones. This creates impossible situations where a downstream service "succeeds" but the response is discarded because the upstream timeout already fired.</p>
+
+<div class="diagram">
+  WRONG (cascading failure):
+  ┌──────────┐     3s timeout     ┌──────────┐     5s timeout     ┌──────────┐
+  │ Service A │ ────────────────▶ │ Service B │ ────────────────▶ │ Service C │
+  └──────────┘                    └──────────┘                    └──────────┘
+       │                                                               │
+  A times out at 3s                                            C responds at 4s
+       │                                                               │
+  └── B is still waiting for C (hasn't timed out yet)
+      └── B returns at 4s to A, but A is already gone
+         └── Wasted work, wasted resources
+
+  CORRECT (deadline propagation):
+  ┌──────────┐     3s deadline    ┌──────────┐     2.5s deadline  ┌──────────┐
+  │ Service A │ ────────────────▶ │ Service B │ ────────────────▶ │ Service C │
+  │ 5000ms    │    (reserves 500ms│ 2500ms    │    (reserves 500ms│ 2000ms    │
+  │ total     │     for response) │ remaining │     for response) │ remaining │
+  └──────────┘                    └──────────┘                    └──────────┘
+</div>
+
+<h2>Setting Timeout Values</h2>
+<p>Timeout values should be derived from observed latency data, not arbitrary numbers.</p>
+
+<pre>
+// Derive timeouts from SLO targets and latency data
+// Use p99 latency as the baseline, then add safety margin
+
+p50 latency = 50ms
+p95 latency = 120ms
+p99 latency = 350ms
+p99.9 latency = 800ms
+
+// Read timeout = p99.9 * 2 = 1600ms (generous safety margin)
+// Connection timeout = 500ms
+// Total timeout = connection + read = 2100ms
+</pre>
+
+<h3>Guidelines by Operation Type</h3>
+<table>
+  <tr><th>Operation</th><th>Suggested Timeout</th><th>Rationale</th></tr>
+  <tr><td>Cache lookup (Redis)</td><td>50-100ms</td><td>Should be sub-millisecond; anything &gt;50ms indicates a problem</td></tr>
+  <tr><td>Database read</td><td>500ms-2s</td><td>Index-scanned queries should be fast; full scans need different handling</td></tr>
+  <tr><td>Database write</td><td>1-5s</td><td>Writes are slower; account for replication lag</td></tr>
+  <tr><td>Internal API call</td><td>2-10s</td><td>Depends on downstream processing complexity</td></tr>
+  <tr><td>External API call</td><td>10-30s</td><td>External services are less predictable; use circuit breaker too</td></tr>
+  <tr><td>User-facing request (total)</td><td>30-60s</td><td>Browser clients typically timeout at 60-120s</td></tr>
+</table>
+
+<h2>Timeout + Retry + Circuit Breaker</h2>
+<p>Timeouts should always be combined with retries and circuit breakers:</p>
+
+<div class="diagram">
+  Request Flow:
+  ┌──────────────────────────────────────────────────────────────┐
+  │  1. Set overall deadline (e.g., 5s)                         │
+  │  2. Try request with 2s timeout                             │
+  │     ├── Success → return                                    │
+  │     └── Timeout → check remaining budget                    │
+  │  3. Retry with 2s timeout (remaining budget: ~3s)          │
+  │     ├── Success → return                                    │
+  │     └── Timeout → check circuit breaker state               │
+  │  4. Circuit breaker says OPEN → return fallback immediately  │
+  └──────────────────────────────────────────────────────────────┘
+</div>
+
+<h2>Deadline Propagation (gRPC/HTTP)</h2>
+<p>In distributed systems, deadlines must propagate across service boundaries:</p>
+
+<pre>
+// gRPC: deadline is propagated automatically via metadata
+// HTTP: use custom header
+Deadline-Propagation: remaining_ms=3200
+
+// Each service reads the header and sets its own timeout accordingly:
+downstream_timeout = min(local_default_timeout, received_remaining_ms)
+</pre>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>"How would you set timeouts for a microservices call chain?" — Calculate from observed p99 latency, propagate deadlines downstream, each hop reserves time for response.</li>
+  <li>"What happens if you don't set timeouts?" — Threads/connections accumulate, eventually exhausting all resources, bringing down the entire service.</li>
+  <li>"What is a cascading timeout?" — When upstream timeouts are shorter than downstream timeouts, the downstream succeeds but the response is wasted because upstream already gave up.</li>
+  <li>"How do you propagate timeouts across services?" — Deadline propagation via headers (HTTP) or metadata (gRPC), each service uses remaining budget minus safety margin.</li>
+  <li>"What is a good timeout for a Redis call?" — Very short (50-100ms). Redis should respond in sub-millisecond; a longer timeout masks a real problem.</li>
+</ul>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Depth:</strong> TCP keep-alive, SO_TIMEOUT, and OS-level socket configuration specifics. <br>
+  <strong>Depth:</strong> HTTP/2 stream-level timeout mechanics. <br>
+  <strong>Depth:</strong> Go context.Context deadline propagation internals — concept is enough.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Google SRE Book — Chapter 20: Cascading Failures</div>
+  <p>How missing timeouts cause cascading failures, with real production examples from Google.</p>
+</div>
+<div class="source">
+  <div class="source-label">Release It! — Michael Nygard</div>
+  <p>Chapter 6: Timeout patterns, including timeout budgets and how to set appropriate values.</p>
+</div>
+<div class="source">
+  <div class="source-label">AWS Architecture Blog — Timeout Review</div>
+  <p>Best practices for setting and propagating timeouts across distributed service calls.</p>
+</div>
+
+<div class="nav">
+  <a href="retry.html">&larr; Retry</a>
+  <a href="bulkhead.html">Bulkhead &rarr;</a>
+</div>
+</body>
+</html>

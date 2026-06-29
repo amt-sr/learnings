@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.6.1 Why Consensus - System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">5 Distributed Systems</a> / <a href="index.html">5.6 Consensus</a> / 5.6.1
+</div>
+
+<h1>5.6.1 Why Consensus</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<div class="callout green">
+  <strong>Goal:</strong> Understand what the consensus problem is, why it is fundamental to distributed systems, and what real-world problems it solves. Be able to articulate why consensus is unavoidable in many distributed system designs.
+</div>
+
+<h2>Definition</h2>
+
+<p><strong>Consensus</strong> is the problem of getting a group of distributed processes to agree on a single value (or state), even when some processes may fail or the network may deliver messages late, out of order, or not at all. A correct consensus algorithm must satisfy three properties:</p>
+
+<ul>
+  <li><strong>Safety:</strong> All non-faulty nodes decide on the same value.</li>
+  <li><strong>Liveness:</strong> Every non-faulty node eventually decides (no indefinite deadlock).</li>
+  <li><strong>Validity:</strong> The decided value must have been proposed by some node (not fabricated).</li>
+</ul>
+
+<h2>Why Consensus Is Unavoidable</h2>
+
+<p>In a single machine, coordination is trivial -- one CPU, one memory, one clock. In distributed systems, there is no shared memory, no global clock, and no single source of truth. When multiple nodes need to make a coordinated decision, they must communicate over an unreliable network. Consensus is the formal solution to this coordination challenge.</p>
+
+<div class="diagram">
+  Without Consensus                          With Consensus
+  ─────────────────                         ─────────────────
+
+  Node A: value = X                         Node A: value = X ✓
+  Node B: value = Y       ──→               Node B: value = X ✓
+  Node C: value = X                         Node C: value = X ✓
+
+  ❌ Inconsistent state                     ✅ Agreed state
+  "Who has the truth?"                      "We all agree on X"
+</div>
+
+<h2>FLP Impossibility Result</h2>
+
+<div class="callout yellow">
+  <strong>Fischer, Lynch, and Paterson (1985):</strong> In a purely asynchronous system with even one possible crash failure, no deterministic algorithm can guarantee consensus. This means that any consensus algorithm must either make timing assumptions (e.g., partial synchrony) or use randomization to achieve liveness.
+</div>
+
+<p>The practical implication is significant: real-world consensus algorithms (Raft, Paxos, Zab) all assume <strong>partial synchrony</strong> -- the network is usually timely, but may have arbitrary delays occasionally. This assumption allows them to make progress under normal conditions while providing safety guarantees always.</p>
+
+<h3>Why FLP Does Not Matter in Practice</h3>
+
+<ul>
+  <li>Real systems have timeouts (not purely asynchronous).</li>
+  <li>Crash-only failures are a reasonable model for well-engineered servers.</li>
+  <li>Randomized election timeouts (Raft) break the symmetry that FLP exploits.</li>
+  <li>The FLP scenario (a perfectly timed message delay during a vote) is vanishingly unlikely in production.</li>
+</ul>
+
+<h2>Real Problems That Require Consensus</h2>
+
+<h3>1. Leader Election</h3>
+<p>Many distributed systems (Raft, Zab, Kafka, etcd) need a single leader to coordinate writes. Electing that leader is a consensus problem -- all nodes must agree on who the leader is.</p>
+
+<h3>2. Mutual Exclusion / Distributed Locking</h3>
+<p>Preventing two nodes from accessing a shared resource simultaneously requires consensus. Who holds the lock? All nodes must agree, otherwise two nodes could both believe they hold the lock (split brain).</p>
+
+<h3>3. Atomic Broadcast / Total Order Broadcast</h3>
+<p>Ensuring all nodes see the same sequence of messages in the same order is equivalent to consensus. This is critical for replicated state machines, where every replica must apply the same operations in the same order.</p>
+
+<h3>4. Configuration / Membership Changes</h3>
+<p>When nodes join or leave a cluster, all nodes must agree on the current membership list. An inconsistent membership view leads to partition splits and data loss.</p>
+
+<h3>5. Distributed Transactions (Two-Phase Commit)</h3>
+<p>Deciding whether to commit or abort a transaction across multiple nodes requires all participants to agree on the outcome. This is a form of consensus, though 2PC is a blocking protocol (not liveness-safe under all failures).</p>
+
+<table>
+  <tr>
+    <th>Problem</th>
+    <th>Algorithm Used</th>
+    <th>Example System</th>
+  </tr>
+  <tr>
+    <td>Leader election</td>
+    <td>Raft / Zab</td>
+    <td>etcd, ZooKeeper, CockroachDB</td>
+  </tr>
+  <tr>
+    <td>Distributed locking</td>
+    <td>Paxos / Raft</td>
+    <td>Chubby, Consul</td>
+  </tr>
+  <tr>
+    <td>Atomic broadcast</td>
+    <td>Zab / Viewstamped Replication</td>
+    <td>ZooKeeper, Titan</td>
+  </tr>
+  <tr>
+    <td>Membership changes</td>
+    <td>Raft / SWIM + Gossip</td>
+    <td>etcd, Cassandra</td>
+  </tr>
+  <tr>
+    <td>Distributed transactions</td>
+    <td>Two-Phase Commit / Paxos</td>
+    <td>Spanner, CockroachDB</td>
+  </tr>
+</table>
+
+<h2>Consensus and the CAP Theorem</h2>
+
+<p>Consensus sits at the heart of the consistency vs. availability tradeoff. A system that uses consensus for every operation sacrifices latency and availability (a write must be replicated to a quorum before it is acknowledged). Systems that avoid consensus (Dynamo-style) gain availability at the cost of potential inconsistencies.</p>
+
+<div class="callout">
+  <strong>Key insight for interviews:</strong> When asked "how would you design X?", ask yourself: "Do all nodes need to agree on something?" If yes, you need consensus. If you can tolerate temporary disagreement (eventual consistency), you can avoid it and gain performance and availability.
+</div>
+
+<h2>Common Interview Questions</h2>
+
+<ul>
+  <li>What is the consensus problem and why is it hard?</li>
+  <li>Explain the FLP impossibility result and its practical implications.</li>
+  <li>Why does a distributed database need consensus?</li>
+  <li>What is the relationship between consensus and leader election?</li>
+  <li>How does consensus relate to the CAP theorem?</li>
+  <li>Can you have consistency without consensus? Under what conditions?</li>
+  <li>Name three real systems that use consensus internally.</li>
+</ul>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Do NOT deep-dive into Byzantine consensus</strong> (BFT, PBFT) unless asked. Most interviews focus on crash-fault tolerance, not Byzantine faults. Also skip formal proofs of FLP -- knowing the result and its practical implications is sufficient. Avoid the full history of consensus algorithms; focus on Raft and Paxos which are what interviewers expect.
+</div>
+
+<div class="source">
+  <div class="source-label">Reading Sources</div>
+  <ul>
+    <li>Designing Data-Intensive Applications (Kleppmann) -- Chapter 5: Replication, Section on Consensus</li>
+    <li>In Search of an Understandable Consensus Algorithm (Ongaro & Ousterhout, 2014) -- Raft paper, Section 1 for motivation</li>
+    <li>FLP Impossibility -- Fischer, Lynch, Paterson (1985)</li>
+    <li>Distributed Systems: Principles and Paradigms (Tanenbaum & Van Steen) -- Chapter 8: Fault Tolerance</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="merge-strategies.html">&larr; 5.5.4 Merge Strategies</a>
+  <a href="leader-election.html">5.6.2 Leader Election &rarr;</a>
+</div>
+
+</body>
+</html>

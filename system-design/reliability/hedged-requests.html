@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hedged Requests — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">System Design</a> / <a href="./index.html">Reliability</a> / 10.2.5 Hedged Requests</div>
+
+<h1>Hedged Requests</h1>
+<div class="meta">
+  <span>Difficulty ⭐⭐⭐⭐</span>
+  <span>Interview Frequency ★★★</span>
+</div>
+
+<div class="callout">
+  <strong>Goal:</strong> Understand the hedged request technique — sending duplicate requests to multiple replicas and returning the first response — when to use it, the cost tradeoffs, and Google's use case.
+</div>
+
+<h2>Definition</h2>
+<p><strong>Hedged requests</strong> (also called "request hedging" or "speculative execution") is a latency optimization technique where the client sends a request to one server, and if no response is received within a timeout, sends a duplicate request to another server. The client returns whichever response arrives first and cancels the other. This is particularly effective for reducing <strong>tail latency</strong> (p99/p99.9).</p>
+
+<p>The technique was popularized by <strong>Google Search</strong>, where Dean and Barroso described it in their paper "The Tail at Scale" (2013).</p>
+
+<h2>How It Works</h2>
+
+<div class="diagram">
+  Timeline:
+  t=0ms     t=50ms        t=95ms       t=200ms
+  ┃         ┃              ┃            ┃
+  ┃  Send   ┃  No response ┃  Response  ┃  Cancel
+  ┃  to A   ┃  (trigger    ┃  from B    ┃  A (if still
+  ┃         ┃   hedge)     ┃  arrives   ┃  pending)
+  ┃         ┃              ┃            ┃
+
+  Client ──────▶ Server A  (no response within 50ms)
+         │
+         └──────────▶ Server B  (response at 95ms)
+                      │
+                      └──── response to client
+
+  Client sees total latency: 95ms
+  (vs 200ms+ if waiting only for Server A)
+
+  Cost: 2 requests served, but only 1 response used
+</div>
+
+<h3>Two Variants</h3>
+<table>
+  <tr><th>Variant</th><th>Behavior</th><th>Use Case</th></tr>
+  <tr><td><strong>Timeout-based Hedge</strong></td><td>Send second request after timeout on first</td><td>High-value reads where latency matters more than cost (search, recommendations)</td></tr>
+  <tr><td><strong>Parallel Hedge</strong></td><td>Send to N replicas simultaneously, return first</td><td>Critical-path reads where cost is less important than latency (leader election, config fetch)</td></tr>
+</table>
+
+<h2>"The Tail at Scale" — Why It Matters</h2>
+<p>Google's key insight: even a tiny fraction of slow requests becomes a huge problem at scale.</p>
+
+<pre>
+// At 1 million QPS:
+// If p99 latency = 1s and p50 = 100ms
+// → 10,000 requests per second experience 1s latency
+// → 10,000 users per second see a "slow" page
+
+// With hedging:
+// p99.9 of the FIRST response drops dramatically
+// because the second request usually succeeds fast
+</pre>
+
+<div class="callout">
+  <strong>Google's Finding:</strong> In their paper, Google showed that sending a single hedged request reduced p99 latency by up to 10x for certain operations. The cost was a modest increase in total resource usage (typically 2-5%).
+</div>
+
+<h2>When to Use Hedged Requests</h2>
+
+<table>
+  <tr><th>Good Fit</th><th>Poor Fit</th></tr>
+  <tr><td class="green">Read-only operations (idempotent by nature)</td><td class="red">Write operations (risk of duplicates)</td></tr>
+  <tr><td class="green">High-value requests (search results, recommendations)</td><td class="red">Low-value/background operations</td></tr>
+  <tr><td class="green">Stateless services with multiple replicas</td><td class="red">Services with limited replicas or capacity</td></tr>
+  <tr><td class="green">Latency-sensitive user-facing paths</td><td class="red">Internal batch processing</td></tr>
+  <tr><td class="green">Operations where tail latency is extremely variable</td><td class="red">Operations with consistent latency</td></tr>
+</table>
+
+<h2>Configuration Parameters</h2>
+
+<table>
+  <tr><th>Parameter</th><th>Description</th><th>Typical Values</th></tr>
+  <tr><td><strong>Hedge Timeout</strong></td><td>How long to wait before sending duplicate</td><td>p95 or p99 of normal latency (50-200ms)</td></tr>
+  <tr><td><strong>Max Hedge Count</strong></td><td>Maximum number of duplicate requests</td><td>1-2 (beyond this, returns diminish)</td></tr>
+  <tr><td><strong>Hedge Probability</strong></td><td>Percentage of requests to hedge (not all need it)</td><td>1-5% for cost control</td></tr>
+  <tr><td><strong>Cancel On First</strong></td><td>Cancel pending requests when first response arrives</td><td>Always true (waste reduction)</td></tr>
+</table>
+
+<h2>Cost Analysis</h2>
+
+<div class="callout yellow">
+  <strong>Tradeoff:</strong> Hedged requests trade server resources for better latency. At Google's scale, a 1% increase in total request load can reduce p99 latency by 10x. But you must ensure your system has capacity for the extra load.
+</div>
+
+<pre>
+// Cost calculation:
+// If hedge_timeout = p95 and 5% of requests are slow (beyond p95):
+// Then ~5% of requests trigger a hedge
+// Extra load = 5% of total traffic (one extra request each)
+// Net load increase = 105% (5% overhead)
+
+// But for those 5%, latency drops from p99 → ~p60
+// (because the hedge usually succeeds much faster)
+</pre>
+
+<h2>Hedging vs Retries</h2>
+
+<table>
+  <tr><th>Aspect</th><th>Retry</th><th>Hedged Request</th></tr>
+  <tr><td><strong>Timing</strong></td><td>Sequential: wait for failure, then retry</td><td>Parallel after timeout: both in-flight simultaneously</td></tr>
+  <tr><td><strong>Goal</strong></td><td>Recover from transient failures</td><td>Reduce tail latency</td></tr>
+  <tr><td><strong>Latency</strong></td><td>Worse (total = first + retry time)</td><td>Better (total = first response time)</td></tr>
+  <tr><td><strong>Load</strong></td><td>Same total request count (retry only if failed)</td><td>Higher (duplicate request sent proactively)</td></tr>
+  <tr><td><strong>Cancel</strong></td><td>Not applicable (sequential)</td><td>Must cancel the slower request</td></tr>
+</table>
+
+<h2>Implementation Sketch</h2>
+
+<pre>
+Response hedgedGet(Request req, Duration hedgeTimeout) {
+    Future&lt;Response&gt; first = sendAsync(replica_A, req);
+
+    try {
+        return first.get(hedgeTimeout);          // Wait for first replica
+    } catch (TimeoutException e) {
+        Future&lt;Response&gt; second = sendAsync(replica_B, req);
+
+        // Return whichever completes first, cancel the other
+        return CompletableFence.anyOf(first, second)
+                                .get(overallTimeout);
+    } finally {
+        first.cancel(true);   // Cancel pending requests
+        second.cancel(true);
+    }
+}
+</pre>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>"What is a hedged request?" — Send a duplicate request to another replica if the first one is slow, return whichever responds first.</li>
+  <li>"How does Google Search use hedged requests?" — To reduce p99 latency. The paper "The Tail at Scale" showed that a small fraction of slow requests at high QPS means many users affected, and hedging dramatically reduces tail latency.</li>
+  <li>"What is the cost of hedging?" — Extra server load (typically 1-5% overhead). Each hedge is a duplicate request that consumes CPU, network, and database capacity.</li>
+  <li>"Can you hedge write operations?" — Generally no, unless writes are idempotent. Hedging a non-idempotent write causes duplicates (double charges, double posts).</li>
+  <li>"How is hedging different from retrying?" — Retries are sequential (wait for failure, try again). Hedging sends a second request in parallel, and returns whichever is faster.</li>
+  <li>"How would you decide the hedge timeout?" — Set it at the p95 latency threshold. This means only the slowest 5% of requests trigger a hedge.</li>
+</ul>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Depth:</strong> gRPC speculative retry protocol details. <br>
+  <strong>Depth:</strong> Google Spanner's Paxos-based hedging implementation specifics. <br>
+  <strong>Depth:</strong> Mathematical analysis of tail latency distributions (Weibull, log-normal).
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Dean & Barroso — "The Tail at Scale" (CACM 2013)</div>
+  <p>The foundational paper on hedged requests at Google. Explains why tail latency matters at scale and how speculative execution reduces it.</p>
+</div>
+<div class="source">
+  <div class="source-label">Google SRE Book — Chapter 22: Addressing Latency</div>
+  <p>Practical guidance on latency reduction techniques including hedged requests and timeout tuning.</p>
+</div>
+<div class="source">
+  <div class="source-label">Martin Kleppmann — Designing Data-Intensive Applications</div>
+  <p>Chapter on replication and latency, discussing techniques to handle variable response times including hedging.</p>
+</div>
+
+<div class="nav">
+  <a href="bulkhead.html">&larr; Bulkhead</a>
+  <a href="graceful-degradation.html">Graceful Degradation &rarr;</a>
+</div>
+</body>
+</html>

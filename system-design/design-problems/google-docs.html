@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>15.15 Google Docs — System Design</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../">Handbook</a> / <a href="../">System Design</a> / 15. Design Problems / 15.15 Google Docs</p>
+
+<h1>Google Docs</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Design a real-time collaborative document editing system where multiple users can edit the same document simultaneously and see each other's changes in real-time. The system must handle conflict resolution, maintain document consistency, support offline editing with reconnection sync, and provide low-latency propagation of changes across all connected clients.</p>
+
+<h2>Functional Requirements</h2>
+<ul>
+  <li>Real-time collaborative editing: multiple users edit the same document simultaneously</li>
+  <li>Every user sees a consistent view of the document at all times</li>
+  <li>Support text formatting (bold, italic, headings, lists) and rich content (images, tables)</li>
+  <li>Handle conflict resolution when concurrent edits affect the same region</li>
+  <li>Support offline editing with merge on reconnection</li>
+  <li>Version history with undo/redo per user</li>
+  <li>Cursor and selection sharing (see where others are typing)</li>
+</ul>
+
+<h2>Non-Functional Requirements</h2>
+<ul>
+  <li><strong>Real-time:</strong> changes visible to other users within 100ms</li>
+  <li><strong>Consistency:</strong> no data loss, all users converge to the same final document</li>
+  <li><strong>Scalability:</strong> support millions of concurrent editing sessions</li>
+  <li><strong>Low latency:</strong> typing latency not noticeably worse than local editing</li>
+  <li><strong>Availability:</strong> survive server failures without data loss</li>
+</ul>
+
+<h3>Capacity Estimates</h3>
+<table>
+  <tr><th>Metric</th><th>Estimate</th><th>Notes</th></tr>
+  <tr><td>Active documents</td><td>10M</td><td>Currently being edited</td></tr>
+  <tr><td>Total documents</td><td>10B</td><td>All created documents</td></tr>
+  <tr><td>Concurrent editors</td><td>50M</td><td>Peak simultaneous</td></tr>
+  <tr><td>Operations/sec</td><td>500K</td><td>Keystrokes + formatting changes</td></tr>
+  <tr><td>Average document size</td><td>50 KB</td><td>Text content</td></tr>
+  <tr><td>Average editors per doc</td><td>2-3</td><td>Most documents have 1-2 editors</td></tr>
+</table>
+
+<h2>API Design</h2>
+<pre>
+# WebSocket connection for editing session
+WS /api/v1/documents/{document_id}/edit?token={jwt}
+
+# Client sends operation
+→ { "op": "insert", "position": 42, "text": "a", "user_id": "u1", "revision": 15 }
+
+# Server broadcasts transformed operation to other clients
+← { "op": "insert", "position": 43, "text": "a", "user_id": "u1", "revision": 16 }
+
+# Cursor position sharing
+→ { "type": "cursor", "position": 42, "user_id": "u1" }
+← { "type": "cursor", "position": 89, "user_id": "u2" }
+
+# REST API
+POST   /api/v1/documents
+Body:  { "title": "Meeting Notes", "content": "" }
+Resp:  { "document_id": "doc_abc123", "version": 0 }
+
+GET    /api/v1/documents/{document_id}
+Resp:  { "document_id": "doc_abc123", "title": "Meeting Notes",
+         "content": "Hello world...", "version": 42,
+         "active_editors": [{ "user_id": "u1", "cursor": 42 }, ...] }
+</pre>
+
+<h2>High-Level Design</h2>
+<div class="diagram">
+  Client A          Client B          Client C
+  (Editor)          (Editor)          (Viewer)
+     │                 │                 │
+     │  WebSocket      │  WebSocket      │
+     ▼                 ▼                 ▼
+  ┌──────────────────────────────────────────────┐
+  │             Connection Manager                │
+  │     Maps: document_id → set of WebSocket     │
+  │     connections (which users are editing)     │
+  └──────────────────────┬──────────────────────┘
+                         │
+                 ┌───────▼────────┐
+                 │  Edit Engine    │
+                 │  (OT/CRDT core) │
+                 │                 │
+                 │  1. Receive op  │
+                 │  2. Transform   │
+                 │  3. Apply       │
+                 │  4. Broadcast   │
+                 │  5. Persist     │
+                 └───────┬────────┘
+                         │
+              ┌──────────┼──────────┐
+              │          │          │
+       ┌──────▼───┐ ┌───▼──────┐ ┌─▼────────┐
+       │ Document │ │ Operation│ │ Document │
+       │ Store    │ │ Log      │ │ History  │
+       │ (DB)     │ │ (Kafka)  │ │ (S3)     │
+       └──────────┘ └──────────┘ └──────────┘
+</div>
+
+<h2>Deep Dive: Operational Transformation (OT)</h2>
+<p>OT is the algorithm behind Google Docs. When two users make concurrent edits, the server transforms one operation against the other so both can be applied without conflict.</p>
+
+<h3>OT Example</h3>
+<div class="diagram">
+  Document state: "Hello world" (length 11)
+
+  User A: inserts "beautiful " at position 6 → "Hello beautiful world"
+  User B: inserts "Dear " at position 0 → "Dear Hello world"
+
+  Both operations based on revision 0 (concurrent edits).
+
+  Server receives A's op first:
+    Apply A: "Hello beautiful world" (rev 0 → rev 1)
+    Transform B's op against A's op:
+      B inserts at 0 → still inserts at 0 (A's insert was after position 0)
+    Apply transformed B: "Dear Hello beautiful world" (rev 1 → rev 2)
+
+  Server receives B's op first:
+    Apply B: "Dear Hello world" (rev 0 → rev 1)
+    Transform A's op against B's op:
+      A inserts at 6 → insert at 6+5=11 (shifted by B's 5-char insert)
+    Apply transformed A: "Dear Hello beautiful world" (rev 1 → rev 2)
+
+  Same final result: "Dear Hello beautiful world" ✓ (consistency guaranteed)
+</div>
+
+<div class="callout green">
+  <strong>OT properties:</strong> The transformation function must satisfy two properties: (1) TP1(a, b) applied after b equals TP2(b, a) applied after a (convergence), and (2) applying a transformation never loses operations (intention preservation). Google's Wave protocol formalized these guarantees.
+</div>
+
+<h2>Deep Dive: OT Server Algorithm</h2>
+<pre>
+# Server-side OT processing
+
+On receive operation op from client at revision client_rev:
+
+  # 1. Transform against all operations the client hasn't seen
+  for each pending_op in operations[client_rev + 1 ... server_rev]:
+      op = transform(op, pending_op)
+
+  # 2. Apply to current document state
+  document = apply(document, op)
+  server_rev += 1
+
+  # 3. Broadcast to all OTHER clients
+  for each other_client in connected_clients:
+      # Each client may be at a different revision
+      broadcast_op = op
+      for each op that other_client has NOT seen:
+          broadcast_op = transform(broadcast_op, that_op)
+      send(broadcast_op) to other_client
+
+  # 4. Persist operation to operation log
+  append_to_log(op, server_rev)
+</pre>
+
+<div class="callout yellow">
+  <strong>Centralized OT server:</strong> The server acts as the single source of truth. Clients send operations, the server transforms and applies them, then broadcasts. This avoids N-way transformation complexity (which would be O(N^2) for N concurrent editors). The downside is that the server is a single point of coordination.
+</div>
+
+<h2>Deep Dive: CRDT (Alternative to OT)</h2>
+<p>Conflict-Free Replicated Data Types (CRDTs) provide an alternative approach where each client can apply operations independently and all replicas will converge to the same state without a central server.</p>
+
+<table>
+  <tr><th>Aspect</th><th>OT</th><th>CRDT</th></tr>
+  <tr><td>Architecture</td><td>Central server required</td><td class="green">Peer-to-peer capable</td></tr>
+  <tr><td>Complexity</td><td>High (transformation logic)</td><td>Moderate (merge functions)</td></tr>
+  <tr><td>Document model</td><td>Linear text (array)</td><td>RGA (Replicated Growable Array), tree, etc.</td></tr>
+  <tr><td>Rich text support</td><td class="green">Mature (Google Docs proven)</td><td>Research phase (proven for text, complex for rich)</td></tr>
+  <tr><td>Offline support</td><td>Limited (needs server to transform)</td><td class="green">Excellent (merge on reconnect)</td></tr>
+  <tr><td>Memory overhead</td><td class="green">Low (just the document)</td><td class="red">Higher (metadata per character/element)</td></tr>
+  <tr><td>Production use</td><td>Google Docs, CKEditor</td><td>Figma, Notion (partial), Yjs</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Hybrid approach (used by modern editors):</strong> Use OT for real-time collaborative editing with a central server, and CRDT concepts for offline-first editing and reconnection merge. Notion and some modern editors take this hybrid approach. The OT server handles the happy path; CRDT-style tombstones and version vectors handle reconnection.
+</div>
+
+<h2>Deep Dive: Document Model</h2>
+<p>Documents are represented as structured data, not plain text. This enables rich formatting, embedding, and efficient operations.</p>
+
+<pre>
+# Document as a JSON structure (simplified)
+{
+  "type": "document",
+  "version": 42,
+  "children": [
+    {
+      "type": "heading",
+      "level": 1,
+      "children": [
+        { "type": "text", "text": "Meeting Notes", "bold": true }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "children": [
+        { "type": "text", "text": "Attendees: Alice, Bob, Carol" }
+      ]
+    },
+    {
+      "type": "image",
+      "src": "https://cdn.example.com/image.png",
+      "width": 640
+    }
+  ]
+}
+
+# Operations work on this tree structure:
+# - Insert node at path
+# - Delete node at path
+# - Update text content at path
+# - Update formatting at path
+</pre>
+
+<h2>Deep Dive: Persistence and History</h2>
+<ul>
+  <li><strong>Operation log:</strong> Append-only log of all operations, stored in Kafka for durability and replay. Each operation has a monotonically increasing revision number.</li>
+  <li><strong>Document snapshots:</strong> Periodically (every 100 operations or 10 seconds) snapshot the current document state. Store in the database. This enables fast document loading (load latest snapshot + replay operations since snapshot).</li>
+  <li><strong>Version history:</strong> Users can view the document at any previous revision. Walk backwards through the operation log and apply inverse operations (or use snapshots to skip large jumps).</li>
+</ul>
+
+<div class="callout green">
+  <strong>Compaction:</strong> The operation log grows unboundedly. Periodically compact: create a new snapshot from the current state, then truncate the operation log before the snapshot. Keep a configurable retention window (e.g., last 1000 revisions) for undo support.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>Why not just send the entire document on every keystroke? <em>A: Bandwidth and latency. A 50KB document updated 10 times/sec = 500KB/sec per editor. With OT/CRDT, each operation is ~20 bytes, so 200 bytes/sec — 2500x more efficient. Also, sending the full document makes conflict resolution impossible.</em></li>
+  <li>How does OT handle three or more concurrent editors? <em>A: The central server serializes all operations. Each operation is transformed against all pending operations in order. The complexity is O(N * K) where N = number of pending ops, K = transformation cost. For typical documents with a few editors, this is fast.</em></li>
+  <li>How do you handle the server going down? <em>A: All operations are persisted to the operation log (Kafka) before acknowledging. On server restart, replay from the last snapshot + operations. Clients buffer operations locally and retry on reconnect.</em></li>
+  <li>How do you support undo/redo in a collaborative document? <em>A: Per-user undo stack. Each user tracks their own operations. Undo removes the user's last operation (transformed against intervening operations from others). This is different from a single global undo — each user undoes only their own changes.</em></li>
+  <li>How does this scale to very large documents (100+ pages)? <em>A: Use a hierarchical document model (tree structure) instead of a flat array. This enables selective syncing of only the visible portions of the document (viewport optimization). Operations are applied to the relevant subtree.</em></li>
+  <li>What is the difference between optimistic updates and OT? <em>A: Optimistic updates apply locally and hope for no conflicts (retry on conflict). OT guarantees convergence — every concurrent edit is mathematically resolved. For collaborative editing, OT/CRDT is required; optimistic updates are insufficient.</em></li>
+</ul>
+
+<div class="callout red">
+  <strong>What to Skip:</strong>
+  <ul>
+    <li>Don't implement the full OT transformation function — describe the concept and properties</li>
+    <li>Don't design the rich text editor UI (Quill, ProseMirror) — assume a client-side library</li>
+    <li>Don't design the document sharing/permission system in detail</li>
+    <li>Don't get into specific CRDT implementations (RGA, LWW-Element-Set) unless asked</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Papers</div>
+  <ul>
+    <li>"Operational Transformation in Real-Time Group Editors" — Ellis &amp; Gibbs, 1989 (foundational OT paper)</li>
+    <li>"A Survey of Real-Time Collaborative Editing Systems" — Nichols et al.</li>
+    <li>"A comprehensive study of Convergent and Commutative Replicated Data Types" — Marc Shapiro et al. (INRIA, CRDT survey)</li>
+    <li>"Conflict-free Replicated Data Types" — Marc Shapiro et al. (SSS 2011)</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Articles</div>
+  <ul>
+    <li>Google Wave Architecture: "Operational Transformation" (wave.google.com)</li>
+    <li>Yjs documentation: "Understanding CRDTs" (docs.yjs.dev)</li>
+    <li>Figma Engineering: "How Figma's Multiplayer Technology Works" (figma.com/blog)</li>
+    <li>Neil Fraser: "Differential Synchronization" (neil.fraser.name/writing/sync)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="dropbox.html">&larr; Previous: Dropbox</a>
+  <a href="uber.html">Next: Uber &rarr;</a>
+</div>
+
+</body>
+</html>

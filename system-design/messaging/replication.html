@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.2.8 Replication — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">8. Messaging</a> / 8.2.8 Replication</p>
+
+<h1>8.2.8 Replication (Kafka Replication)</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+
+<p>Understand how Kafka replicates topic partitions across brokers for fault tolerance, the leader-follower model, and the role of the In-Sync Replicas (ISR) set.</p>
+
+<h2>Definition</h2>
+
+<p><strong>Kafka replication</strong> copies each partition of a topic across multiple brokers. One replica serves as the <strong>leader</strong> (handles all read/write requests), and the others serve as <strong>followers</strong> (passively replicate from the leader). If the leader broker fails, one of the in-sync followers is elected as the new leader, ensuring data availability and fault tolerance.</p>
+
+<div class="callout">
+  <strong>Key Concept:</strong> Replication provides durability and availability. Messages are not considered fully acknowledged until they are written to the leader and (depending on acks setting) replicated to followers. If the leader fails, an in-sync follower takes over with no data loss.
+</div>
+
+<h2>Architecture</h2>
+
+<div class="diagram">
+  Topic: "payment-events" — Partition 0 (replication factor = 3)
+
+  ┌───────────────────────────────────────────────────────────────┐
+  │                        Broker 1                               │
+  │  ┌──────────────────────────────────┐                         │
+  │  │  Partition 0 — LEADER             │                         │
+  │  │  [m1][m2][m3][m4][m5][m6]       │                         │
+  │  │  Handles all reads and writes    │                         │
+  │  └──────────────┬───────────────────┘                         │
+  │                 │                                              │
+  └─────────────────┼──────────────────────────────────────────────┘
+                    │ replicate
+          ┌─────────┴──────────┐
+          ▼                    ▼
+  ┌──────────────────┐  ┌──────────────────┐
+  │     Broker 2      │  │     Broker 3      │
+  │  ┌──────────────┐│  │  ┌──────────────┐│
+  │  │ P0 — FOLLOWER││  │  │ P0 — FOLLOWER││
+  │  │ [m1][m2][m3] ││  │  │ [m1][m2][m3] ││
+  │  │ (catching up) ││  │  │ (caught up)  ││
+  │  └──────────────┘│  │  └──────────────┘│
+  └──────────────────┘  └──────────────────┘
+
+  ISR = {Broker 1 (leader), Broker 3 (follower)}
+  Broker 2 is NOT in ISR (too far behind)
+</div>
+
+<h2>Leader-Follower Model</h2>
+
+<h3>Leader</h3>
+<ul>
+  <li>Handles all read and write requests for the partition.</li>
+  <li>Producers always write to the leader (unless a configuration error).</li>
+  <li>Consumers always read from the leader.</li>
+  <li>Maintains the authoritative log for the partition.</li>
+</ul>
+
+<h3>Followers</h3>
+<ul>
+  <li>Pull messages from the leader's log to stay in sync.</li>
+  <li>Do not serve client requests (read or write) unless they become leader.</li>
+  <li>If the leader fails, an in-sync follower is elected as the new leader.</li>
+</ul>
+
+<h2>Replication Factor</h2>
+
+<p>The <strong>replication factor</strong> controls how many copies of each partition exist across the cluster:</p>
+
+<table>
+  <tr><th>Replication Factor</th><th>Copies</th><th>Tolerates Failures</th><th>Storage Overhead</th></tr>
+  <tr><td>1</td><td>1 (leader only)</td><td class="red">0 broker failures</td><td>1x</td></tr>
+  <tr><td>2</td><td>1 leader + 1 follower</td><td>1 broker failure</td><td>2x</td></tr>
+  <tr><td>3</td><td>1 leader + 2 followers</td><td class="green">1 broker failure (with acks=all)</td><td>3x</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Interview Tip:</strong> "What replication factor do you use?" A common answer is 3 — it provides fault tolerance against one broker failure while maintaining availability (the partition remains writable even after losing one broker). The replication factor should not exceed the number of brokers in the cluster.
+</div>
+
+<h2>Write Path with Replication</h2>
+
+<div class="diagram">
+  Producer writes to Partition 0 with acks=all:
+
+  1. Producer ──write──► Leader (Broker 1)
+     Leader writes to local log
+
+  2. Leader ──replicate──► Follower 1 (Broker 3)
+     Follower 1 writes to local log, sends ACK to leader
+
+  3. Leader ──replicate──► Follower 2 (Broker 2)
+     Follower 2 writes to local log, sends ACK to leader
+
+  4. Leader has received ACK from all ISR replicas
+     Leader ──ACK──► Producer (success)
+
+  If Broker 2 is slow:
+  Follower 2 takes too long → removed from ISR
+  Leader only waits for ISR members (Broker 1 + Broker 3)
+  → Still returns success to producer
+</div>
+
+<h2>Leader Election</h2>
+
+<p>When the leader broker for a partition fails:</p>
+
+<ol>
+  <li>A controller broker (one of the brokers in the cluster) detects the failure.</li>
+  <li>The controller selects a new leader from the ISR for that partition.</li>
+  <li>The new leader starts serving read/write requests.</li>
+  <li>Followers begin replicating from the new leader.</li>
+</ol>
+
+<div class="callout">
+  <strong>Unclean Leader Election:</strong> If no ISR members are available (all followers are too far behind or also failed), Kafka can elect a non-ISR follower as leader. This results in data loss for messages the new leader did not replicate. This is configurable (<code>unclean.leader.election.enable</code>) and is generally <strong>disabled</strong> in production to prevent data loss.
+</div>
+
+<h2>Replication vs. Partitioning</h2>
+
+<table>
+  <tr><th>Aspect</th><th>Partitioning</th><th>Replication</th></tr>
+  <tr><td>Purpose</td><td>Parallelism and throughput</td><td>Fault tolerance and durability</td></tr>
+  <tr><td>Unit</td><td>Partitions within a topic</td><td>Copies of a partition across brokers</td></tr>
+  <tr><td>Configuration</td><td><code>num.partitions</code></td><td><code>default.replication.factor</code></td></tr>
+  <tr><td>Trade-off</td><td>More partitions → more parallelism, more overhead</td><td>Higher factor → more durability, more storage</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+
+<ol>
+  <li>"How does Kafka replication work?"</li>
+  <li>"What is the difference between a leader and a follower in Kafka?"</li>
+  <li>"What happens when the leader broker for a partition fails?"</li>
+  <li>"What replication factor would you choose and why?"</li>
+  <li>"How does replication affect producer acks?"</li>
+  <li>"What is unclean leader election and when would it happen?"</li>
+  <li>"What is the ISR and why is it important for replication?"</li>
+  <li>"How does replication affect throughput?"</li>
+</ol>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Do not dive into:</strong>
+  <ul>
+    <li>Controller election and ZooKeeper/KRaft-based controller internals.</li>
+    <li>Replica fetcher thread internals and lag calculation algorithms.</li>
+    <li>Log directory layout for replicas (how Kafka stores replica data on disk).</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Books &amp; Guides</div>
+  <ul>
+    <li><a href="https://kafka.apache.org/documentation/#replication">Kafka Documentation — Replication</a> — Official replication concepts</li>
+    <li><a href="https://www.confluent.io/learn/kafka-replication/">Confluent — Kafka Replication Deep Dive</a> — Leader election and ISR mechanics</li>
+    <li><a href="https://www.oreilly.com/library/view/kafka-the-definitive/9781491936153/">Kafka: The Definitive Guide</a> — Ch. 6 (Reliability)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="consumer-group.html">&larr; 8.2.7 Consumer Group</a>
+  <a href="isr.html">8.2.9 ISR &rarr;</a>
+</div>
+
+</body>
+</html>

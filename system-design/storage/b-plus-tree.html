@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.9.1 B+ Tree</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#3">3 Storage</a> / <a href="../index.html#3.9">3.9 Storage Engines</a> / 3.9.1
+</div>
+
+<h1>B+ Tree</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>How a B+ tree is structured (internal nodes vs leaf nodes)</li>
+  <li>Why B+ trees are the default index structure in relational databases</li>
+  <li>How balanced height guarantees O(log n) lookups</li>
+  <li>Sequential I/O optimization via linked leaf nodes</li>
+</ul>
+
+<h2>Definition</h2>
+<p>A <strong>B+ tree is a self-balancing tree data structure that keeps data sorted and allows searches, insertions, deletions, and sequential access in O(log n) time</strong>. Internal nodes store only keys for routing; all actual data (or pointers to data) reside in the leaf nodes, which are linked together in a doubly-linked list.</p>
+
+<div class="diagram">                    B+ Tree (order = 3, max 3 keys per node)
+
+  Level 0 (Root):        [ 30 | 60 ]
+                         /    |     \
+  Level 1 (Internal):  [10|20] [40|50] [70|80]
+                      / | \   / | \    / | \
+  Level 2 (Leaves):  [1][5][15] [25][35] [45][55][65] [75][85][95]
+                      ——————————————————————————————————————————————→  linked list
+
+  Properties:
+  - Root:    2..3 keys    (flexible, fewer on low fill)
+  - Internal: 2..3 keys   (must be at least half full)
+  - Leaf:    2..3 keys + pointer to next leaf
+  - All leaves at same depth → tree is always balanced</div>
+
+<h2>Key Properties</h2>
+<table>
+  <tr><th>Property</th><th>Detail</th></tr>
+  <tr><td><strong>Balanced</strong></td><td>All leaves at the same depth — guaranteed by the tree invariant. No degenerate O(n) paths.</td></tr>
+  <tr><td><strong>Wide nodes</strong></td><td>Each node holds 100s of keys (tuned to a disk page, typically 4 KB or 16 KB). This makes the tree very shallow.</td></tr>
+  <tr><td><strong>Data in leaves only</strong></td><td>Internal nodes are routing tables. This keeps internal nodes small and cache-friendly.</td></tr>
+  <tr><td><strong>Linked leaf nodes</strong></td><td>Leaves form a doubly-linked list — enables fast range scans and sequential access.</td></tr>
+  <tr><td><strong>Ordered</strong></td><td>Keys are sorted within every node and across the tree — supports efficient range queries.</td></tr>
+</table>
+
+<h2>Why B+ Trees Dominate Database Indexing</h2>
+<h3>1. Disk-Friendly Design</h3>
+<p>Database nodes are sized to match a disk page (4-16 KB). A single disk read fetches an entire node with hundreds of keys. This means a B+ tree with 1 billion rows needs only <strong>3-4 levels</strong>:</p>
+<pre>Assumptions:
+  - Page size:        8 KB
+  - Key size:         12 bytes
+  - Page capacity:   ~500 keys per internal node
+  - Fan-out:          500
+
+  Levels for 1 billion rows:
+    Level 0 (root):         1 page
+    Level 1 (internal):     1 page  (500 keys → 500 children)
+    Level 2 (internal):     ~2,000 pages (1M keys → 1M children)
+    Level 3 (leaf):         ~2,000,000 pages
+
+  Lookup = 4 disk seeks → predictable, fast</pre>
+
+<h3>2. Sequential I/O for Range Scans</h3>
+<p>Leaf nodes are linked, so a range query like <code>WHERE age BETWEEN 20 AND 30</code> reads contiguous leaf pages — perfect for disk prefetching and OS read-ahead.</p>
+
+<h3>3. Predictable Performance</h3>
+<table>
+  <tr><th>Operation</th><th>Time Complexity</th><th>Disk I/O</th></tr>
+  <tr><td>Point lookup (by key)</td><td class="green">O(log n)</td><td>3-4 page reads</td></tr>
+  <tr><td>Range scan</td><td class="green">O(log n + k)</td><td>3-4 reads + k leaf pages</td></tr>
+  <tr><td>Insert</td><td class="green">O(log n)</td><td>3-4 reads + 1 write (no split) or more (with split)</td></tr>
+  <tr><td>Delete</td><td class="green">O(log n)</td><td>3-4 reads + 1 write (no merge) or more (with merge)</td></tr>
+</table>
+
+<h2>Insertion and Splits</h2>
+<div class="diagram">  Insert key=42 into this B+ tree:
+
+  Before:                          After (split at leaf):
+  [ 30 | 60 ]                     [ 30 | 45 | 60 ]     ← promoted 45
+   /    |     \                     /     |      \
+  [...]  [40|50]  [...]          [...]  [40|42] [50]  [...]   ← split leaf
+
+  Split process:
+  1. Find target leaf
+  2. Insert key in sorted position
+  3. If leaf overflows (too many keys):
+     a. Split leaf into two halves
+     b. Copy middle key up to parent
+     c. If parent overflows → recurse up (rare)
+
+  In practice, bulk loading (bottom-up construction) is preferred
+  for initial index creation — O(n) vs O(n log n) for individual inserts.</div>
+
+<h2>B+ Tree vs B Tree</h2>
+<table>
+  <tr><th></th><th>B Tree</th><th class="green">B+ Tree</th></tr>
+  <tr><td>Data location</td><td>Every node (internal + leaf)</td><td class="green">Leaf nodes only</td></tr>
+  <tr><td>Leaf linkage</td><td class="red">No linked leaves</td><td class="green">Doubly-linked list</td></tr>
+  <tr><td>Range scan</td><td class="red">Inefficient (tree traversal)</td><td class="green">Efficient (follow leaf pointers)</td></tr>
+  <tr><td>Internal node size</td><td class="red">Larger (stores data + keys)</td><td class="green">Smaller (keys only → higher fan-out)</td></tr>
+  <tr><td>Tree height</td><td class="red">Taller (lower fan-out)</td><td class="green">Shorter (higher fan-out)</td></tr>
+  <tr><td>Disk reads per lookup</td><td class="red">More</td><td class="green">Fewer</td></tr>
+  <tr><td>Used by</td><td>File systems (NTFS, ext4)</td><td class="green">Databases (MySQL, PostgreSQL, Oracle)</td></tr>
+</table>
+
+<div class="callout green">
+  <strong>Key insight:</strong> B+ trees are superior for databases because higher fan-out means shallower trees, and linked leaves enable fast range scans — the most common query pattern in analytical workloads.
+</div>
+
+<h2>When B+ Trees Struggle</h2>
+<div class="callout red">
+  <strong>Write-heavy workloads:</strong> Random insertions cause page splits and fragmentation. Each write requires a read-modify-write cycle (read leaf → modify → write back). This is why write-intensive systems use <a href="lsm-tree.html">LSM trees</a> instead.
+</div>
+
+<ul>
+  <li><strong>Page splits</strong> cause write amplification (write 1 row → rewrite multiple pages)</li>
+  <li><strong>Fragmentation</strong> over time reduces page fill factor (typically drops to 60-70%)</li>
+  <li><strong>Random I/O</strong> on inserts — poor for SSDs under high write load</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"Why are B+ trees used instead of hash tables for database indexes?"</strong><br>Hash tables support only point lookups (O(1)), not range queries. B+ trees support both point and range queries in O(log n), and linked leaves make range scans efficient. Most database queries involve ranges (WHERE, ORDER BY, BETWEEN).</li>
+  <li><strong>"How many disk reads to look up a key in a B+ tree with 10 million rows?"</strong><br>With 4 KB pages and 8-byte keys, fan-out is ~400. log₄₀₀(10M) ≈ 3.4 → <strong>4 disk reads</strong>. With buffer pool caching, often 0-1 actual disk reads.</li>
+  <li><strong>"What happens during a B+ tree node split?"</strong><br>When a node exceeds its capacity, it splits into two. The median key is promoted (copied, not moved) to the parent. If the parent also overflows, the split propagates upward — potentially creating a new root level (tree grows by 1 level). This is rare and amortized O(1) per insert.</li>
+  <li><strong>"B+ tree vs LSM tree for a write-heavy workload?"</strong><br>B+ tree: in-place updates, read-optimized, writes cause page splits. LSM tree: append-only writes, write-optimized, reads may check multiple levels. See: <a href="lsm-tree.html">LSM Tree</a></li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>B tree deletion merge algorithms in detail (know it exists, skip the mechanics)</li>
+    <li>B* tree and B# tree variants</li>
+    <li>R-tree and other spatial variants (unless asked about geospatial)</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Designing Data-Intensive Applications" — Chapter 3</strong> (Kleppmann) — Storage engines and B+ trees</li>
+    <li><strong>"Database Internals" — Chapter 6</strong> (Petrova) — B+ tree implementation details</li>
+    <li><strong>MySQL 8.0 Reference Manual</strong> — InnoDB B+ tree index structure</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="covering-index.html">&larr; covering-index.html</a>
+  <a href="lsm-tree.html">Next: lsm-tree.html &rarr;</a>
+</div>
+
+</body>
+</html>

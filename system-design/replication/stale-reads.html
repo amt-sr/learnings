@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.6.2 Stale Reads</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">4 Replication</a> / 4.6 Replication Problems / 4.6.2
+</div>
+
+<h1>Stale Reads</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand why stale reads happen in replicated systems, how they degrade user experience, and how to design around them.</p>
+
+<h2>Definition</h2>
+<p>A <strong>stale read</strong> occurs when a client reads data from a replica that has not yet applied the latest writes from the leader. The client receives an older version of the data, potentially making incorrect decisions or seeing inconsistent state.</p>
+
+<h2>Timeline: How Stale Reads Happen</h2>
+<div class="diagram">
+  Time    Client              Leader (Primary)        Follower (Replica)
+   |        |                      |                       |
+  t0   User writes post       ACCEPT WRITE              |
+       "Hello World"          (id=1001)                 |
+   |        |                  COMMIT (LSN=5000)          |
+   |        |-- POST /post -->|                          |
+   |        |<- 201 Created --|                          |
+   |        |                                           |
+  t1   User refreshes page                               |
+   |        |-- GET /posts -->|                          |
+   |        |  (routed to Follower by load balancer)     |
+   |        |                  |<-- replication delay ---|
+   |        |<- [empty list] ---|  LSN=4995 (behind!)    |
+   |        |                  |                          |
+   |       "Where did my post go?!"                        |
+   |                                                       |
+  t2   User refreshes again (2s later)                     |
+   |        |-- GET /posts -->|                           |
+   |        |  (routed to Follower)                        |
+   |        |                  |  APPLY LSN=4996..5000   |
+   |        |<- [post: "Hello World"] ---------------------|
+   |        |                  |                          |
+   |       "There it is."                                   |
+</div>
+
+<h2>Impact on User Experience</h2>
+
+<table>
+  <tr>
+    <th>Scenario</th>
+    <th>What the User Sees</th>
+    <th>Severity</th>
+  </tr>
+  <tr>
+    <td>Social media post</td>
+    <td>User posts, refreshes, post is missing. May re-post, creating duplicates.</td>
+    <td class="red">High</td>
+  </tr>
+  <tr>
+    <td>Bank account balance</td>
+    <td>After deposit, balance shows old amount. User may think deposit failed.</td>
+    <td class="red">Critical</td>
+  </tr>
+  <tr>
+    <td>Profile update</td>
+    <td>User changes name, sees old name on next page load.</td>
+    <td class="red">High</td>
+  </tr>
+  <tr>
+    <td>Product inventory count</td>
+    <td>Shows items in stock that are actually sold out.</td>
+    <td class="red">High</td>
+  </tr>
+  <tr>
+    <td>Analytics dashboard</td>
+    <td>Metrics lag by seconds. Generally acceptable.</td>
+    <td class="green">Low</td>
+  </tr>
+  <tr>
+    <td>Feed timeline</td>
+    <td>New items from followed users appear with slight delay.</td>
+    <td class="green">Low</td>
+  </tr>
+</table>
+
+<h2>Why It Happens: The Architecture Tradeoff</h2>
+<p>Stale reads are an inherent consequence of asynchronous replication, which is chosen for performance. In a single-leader system:</p>
+<ul>
+  <li><strong>Writes</strong> go to the leader for strong consistency.</li>
+  <li><strong>Reads</strong> are distributed across replicas for scalability and low latency.</li>
+  <li>The leader acknowledges writes immediately; replicas apply them later.</li>
+  <li>Any read hitting a replica before it applies the write sees stale data.</li>
+</ul>
+
+<div class="callout yellow">
+  <strong>Key insight for interviews:</strong> Stale reads are not a bug &mdash; they are a deliberate tradeoff. The question is not "how do we eliminate them?" but "which reads can tolerate staleness and which cannot?"
+</div>
+
+<h2>Solutions</h2>
+
+<h3>1. Read-After-Write Consistency</h3>
+<p>Ensure that a user always reads their own recent writes. Route reads for recently-written data back to the leader. See <a href="read-after-write.html">4.6.3 Read After Write Consistency</a> for full details.</p>
+
+<h3>2. Sticky Reads (Session Consistency)</h3>
+<p>Pin a user's session to a single replica for its duration. If the user writes, pin to the leader for the remainder of the session. This ensures the user sees a monotonically increasing version of their own data.</p>
+
+<div class="diagram">
+  Session Start
+       |
+       v
+  [Route to Replica A]  <-- all reads go here for this session
+       |
+  User writes something
+       |
+  [Re-pin to Leader]    <-- session stays pinned to leader
+       |
+  User reads
+       |
+  [Read from Leader]    <-- guaranteed to see own write
+       |
+  Session ends
+       |
+  [Return to pool]
+</div>
+
+<h3>3. Follower Lag Monitoring and Adaptive Routing</h3>
+<p>Monitor each follower's replication lag in real time. If a follower's lag exceeds a threshold, stop routing reads to it. Implement this in a middleware layer (ProxySQL, HAProxy, or a custom proxy).</p>
+
+<div class="callout green">
+  <strong>Production pattern:</strong> Instagram routes reads to replicas but tracks the version number (timestamp) of the user's last write. The proxy checks if the replica has caught up to that version before routing the read. If not, it falls back to the leader.
+</div>
+
+<h3>4. Client-Side Retry with Version Check</h3>
+<p>The client includes the version/timestamp of its last write with the read request. The server checks whether the serving replica has applied that version. If not, it retries on the leader or waits.</p>
+
+<h3>5. Causal Consistency</h3>
+<p>A stronger guarantee where replicas respect the causal order of operations. If write A causally precedes write B, no replica will return B without also having A. Implemented via vector clocks or logical timestamps.</p>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li><strong>"A user posts a comment, refreshes, and doesn't see it. What's happening and how do you fix it?"</strong> &mdash; Explain stale reads due to replica lag. Solutions: read-after-write (route own reads to leader), sticky sessions, version-aware routing.</li>
+  <li><strong>"Design a read routing layer that minimizes stale reads."</strong> &mdash; Discuss a proxy that tracks client write timestamps, checks replica progress, and adaptively routes. Mention lag thresholds and health checks.</li>
+  <li><strong>"Is eventual consistency acceptable for a banking app?"</strong> &mdash; Generally no for balance reads and transfers. Use strong consistency (read from leader or use synchronous replication) for financial operations. Eventual consistency may be acceptable for analytics, marketing emails, or statement generation.</li>
+  <li><strong>"How does Instagram handle stale reads at scale?"</strong> &mdash; They use a master-replica architecture with Redis caching for hot data. Reads for the author's own content go to the leader; reads for feed content go to replicas with eventual consistency.</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid cache invalidation deep dives:</strong> Cache staleness is related but distinct. Focus on database replica staleness unless the question explicitly bridges both.<br><br>
+  <strong>Avoid distributed consensus details:</strong> Paxos/Raft details are covered in consensus topics. Stay focused on the read-path problem here.<br><br>
+  <strong>Avoid multi-leader stale reads:</strong> The common interview scenario is single-leader with replicas. Multi-leader staleness is a more advanced variant covered under divergence.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary References</div>
+  <ul>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em> &mdash; Chapter 5: Replication (section: "Problems with Replication Lag")</li>
+    <li>Instagram Engineering Blog: <a href="https://instagram-engineering.com/">Scaling Instagram Infrastructure</a></li>
+    <li>Alex Petrov, <em>Database Internals</em> &mdash; Chapter 8: Distributed Transactions (replication lag section)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="replica-lag.html">&larr; 4.6.1 Replica Lag</a>
+  <a href="read-after-write.html">4.6.3 Read After Write Consistency &rarr;</a>
+</div>
+
+</body>
+</html>

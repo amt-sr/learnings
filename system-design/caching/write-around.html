@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.2.4 Write Around — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb"><a href="../../../">System Design</a> / <a href="../">7 Caching</a> / <a href="#">7.2 Cache Patterns</a> / 7.2.4</div>
+
+<h1>7.2.4 Write Around</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<div class="callout green">
+  <strong>Goal:</strong> Understand the Write Around pattern, why it is preferable for write-heavy workloads, and the read-miss penalty it introduces. Know when to choose it over Write Through or Write Back.
+</div>
+
+<h2>Definition</h2>
+
+<p>Write Around is a caching pattern where write operations bypass the cache entirely and go <strong>directly to the database</strong>. If the written key exists in the cache, it may optionally be invalidated; otherwise, the cache is simply not updated. The rationale is to avoid polluting the cache with data that may never be read again — a common scenario in write-heavy workloads where many writes are for data with low read recurrence.</p>
+
+<h2>How It Works</h2>
+
+<div class="diagram">
+  Application              Cache Layer                 Database
+      │                        │                           │
+      │                        │                           │
+      │  ──── WRITE PATH ────  │                           │
+      │                        │                           │
+      │ 1. UPDATE users SET    │                           │
+      │    name='Alice'        │                           │
+      │    WHERE id=123        │                           │
+      │ ──────────────────────────────────────────────────>│
+      │                        │                           │
+      │ 2. Cache INVALIDATE    │                           │
+      │    user:123            │                           │
+      │ ───────────────────────>│  (optional: evict if      │
+      │                        │   the key exists in cache) │
+      │                        │                           │
+      │ 3. Write OK            │                           │
+      │ <─────────────────────────────────────────────────│
+      │                        │                           │
+      │                        │                           │
+      │  ──── READ PATH ────   │                           │
+      │                        │                           │
+      │ 4. GET user:123        │                           │
+      │ ───────────────────────>│                           │
+      │                        │                           │
+      │ 5. Cache MISS          │                           │
+      │    (entry was invalided)                          │
+      │ <──────────────────────│                           │
+      │                        │                           │
+      │ 6. SELECT * FROM users │                           │
+      │    WHERE id=123        │                           │
+      │ ──────────────────────────────────────────────────>│
+      │                        │                           │
+      │ 7. {id:123, name:Alice}│                           │
+      │ <─────────────────────────────────────────────────│
+      │                        │                           │
+      │ 8. Cache SET user:123  │                           │
+      │ ───────────────────────>│  (lazy repopulation)     │
+      │                        │                           │
+      │ 9. Return result       │                           │
+</div>
+
+<pre>
+# Pseudocode — Write Around
+function updateUser(userId, newData):
+    # Write goes directly to DB — cache is NOT updated
+    db.execute("UPDATE users SET name = ? WHERE id = ?", newData.name, userId)
+
+    # Optionally invalidate the cache entry if it exists
+    cache.delete("user:" + userId)
+
+    return success
+
+# The next read will repopulate the cache via Cache Aside or Read Through
+function getUser(userId):
+    data = cache.get("user:" + userId)
+    if data is null:
+        data = db.query("SELECT * FROM users WHERE id = ?", userId)
+        cache.set("user:" + userId, data, TTL=3600)
+    return data
+</pre>
+
+<h2>Why Write Around Exists</h2>
+
+<p>Consider a workload where you write 1,000 records per second but only read 10 per second. With Write Through, every write would also update the cache, meaning you are filling the cache with 990 entries per second that will never be read. This cache pollution:</p>
+
+<ul>
+  <li>Evicts genuinely hot data from the cache (useful entries get pushed out by write-only entries).</li>
+  <li>Wastes cache memory on data with zero read value.</li>
+  <li>Adds unnecessary write latency (cache write on top of DB write).</li>
+</ul>
+
+<p>Write Around solves this by keeping the cache focused on data that is actually <em>read</em>.</p>
+
+<h2>The Read-Miss Penalty</h2>
+
+<p>The downside of Write Around is the first read after a write always results in a cache miss (cold read). The tradeoff is explicit:</p>
+
+<div class="callout">
+  <strong>Write Through:</strong> Write is slower, but the first read after a write is always a cache hit.<br>
+  <strong>Write Around:</strong> Write is fast (DB only), but the first read after a write is a cache miss.
+</div>
+
+<p>Whether this penalty matters depends on the read-after-write pattern:</p>
+
+<table>
+  <tr><th>Access Pattern</th><th>Impact</th><th>Recommendation</th></tr>
+  <tr><td>Write then immediately read same key</td><td class="red">High — always a miss</td><td>Write Through is better</td></tr>
+  <tr><td>Write then read much later (seconds/minutes)</td><td>Low — miss is acceptable</td><td>Write Around is fine</td></tr>
+  <tr><td>Write-heavy, rarely read written data</td><td class="green">Negligible — avoids pollution</td><td>Write Around is ideal</td></tr>
+  <tr><td>User profile updates</td><td>Medium — user may re-read profile</td><td>Depends on read frequency</td></tr>
+</table>
+
+<h2>Comparison with Other Write Strategies</h2>
+
+<table>
+  <tr><th>Aspect</th><th>Write Through</th><th>Write Around</th><th>Write Back</th></tr>
+  <tr><td>Cache updated on write?</td><td>Yes — synchronously</td><td>No (or invalidated)</td><td>Yes — asynchronously</td></tr>
+  <tr><td>DB updated on write?</td><td>Yes — synchronously</td><td>Yes — synchronously</td><td>No — deferred</td></tr>
+  <tr><td>Write latency</td><td>Higher (cache + DB)</td><td>Normal (DB only)</td><td class="green">Lowest (cache only)</td></tr>
+  <tr><td>First read after write</td><td class="green">Cache HIT</td><td class="red">Cache MISS</td><td class="green">Cache HIT</td></tr>
+  <tr><td>Cache pollution risk</td><td>Yes</td><td class="green">No</td><td>Yes</td></tr>
+  <tr><td>Data loss risk</td><td>None</td><td>None</td><td class="red">Yes</td></tr>
+</table>
+
+<h2>Real-World Usage</h2>
+
+<ul>
+  <li><strong>Log/aggregation systems:</strong> Writing time-series or log data that is rarely re-read after initial write.</li>
+  <li><strong>Social media posts:</strong> Writing a new post/tweet — the write is frequent but re-reads of any specific post are less common than reads of the feed.</li>
+  <li><strong>Audit trails:</strong> Appending audit records that are written once and read only during investigations.</li>
+  <li><strong>IoT sensor data:</strong> High-frequency writes of sensor readings where only recent data is cached (time-windowed).</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+
+<ul>
+  <li>What is the Write Around pattern? Why would you choose it over Write Through?</li>
+  <li>What is "cache pollution," and how does Write Around avoid it?</li>
+  <li>What is the read-miss penalty with Write Around? When does it matter?</li>
+  <li>Describe a workload where Write Around is clearly better than Write Through.</li>
+  <li>How does Write Around differ from Cache Aside with invalidation?</li>
+</ul>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>For a system design interview, skip:</strong>
+  <ul>
+    <li>Implementation details of cache invalidation in Write Around — the concept is straightforward.</li>
+    <li>Hardware-level write-around policies in CPU caches (this is a systems architecture topic, not distributed systems).</li>
+    <li>Perf benchmarks comparing Write Around vs. Write Through in specific database engines.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Books &amp; Papers</div>
+  <ul>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em> — Chapter 5: Replication</li>
+    <li>Alex Xu, <em>System Design Interview Vol. 1</em> — Chapter 3: Design Pastebin</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Online Resources</div>
+  <ul>
+    <li>Azure: Cache-Aside Pattern — <a href="https://docs.microsoft.com/en-us/azure/architecture/patterns/cache-aside">docs.microsoft.com/azure/architecture/patterns/cache-aside</a></li>
+    <li>Memcached: Best Practices — <a href="https://memcached.org/">memcached.org</a></li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="write-through.html">← 7.2.3 Write Through</a>
+  <a href="write-back.html">7.2.5 Write Back →</a>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.1.1 Horizontal Partitioning (Sharding)</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="../index.html">6 Partitioning</a> / <a href="index.html">6.1 Partitioning</a> / 6.1.1</p>
+
+<h1>Horizontal Partitioning (Sharding)</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the most common data partitioning strategy used at scale — splitting rows across multiple servers to distribute load, increase storage capacity, and maintain query performance as data grows beyond what a single machine can handle.</p>
+
+<h2>Definition</h2>
+<p>Horizontal partitioning (sharding) splits a logically single table into multiple smaller tables — each containing the <strong>same schema but a different subset of rows</strong>. Each partition (shard) lives on its own physical server. The application or a middleware layer routes queries to the correct shard using a partition key (shard key).</p>
+
+<div class="diagram">
+  ┌─────────────────────────────────────────────────────────────┐
+  │                    Logical Table: users                      │
+  │  id | name  | email           | created_at                  │
+  │  1  | Alice | alice@x.com     | 2024-01-01                  │
+  │  2  | Bob   | bob@x.com       | 2024-01-02                  │
+  │  3  | Carol | carol@x.com     | 2024-01-03                  │
+  │  4  | Dave  | dave@x.com      | 2024-01-04                  │
+  └──────────────────────┬──────────────────────────────────────┘
+                         │  Shard Key: user_id
+              ┌──────────┼──────────┐
+              ▼          ▼          ▼
+  ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
+  │   Shard 0       │ │   Shard 1       │ │   Shard 2       │
+  │ id | name       │ │ id | name       │ │ id | name       │
+  │  0 | Alice      │ │  1 | Bob        │ │  3 | Dave       │
+  │  3 | Dave       │ │  4 | Eve        │ │  6 | Frank      │
+  │  6 | Frank      │ │  7 | Grace      │ │  9 | Helen      │
+  └─────────────────┘ └─────────────────┘ └─────────────────┘
+  Server A            Server B            Server C
+</div>
+
+<h2>Why Horizontal Partitioning?</h2>
+
+<h3>Scalability Beyond a Single Machine</h3>
+<p>No single server can hold infinite data. A single MySQL instance might handle 1-5 TB comfortably; what happens at 50 TB? Sharding distributes data across N servers, where total capacity scales linearly with N.</p>
+
+<h3>Smaller Indexes, Faster Queries</h3>
+<p>Each shard holds only a fraction of the data, so B-tree indexes are shallower. A B+tree with 100M rows might be 4 levels deep, but with 10M rows per shard it drops to 3 levels — reducing disk seeks per lookup.</p>
+
+<h3>Distribute Write Load</h3>
+<p>A single database server bottleneck on writes (single-writer replication, lock contention). With sharding, writes to different shards can happen concurrently across separate machines, multiplying aggregate write throughput.</p>
+
+<table>
+  <tr>
+    <th>Benefit</th>
+    <th>How It Helps at Scale</th>
+  </tr>
+  <tr>
+    <td>Storage capacity</td>
+    <td>Linear scaling — add more shards, store more data</td>
+  </tr>
+  <tr>
+    <td>Query latency</td>
+    <td>Smaller datasets per shard = fewer disk pages, shallower indexes</td>
+  </tr>
+  <tr>
+    <td>Write throughput</td>
+    <td>N shards handle N independent write streams concurrently</td>
+  </tr>
+  <tr>
+    <td>Availability</td>
+    <td>Shard failure affects only 1/N of users; others unaffected</td>
+  </tr>
+  <tr>
+    <td>Cache efficiency</td>
+    <td>Per-shard caches hold a larger fraction of shard data in memory</td>
+  </tr>
+</table>
+
+<h2>Cross-Shard Queries</h2>
+<p>This is the hardest problem in sharding. When a query needs data from multiple shards, the application must:</p>
+<ul>
+  <li><strong>Parallel fan-out:</strong> Send the query to all shards, collect results, merge in the application layer.</li>
+  <li><strong>Secondary index lookup:</strong> If querying by a non-shard-key column, you need a global secondary index (GSI).</li>
+</ul>
+
+<div class="callout yellow">
+  <strong>Interview tip:</strong> When designing a sharded system, always choose the shard key carefully. The shard key determines which queries can be served by a single shard (efficient) and which require fan-out (expensive). If 90% of queries filter by <code>user_id</code>, then <code>user_id</code> is the right shard key.
+</div>
+
+<h2>Global Secondary Indexes</h2>
+<p>A global secondary index (GSI) is a separate, non-sharded or differently-sharded index that maps a non-shard-key column back to the shard key. Example: if data is sharded by <code>user_id</code> but you need to query by <code>email</code>, maintain a separate lookup table mapping <code>email → user_id</code>, then route to the correct shard.</p>
+
+<div class="diagram">
+  Query: SELECT * FROM users WHERE email = 'bob@x.com'
+
+  1. Lookup GSI (email_index table):
+     ┌──────────────┬─────────┐
+     │ email        │ user_id │
+     │ bob@x.com    │ 42      │  ← Found
+     └──────────────┴─────────┘
+
+  2. Route to shard containing user_id=42:
+     ┌──────────────────────────────────────┐
+     │ Shard N (user_id % 16 == 10)        │
+     │ id=42, name=Bob, email=bob@x.com   │ ← Direct lookup
+     └──────────────────────────────────────┘
+</div>
+
+<h2>Choosing a Shard Key</h2>
+
+<div class="callout green">
+  <strong>Good shard keys</strong> have three properties: <strong>high cardinality</strong> (many unique values), <strong>uniform distribution</strong> (even data spread), and <strong>query alignment</strong> (most queries filter on this key).
+</div>
+
+<table>
+  <tr>
+    <th>Shard Key</th>
+    <th>Cardinality</th>
+    <th>Distribution</th>
+    <th>Verdict</th>
+  </tr>
+  <tr>
+    <td>user_id</td>
+    <td>High (billions)</td>
+    <td>Uniform</td>
+    <td class="green">Excellent</td>
+  </tr>
+  <tr>
+    <td>country_code</td>
+    <td>Low (~200)</td>
+    <td>Skewed (US/India dominate)</td>
+    <td class="red">Poor</td>
+  </tr>
+  <tr>
+    <td>created_at (day)</td>
+    <td>Medium</td>
+    <td>Uneven (recent data skews hot)</td>
+    <td class="red">Risky</td>
+  </tr>
+  <tr>
+    <td>order_id (UUID)</td>
+    <td>Very high</td>
+    <td>Uniform</td>
+    <td class="green">Excellent (if queries align)</td>
+  </tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>How would you shard a user database for a social network? What shard key would you choose?</li>
+  <li>Explain cross-shard queries. How do you handle JOINs across shards?</li>
+  <li>What happens when a shard becomes too large — how do you reshard?</li>
+  <li>How do you maintain consistency when a single transaction spans multiple shards?</li>
+  <li>What is a global secondary index and when would you use one?</li>
+  <li>How does sharding differ from replication? Can you use both together?</li>
+  <li>Design Instagram's photo storage — how would you partition the data?</li>
+</ul>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Do not deep-dive into specific sharding middleware</strong> (Vitess, Citus, Mongo sharding internals) unless asked. In an interview, focus on the <em>concepts</em> and <em>tradeoffs</em>, not implementation details of a particular tool. Also skip theoretical discussions about CAP theorem unless the question explicitly connects sharding to consistency.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Recommended Reading</div>
+  <ul>
+    <li><a href="https://www.cs.yale.edu/homes/dna/papers/abadi-sharding.pdf">"The Problems with Sharding" — Daniel Abadi (Yale)</a></li>
+    <li><a href="https://martin.kleppmann.com/book/">"Designing Data-Intensive Applications" — Martin Kleppmann, Ch. 6 (Partitioning)</a></li>
+    <li><a href="https://www.youtube.com/watch?v=wS5AKOXkl0s">"Sharding YouTube" — Google Tech Talk</a></li>
+    <li><a href="https://medium.com/instagram-engineering/sharding-Instagrams-user-data-1f2fc897eddd">Instagram Engineering: "Sharding Instagram's User Data"</a></li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="../distributed-systems/majority-quorum.html">&larr; 5.7.3 Majority Quorum</a>
+  <a href="vertical-partitioning.html">6.1.2 Vertical Partitioning &rarr;</a>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.3.3 Semi Synchronous Replication</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">4 Replication</a> / <a href="why-replication.html">4.3 Replication Types</a> / 4.3.3
+</div>
+
+<h1>4.3.3 Semi Synchronous Replication</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the pragmatic middle ground between synchronous and asynchronous replication. Know how semi-synchronous replication reduces the data loss window while preserving acceptable write latency, the MySQL semi-sync plugin as the canonical example, and the remaining risks that still exist.</p>
+
+<h2>Definition</h2>
+
+<div class="callout">
+  <strong>Semi-synchronous replication</strong> means the leader waits for acknowledgment from <strong>at least one follower</strong> before committing a write and responding to the client. Unlike fully synchronous replication (which waits for ALL followers), semi-sync only requires a quorum of one. The remaining followers are replicated asynchronously in the background.
+</div>
+
+<p>Semi-synchronous replication is a practical compromise: it dramatically reduces the data loss window compared to fully asynchronous replication, while adding significantly less latency than fully synchronous replication (which must wait for all followers).</p>
+
+<h2>How It Works</h2>
+
+<div class="diagram">
+  Semi-Synchronous Replication: Write Flow
+  ─────────────────────────────────────────
+
+  N = 3 (Leader + 2 Followers)
+  Semi-sync: wait for at least 1 follower ACK
+
+  Client
+   │
+   │  WRITE: UPDATE inventory SET qty = 10 WHERE sku = "ABC"
+   │
+   ▼
+  ┌──────────────────────────────────────────────────────────┐
+  │                       LEADER                              │
+  │                                                          │
+  │  1. Receive write request                                 │
+  │  2. Write to local WAL                                    │
+  │  3. Send replication entry to ALL followers                │
+  │  4. WAIT for at least 1 follower ACK ...                  │
+  │     │                                                     │
+  │  5. ◀─── ACK from FOLLOWER A ─────── ✓                   │
+  │  6. Commit write                                          │
+  │  7. ACK client                                           │
+  │                                                          │
+  │  (FOLLOWER B's ACK arrives later -- not needed)           │
+  └────────────┬──────────────────────┬───────────────────────┘
+               │                      │
+               ▼                      ▼
+  ┌──────────────────────┐  ┌──────────────────────┐
+  │    FOLLOWER A       │  │    FOLLOWER B       │
+  │                      │  │                      │
+  │  Receives replication│  │  Receives replication│
+  │  Writes to WAL       │  │  Writes to WAL       │
+  │  Sends ACK ◀─────────┼──┼── (background)       │
+  │                      │  │  ACKs later           │
+  └──────────────────────┘  └──────────────────────┘
+
+  Client ACK time: ~leader local write + 1 RTT + 1 follower write
+  (Only ONE follower must respond, not all)
+</div>
+
+<h2>Comparison of All Three Replication Types</h2>
+
+<div class="diagram">
+  Timeline Comparison: Sync vs. Semi-Sync vs. Async
+  ────────────────────────────────────────────────────
+
+  ASYNC:
+  Client ──▶ Leader writes ──▶ ACK ✓ (2ms)
+                        │
+                        └──▶ Followers (later, in background)
+
+  SEMI-SYNC:
+  Client ──▶ Leader writes ──▶ Send to Follower A ──▶ Follower A ACK
+                                   (3ms RTT)              (1ms disk)
+                        ◀─── Leader ACK ✓ (6ms) ◀────────────
+                        │
+                        └──▶ Follower B (later, in background)
+
+  FULLY SYNC:
+  Client ──▶ Leader writes ──▶ Send to ALL followers
+                                   ├──▶ Follower A ACK (4ms)
+                                   └──▶ Follower B ACK (5ms)
+                        ◀─── Leader ACK ✓ (7ms) ◀────────
+                        (Waits for SLOWEST follower)
+</div>
+
+<table>
+  <tr><th>Property</th><th>Asynchronous</th><th>Semi-Synchronous</th><th>Fully Synchronous</th></tr>
+  <tr><td><strong>Data loss risk</strong></td><td class="red">High (all unreplicated writes lost)</td><td class="yellow">Reduced (at most ~1 RTT of writes lost in fallback)</td><td class="green">None (committed data always on follower)</td></tr>
+  <tr><td><strong>Write latency</strong></td><td class="green">Lowest (~2ms)</td><td>Medium (~5-6ms)</td><td class="red">Highest (~7-12ms)</td></tr>
+  <tr><td><strong>Availability</strong></td><td class="green">Highest (writes succeed with any follower state)</td><td>Medium (requires at least 1 follower to respond)</td><td class="red">Lowest (requires ALL followers to respond)</td></tr>
+  <tr><td><strong>Replica lag</strong></td><td class="red">May be significant</td><td class="yellow">At least 1 follower is nearly caught up</td><td class="green">Zero (all followers in sync)</td></tr>
+  <tr><td><strong>Stale read risk</strong></td><td class="red">High</td><td class="yellow">Reduced (at least 1 follower is fresh)</td><td class="green">None</td></tr>
+  <tr><td><strong>Follower blocking</strong></td><td>None</td><td>1 follower can block writes</td><td class="red">ANY slow follower blocks ALL writes</td></tr>
+</table>
+
+<h2>Fallback Behavior</h2>
+
+<p>A critical feature of semi-synchronous replication is its <strong>graceful fallback</strong> to asynchronous mode when no follower responds in time.</p>
+
+<div class="diagram">
+  Semi-Sync Fallback to Async
+  ───────────────────────────
+
+  Normal operation (Follower A responds within timeout):
+  Client ──▶ Leader ──▶ Follower A (ACK in 3ms ✓)
+  Client ◀── Leader ACK (semi-sync commit)
+
+  Follower A is slow (ACK after 10s, timeout = 5s):
+  Client ──▶ Leader ──▶ Follower A (no ACK in 5s)
+  Client ◀── Leader ACK (FALLS BACK to async mode)
+
+  What happens:
+  1. Leader sets a timeout (e.g., rpl_semi_sync_master_timeout = 5000ms)
+  2. If no follower ACK within timeout, leader falls back to async
+  3. Write is committed with only local durability
+  4. Data loss risk temporarily increases (same as async)
+  5. When follower recovers and ACKs, semi-sync mode resumes
+
+  This fallback ensures writes are never blocked indefinitely by
+  a slow or partitioned follower.
+</div>
+
+<div class="callout yellow">
+  <strong>Key Point:</strong> The fallback mechanism means semi-sync is not a strict guarantee. During the fallback window, the system behaves exactly like asynchronous replication. The practical benefit is that the data loss window is reduced to the timeout period (typically 1-5 seconds) rather than the full replication lag (which could be much larger in pathological cases).
+</div>
+
+<h2>MySQL Semi-Synchronous Plugin</h2>
+
+<p>MySQL's semi-synchronous replication plugin is the most widely known implementation and is frequently referenced in interviews.</p>
+
+<table>
+  <tr><th>Component</th><th>Setting</th><th>Default</th><th>Description</th></tr>
+  <tr><td>Master plugin</td><td>plugin_load = rpl_semi_sync_master</td><td>Not loaded</td><td>Must be explicitly enabled on the leader</td></tr>
+  <tr><td>Slave plugin</td><td>plugin_load = rpl_semi_sync_slave</td><td>Not loaded</td><td>Must be enabled on the follower</td></tr>
+  <tr><td>Master timeout</td><td>rpl_semi_sync_master_timeout</td><td>10000ms</td><td>How long the leader waits before falling back to async</td></tr>
+  <tr><td>Wait for count</td><td>rpl_semi_sync_master_wait_for_replica_count</td><td>1</td><td>Number of followers that must ACK</td></tr>
+  <tr><td>Status</td><td>rpl_semi_sync_master_status</td><td>ON/OFF</td><td>Shows whether semi-sync is currently active or has fallen back</td></tr>
+</table>
+
+<h2>Remaining Risks</h2>
+
+<p>Semi-synchronous replication eliminates <strong>most</strong> but not <strong>all</strong> data loss risk:</p>
+
+<table>
+  <tr><th>Risk</th><th>Severity</th><th>Description</th><th>Mitigation</th></tr>
+  <tr><td><strong>Timeout fallback</strong></td><td class="yellow">Medium</td><td>If no follower ACKs within the timeout, system falls back to async and loses the sync guarantee for those writes</td><td>Monitor rpl_semi_sync_master_status; alert on fallback events</td></tr>
+  <tr><td><strong>Both leader and sync follower crash</strong></td><td class="yellow">Medium</td><td>If the leader and the one semi-sync follower crash simultaneously, committed data is on both failed machines</td><td>Use multiple semi-sync followers (wait_for_replica_count > 1)</td></tr>
+  <tr><td><strong>Split-brain during failover</strong></td><td class="yellow">Medium</td><td>Same split-brain risk as leader-follower; semi-sync does not prevent it</td><td>Fencing tokens, external consensus for failover</td></tr>
+  <tr><td><strong>Non-synced follower promoted to leader</strong></td><td class="red">High</td><td>If the sync follower crashes and an async follower is promoted, it may be missing writes</td><td>Prefer promoting the sync follower; use GTID to track position</td></tr>
+</table>
+
+<h2>When to Use Semi-Synchronous Replication</h2>
+
+<div class="callout green">
+  <strong>Interview Tip:</strong> Semi-synchronous is the right answer when you need better durability than async but cannot afford the latency cost of full sync. Frame it as: "We use semi-synchronous replication as a practical middle ground. It reduces our data loss window from potentially seconds of replication lag to just the timeout period, while adding only one network round trip to our write latency."
+</div>
+
+<ul>
+  <li><strong>E-commerce order processing:</strong> You cannot lose orders but can tolerate a few milliseconds of added write latency.</li>
+  <li><strong>User account operations:</strong> Password changes, email updates, account settings -- important data where loss is unacceptable but not mission-critical enough for full sync.</li>
+  <li><strong>General-purpose databases:</strong> A good default for production systems that want durability without the full cost of synchronous replication.</li>
+  <li><strong>Multi-DC setups with cross-replication:</strong> Sync to local follower (fast RTT), async to remote follower (slow RTT). Achieves local durability without remote latency.</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+
+<ol>
+  <li><strong>"What is semi-synchronous replication?"</strong><br>
+  Answer: "Semi-synchronous replication is a middle ground between fully synchronous and asynchronous replication. The leader waits for acknowledgment from at least one follower before committing a write, but does not wait for all followers. This means committed data exists on at least two machines, reducing the data loss window compared to async. The latency cost is roughly one network round trip to the nearest follower, which is significantly less than waiting for all followers. If no follower responds within a timeout, the system falls back to async mode to avoid blocking writes indefinitely."</li>
+
+  <li><strong>"How does semi-sync compare to fully synchronous replication?"</strong><br>
+  Answer: "Fully synchronous waits for ALL followers, providing zero data loss guarantee but high latency (bounded by the slowest follower). Semi-sync waits for at least ONE follower, providing a reduced but not zero data loss window, with lower latency (bounded by the fastest follower). The practical difference: semi-sync is robust against a leader crash because at least one other node has the data, but it is not robust against the simultaneous crash of both the leader and the sync follower. In most deployments, that correlated failure is unlikely enough to accept."</li>
+
+  <li><strong>"What happens when the semi-sync follower is slow?"</strong><br>
+  Answer: "The leader has a configurable timeout (in MySQL, rpl_semi_sync_master_timeout). If no follower ACKs within this timeout, the leader falls back to asynchronous mode for that write. This ensures that writes are never blocked indefinitely. The tradeoff is that during the fallback period, the system has the same data loss characteristics as async replication. In practice, the timeout is set to a few seconds (5-10s), so the data loss window is bounded. Monitoring should alert when fallback events occur so operations can investigate."</li>
+</ol>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Do not go deep into:</strong>
+  <ul>
+    <li>MySQL plugin internals (semi_sync ACK packet format, the exact mutex locking in the plugin code).</li>
+    <li>MariaDB semi-sync vs. MySQL semi-sync differences (minor implementation details).</li>
+    <li>Performance benchmark numbers from specific hardware setups (these are too specific and may be outdated).</li>
+    <li>PostgreSQL synchronous_commit settings (synchronous_commit = remote_apply, etc.) -- while related, this is a different system with different terminology.</li>
+    <li>Failover orchestrator integration with semi-sync (Patroni/Orchestrator details).</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Reading Sources</div>
+  <ul>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em>, Chapter 5, Section "Synchronous vs. Asynchronous Replication" -- provides the conceptual framework that leads to understanding the semi-sync middle ground.</li>
+    <li>MySQL Reference Manual, <em>Semi-Synchronous Replication</em> -- official documentation covering the plugin installation, configuration options, and monitoring variables.</li>
+    <li>High Performance MySQL (O'Reilly), Chapter "Replication" -- covers practical deployment patterns for semi-sync in production.</li>
+    <li>Percona Blog, <em>MySQL Semi-Synchronous Replication: Pitfalls and Gotchas</em> -- real-world operational experience with semi-sync failure modes and fallback behavior.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="asynchronous.html">&larr; 4.3.2 Asynchronous</a>
+  <a href="star-replication.html">4.4.1 Star Replication &rarr;</a>
+</div>
+
+</body>
+</html>

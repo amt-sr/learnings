@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.5.4 Logical Replication - System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">4 Replication</a> / 4.5 Replication Internals / 4.5.4
+</div>
+
+<h1>Logical Replication</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand logical replication as a higher-level replication approach that copies data changes at the row/table level rather than the byte level. Know the publisher/subscriber model, CDC use cases, database version flexibility, and the limitations compared to physical replication.</p>
+
+<h2>Definition</h2>
+<p><strong>Logical replication</strong> replicates data changes at the logical level -- individual row insertions, updates, and deletions are decoded from the source's write-ahead log and published as discrete change events. Unlike physical replication (which copies raw disk page modifications), logical replication works with the <em>meaning</em> of the data rather than its physical storage representation. This allows replication between different database versions, architectures, and even between different database systems.</p>
+
+<div class="callout">
+  <strong>Key idea:</strong> Physical replication copies <em>bytes</em>. Logical replication copies <em>changes</em>. Physical produces an exact disk-level clone. Logical produces a logically equivalent copy that may have different physical layout.
+</div>
+
+<h2>Architecture</h2>
+
+<div class="diagram">
+  ┌──────────────────────────────────────────────────────────────┐
+  │                    Publisher (Leader)                       │
+  │                                                              │
+  │  Client writes ──► PostgreSQL ──► WAL (physical log)        │
+  │                                     │                        │
+  │                                     ▼                        │
+  │                          ┌──────────────────┐                │
+  │                          │ Logical Decoder   │                │
+  │                          │ (pgoutput plugin) │                │
+  │                          │ Extracts row-level│                │
+  │                          │ changes from WAL  │                │
+  │                          └────────┬─────────┘                │
+  │                                   │                          │
+  │                        ┌──────────┼──────────┐                │
+  │                        ▼          ▼          ▼                │
+  │                  Publication Publication Publication           │
+  │                  "orders"   "users"   "inventory"            │
+  └────────────────┬─────────┴──────────┴──────────┘              │
+                   │                                              │
+         Replication Protocol (WAL logical stream)               │
+                   │                                              │
+  ┌────────────────┼─────────────────────────────────────────────┘
+  │                ▼                                              │
+  │  ┌──────────────────────────────────────────────────┐         │
+  │  │            Subscriber (Follower)                 │         │
+  │  │                                                  │         │
+  │  │   Subscription "orders_replica"                  │         │
+  │  │     └─ subscribes to "orders" publication        │         │
+  │  │       Receives INSERT/UPDATE/DELETE events       │         │
+  │  │       Applies to local "orders" table            │         │
+  │  │                                                  │         │
+  │  └──────────────────────────────────────────────────┘         │
+  │                                                              │
+  │  Can also be: Kafka, Elasticsearch, analytics pipeline       │
+  └──────────────────────────────────────────────────────────────┘
+</div>
+
+<h2>How It Works</h2>
+
+<ol>
+  <li><strong>Write on publisher:</strong> A client performs INSERT, UPDATE, or DELETE on the publisher.</li>
+  <li><strong>WAL generation:</strong> PostgreSQL writes the change to the WAL (physical log) as usual.</li>
+  <li><strong>Logical decoding:</strong> A logical decoding plugin (e.g., <code>pgoutput</code>, <code>wal2json</code>, <code>test_decoding</code>) reads the WAL and converts physical changes into logical change events.</li>
+  <li><strong>Publication:</strong> The publisher makes logical change events available to subscribers. A publication defines which tables and which operations (INSERT, UPDATE, DELETE) are replicated.</li>
+  <li><strong>Subscription:</strong> The subscriber connects to the publisher, requests changes for the subscribed publications, and applies the row-level changes to its local tables.</li>
+  <li><strong>Apply:</strong> The subscriber applies each change event as a normal INSERT/UPDATE/DELETE on its local tables.</li>
+</ol>
+
+<h2>Advantages</h2>
+
+<ul>
+  <li><strong>Version flexibility:</strong> Can replicate between different PostgreSQL major versions (e.g., PG 14 to PG 16). Physical replication requires exact same major version.</li>
+  <li><strong>Partial replication:</strong> Replicate specific tables or columns, not the entire database. Publications allow fine-grained control over what is replicated.</li>
+  <li><strong>Cross-platform potential:</strong> Logical decoding outputs can be consumed by non-PostgreSQL systems (Kafka, Elasticsearch, other databases via CDC tools like Debezium).</li>
+  <li><strong>Publisher/subscriber model:</strong> One publisher can serve multiple subscribers with different subscriptions. Each subscriber chooses which publications to consume.</li>
+  <li><strong>Schema differences allowed:</strong> The subscriber can have a different physical layout (different indexes, different table structure) as long as the logical schema is compatible.</li>
+  <li><strong>Read replicas with different workload:</strong> The subscriber can have different indexes optimized for analytics while the publisher has indexes optimized for OLTP.</li>
+</ul>
+
+<h2>Limitations</h2>
+
+<ul>
+  <li><strong>Slower than physical replication:</strong> Logical decoding adds overhead (parsing WAL, constructing row events). Physical replication copies bytes directly, which is faster.</li>
+  <li><strong>No DDL replication:</strong> Logical replication replicates data changes (DML) but not schema changes (DDL). Schema changes must be applied manually on the subscriber.</li>
+  <li><strong>No sequences replicated:</strong> Sequence values are not replicated. Auto-increment/serial columns can diverge between publisher and subscriber.</li>
+  <li><strong>No unlogged tables:</strong> Unlogged tables are not written to WAL, so they cannot be logically replicated.</li>
+  <li><strong>Trigger behavior:</strong> Triggers on the subscriber fire for replicated changes, which can cause unintended side effects unless handled explicitly.</li>
+  <li><strong>Conflict resolution limited:</strong> If a subscriber has local writes on the same data, conflicts arise. Logical replication provides limited conflict detection compared to multi-master systems.</li>
+  <li><strong>Large transactions:</strong> Very large bulk operations can overwhelm the logical replication stream.</li>
+</ul>
+
+<h2>CDC with Logical Replication</h2>
+
+<p>Logical decoding is the foundation of <strong>Change Data Capture (CDC)</strong> in PostgreSQL:</p>
+
+<ul>
+  <li><strong>Debezium:</strong> Connects to PostgreSQL using the logical replication protocol, decodes WAL into change events, and publishes them to Kafka.</li>
+  <li><strong>wal2json:</strong> Output plugin that converts WAL changes to JSON format, consumed by custom CDC pipelines.</li>
+  <li><strong>pgoutput:</strong> Built-in plugin (PostgreSQL 10+) that produces logical replication protocol messages. Used by native logical replication and Debezium.</li>
+</ul>
+
+<div class="callout">
+  <strong>CDC vs Replication:</strong> Logical replication is a specific use case of CDC where the subscriber is another PostgreSQL database. CDC is the broader concept of capturing and streaming data changes to any consumer (Kafka, search indexes, caches, analytics).
+</div>
+
+<h2>Publication and Subscription Configuration</h2>
+
+<h3>Publications</h3>
+<ul>
+  <li>A publication defines a set of tables from which changes are replicated.</li>
+  <li>Can filter by operation type: INSERT only, UPDATE only, DELETE only, or all.</li>
+  <li>Multiple publications can exist on one database.</li>
+</ul>
+
+<h3>Subscriptions</h3>
+<ul>
+  <li>A subscription connects to a publisher and requests changes from one or more publications.</li>
+  <li>The subscriber needs an initial snapshot of the published tables (can use existing data or copy from publisher).</li>
+  <li>Subscriptions are live -- changes are applied in real time as they arrive.</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+
+<ul>
+  <li>"What is logical replication?" Answer: Replication at the row/table level where individual INSERT, UPDATE, DELETE events are decoded from the WAL and published to subscribers. It is database-version-agnostic and allows partial replication of specific tables.</li>
+  <li>"How does logical replication differ from physical replication?" Answer: Physical replication copies disk page bytes (exact clone, same version required). Logical replication copies row changes (logical equivalence, allows version differences and partial replication). Physical is faster; logical is more flexible.</li>
+  <li>"What is CDC and how does it relate to logical replication?" Answer: CDC (Change Data Capture) is the broader concept of streaming data changes to consumers. Logical replication is a specific implementation where the consumer is another database. Tools like Debezium use logical decoding to implement CDC pipelines.</li>
+  <li>"What are the limitations of logical replication?" Answer: No DDL replication (schema changes must be manual), no sequence replication, slower than physical replication, limited conflict resolution for multi-writer scenarios.</li>
+  <li>"When would you choose logical over physical replication?" Answer: When you need to replicate between different PostgreSQL versions, replicate only specific tables, or send changes to non-database consumers (Kafka, search indexes). Physical is better when you need an exact clone with maximum performance.</li>
+</ul>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Avoid going deep into:</strong>
+  <ul>
+    <li><code>CREATE PUBLICATION</code> and <code>CREATE SUBSCRIPTION</code> SQL syntax. Understand the concepts of publications and subscriptions; skip the exact DDL.</li>
+    <li>Logical decoding plugin implementation details (how <code>pgoutput</code> parses WAL internally). Know that plugins exist; skip how they work internally.</li>
+    <li>Replication slot internals for logical replication. Know the concept; skip the implementation.</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Reading Sources</div>
+  <ul>
+    <li><strong>PostgreSQL Documentation</strong> - "Logical Replication" and "Logical Decoding" chapters (Chapter 30 and 49).</li>
+    <li><strong>Designing Data-Intensive Applications (Kleppmann)</strong> - Chapter 5 on replication types, Chapter 11 on change data capture.</li>
+    <li><strong>PostgreSQL Replication (Husain, Sikder)</strong> - Chapter on logical replication and publisher/subscriber architecture.</li>
+    <li><strong>Debezium Documentation</strong> - PostgreSQL connector, explaining how it uses logical decoding for CDC.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="snapshot-replication.html">&larr; 4.5.3 Snapshot Replication</a>
+  <a href="physical-replication.html">4.5.5 Physical Replication &rarr;</a>
+</div>
+
+</body>
+</html>

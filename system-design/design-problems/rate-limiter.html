@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>15.5 Rate Limiter — System Design</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../">Handbook</a> / <a href="../">System Design</a> / 15. Design Problems / 15.5 Rate Limiter</p>
+
+<h1>Rate Limiter</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Design a distributed rate limiting service that controls the rate of incoming requests to protect backend services from overload, abuse, and DDoS attacks. The system must enforce limits across multiple server instances and support various rate limiting algorithms.</p>
+
+<h2>Functional Requirements</h2>
+<ul>
+  <li>Enforce per-user, per-IP, or per-API-key rate limits</li>
+  <li>Support different rate limiting algorithms (token bucket, sliding window, fixed window)</li>
+  <li>Return appropriate HTTP responses (429 Too Many Requests) with retry-after headers</li>
+  <li>Support configurable rate limit rules (X requests per Y time window)</li>
+  <li>Provide rate limit status headers (X-RateLimit-Remaining, X-RateLimit-Reset)</li>
+  <li>Support hierarchical rate limits (per-user, per-tier, per-endpoint, global)</li>
+</ul>
+
+<h2>Non-Functional Requirements</h2>
+<ul>
+  <li><strong>Low latency:</strong> rate limit check &lt; 2ms (must not add significant latency to request path)</li>
+  <li><strong>High throughput:</strong> handle 1M+ checks/second</li>
+  <li><strong>Distributed:</strong> consistent enforcement across all instances</li>
+  <li><strong>Low memory:</strong> O(N) where N is the number of unique rate-limited entities</li>
+  <li><strong>Available:</strong> fail-open (allow requests) when rate limiter is unavailable</li>
+</ul>
+
+<h3>Capacity Estimates</h3>
+<table>
+  <tr><th>Metric</th><th>Estimate</th><th>Notes</th></tr>
+  <tr><td>Requests/sec</td><td>1M</td><td>Total incoming traffic</td></tr>
+  <tr><td>Unique users</td><td>10M</td><td>Active daily</td></tr>
+  <tr><td>Rules configured</td><td>1K</td><td>Different rate limit configurations</td></tr>
+  <tr><td>Redis ops/sec</td><td>2M</td><td>INCR + EXPIRE per request (2 ops each)</td></tr>
+  <tr><td>Memory</td><td>~2 GB</td><td>Redis: 10M users * ~200 bytes each</td></tr>
+</table>
+
+<h2>API Design</h2>
+<pre>
+# Middleware interface (internal)
+CHECK_RATE_LIMIT(user_id, endpoint, client_ip)
+Resp: { "allowed": true, "remaining": 45, "reset_at": 1701234600 }
+    or: { "allowed": false, "retry_after": 30 }
+
+# Management API
+PUT    /api/v1/rate-limits/rules
+Body:  { "name": "api-write", "limit": 100, "window_seconds": 60, "scope": "user" }
+Resp:  201 Created
+
+GET    /api/v1/rate-limits/status/{user_id}
+Resp:  { "limits": [{ "rule": "api-write", "remaining": 87, "reset_at": "..." }] }
+</pre>
+
+<h2>High-Level Design</h2>
+<div class="diagram">
+                    ┌──────────────┐
+    Client ────────►│ API Gateway  │
+                    └──────┬───────┘
+                           │
+                    ┌──────▼───────┐
+                    │  Rate Limiter │
+                    │   Middleware  │
+                    └──────┬───────┘
+                           │
+              ┌────────────┼────────────┐
+              │            │            │
+              ▼            ▼            ▼
+       ┌──────────┐ ┌──────────┐ ┌──────────┐
+       │ Redis-1  │ │ Redis-2  │ │ Redis-3  │
+       │ (Shard 0)│ │ (Shard 1)│ │ (Shard 2)│
+       └──────────┘ └──────────┘ └──────────┘
+              │
+              ▼
+       If allowed:     If rejected:
+       ┌──────────┐    ┌──────────────────┐
+       │ Backend  │    │ Return 429 with   │
+       │ Service  │    │ Retry-After: N    │
+       └──────────┘    └──────────────────┘
+</div>
+
+<h2>Deep Dive: Rate Limiting Algorithms</h2>
+
+<h3>1. Token Bucket</h3>
+<p>Each entity has a bucket that holds tokens. Tokens are added at a fixed rate (refill). Each request consumes one token. If the bucket is empty, the request is rejected.</p>
+
+<div class="diagram">
+  Token Bucket (capacity=10, refill_rate=5/min)
+
+  Time 0:   [██████████] 10 tokens   → Request: OK (9 remaining)
+  Time 1m:  [████████]   8 tokens     → Request: OK (7 remaining)
+  Time 2m:  [██████]     6 tokens     → Request: OK (5 remaining)
+  Time 3m:  [████]       4 tokens     → Burst of 6: 4 OK, 2 rejected
+
+  Key properties:
+  - Allows bursty traffic up to bucket capacity
+  - Average rate limited by refill rate
+  - Memory: O(1) per entity (token count + last_refill_time)
+</div>
+
+<pre>
+# Redis token bucket implementation
+EVAL "
+  local rate = tonumber(ARGV[1])
+  local capacity = tonumber(ARGV[2])
+  local now = tonumber(ARGV[3])
+  local requested = tonumber(ARGV[4])
+
+  local fill_time = capacity / rate
+  local tokens = tonumber(redis.call('GET', KEYS[1]) or capacity)
+  local last_time = tonumber(redis.call('GET', KEYS[2]) or now)
+
+  local delta = math.max(0, now - last_time)
+  tokens = math.min(capacity, tokens + (delta * rate))
+
+  if tokens >= requested then
+    tokens = tokens - requested
+    redis.call('SET', KEYS[1], tokens)
+    redis.call('SET', KEYS[2], now)
+    redis.call('EXPIRE', KEYS[1], math.ceil(fill_time))
+    redis.call('EXPIRE', KEYS[2], math.ceil(fill_time))
+    return {1, tokens}
+  else
+    redis.call('SET', KEYS[1], tokens)
+    redis.call('SET', KEYS[2], now)
+    return {0, tokens}
+  end
+" 2 rate_limit:{user_id}:tokens rate_limit:{user_id}:ts 5 10 1701234567 1
+</pre>
+
+<h3>2. Sliding Window Log</h3>
+<p>Maintain a sorted log of all request timestamps within the current window. On each request, prune timestamps older than the window and check if the count exceeds the limit.</p>
+
+<div class="callout">
+  <strong>Pros:</strong> Exact enforcement (no boundary burst problem). <strong>Cons:</strong> O(N) memory where N = requests per window per entity. For 10M users at 100 requests/window, this is 1B entries — too expensive.
+</div>
+
+<h3>3. Sliding Window Counter (Recommended)</h3>
+<p>Hybrid of fixed window and sliding window. Weighted average of the current window and the previous window to approximate a sliding window with O(1) memory.</p>
+
+<div class="diagram">
+  Sliding Window Counter (limit=100/hour):
+
+  Previous window (60-120 min ago): 80 requests → 20% weight → 16 weighted
+  Current  window (0-60 min ago):   60 requests → 80% weight → 48 weighted
+  Combined estimate: 64 requests
+
+  Rate = 64/100 → 64% utilized → ALLOWED
+
+  Formula:
+  weighted_count = (current_count * elapsed_pct) + (prev_count * (1 - elapsed_pct))
+  where elapsed_pct = time_elapsed_in_current_window / window_size
+</div>
+
+<div class="callout green">
+  <strong>Recommended for production:</strong> Sliding window counter provides a good balance of accuracy and memory efficiency. It eliminates the boundary burst problem of fixed windows while using only 2 counters per entity (current and previous window). Redis can store both counters in a single hash.
+</div>
+
+<h3>Algorithm Comparison</h3>
+<table>
+  <tr><th>Algorithm</th><th>Memory</th><th>Accuracy</th><th>Burst Support</th><th>Complexity</th></tr>
+  <tr><td>Fixed Window Counter</td><td class="green">O(1)</td><td class="red">Low (boundary burst)</td><td class="red">No</td><td class="green">Very low</td></tr>
+  <tr><td>Sliding Window Log</td><td class="red">O(N)</td><td class="green">Exact</td><td class="green">Yes</td><td>Low</td></tr>
+  <tr><td>Token Bucket</td><td class="green">O(1)</td><td>Good</td><td class="green">Yes (configurable)</td><td>Low</td></tr>
+  <tr><td>Sliding Window Counter</td><td class="green">O(1)</td><td class="green">Good (approx)</td><td>Moderate</td><td>Low</td></tr>
+  <tr><td>Leaky Bucket</td><td class="green">O(1)</td><td>Good</td><td class="red">No (constant rate)</td><td class="green">Very low</td></tr>
+</table>
+
+<h2>Deep Dive: Distributed Rate Limiting</h2>
+<p>With multiple server instances, each instance must enforce the same rate limit consistently. Two main approaches:</p>
+
+<h3>Centralized (Redis-based)</h3>
+<p>All instances check and update counters in a shared Redis cluster. Single source of truth, but adds network latency and creates a bottleneck at Redis.</p>
+
+<h3>Local + Sync</h3>
+<p>Each instance maintains a local rate limiter. Periodically sync state to peers. Lower latency, but may allow slightly more requests than the limit (acceptable for many use cases).</p>
+
+<div class="callout yellow">
+  <strong>Fail-open vs Fail-closed:</strong> If Redis is unavailable, should requests be allowed (fail-open) or rejected (fail-closed)? For most API services, fail-open is preferred — availability over strict rate limiting. For security-sensitive endpoints (login, password reset), fail-closed is safer. Make this configurable per rule.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>How do you handle rate limiting when a user is behind a NAT (many users share one IP)? <em>A: Don't rely solely on IP. Use API keys, tokens, or user IDs. For anonymous users, combine IP with browser fingerprinting or use a CAPTCHA.</em></li>
+  <li>How do you handle the "thundering herd" when many requests are unblocked simultaneously? <em>A: Use jitter: add random delay (0-500ms) to the retry-after time. Or use token bucket which naturally smooths out re-admission.</em></li>
+  <li>How would you implement rate limiting at the API gateway level? <em>A: Deploy rate limiter as a filter/middleware in the gateway. Use Redis cluster for state. Configure rules per route. Pass rate limit headers to clients.</em></li>
+  <li>What is the boundary burst problem with fixed windows? <em>A: A user can make 2x the limit by sending requests at the boundary of two windows (e.g., 100 requests at :59 and 100 at :00 = 200 in 2 seconds). Sliding window algorithms eliminate this.</em></li>
+  <li>How do you handle rate limit propagation delays in a distributed setup? <em>A: Accept approximate enforcement. Use a slightly conservative limit (e.g., enforce 95 instead of 100) to account for propagation lag. For strict enforcement, use Redis Lua scripts for atomic operations.</em></li>
+</ul>
+
+<div class="callout red">
+  <strong>What to Skip:</strong>
+  <ul>
+    <li>Don't design the full API gateway — focus on the rate limiting component</li>
+    <li>Don't implement all algorithms in code — explain the tradeoffs and pick one</li>
+    <li>Don't over-design the management API — keep it simple</li>
+    <li>Don't forget to discuss fail-open vs fail-closed — this is a critical operational decision</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><em>System Design Interview Vol 2</em> — Alex Xu, Ch. 5: Design Rate Limiter</li>
+    <li><em>Building Microservices</em> — Sam Newman (rate limiting patterns)</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Articles</div>
+  <ul>
+    <li>Stripe: "Designing, building, and operating rate limiters" (stripe.com/blog)</li>
+    <li>Cloudflare: "How we designed our rate limiter" (blog.cloudflare.com)</li>
+    <li>Redis documentation: "Rate Limiter" recipe (redis.io/docs/reference/patterns/rate-limiter)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="distributed-lock.html">&larr; Previous: Distributed Lock</a>
+  <a href="notification-system.html">Next: Notification System &rarr;</a>
+</div>
+
+</body>
+</html>

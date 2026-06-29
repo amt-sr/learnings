@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.1.4 Geo Partitioning</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="../index.html">6 Partitioning</a> / <a href="index.html">6.1 Partitioning</a> / 6.1.4</p>
+
+<h1>Geo Partitioning</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand how to partition data by geographic region to comply with data residency laws, reduce latency for users in different regions, and achieve fault isolation across continents. Master the consistency challenges that arise when the same logical data lives in multiple geographic partitions.</p>
+
+<h2>Definition</h2>
+<p>Geo partitioning distributes data across database instances in different geographic regions based on the user's location. EU users' data resides in EU data centers, US users' data in US data centers, and so on. Each region operates semi-independently with its own complete copy of relevant data.</p>
+
+<div class="diagram">
+                     ┌─────────────────────────────────────────┐
+                     │           Global Load Balancer            │
+                     └──────────┬──────────┬──────────┬────────┘
+                                │          │          │
+              ┌─────────────────┘          │          └─────────────────┐
+              ▼                            ▼                            ▼
+  ┌─────────────────────────┐  ┌─────────────────────────┐  ┌─────────────────────────┐
+  │  EU Region (Frankfurt)  │  │  US Region (Virginia)   │  │  APAC Region (Tokyo)    │
+  │  ┌───────────────────┐  │  │  ┌───────────────────┐  │  │  ┌───────────────────┐  │
+  │  │ EU Users DB      │  │  │  │ US Users DB      │  │  │  │ APAC Users DB     │  │
+  │  │ EU Orders DB     │  │  │  │ US Orders DB     │  │  │  │ APAC Orders DB    │  │
+  │  │ EU Payments DB   │  │  │  │ US Payments DB   │  │  │  │ APAC Payments DB  │  │
+  │  └───────────────────┘  │  │  └───────────────────┘  │  │  └───────────────────┘  │
+  │  Serves: DE, FR, UK, IT │  │  Serves: US, CA, MX     │  │  Serves: JP, AU, IN, KR │
+  └─────────────────────────┘  └─────────────────────────┘  └─────────────────────────┘
+              │                            │                            │
+              └────────────────┬───────────┴────────────────┬────────────┘
+                               ▼                            ▼
+                    Cross-region async replication (event streaming)
+</div>
+
+<h2>Why Geo Partition?</h2>
+
+<h3>Compliance and Data Residency</h3>
+<p>GDPR (EU), CCPA (California), LGPD (Brazil), and similar regulations require that personal data of residents be stored within the jurisdiction. Geo partitioning is often the simplest way to achieve compliance — data never leaves the region.</p>
+
+<div class="callout">
+  <strong>GDPR Article 44:</strong> Transfer of personal data to a third country may only take place if the conditions laid down in the GDPR are met. Geo partitioning sidesteps this entirely by ensuring data never crosses borders for processing.
+</div>
+
+<h3>Latency Reduction</h3>
+<p>The speed of light limits round-trip time. A request from Frankfurt to Virginia is ~100ms; within Frankfurt, it is <5ms. Geo partitioning ensures users talk to a nearby data center.</p>
+
+<table>
+  <tr>
+    <th>Route</th>
+    <th>Typical RTT</th>
+    <th>Impact on P99</th>
+  </tr>
+  <tr>
+    <td>Same region</td>
+    <td class="green">1-5 ms</td>
+    <td class="green">Excellent</td>
+  </tr>
+  <tr>
+    <td>EU to US East</td>
+    <td>80-120 ms</td>
+    <td>Degraded</td>
+  </tr>
+  <tr>
+    <td>EU to APAC</td>
+    <td class="red">180-250 ms</td>
+    <td class="red">Unacceptable for interactive</td>
+  </tr>
+</table>
+
+<h3>Fault Isolation by Region</h3>
+<p>If the US East region goes down, EU and APAC users are unaffected. Geo partitioning provides natural blast-radius containment at the continental level.</p>
+
+<h2>Cross-Region Queries</h2>
+<p>The fundamental challenge: what happens when a user in one region needs data from another?</p>
+
+<h3>Scenario: Global Leaderboard</h3>
+<p>A gaming app needs a worldwide leaderboard. With geo partitioning, each region has its own leaderboard. The solution is an <strong>aggregation layer</strong> that asynchronously merges regional data into a global view.</p>
+
+<h3>Scenario: User Travels Abroad</h3>
+<p>A EU user travels to the US. Their data is in the EU partition. Options:</p>
+<ul>
+  <li><strong>Reroute:</strong> API requests go back to EU (adds latency but ensures compliance)</li>
+  <li><strong>Replicate:</strong> Cache a read-only copy in the visiting region (requires careful cache invalidation)</li>
+  <li><strong>Session migration:</strong> Temporarily move the user's session to the visiting region's DB (requires legal review)</li>
+</ul>
+
+<div class="callout yellow">
+  <strong>Interview tip:</strong> When designing a globally distributed system, always address the "traveling user" problem. Interviewers love this edge case because it forces you to reconcile compliance requirements with user experience.
+</div>
+
+<h2>Consistency Challenges Across Regions</h2>
+<p>With geo partitioning, you face the hardest problems in distributed systems: maintaining consistency across regions with 100+ ms network latency between them.</p>
+
+<h3>Replication Topology</h3>
+<ul>
+  <li><strong>Multi-leader:</strong> Each region can accept writes. Conflicts resolved with CRDTs, last-write-wins, or application-level merge logic. Used by Cassandra, CockroachDB.</li>
+  <li><strong>Single-leader with regional followers:</strong> All writes go to one region (e.g., US), followers replicate asynchronously. Simple consistency model but poor write latency for non-leader regions.</li>
+</ul>
+
+<div class="callout red">
+  <strong>Consistency tradeoff:</strong> With multi-leader geo partitioning, you cannot have strong consistency without sacrificing availability (CAP theorem). If EU and US can both write simultaneously, you must accept eventual consistency or design conflict-free data types (CRDTs).
+</div>
+
+<h3>Conflict Resolution Strategies</h3>
+<table>
+  <tr>
+    <th>Strategy</th>
+    <th>Mechanism</th>
+    <th>When to Use</th>
+  </tr>
+  <tr>
+    <td>Last Write Wins (LWW)</td>
+    <td>Timestamp-based, discard older value</td>
+    <td>Simple, acceptable data loss for non-critical fields</td>
+  </tr>
+  <tr>
+    <td>CRDTs</td>
+    <td>Mathematically merge-able data structures</td>
+    <td>Counters, sets, registers with commutative operations</td>
+  </tr>
+  <tr>
+    <td>Application-level merge</td>
+    <td>Custom logic (e.g., merge shopping carts)</td>
+    <td>Domain-specific conflict handling</td>
+  </tr>
+  <tr>
+    <td>Escalation to human</td>
+    <td>Flag conflicts for manual resolution</td>
+    <td>Financial transactions, critical data</td>
+  </tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>How would you design a globally distributed system that complies with GDPR?</li>
+  <li>A EU user travels to the US — how do you handle their data access?</li>
+  <li>How do you maintain a global leaderboard when data is geo-partitioned?</li>
+  <li>Explain the consistency challenges in multi-region deployments.</li>
+  <li>Design a system where each region must be fully self-contained — what are the tradeoffs?</li>
+  <li>How does CockroachDB / Google Spanner handle geo-distributed transactions?</li>
+  <li>What is the CAP theorem implication of geo-partitioned multi-leader systems?</li>
+</ul>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Do not deep-dive into specific cloud provider regions or pricing.</strong> The interviewer cares about the architectural decisions, not whether you pick <code>eu-west-1</code> vs <code>eu-central-1</code>. Also skip implementation details of consensus protocols (Raft, Paxos) unless the conversation naturally leads there. The focus should be on <em>why geo partitioning</em>, not <em>how to configure Terraform for multi-region deployment</em>.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Recommended Reading</div>
+  <ul>
+    <li><a href="https://martin.kleppmann.com/book/">"Designing Data-Intensive Applications" — Martin Kleppmann, Ch. 5 (Replication) and Ch. 9 (Consistency)</a></li>
+    <li><a href="https://www.cockroachlabs.com/blog/how-cockroachdb-distributes-data-across-multiple-regions/">CockroachDB: "How CockroachDB Distributes Data Across Multiple Regions"</a></li>
+    <li><a href="https://cloud.google.com/spanner/docs/architecture">Google Cloud Spanner: TrueTime and Distributed Transactions</a></li>
+    <li><a href="https://engineering.fb.com/2021/08/11/core-data/trees-and-treespheres/">Meta Engineering: "Trees and Treespheres" (Tao geo-distributed storage)</a></li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="functional-partitioning.html">&larr; 6.1.3 Functional Partitioning</a>
+  <a href="range-sharding.html">6.2.1 Range Sharding &rarr;</a>
+</div>
+
+</body>
+</html>

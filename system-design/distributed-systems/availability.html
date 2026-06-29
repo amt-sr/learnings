@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.1.2 Availability (CAP)</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">5 Distributed Systems</a> / <a href="../index.html">5.1 CAP</a> / 5.1.2
+</div>
+
+<h1>5.1.2 Availability (CAP)</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand what <strong>availability</strong> means in the CAP theorem, how it differs from operational uptime or SLA metrics, and why "available" does not mean "correct."</p>
+
+<h2>Definition</h2>
+<p>In the CAP theorem, <strong>availability</strong> means that <strong>every request receives a non-error response</strong> — without guaranteeing that the response contains the most recent write. The system always returns <em>some</em> data, even if it is stale, during a partition.</p>
+
+<div class="callout">
+  <strong>Formal Definition (Gilbert &amp; Lynch):</strong> For every request received, a non-error response is returned, without guaranteeing that the response contains the most recent write. The key phrase is "non-error response" — the system must not reject or timeout requests during a partition.
+</div>
+
+<h2>Availability vs. Uptime / SLA</h2>
+
+<table>
+  <tr>
+    <th>Property</th>
+    <th>CAP Availability</th>
+    <th>Uptime / SLA</th>
+  </tr>
+  <tr>
+    <td>Definition</td>
+    <td>Every non-failing node returns a response to every request</td>
+    <td>System is operational for X% of time (e.g., 99.99%)</td>
+  </tr>
+  <tr>
+    <td>Scope</td>
+    <td>Per-request guarantee</td>
+    <td>Aggregated over time window</td>
+  </tr>
+  <tr>
+    <td>Data Freshness</td>
+    <td>May return stale data</td>
+    <td>Not a factor in the metric</td>
+  </tr>
+  <tr>
+    <td>Context</td>
+    <td>During network partitions</td>
+    <td>All operations (maintenance, failures, etc.)</td>
+  </tr>
+  <tr>
+    <td>Measurement</td>
+    <td>Binary: responds or errors</td>
+    <td>Percentage: nines (99.9%, 99.99%, etc.)</td>
+  </tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Interview Tip:</strong> "Five nines" (99.999% uptime) is about 5 minutes of downtime per year. But CAP availability is not the same thing. A system with 99.999% uptime can still violate CAP availability if it returns errors during partitions. Conversely, a system that always responds (even with stale data) satisfies CAP availability but might return incorrect results.
+</div>
+
+<h2>"Available" Does Not Mean "Correct"</h2>
+
+<div class="diagram">
+  Scenario: Node 1 and Node 2 are partitioned
+
+  Before partition:
+    Node 1: balance = $100
+    Node 2: balance = $100  (consistent)
+
+  During partition:
+    Client A → Node 1: write(balance = $50)  → Node 1: balance = $50
+    Client B → Node 2: read(balance)         → Node 2: balance = $100  ← STALE but AVAILABLE
+
+  CAP-Available: Node 2 returns $100 (not an error)
+  CAP-Consistent: Node 2 would return ERROR (cannot guarantee latest value)
+
+  === The fundamental trade-off ===
+
+  AP: Always respond, even with stale data  → Users can transact, but see old data
+  CP: Block until you can guarantee correct → Users may get errors, but data is right
+</div>
+
+<h3>Real-World Example: Shopping Cart</h3>
+<p>An e-commerce site during a partition: Do you let users add items to their cart (AP — available but the cart might be stale) or do you show an error page (CP — consistent but users cannot shop)?</p>
+
+<ul>
+  <li><strong>Amazon chose AP:</strong> In 2001, Gilbert &amp; Lynch noted that Amazon's "1-click" checkout chose high availability over consistency — a customer could always place an order, even if inventory data was slightly stale.</li>
+  <li><strong>Payment systems choose CP:</strong> You cannot tolerate double-spending. An error is better than an incorrect charge.</li>
+</ul>
+
+<h2>Examples of AP Systems</h2>
+
+<table>
+  <tr>
+    <th>System</th>
+    <th>AP Behavior</th>
+  </tr>
+  <tr>
+    <td>Cassandra</td>
+    <td>Any replica can serve reads/writes; uses tunable consistency but defaults to AP</td>
+  </tr>
+  <tr>
+    <td>DynamoDB (eventual)</td>
+    <td>Serves reads from any replica; eventual consistency mode is the default for many workloads</td>
+  </tr>
+  <tr>
+    <td>Eureka (Netflix)</td>
+    <td>Service discovery registry that works even when nodes cannot reach each other</td>
+  </tr>
+  <tr>
+    <td>CouchDB</td>
+    <td>Multi-master replication; every node accepts writes, resolves conflicts later</td>
+  </tr>
+  <tr>
+    <td>DNS</td>
+    <td>Caches propagate over time; no global lock, always resolves (with potential staleness)</td>
+  </tr>
+</table>
+
+<div class="diagram">
+  AP System Architecture:
+
+                    ┌──────────┐
+    Client ───────→│  LB/Proxy │
+                    └──────────┘
+                   /     |      \
+                  /      |       \
+          ┌──────┐  ┌──────┐  ┌──────┐
+          │Node 1│  │Node 2│  │Node 3│
+          │(US)   │  │(EU)   │  │(APAC) │
+          └──────┘  └──────┘  └──────┘
+              ↕          ↕          ↕
+         (async gossip/replication — no sync required)
+
+    During partition (Node 2 isolated):
+    Client in EU → Node 2: still serves reads/writes
+    Node 2 continues operating with local data
+    → Partition healed → conflict resolution → convergence
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>"What does the 'A' in CAP actually mean?"</li>
+  <li>"Is 'available' the same as '99.99% uptime'? Explain the difference."</li>
+  <li>"Give an example where you would choose availability over consistency."</li>
+  <li>"How does an AP system handle a network partition?"</li>
+  <li>"What happens to stale data in an AP system after a partition heals?"</li>
+  <li>"Can you name real-world systems that are AP and explain their choice?"</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid in interviews:</strong>
+  <ul>
+    <li>SLA/SLO calculation exercises (that is an SRE topic, not system design)</li>
+    <li>Load balancer health check mechanisms in depth unless directly relevant</li>
+    <li>Service mesh retry/backoff configuration details</li>
+    <li>Specific cloud provider uptime guarantees (AWS SLA tables, etc.)</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary Sources</div>
+  <ul>
+    <li>Gilbert, S. &amp; Lynch, N. "Brewer's Conjecture and the Feasibility of Consistent, Available, Partition-Tolerant Web Services" (ACM SIGACT News, 2002)</li>
+    <li>Brewer, E. "CAP Twelve Years Later" (IEEE Computer, 2012)</li>
+    <li>Kleppmann, M. <strong>Designing Data-Intensive Applications</strong>, Chapter 5 (Replication)</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Supplementary</div>
+  <ul>
+    <li>DeCandia, G. et al. "Dynamo: Amazon's Highly Available Key-value Store" (SOSP, 2007)</li>
+    <li>Vogels, W. "Eventually Consistent" (ACM Queue, 2009)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="consistency.html">&larr; 5.1.1 Consistency</a>
+  <a href="partition-tolerance.html">5.1.3 Partition Tolerance &rarr;</a>
+</div>
+
+</body>
+</html>

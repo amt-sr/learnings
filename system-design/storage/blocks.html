@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.2.2 Blocks</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#3">3 Storage</a> / <a href="../index.html#3.2">3.2 Storage Layout</a> / 3.2.2
+</div>
+
+<h1>Blocks</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What a block is — the smallest addressable unit of storage I/O</li>
+  <li>Block devices vs character devices and why the distinction matters</li>
+  <li>How the OS manages blocks vs how the CPU/MMU manages pages</li>
+  <li>Filesystem blocks vs disk sectors vs database <a href="pages.html">pages</a></li>
+  <li>Block alignment and its impact on I/O performance</li>
+</ul>
+
+<h2>Definition</h2>
+<p>A block (also called a <strong>filesystem block or disk block</strong>) is the <strong>smallest unit of storage that the operating system reads from or writes to a block device</strong>. On modern Linux systems, this is typically 4 KB. The OS filesystem organizes all files into blocks — even a 1-byte file occupies a full 4 KB block on disk.</p>
+
+<h2>Block Devices vs Character Devices</h2>
+<table>
+  <tr><th></th><th>Block Device</th><th>Character Device</th></tr>
+  <tr><td>Access pattern</td><td>Fixed-size blocks, random access</td><td>Byte stream, sequential access</td></tr>
+  <tr><td>Caching</td><td class="green">Cached in OS <a href="page-cache.html">page cache</a></td><td class="red">No caching (typically)</td></tr>
+  <tr><td>Examples</td><td><a href="hdd.html">HDD</a>, <a href="ssd.html">SSD</a>, loop devices, LVM volumes</td><td>Terminal (/dev/tty), serial port, /dev/null</td></tr>
+  <tr><td>I/O model</td><td>read()/write() with seek (lseek)</td><td>read()/write() as stream</td></tr>
+  <tr><td>Relevance to databases</td><td class="green">Primary storage interface</td><td>Minimal (used for logging to terminals)</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Why this matters:</strong> Databases store their data files on block devices. The block device interface determines the I/O semantics: the OS always reads and writes in whole-block multiples, and it caches these blocks in the <a href="page-cache.html">page cache</a>. When a database uses O_DIRECT (direct I/O), it bypasses this cache and issues block I/O directly to the device.
+</div>
+
+<h2>Block Size at Each Layer</h2>
+<div class="diagram">  Storage Size Hierarchy:
+
+  ┌──────────────────────────────────────────────────────┐
+  │  Hardware Sector (disk firmware)                     │
+  │  └── 512 bytes (legacy) or 4 KB (Advanced Format)   │
+  │      Minimum physical read/write unit on disk        │
+  └──────────────────────────────────────────────────────┘
+                          │
+                          ↓
+  ┌──────────────────────────────────────────────────────┐
+  │  OS / Filesystem Block                               │
+  │  └── 4 KB (Linux ext4, XFS; NTFS default)            │
+  │      Minimum I/O unit managed by the OS kernel        │
+  │      Cached in the OS <a href="page-cache.html">page cache</a>                    │
+  └──────────────────────────────────────────────────────┘
+                          │
+                          ↓
+  ┌──────────────────────────────────────────────────────┐
+  │  Database Page                                       │
+  │  └── 4 KB (PostgreSQL), 8 KB (Oracle/SQL Server),    │
+  │      16 KB (MySQL InnoDB)                             │
+  │      Managed by the <a href="buffer-pool.html">buffer pool</a>                          │
+  └──────────────────────────────────────────────────────┘
+
+  Relationship (MySQL InnoDB example):
+  ┌───────────────────────────────────────────┐
+  │        Database Page (16 KB)              │
+  │  ┌────────┐┌────────┐┌────────┐┌────────┐│
+  │  │OS Block││OS Block││OS Block││OS Block││
+  │  │ 4 KB   ││ 4 KB   ││ 4 KB   ││ 4 KB   ││
+  │  └────────┘└────────┘└────────┘└────────┘│
+  │  1 DB page = 4 OS blocks = 32 sectors    │
+  └───────────────────────────────────────────┘
+
+  PostgreSQL example:
+  ┌─────────────────┐┌─────────────────┐
+  │  DB Page (8 KB)  ││  DB Page (8 KB)  │
+  │  ┌─────┐┌─────┐ ││  ┌─────┐┌─────┐ │
+  │  │Block││Block│ ││  │Block││Block│ │
+  │  │4 KB ││4 KB │ ││  │4 KB ││4 KB │ │
+  │  └─────┘└─────┘ ││  └─────┘└─────┘ │
+  │  1 DB page = 2 OS blocks             │
+  └─────────────────┘└─────────────────┘</div>
+
+<h2>OS Blocks vs CPU Pages</h2>
+<p>These are related but distinct concepts that are often confused:</p>
+<table>
+  <tr><th>Aspect</th><th>OS Block (I/O)</th><th>CPU Page (Memory)</th></tr>
+  <tr><td>Managed by</td><td>OS kernel / filesystem</td><td>CPU MMU / kernel VM subsystem</td></tr>
+  <tr><td>Size</td><td>4 KB (filesystem)</td><td>4 KB (typical, can be 2 MB / 1 GB huge pages)</td></tr>
+  <tr><td>Purpose</td><td>Unit of disk I/O</td><td>Unit of virtual memory mapping</td></tr>
+  <tr><td>Cached in</td><td><a href="page-cache.html">Page cache</a> (in-kernel)</td><td>Physical <a href="ram.html">RAM</a> frames</td></tr>
+  <tr><td>Errors</td><td>EIO (disk I/O error)</td><td>Page fault (virtual → physical)</td></tr>
+  <tr><td>Relationship</td><td colspan="2" style="text-align:center">When an OS block is read from disk, it is stored in RAM as a CPU page in the page cache</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Interview distinction:</strong> When someone says "page fault," they are talking about CPU virtual memory (a process accessing unmapped memory). When someone says "block I/O," they are talking about reading/writing storage. The page cache is where these two worlds meet — disk blocks are cached as CPU pages.
+</div>
+
+<h2>Block Alignment</h2>
+<p>Modern disks use 4 KB physical sectors internally but expose a 512-byte logical interface for backward compatibility. If data is misaligned — starting at an offset that does not match the 4 KB physical boundary — every write requires a read-modify-write cycle:</p>
+
+<div class="diagram">  Correct Alignment:
+
+  Physical:  [|  Sector 0 (4 KB)  |  Sector 1 (4 KB)  |]
+  Logical:   [|  Block A (4 KB)   |  Block B (4 KB)   |]
+             offset 0              offset 4096
+             ✓ Aligned             ✓ Aligned
+
+  Misaligned (partition starts at 512-byte offset):
+
+  Physical:  [| Sector 0 |  Sector 1  |  Sector 2 |]
+  Logical:      [|  Block A   |  Block B   |]
+                 offset 512    offset 4608
+                 ✗ Straddles sectors 0-1
+                 ✗ Straddles sectors 1-2
+
+  Misaligned write = READ sector + MODIFY bytes + WRITE sector back
+  = 2x I/O amplification for every write</div>
+
+<div class="callout green">
+  <strong>Practical note:</strong> Modern Linux partitioning tools (parted, fdisk with GPT) automatically align partitions to 1 MB boundaries. This eliminates misalignment for typical filesystem block sizes. However, databases using raw devices or custom storage managers must handle alignment explicitly.
+</div>
+
+<h2>Block I/O and the <a href="buffer-pool.html">Buffer Pool</a></h2>
+<p>The relationship between OS blocks and the database buffer pool has performance implications:</p>
+<ul>
+  <li><strong>Without O_DIRECT</strong>: Database writes go to the buffer pool (dirty), then to the OS page cache, then to disk. Data is cached twice — wasteful but simple. PostgreSQL default.</li>
+  <li><strong>With O_DIRECT</strong>: Database writes go to the buffer pool (dirty), then directly to disk, bypassing the OS page cache. Single copy in memory. MySQL InnoDB default.</li>
+  <li><strong>Block size matching</strong>: If the database page size is a multiple of the OS block size (e.g., 16 KB DB page / 4 KB OS block), I/O is efficient. Non-aligned sizes cause cross-block reads.</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What is the difference between a database page, an OS block, and a CPU page?"</strong><br>An OS block (4 KB) is the smallest unit of filesystem I/O. A CPU page (4 KB, or 2 MB/1 GB for huge pages) is the unit of virtual memory mapping. A database page (4–16 KB) is the database engine's I/O unit. When the OS reads a block from disk, it stores it as a CPU page in the <a href="page-cache.html">page cache</a>. The database manages its own pages in the <a href="buffer-pool.html">buffer pool</a>, which is a separate memory area from the page cache.</li>
+  <li><strong>"Why can't you read half a block from disk?"</strong><br>The disk hardware and filesystem are designed around fixed-size blocks. The disk controller reads entire sectors (512 B or 4 KB) from the physical media. The OS filesystem layer manages space allocation in whole blocks. There is no mechanism to address or transfer partial blocks — it would require firmware-level changes to every storage device and filesystem.</li>
+  <li><strong>"What is a block device and how is it different from a character device?"</strong><br>A block device (/dev/sda, /dev/nvme0n1) supports random access to fixed-size blocks and is cached by the OS. A character device (/dev/tty, /dev/null) provides a byte-stream interface with no caching. Databases use block devices exclusively for data storage.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>MBR vs GPT partition table internals</li>
+    <li>Filesystem journaling internals (ext4 journal, NTFS transaction log)</li>
+    <li>Linux block layer scheduler details (CFQ, deadline, mq-deadline, bfq)</li>
+    <li>Device mapper (LVM, dm-crypt) internals</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Database Internals" by Alex Petrov</strong> — Chapter 2 (File Formats and Page Layout)</li>
+    <li><strong>"Operating Systems: Three Easy Pieces" (Arpaci-Dusseau)</strong> — Chapter 36 (File Systems) and Chapter 40 (File System Implementation)</li>
+    <li><strong>"Designing Data-Intensive Applications" by Martin Kleppmann</strong> — Chapter 3</li>
+    <li><strong>Linux man pages: statvfs(2), blockdev(8)</strong></li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="pages.html">&larr; 3.2.1 Pages</a>
+  <a href="records.html">Next: 3.2.3 Records &rarr;</a>
+</div>
+
+</body>
+</html>

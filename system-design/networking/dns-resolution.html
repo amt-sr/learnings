@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.5.1 DNS Resolution</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#2">2 Networking</a> / <a href="../index.html#2.5">2.5 DNS</a> / 2.5.1
+</div>
+
+<h1>DNS Resolution</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>The complete DNS resolution flow from browser to authoritative server</li>
+  <li>Roles of the recursive resolver, root server, TLD server, and authoritative server</li>
+  <li>Latency characteristics of DNS resolution (~100ms uncached, 0ms cached)</li>
+  <li>Why DNS is a critical bottleneck and single point of failure in system design</li>
+</ul>
+
+<h2>What is DNS Resolution?</h2>
+<p>DNS resolution is the process of translating a human-readable domain name (e.g., <code>api.example.com</code>) into an IP address (e.g., <code>203.0.113.42</code>). It involves a chain of queries across multiple servers, each responsible for a different level of the DNS hierarchy.</p>
+
+<div class="callout">
+  <strong>Key insight:</strong> DNS resolution happens before any HTTP request is made. If DNS is slow or fails, the entire request fails. This is why DNS is one of the most critical infrastructure components in system design interviews.
+</div>
+
+<h2>DNS Resolution Flow</h2>
+<div class="diagram">  Resolving: api.example.com
+
+  ┌──────────┐     ┌───────────────────┐     ┌──────────┐     ┌──────────┐     ┌───────────────┐
+  │          │     │                   │     │          │     │          │     │               │
+  │ Browser  │────→│ Recursive Resolver │────→│   Root   │────→│   TLD    │────→│ Authoritative │
+  │          │     │  (8.8.8.8/ISP)    │     │  Server  │     │  Server  │     │    Server     │
+  │          │     │                   │     │          │     │          │     │               │
+  └──────────┘     └───────────────────┘     └──────────┘     └──────────┘     └───────────────┘
+       │                   │                        │                │                  │
+   Step 1              Step 2                   Step 3          Step 4            Step 5
+   Check cache        Ask root for .com        Root says       TLD says          Returns
+                      "who handles .com?"      "ask TLD"       "ask ns.example"   203.0.113.42
+                        │                        │                │                  │
+                        └────────────────────────┘                │                  │
+                                                                  │                  │
+                        ┌───────────────────────────────────────────┘                  │
+                        │                                                      ┌─────┘
+                        │                                                      │
+                        ▼                                                      ▼
+  Step 6: Resolver caches the result → Returns 203.0.113.42 to browser → HTTP request begins</div>
+
+<h2>Step-by-Step Breakdown</h2>
+<table>
+  <tr><th>Step</th><th>Actor</th><th>Action</th><th>Typical Latency</th></tr>
+  <tr><td><strong>1</strong></td><td>Browser / OS</td><td>Check local DNS cache (browser, OS hosts file, OS resolver cache). If hit, return immediately.</td><td class="green">0ms</td></tr>
+  <tr><td><strong>2</strong></td><td>Recursive Resolver</td><td>Check resolver cache. If miss, forward query to root server.</td><td class="green">0&ndash;1ms</td></tr>
+  <tr><td><strong>3</strong></td><td>Root Server</td><td>Root does NOT know the IP. Returns referral to the TLD server responsible for <code>.com</code>.</td><td>5&ndash;30ms</td></tr>
+  <tr><td><strong>4</strong></td><td>TLD Server</td><td>TLD does NOT know the IP. Returns referral to the authoritative NS for <code>example.com</code>.</td><td>5&ndash;30ms</td></tr>
+  <tr><td><strong>5</strong></td><td>Authoritative Server</td><td>Looks up <code>api.example.com</code> in its zone file. Returns the A record (IP address).</td><td>5&ndash;30ms</td></tr>
+  <tr><td><strong>6</strong></td><td>Recursive Resolver</td><td>Caches the result for TTL duration. Returns IP to the client.</td><td>1&ndash;2ms</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Worst case vs. cached:</strong> Full uncached resolution: ~30&ndash;100ms (3 network round trips). Fully cached (browser or resolver): 0ms. This 100ms difference is the reason DNS caching is critical in system design.
+</div>
+
+<h2>DNS Hierarchy</h2>
+<div class="diagram">                     ┌─────────────────────┐
+                     │     Root ( . )      │  13 logical root server clusters
+                     │   a.root-servers.net │  (anycast: 1000+ instances globally)
+                     └──────────┬──────────┘
+                                │
+              ┌─────────────────┼─────────────────┐
+              │                 │                 │
+     ┌────────▼──────┐ ┌───────▼───────┐ ┌───────▼───────┐
+     │  TLD: .com    │ │  TLD: .org    │ │  TLD: .net    │   Verisign (.com, .net)
+     │  TLD: .io     │ │  TLD: .dev    │ │  TLD: .gov    │   Google (.dev, .app)
+     └────────┬──────┘ └───────┬───────┘ └───────┬───────┘   1500+ TLDs exist
+              │                │                 │
+     ┌────────▼──────┐         │                 │
+     │ example.com   │         │                 │   Authoritative nameservers
+     │   ns1.dns.co  │         │                 │   (Route53, Cloudflare, etc.)
+     └────────┬──────┘         │                 │
+              │                │                 │
+     ┌────────▼────────────────▼─────────────────▼──────┐
+     │  api.example.com  →  203.0.113.42                 │   Zone records
+     │  www.example.com  →  203.0.113.42                 │   (A, AAAA, CNAME, MX)
+     └──────────────────────────────────────────────────┘</div>
+
+<h2>Latency Budget</h2>
+<table>
+  <tr><th>Scenario</th><th>Latency</th><th>Notes</th></tr>
+  <tr><td>Browser cache hit</td><td class="green">~0ms</td><td>DNS already resolved; no network call</td></tr>
+  <tr><td>OS cache hit</td><td class="green">~0ms</td><td>OS-level DNS cache (nscd, systemd-resolved)</td></tr>
+  <tr><td>Resolver cache hit</td><td class="green">1&ndash;5ms</td><td>Single RTT to resolver (8.8.8.8)</td></tr>
+  <tr><td>Resolver cache miss (cold)</td><td class="red">30&ndash;100ms</td><td>3 sequential round trips: root → TLD → authoritative</td></tr>
+  <tr><td>DNS timeout / failure</td><td class="red">1&ndash;5s</td><td>Client retries, falls back to secondary resolver</td></tr>
+</table>
+
+<div class="callout">
+  <strong>System design impact:</strong> For a service handling 1M requests/second with cold DNS, that is 100ms of latency added to every first request. If your DNS provider goes down, your entire service is unreachable — even if all your application servers are healthy. This is why multi-provider DNS and health checks are essential.
+</div>
+
+<h2>DNS over UDP vs TCP</h2>
+<table>
+  <tr><th></th><th>UDP (Port 53)</th><th>TCP (Port 53)</th></tr>
+  <tr><td>Default for queries</td><td class="green">Yes</td><td>No</td></tr>
+  <tr><td>Response size limit</td><td>512 bytes (traditional) / EDNS0 up to 4096</td><td class="green">No limit</td></tr>
+  <tr><td>Connection overhead</td><td class="green">None (stateless)</td><td>3-way handshake needed</td></tr>
+  <tr><td>Retry / retransmit</td><td class="red">Application-level</td><td class="green">TCP handles it</td></tr>
+  <tr><td>Use case</td><td>Standard queries</td><td>Zone transfers (AXFR), large responses (DNSSEC)</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What happens when you type a URL in the browser?"</strong><br>Browser checks cache → OS checks cache → query goes to recursive resolver → root → TLD → authoritative → IP returned → TCP handshake → TLS handshake → HTTP request. DNS resolution is the first 3 hops of this chain.</li>
+  <li><strong>"Why can DNS be a bottleneck?"</strong><br>Cold resolution adds 30&ndash;100ms. DNS provider outage takes down your entire service regardless of server health. DNSSEC validation adds CPU overhead. High query volume can overwhelm resolvers during traffic spikes.</li>
+  <li><strong>"How many root servers exist?"</strong><br>13 logical root server names (A through M), but each is deployed via anycast to 1000+ physical instances worldwide. Any single root server going down has minimal impact due to anycast routing.</li>
+  <li><strong>"What is DNS hijacking and how do you prevent it?"</strong><br>Attacker redirects DNS queries to malicious IPs. Prevention: DNSSEC (cryptographic signatures), DNS over HTTPS (DoH), DNS over TLS (DoT), and using trusted recursive resolvers.</li>
+  <li><strong>"Design a DNS system that can handle 10M queries per second."</strong><br>Anycast deployment across multiple regions, caching at multiple levels (browser, OS, resolver, CDN edge), sharding zones across authoritative servers, health checks and automatic failover, DNSSEC for integrity, rate limiting and DDoS protection.</li>
+  <li><strong>"What is EDNS0 and why does it matter?"</strong><br>Extension Mechanism for DNS version 0. Increases UDP message size beyond 512 bytes (up to 4096) and adds optional fields (client subnet, flags). Critical for DNSSEC responses and large record sets that would otherwise fall back to TCP.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>Deep dive into DNS packet format (header, question, answer, authority, additional sections)</li>
+    <li>DNSSEC cryptographic details (RSASHA256, ECDSAP256SHA256 specifics)</li>
+    <li>Historical DNS protocols (NIS, WINS)</li>
+    <li>Zone file syntax details</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"DNS and BIND"</strong> — Cricket Liu, Paul Albitz (O'Reilly)</li>
+    <li><strong>"Computer Networking: A Top-Down Approach"</strong> — Kurose &amp; Ross, Chapter 2 (Application Layer, DNS section)</li>
+    <li><strong>ICANN Root Server System</strong> — root-servers.org</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="server-sent-events.html">&larr; 2.4.4 Server-Sent Events</a>
+  <a href="recursive-resolver.html">Next: 2.5.2 Recursive Resolver &rarr;</a>
+</div>
+
+</body>
+</html>

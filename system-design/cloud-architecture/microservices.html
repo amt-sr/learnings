@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>12.1.2 — Microservices Architecture</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">Cloud Architecture</a> / 12.1.2 Microservices</div>
+<h1>Microservices Architecture</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand microservices architecture, how to define service boundaries, the pros and cons relative to monoliths, and when microservices are the right choice. This is one of the most frequently discussed architectural decisions in system design interviews.</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>Microservices</strong> is an architectural style where a system is decomposed into small, independent services, each owning its data and communicating over well-defined APIs (typically HTTP/REST or gRPC). Each service is independently deployable, scalable, and developed by a small team.
+</div>
+
+<p>The key properties: independent deployment, independent data ownership, independent scaling, and technology heterogeneity. Services communicate over the network (never shared memory or shared database).</p>
+
+<h2>Architecture Diagram</h2>
+<div class="diagram">
+                    ┌─────────────────┐
+                    │   API Gateway   │
+                    │ (routing, auth) │
+                    └────────┬────────┘
+                             │
+            ┌────────────────┼────────────────┐
+            ▼                ▼                ▼
+    ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+    │ Auth Service │ │ User Service │ │Order Service │
+    │              │ │              │ │              │
+    │ ┌──DB──┐    │ │ ┌──DB──┐    │ │ ┌──DB──┐    │
+    │ │Redis │    │ │ │PgSQL │    │ │ │Mongo │    │
+    │ └──────┘    │ │ └──────┘    │ │ └──────┘    │
+    └──────────────┘ └──────────────┘ └──────┬───────┘
+                                           │
+                              ┌─────────────┼─────────────┐
+                              ▼             ▼             ▼
+                     ┌──────────────┐ ┌───────────┐ ┌──────────┐
+                     │ Payment Svc  │ │Inventory  │ │Shipping  │
+                     │              │ │  Svc      │ │  Svc     │
+                     │ ┌──DB──┐    │ │ ┌──DB──┐ │ │ ┌──DB──┐ │
+                     │ │PgSQL │    │ │ │PgSQL │ │ │ └──────┘ │
+                     │ └──────┘    │ │ └──────┘ │ │          │
+                     └──────────────┘ └───────────┘ └──────────┘
+
+    Each service:
+    - Owns its database (no shared schema)
+    - Deploys independently
+    - Communicates via REST/gRPC/events
+    - Scaled independently
+</div>
+
+<h2>Service Boundaries</h2>
+<p>Defining service boundaries is the hardest part of microservices. Bad boundaries create distributed monoliths — worse than the original monolith.</p>
+
+<h3>Guiding Principles</h3>
+<table>
+  <tr><th>Principle</th><th>Description</th></tr>
+  <tr><td><strong>Single responsibility</strong></td><td>Each service owns one bounded context (Domain-Driven Design)</td></tr>
+  <tr><td><strong>Data ownership</strong></td><td>Service owns its data exclusively; other services access it via API</td></tr>
+  <tr><td><strong>Loose coupling</strong></td><td>Services should not depend on each other's internal implementation</td></tr>
+  <tr><td><strong>High cohesion</strong></td><td>Related functionality belongs in the same service</td></tr>
+  <tr><td><strong>Team alignment</strong></td><td>Service boundary matches team boundary (Conway's Law)</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Rule of thumb:</strong> A service should be small enough that a single team (2-8 engineers) can own it, build it, deploy it, and operate it independently. If you need two teams for one service, it is too big. If one team owns 10 services, they are too small.
+</div>
+
+<h2>Pros and Cons</h2>
+<table>
+  <tr><th>Advantage</th><th>Why It Matters</th></tr>
+  <tr><td class="green">Independent deployment</td><td>Ship features faster without coordinating with other teams</td></tr>
+  <tr><td class="green">Independent scaling</td><td>Scale the payment service 10x without scaling the auth service</td></tr>
+  <tr><td class="green">Technology diversity</td><td>Use Python for ML, Go for high-throughput API, Java for CRUD</td></tr>
+  <tr><td class="green">Team autonomy</td><td>Teams own their services end-to-end (build, deploy, operate)</td></tr>
+  <tr><td class="green">Fault isolation</td><td>One service crashing does not bring down the entire system</td></tr>
+  <tr><td class="green">Organizational scaling</td><td>More teams can work in parallel without merge conflicts</td></tr>
+</table>
+
+<table>
+  <tr><th>Disadvantage</th><th>Why It Matters</th></tr>
+  <tr><td class="red">Distributed system complexity</td><td>Network latency, partial failures, retries, timeouts</td></tr>
+  <tr><td class="red">Data consistency</td><td>No ACID across services — eventual consistency, sagas</td></tr>
+  <tr><td class="red">Operational overhead</td><td>Monitoring, logging, tracing for 50+ services</td></tr>
+  <tr><td class="red">Deployment complexity</td><td>Need orchestration (K8s), CI/CD pipelines per service</td></tr>
+  <tr><td class="red">Testing complexity</td><td>Integration testing across services is harder</td></tr>
+  <tr><td class="red">Network overhead</td><td>Inter-service calls are 10-1000x slower than in-process calls</td></tr>
+  <tr><td class="red">Contract management</td><td>API versioning, backward compatibility, breaking changes</td></tr>
+</table>
+
+<h2>Monolith vs Microservices Comparison</h2>
+<table>
+  <tr><th>Dimension</th><th>Monolith</th><th>Microservices</th></tr>
+  <tr><td>Deployment</td><td>Single artifact</td><td>Per-service independent</td></tr>
+  <tr><td>Scaling</td><td>Horizontal: copy entire app</td><td>Per-service, granular</td></tr>
+  <tr><td>Data</td><td>Shared database, ACID</td><td>Database per service, eventual consistency</td></tr>
+  <tr><td>Communication</td><td>In-process function calls</td><td>Network: REST, gRPC, events</td></tr>
+  <tr><td>Complexity</td><td>Code complexity (spaghetti risk)</td><td>Distributed complexity (network, consistency)</td></tr>
+  <tr><td>Team fit</td><td>Small teams (1-10)</td><td>Large organizations (50+ engineers)</td></tr>
+  <tr><td>Dev speed (initial)</td><td class="green">Fast</td><td class="red">Slow (infrastructure investment)</td></tr>
+  <tr><td>Dev speed (mature)</td><td class="red">Slow (coordination bottleneck)</td><td class="green">Fast (independent teams)</td></tr>
+  <tr><td>Failure blast radius</td><td class="red">Entire application</td><td class="green">Single service</td></tr>
+</table>
+
+<h2>Common Anti-Patterns</h2>
+<ul>
+  <li><strong>Distributed monolith:</strong> Services are tightly coupled through synchronous calls, shared databases, or circular dependencies. You get the complexity of microservices with none of the benefits.</li>
+  <li><strong>Nanoservices:</strong> Services that are too small (one endpoint each), creating excessive inter-service communication overhead.</li>
+  <li><strong>Shared-nothing denial:</strong> Every service reimplements common concerns (auth, logging, config) instead of using shared libraries or a service mesh.</li>
+</ul>
+
+<div class="callout green">
+  <strong>Interview tip:</strong> When asked to design a system, start by justifying your architectural choice. Say "For this problem, I would choose [monolith/microservices] because [specific reason related to team size, scaling needs, or domain complexity]." Then explain what would make you switch to the other approach.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>When would you choose microservices over a monolith?</li>
+  <li>How do you define service boundaries?</li>
+  <li>What is a distributed monolith and how do you avoid it?</li>
+  <li>How do microservices handle data consistency?</li>
+  <li>What is the impact of microservices on team structure?</li>
+  <li>How do services communicate with each other?</li>
+  <li>What is the downside of microservices that people underestimate?</li>
+  <li>Compare REST vs gRPC vs events for inter-service communication.</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid diving into:</strong> Specific frameworks (Spring Cloud, Istio configuration), detailed sagas pattern implementation, or service mesh internals unless asked. Focus on the trade-off reasoning and boundary definition — these are what interviewers evaluate.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><strong>Building Microservices</strong> (Sam Newman, 2nd ed) — Definitive guide to microservices architecture</li>
+    <li><strong>Software Architecture: The Hard Parts</strong> (Ford, Parsons, Kua) — Trade-off analysis framework</li>
+    <li><strong>Domain-Driven Design</strong> (Eric Evans) — Bounded contexts as service boundary guide</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Articles</div>
+  <ul>
+    <li><strong>"Microservices" — Martin Fowler</strong> — martinfowler.com/articles/microservices.html</li>
+    <li><strong>"Fallacies of Distributed Computing"</strong> — Wikipedia — Why microservices are hard</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="monolith.html">&larr; Previous: Monolith</a>
+  <a href="api-gateway.html">Next: API Gateway &rarr;</a>
+</div>
+</body>
+</html>

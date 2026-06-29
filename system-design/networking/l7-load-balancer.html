@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.7.4 L7 Load Balancer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#2">2 Networking</a> / <a href="../index.html#2.7">2.7 Load Balancing</a> / 2.7.4
+</div>
+
+<h1>L7 Load Balancer</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What Layer 7 load balancing means and how it differs from <a href="l4-load-balancer.html">L4</a></li>
+  <li>HTTP-aware routing: path-based, host-based, header-based</li>
+  <li>TLS termination, rate limiting, and request transformation</li>
+  <li>Real-world examples: AWS ALB, Nginx, Envoy, HAProxy</li>
+</ul>
+
+<h2>Definition</h2>
+<p>A <strong>Layer 7 load balancer operates at the application layer</strong> of the OSI model. It inspects HTTP requests — including URL path, host header, query parameters, cookies, and custom headers — to make intelligent routing decisions. Unlike L4, it understands the content of each request and can route differently based on it.</p>
+
+<div class="diagram">  L7 Load Balancing — Path-Based Routing:
+
+  Client Request:
+  GET https://api.example.com/api/users/123
+       │              │               │
+       │              │               └── Path: /api/users/123
+       │              └── Host: api.example.com
+       └── Method: GET
+
+  L7 LB parses HTTP and routes:
+  ┌──────────────────────────────────────────────────────────┐
+  │                   L7 Load Balancer                       │
+  │                                                          │
+  │  /api/users/*    ──▶  User Service   (10.0.1.10:8080)   │
+  │  /api/orders/*   ──▶  Order Service  (10.0.1.11:8080)   │
+  │  /api/payments/* ──▶  Payment Svc    (10.0.1.12:8080)   │
+  │  /*              ──▶  Web Frontend   (10.0.1.20:3000)   │
+  │                                                          │
+  │  Host: blog.example.com  ──▶  Blog Service              │
+  │  Host: api.example.com   ──▶  API Gateway               │
+  └──────────────────────────────────────────────────────────┘</div>
+
+<h2>Routing Capabilities</h2>
+<table>
+  <tr><th>Routing Type</th><th>Based On</th><th>Example</th></tr>
+  <tr><td><strong>Path-based</strong></td><td>URL path</td><td>/api/v1/* → Service A, /api/v2/* → Service B</td></tr>
+  <tr><td><strong>Host-based</strong></td><td>Host header</td><td>api.example.com → API, blog.example.com → Blog</td></tr>
+  <tr><td><strong>Header-based</strong></td><td>Request headers</td><td>X-Version: v2 → new backend</td></tr>
+  <tr><td><strong>Query-based</strong></td><td>Query parameters</td><td>?region=us → US backend, ?region=eu → EU backend</td></tr>
+  <tr><td><strong>Method-based</strong></td><td>HTTP method</td><td>GET → read replicas, POST → primary</td></tr>
+  <tr><td><strong>Cookie-based</strong></td><td>Cookie values</td><td>A/B testing: variant=a → Server A</td></tr>
+</table>
+
+<h2>Key Features</h2>
+
+<h3>TLS Termination</h3>
+<p>The L7 LB terminates TLS connections, decrypts HTTPS traffic, and forwards plain HTTP to backends. This centralizes certificate management and enables the LB to inspect and modify HTTP content.</p>
+
+<h3>SSL Offloading</h3>
+<p>TLS encryption/decryption is CPU-intensive (especially RSA with large key sizes). Offloading this to the LB frees backend servers to handle application logic.</p>
+
+<pre># Nginx L7 load balancing with TLS termination
+upstream api_backend {
+    least_conn;
+    server 10.0.1.10:8080;
+    server 10.0.1.11:8080;
+    server 10.0.1.12:8080;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name api.example.com;
+
+    ssl_certificate     /etc/ssl/api.pem;
+    ssl_certificate_key /etc/ssl/api.key;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+
+    location /api/users/ {
+        proxy_pass http://api_backend;
+    }
+
+    location /api/orders/ {
+        proxy_pass http://order_backend;
+    }
+}</pre>
+
+<h3>Rate Limiting</h3>
+<p>L7 LB can enforce per-client, per-IP, or per-API-key rate limits before traffic hits backends.</p>
+<pre># L7 rate limiting strategies:
+# 1. Per IP:     100 requests/minute per IP address
+# 2. Per API key: 1000 requests/minute per key
+# 3. Per user:   500 requests/minute (from JWT sub claim)
+# 4. Global:     10,000 requests/second total
+
+# AWS ALB supports:
+# - Fixed-window rate limiting
+# - Rate-based rules in AWS WAF (5 requests per 5 min per IP, etc.)</pre>
+
+<h3>Request/Response Transformation</h3>
+<p>L7 LB can add, remove, or modify headers, rewrite URLs, and transform request/response bodies.</p>
+<pre># Common header manipulations:
+proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+proxy_set_header X-Real-IP         $remote_addr;
+proxy_set_header X-Request-ID      $request_id;
+
+# URL rewriting:
+rewrite ^/api/v1/(.*) /$1 break;</pre>
+
+<h2>Real-World Examples</h2>
+
+<h3>AWS Application Load Balancer (ALB)</h3>
+<ul>
+  <li>Layer 7 only — HTTP/HTTPS with path-based routing</li>
+  <li>Supports up to 100 rules per listener</li>
+  <li>Integrated with AWS WAF for DDoS protection</li>
+  <li>Supports <a href="sticky-sessions.html">sticky sessions</a>, <a href="health-checks.html">health checks</a>, and slow start mode</li>
+  <li>Can route to Lambda functions directly (no EC2 needed)</li>
+</ul>
+
+<h3>Envoy Proxy</h3>
+<ul>
+  <li>Open-source L7 proxy designed for microservices and service mesh</li>
+  <li>xDS API for dynamic configuration</li>
+  <li>Built-in circuit breaking, retries, rate limiting, observability</li>
+  <li>Used as the data plane in Istio service mesh</li>
+</ul>
+
+<h3>HAProxy (HTTP Mode)</h3>
+<pre># HAProxy L7 configuration
+frontend http_front
+    bind *:443 ssl crt /etc/ssl/api.pem
+
+    # Path-based routing
+    acl is_users path_beg /api/users
+    acl is_orders path_beg /api/orders
+
+    use_backend user_backend if is_users
+    use_backend order_backend if is_orders
+    default_backend default_backend
+
+backend user_backend
+    balance roundrobin
+    server user1 10.0.1.10:8080 check
+    server user2 10.0.1.11:8080 check</pre>
+
+<h2>Performance Considerations</h2>
+<table>
+  <tr><th>Factor</th><th>Impact</th></tr>
+  <tr><td><strong>HTTP parsing overhead</strong></td><td>Each request requires full HTTP parsing — more CPU than L4</td></tr>
+  <tr><td><strong>TLS termination</strong></td><td>CPU-intensive; use hardware acceleration or dedicated certs</td></tr>
+  <tr><td><strong>Rule evaluation</strong></td><td>More routing rules = more evaluation time per request</td></tr>
+  <tr><td><strong>Connection reuse</strong></td><td>HTTP/2 multiplexing reduces connection overhead significantly</td></tr>
+  <tr><td><strong>Buffering</strong></td><td>L7 LB buffers full request/response — higher memory usage</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Typical throughput:</strong> A well-provisioned L7 LB handles 10,000-50,000 requests/second per instance. L4 LB handles 1-10 million connections/second. If you need raw throughput for non-HTTP protocols, use L4. If you need intelligent HTTP routing, use L7.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What is a Layer 7 load balancer and how is it different from L4?"</strong><br>L7 operates at the application layer and inspects HTTP content (path, headers, cookies) to make routing decisions. L4 only sees IP and port. L7 enables path-based routing, TLS termination, and rate limiting, but adds more latency and CPU overhead. See: <a href="l4-load-balancer.html">L4 Load Balancer</a></li>
+  <li><strong>"How would you design routing for a microservices architecture?"</strong><br>Use an L7 load balancer (ALB or Envoy) with path-based routing: /api/users/* → user-service, /api/orders/* → order-service. For internal services, use a service mesh (Envoy sidecars) with L7 routing based on headers and gRPC methods. The L7 LB also handles TLS termination and rate limiting at the edge.</li>
+  <li><strong>"What is TLS termination and why do it at the L7 LB?"</strong><br>The LB decrypts HTTPS and forwards plain HTTP to backends. Centralizes cert management (one cert on the LB, not every backend). Frees backend CPU for application work. Enables the LB to inspect HTTP content for routing and WAF rules.</li>
+  <li><strong>"Explain how an API Gateway differs from an L7 load balancer."</strong><br>An API Gateway is a specialized L7 LB with additional features: authentication/authorization, request transformation, API versioning, developer portal, and usage analytics. An L7 LB focuses on routing and distribution. In practice, many API Gateways (Kong, AWS API Gateway) are built on top of L7 proxies like Nginx or Envoy.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>Envoy xDS API protocol details</li>
+    <li>Service mesh sidecar injection internals</li>
+    <li>Specific AWS ALB pricing tiers</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>AWS ALB Documentation</strong> — docs.aws.amazon.com/elasticloadbalancing/latest/application</li>
+    <li><strong>"Envoy Upstream and Load Balancing"</strong> — envoyproxy.io/docs/envoy/latest/intro/arch_overview/upstream</li>
+    <li><strong>"Designing Data-Intensive Applications"</strong> — Martin Kleppmann (Chapter on Load Balancing)</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="l4-load-balancer.html">&larr; 2.7.3 L4 Load Balancer</a>
+  <a href="health-checks.html">Next: 2.7.5 Health Checks &rarr;</a>
+</div>
+
+</body>
+</html>

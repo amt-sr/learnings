@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Graceful Degradation — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">System Design</a> / <a href="./index.html">Reliability</a> / 10.2.6 Graceful Degradation</div>
+
+<h1>Graceful Degradation</h1>
+<div class="meta">
+  <span>Difficulty ⭐⭐⭐</span>
+  <span>Interview Frequency ★★★★</span>
+</div>
+
+<div class="callout">
+  <strong>Goal:</strong> Understand how to design systems that continue functioning with reduced capability when components fail, rather than failing entirely. Master fallback strategies, feature prioritization, and load-shedding techniques.
+</div>
+
+<h2>Definition</h2>
+<p><strong>Graceful degradation</strong> is the practice of designing a system so that when a non-essential component fails or becomes unavailable, the system continues to operate with reduced functionality rather than failing completely. The core value proposition remains available, while peripheral features are disabled or served from fallbacks.</p>
+
+<div class="callout yellow">
+  <strong>Core Principle:</strong> A partially working system with reduced features is almost always better than a completely down system. Users can tolerate missing recommendations, stale data, or degraded images — they cannot tolerate a blank error page.
+</div>
+
+<h2>Degradation Levels</h2>
+
+<div class="diagram">
+  Level 0: Full Functionality
+  ├── All features operational
+  ├── All data fresh
+  └── All integrations active
+
+  Level 1: Stale Data / Cached Responses
+  ├── Core functionality works
+  ├── Data may be minutes/hours old
+  ├── Non-critical integrations degraded
+  └── Example: show cached product prices instead of live ones
+
+  Level 2: Feature Disabled
+  ├── Core functionality works
+  ├── Non-essential features disabled
+  ├── Static fallbacks for dynamic content
+  └── Example: recommendations hidden, search limited to exact match
+
+  Level 3: Emergency Mode (Read-Only)
+  ├── Only reads work
+  ├── All writes deferred/queued
+  ├── Basic pages served
+  └── Example: social media shows feed but cannot post
+
+  Level 4: Maintenance Page
+  ├── All functionality suspended
+  ├── Scheduled downtime only
+  └── Last resort — rarely needed with proper degradation
+</div>
+
+<h2>Fallback Strategy Examples</h2>
+
+<table>
+  <tr><th>Component</th><th>Normal Operation</th><th>Degraded Fallback</th></tr>
+  <tr><td>Recommendations</td><td>ML model generates personalized results</td><td>Return top-10 popular items (static)</td></tr>
+  <tr><td>Search</td><td>Full-text search with facets, filters, ranking</td><td>Basic keyword search only</td></tr>
+  <tr><td>User profile</td><td>Real-time follower count, activity status</td><td>Cached values from last hour</td></tr>
+  <tr><td>Images</td><td>Full-resolution images from CDN</td><td>Low-res thumbnails or placeholder images</td></tr>
+  <tr><td>Notifications</td><td>Push notification in real-time</td><td>Queue for later delivery; batch email</td></tr>
+  <tr><td>Payment</td><td>Primary payment processor</td><td>Backup processor or "try again later"</td></tr>
+  <tr><td>Analytics</td><td>Real-time dashboards</td><td>Batch processing next day</td></tr>
+  <tr><td>A/B testing</td><td>Dynamic experiment assignments</td><td>Default experience for all users</td></tr>
+</table>
+
+<h2>Feature Prioritization Matrix</h2>
+<p>When designing for degradation, classify every feature by criticality:</p>
+
+<table>
+  <tr><th>Tier</th><th>Category</th><th>Failure Impact</th><th>Behavior</th></tr>
+  <tr><td><strong>P0</strong></td><td>Mission critical</td><td>Revenue loss, data loss</td><td>Never degrade; use active failover, multi-region</td></tr>
+  <tr><td><strong>P1</strong></td><td>Core functionality</td><td>Major user impact</td><td>Fallback to cached/stale data</td></tr>
+  <tr><td><strong>P2</strong></td><td>Important enhancement</td><td>Moderate user annoyance</td><td>Disable with fallback or graceful placeholder</td></tr>
+  <tr><td><strong>P3</strong></td><td>Nice to have</td><td>Minor annoyance</td><td>Disable silently; queue for later</td></tr>
+</table>
+
+<h3>Netflix Example</h3>
+<div class="diagram">
+  Netflix Degradation Strategy:
+  ┌──────────────────────────────────────────────────┐
+  │  P0: Video Streaming                             │
+  │      → Multi-CDN failover, never degrade        │
+  │                                                   │
+  │  P1: Search & Browse                            │
+  │      → Fallback to cached catalog if search down │
+  │                                                   │
+  │  P2: Personalized Recommendations                │
+  │      → Show trending/popular if ML service down  │
+  │                                                   │
+  │  P3: Social Features (ratings, reviews)          │
+  │      → Disable; queue writes for later           │
+  │                                                   │
+  │  P3: Partner Promotions                           │
+  │      → Replace with generic content               │
+  └──────────────────────────────────────────────────┘
+</div>
+
+<h2>Implementation Patterns</h2>
+
+<h3>1. Fallback Chain</h3>
+<pre>
+function getProductPrice(productId) {
+    try {
+        // Level 0: Live price from pricing service
+        return pricingService.getPrice(productId);
+    } catch (ServiceUnavailable) {
+        try {
+            // Level 1: Cached price (may be stale)
+            return cache.get("price:" + productId);
+        } catch (CacheMiss) {
+            // Level 2: Default/fallback price from database
+            return db.query("SELECT base_price FROM products WHERE id = ?", productId);
+        }
+    }
+}
+</pre>
+
+<h3>2. Feature Flags for Degradation</h3>
+<pre>
+// Global degradation level (can be set via config push in seconds)
+DEGRADATION_LEVEL = config.get("degradation.level", 0);
+
+function renderPage(user) {
+    if (DEGRADATION_LEVEL >= 2) {
+        // Hide non-essential features
+        return renderBasicPage(user, includeRecommendations: false);
+    }
+    return renderFullPage(user, includeRecommendations: true);
+}
+</pre>
+
+<h3>3. Load Shedding</h3>
+<p>Actively reject lower-priority requests when the system is overloaded:</p>
+
+<table>
+  <tr><th>Signal</th><th>Action</th></tr>
+  <tr><td>CPU &gt; 80%</td><td>Start rejecting P3 requests</td></tr>
+  <tr><td>CPU &gt; 90%</td><td>Reject P3 and P2 requests</td></tr>
+  <tr><td>Queue depth &gt; 1000</td><td>Reject non-critical async jobs</td></tr>
+  <tr><td>Error rate &gt; 5%</td><td>Enable all fallbacks; return cached data</td></tr>
+  <tr><td>Memory &gt; 90%</td><td>Stop accepting new connections; drain existing</td></tr>
+</table>
+
+<h2>Graceful Degradation vs Circuit Breaker</h2>
+<p>Circuit breakers <em>enable</em> graceful degradation. The circuit breaker detects the failure; graceful degradation defines <em>what to do about it</em>.</p>
+
+<div class="diagram">
+  Service Call → Circuit Breaker detects failure → OPEN
+                                               │
+                                    ┌──────────┼──────────┐
+                                    ▼          ▼          ▼
+                               Return      Queue       Feature
+                               cached      write       disabled
+                               data        for later    in UI
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>"How would you ensure your system stays partially available when a dependency fails?" — Graceful degradation: classify features by priority, define fallbacks for each, use circuit breakers to detect failures and trigger fallbacks.</li>
+  <li>"Give me an example of graceful degradation." — Netflix: if the recommendation service is down, show trending/popular content instead. If the search service is down, allow browsing by category. Core (streaming) never degrades.</li>
+  <li>"How would you decide what to degrade first?" — Feature priority matrix: P0 never degrades, P3 degrades first. Business impact analysis: what does the revenue impact of each feature being down?</li>
+  <li>"How do you implement graceful degradation?" — Fallback chains (live → cache → database), feature flags to toggle degradation levels, circuit breakers to trigger fallbacks, load shedding to reject low-priority traffic under pressure.</li>
+  <li>"What is load shedding?" — Actively rejecting lower-priority requests when the system is near capacity. This is different from graceful degradation: load shedding prevents overload; graceful degradation handles failures.</li>
+</ul>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Depth:</strong> Specific feature flag systems (LaunchDarkly, Unleash) configuration. <br>
+  <strong>Depth:</strong> Netflix Hystrix fallback method implementation details. <br>
+  <strong>Depth:</strong> Chaos engineering / Chaos Monkey (related but separate topic).
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Netflix Tech Blog — "Fallacies of Distributed Computing"</div>
+  <p>How Netflix designs for failure with graceful degradation, fallbacks, and circuit breakers at scale.</p>
+</div>
+<div class="source">
+  <div class="source-label">Designing Data-Intensive Applications — Martin Kleppmann</div>
+  <p>Chapter on reliability: designing systems that tolerate failures gracefully.</p>
+</div>
+<div class="source">
+  <div class="source-label">Amazon Architecture — "Dynamo: Amazon's Highly Available Key-Value Store"</div>
+  <p>How Amazon uses graceful degradation (sloppy quorum, hinted handoff) to maintain availability during failures.</p>
+</div>
+
+<div class="nav">
+  <a href="hedged-requests.html">&larr; Hedged Requests</a>
+  <a href="token-bucket.html">Token Bucket &rarr;</a>
+</div>
+</body>
+</html>

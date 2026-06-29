@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.6.3 Read After Write Consistency</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">4 Replication</a> / 4.6 Replication Problems / 4.6.3
+</div>
+
+<h1>Read After Write Consistency</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand how to guarantee that a user reads their own writes in an asynchronously replicated system &mdash; the most common consistency requirement in real-world applications.</p>
+
+<h2>Definition</h2>
+<p><strong>Read-after-write consistency</strong> (also called <strong>read-your-writes consistency</strong>) guarantees that if a user writes data, any subsequent read by the same user will return that data or a newer version. This is a session-level guarantee: it only applies to the writing user, not to other users who may still see stale data.</p>
+
+<h2>The Problem</h2>
+<div class="diagram">
+  THE PROBLEM:
+
+  User writes to Leader ---> Leader commits at t=0
+         |
+  User immediately reads from Follower (routed by LB)
+         |
+  Follower has not yet replicated t=0 write
+         |
+  Returns STALE data (pre-write state)
+         |
+  User: "My update didn't save!" (it did save, they just can't see it)
+
+
+  THE GOAL:
+
+  User writes to Leader ---> Leader commits at t=0, returns version=42
+         |
+  User reads (carries version=42 in session)
+         |
+  System ensures: reading replica must have version >= 42
+         |
+  If replica is at version 40: route to Leader instead
+  If replica is at version 42: safe to read from replica
+         |
+  Returns FRESH data (version >= 42)
+</div>
+
+<h2>Solutions</h2>
+
+<h3>Solution 1: Read Own Writes from the Leader</h3>
+<p>The simplest approach: any data the user has recently written is always read from the leader. The application tracks which objects the user modified within a time window and routes reads for those objects to the leader.</p>
+
+<div class="callout">
+  <strong>Implementation:</strong> After a successful write, the application stores the affected resource key (e.g., <code>user:1234:profile</code>) and a timestamp in the user's session cache (Redis). On subsequent reads, if the key matches a recent write in the session, route to the leader. Evict after the replica lag window (e.g., 10 seconds).
+</div>
+
+<div class="diagram">
+  Client                    App Server                    Leader           Follower
+    |                          |                             |                |
+    |-- PUT /profile ---------->|                             |                |
+    |                          |-- WRITE profile:1234 ------>|                |
+    |                          |<- OK (version=42) ----------|                |
+    |                          |                             |                |
+    |                          |-- SET session:user1234 ---->|                |
+    |                          |   key=profile:1234          |                |
+    |                          |   version=42                |                |
+    |                          |   expires_at=now+10s        |                |
+    |<- 200 OK -----------------|                             |                |
+    |                          |                             |                |
+    |-- GET /profile ---------->|                             |                |
+    |                          |-- CHECK session:user1234    |                |
+    |                          |   profile:1234 present!     |                |
+    |                          |   --> READ from LEADER      |                |
+    |                          |-- READ profile:1234 ------>|                |
+    |                          |<- { name: "Alice" } --------|                |
+    |<- 200 { name: "Alice" }--|                             |                |
+</div>
+
+<p><strong>Tradeoff:</strong> This increases leader read load. At scale, only a small percentage of reads hit the leader (typically 1-5% of total reads are for a user's own recently-written data).</p>
+
+<h3>Solution 2: Track Write Timestamp, Wait for Follower</h3>
+<p>The leader returns a logical timestamp or LSN with each write response. The client includes this timestamp in subsequent reads. The replica checks whether it has applied all changes up to that timestamp. If not, it waits or the request is retried on another replica.</p>
+
+<div class="diagram">
+  Write Phase:
+    Client -> Leader: PUT /post/1001
+    Leader -> Client: 201 Created, { "version": "v7", "lsn": 5000 }
+
+  Read Phase:
+    Client -> Replica: GET /post/1001, Header: X-Read-Version: v7
+    Replica: internal LSN = 4998 (behind v7)
+    Replica -> Client: 409 Conflict, Header: X-Current-Version: v6
+
+    Client -> Replica-B: GET /post/1001, Header: X-Read-Version: v7
+    Replica-B: internal LSN = 5002 (ahead of v7)
+    Replica-B -> Client: 200 OK, { ... }
+</div>
+
+<h3>Solution 3: Client-Side Routing with Monotonic Reads</h3>
+<p>Maintain session consistency: once a user reads from a specific replica, all subsequent reads in that session go to the same replica. This prevents the user from going "backwards in time" by reading from a less-updated replica.</p>
+
+<p>Combine with a version watermark: the client tracks the highest version it has seen. The proxy ensures the replica's applied version is at least the client's watermark before serving.</p>
+
+<h3>Solution 4: Hybrid &mdash; Critical Path on Leader, Non-Critical on Replicas</h3>
+<p>Not all reads need read-after-write. Classify reads by sensitivity:</p>
+<table>
+  <tr>
+    <th>Read Type</th>
+    <th>Routing</th>
+    <th>Example</th>
+  </tr>
+  <tr>
+    <td>Own profile, own posts, own settings</td>
+    <td>Leader</td>
+    <td>Profile page after edit</td>
+  </tr>
+  <tr>
+    <td>Other users' content</td>
+    <td>Any replica</td>
+    <td>Viewing someone else's profile</td>
+  </tr>
+  <tr>
+    <td>Financial balances, transaction history</td>
+    <td>Leader</td>
+    <td>Bank account page</td>
+  </tr>
+  <tr>
+    <td>Search results, feeds, analytics</td>
+    <td>Any replica</td>
+    <td>Timeline, search</td>
+  </tr>
+</table>
+
+<h2>Production Considerations</h2>
+
+<div class="callout yellow">
+  <strong>Leader read amplification:</strong> At large scale, routing all "own writes" reads to the leader can overwhelm it. Mitigations include: (1) short TTL on the read-from-leader flag (5-10s after write), (2) dedicated read replicas for leader reads that use synchronous replication, (3) caching hot user data in Redis after writes.
+</div>
+
+<div class="callout green">
+  <strong>Instagram's approach:</strong> For the first N seconds after a user writes, reads for that user's data go to the leader. After the window expires, reads go to replicas. The window duration is based on observed P99 replica lag.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li><strong>"How do you ensure read-after-write consistency in a social media app?"</strong> &mdash; Track writes in session cache with TTL. Route reads for recently-written keys to the leader. Evict after replica lag window. Mention that only own writes need this guarantee.</li>
+  <li><strong>"What's the cost of always reading from the leader?"</strong> &mdash; Leader becomes a bottleneck. Horizontal read scaling is lost. Only use leader reads for data the user recently wrote, not for all reads.</li>
+  <li><strong>"How does LinkedIn handle read-after-write?"</strong> &mdash; LinkedIn uses a similar approach where the follower tracks its replication progress. The application server reads the follower's progress, compares against the write timestamp, and decides whether to serve from the follower or redirect to the leader.</li>
+  <li><strong>"Can you guarantee read-after-write without reading from the leader?"</strong> &mdash; Yes, using timestamp-based version checks. The follower must have caught up to the write's LSN. This requires tracking follower progress and potentially waiting or retrying.</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid full causal consistency theory:</strong> Causal consistency is a broader concept. Focus on the practical read-after-write pattern unless asked about causal consistency specifically.<br><br>
+  <strong>Avoid implementing vector clocks from scratch:</strong> Knowing the concept is sufficient. Interviewers want architecture decisions, not algorithm implementation.<br><br>
+  <strong>Avoid monotonic read guarantees:</strong> While related (preventing reading older data after seeing newer data), it is a separate concept. Mention it briefly if relevant but do not dive deep.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary References</div>
+  <ul>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em> &mdash; Chapter 5: Replication (section: "Reading Your Own Writes")</li>
+    <li>Doug Terry, "Replicated Data Consistency Explained Through Baseball" &mdash; MS Research (explains session consistency and monotonic reads)</li>
+    <li>Instagram Engineering: Sharding and Replication at Scale</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="stale-reads.html">&larr; 4.6.2 Stale Reads</a>
+  <a href="split-brain.html">4.6.4 Split Brain &rarr;</a>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.5.1 Read Uncommitted</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#3">3 Storage</a> / <a href="../index.html#3.5">3.5 Isolation Levels</a> / 3.5.1
+</div>
+
+<h1>Read Uncommitted</h1>
+<div class="meta">
+  <span>Difficulty: ★★★☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What Read Uncommitted isolation allows and what it prevents</li>
+  <li>The dirty read anomaly in detail</li>
+  <li>When Read Uncommitted might be useful (rarely)</li>
+  <li>Why no major production database recommends it</li>
+</ul>
+
+<h2>Definition</h2>
+<p><strong>Read Uncommitted</strong> is the lowest SQL isolation level. A transaction at this level can read changes made by other transactions that have not yet been committed. This means a transaction may observe data that could later be rolled back, leading to a <a href="dirty-read.html">dirty read</a>.</p>
+
+<h2>The Dirty Read Problem</h2>
+<div class="diagram">  Transaction A                          Transaction B
+  ────────────────────────────────────────────────────────
+  BEGIN;
+  UPDATE accounts
+    SET balance = balance - 500
+    WHERE id = 1;
+                                         BEGIN;
+  -- balance is now 500 (was 1000)       SELECT balance FROM accounts
+                                         WHERE id = 1;
+                                         -- reads 500 (UNCOMMITTED!)
+
+  ROLLBACK;
+  -- balance reverts to 1000
+
+                                         -- Transaction B used value 500
+                                         -- which never actually existed!
+                                         COMMIT;</div>
+
+<div class="callout red">
+  <strong>Danger:</strong> Transaction B read a value (500) that was never committed to the database. Transaction A rolled back, reverting the balance to 1000. Transaction B made business decisions based on phantom data that never existed.
+</div>
+
+<h2>What Read Uncommitted Allows</h2>
+<table>
+  <tr><th>Anomaly</th><th>Status</th></tr>
+  <tr><td><a href="dirty-read.html">Dirty Read</a></td><td class="red">Possible</td></tr>
+  <tr><td><a href="non-repeatable-read.html">Non-Repeatable Read</a></td><td class="red">Possible</td></tr>
+  <tr><td><a href="phantom-read.html">Phantom Read</a></td><td class="red">Possible</td></tr>
+  <tr><td><a href="lost-update.html">Lost Update</a></td><td class="red">Possible</td></tr>
+</table>
+
+<h2>When Is Read Uncommitted Useful?</h2>
+<p>In practice, almost never. The few legitimate use cases include:</p>
+<ul>
+  <li><strong>Approximate aggregations:</strong> When you need a rough count or sum and do not care about exact numbers (e.g., analytics dashboards with tolerance for inaccuracy)</li>
+  <li><strong>Long-running reports:</strong> When you want to avoid holding locks for the duration of a report query</li>
+  <li><strong>Checking if a row exists:</strong> If the existence check itself has no business consequence</li>
+</ul>
+
+<pre>-- Read Uncommitted is rarely set explicitly
+-- Most databases do not even support it or warn against it
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+
+-- PostgreSQL ignores this; it treats it as Read Committed
+-- SQL Server supports it via WITH (NOLOCK) hint
+SELECT COUNT(*) FROM orders WITH (NOLOCK);
+
+-- MySQL supports it
+SET SESSION TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;</pre>
+
+<h2>NOLOCK Hint in SQL Server</h2>
+<p>The most common real-world encounter with Read Uncommitted is the <code>WITH (NOLOCK)</code> hint in SQL Server, which is equivalent to Read Uncommitted for that specific query:</p>
+<pre>-- SQL Server: NOLOCK = Read Uncommitted for this query
+SELECT * FROM products WITH (NOLOCK);
+
+-- This avoids blocking but returns dirty data
+-- The query can read:
+--   - Rows being modified but not yet committed
+--   - Rows that may be rolled back
+--   - In rare cases, rows twice or not at all (page splits)</pre>
+
+<div class="callout red">
+  <strong>Anti-pattern:</strong> Using <code>WITH (NOLOCK)</code> as a default for all queries to "improve performance" is a common mistake. It introduces data corruption risk that is extremely hard to debug. The performance gain from avoiding read locks is almost never worth the correctness risk.
+</div>
+
+<h2>Why Databases Discourage It</h2>
+<table>
+  <tr><th>Database</th><th>Support</th><th>Behavior</th></tr>
+  <tr><td>PostgreSQL</td><td>Not supported</td><td>Treated as <a href="read-committed.html">Read Committed</a></td></tr>
+  <tr><td>MySQL/InnoDB</td><td>Supported</td><td>Works but not recommended</td></tr>
+  <tr><td>SQL Server</td><td>Supported</td><td>Available; often misused via NOLOCK</td></tr>
+  <tr><td>Oracle</td><td>Not supported</td><td>Oracle always uses MVCC (Read Committed minimum)</td></tr>
+  <tr><td>SQLite</td><td>Not supported</td><td>Always serializable</td></tr>
+</table>
+
+<div class="callout green">
+  <strong>Practical takeaway:</strong> If you need better performance and can tolerate some inaccuracy, use Read Committed with a shorter transaction duration, or use application-level caching. Read Uncommitted is almost never the right answer.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What is a dirty read?"</strong><br>A dirty read occurs when a transaction reads data written by another uncommitted transaction. If that transaction rolls back, the data never existed, but the reading transaction already used it. See: <a href="dirty-read.html">Dirty Read</a></li>
+  <li><strong>"When would you use Read Uncommitted?"</strong><br>Almost never in production. The only valid case is for approximate queries where you can tolerate seeing uncommitted changes, such as showing a live counter on a dashboard where perfect accuracy is not required. Even then, most teams prefer Read Committed with shorter transactions.</li>
+  <li><strong>"Does PostgreSQL support Read Uncommitted?"</strong><br>No. PostgreSQL silently upgrades it to Read Committed. The PostgreSQL developers considered Read Uncommitted too dangerous to support, and since they use MVCC for all reads, the performance justification does not apply.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>Deep implementation details of how Read Uncommitted works internally</li>
+    <li>The history of the SQL-92 standard regarding this level</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Designing Data-Intensive Applications" (Chapter 7)</strong> — Martin Kleppmann</li>
+    <li><strong>PostgreSQL Documentation</strong> — 13.2.1: Read Uncommitted Isolation Level</li>
+    <li><strong>SQL Server Docs</strong> — SET TRANSACTION ISOLATION LEVEL (READ UNCOMMITTED)</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="isolation.html">&larr; isolation.html</a>
+  <a href="read-committed.html">Next: read-committed.html →</a>
+</div>
+
+</body>
+</html>

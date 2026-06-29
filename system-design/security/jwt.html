@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>14.4 — JWT</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">Security</a> / 14.4 JWT</div>
+<h1>JWT (JSON Web Token)</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand JWT structure (header, payload, signature), signing algorithms, verification process, token expiry and rotation strategies, and when to use JWT versus opaque tokens.</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>JWT (JSON Web Token)</strong> is a compact, URL-safe, self-contained token that carries claims (data) in a signed format. It consists of three Base64URL-encoded parts separated by dots: header, payload, and signature. The signature ensures the token has not been tampered with.
+</div>
+
+<p>JWTs are commonly used as access tokens in OAuth 2.0 flows. Because they are self-contained (the signature can be verified without a database lookup), they enable stateless authentication — a key advantage for distributed systems.</p>
+
+<h2>JWT Structure</h2>
+<pre>
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.   ← HEADER
+eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwicm9sZSI6ImFkbWluLCJpYXQiOjE1MTYyMzkwMjJ9.   ← PAYLOAD
+SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c   ← SIGNATURE
+
+Header (decoded):
+{
+  "alg": "HS256",
+  "typ": "JWT"
+}
+
+Payload (decoded):
+{
+  "sub": "1234567890",
+  "name": "John Doe",
+  "role": "admin",
+  "iat": 1516239022,
+  "exp": 1516242622,
+  "scope": "read write"
+}
+
+Signature = HMACSHA256(
+  base64UrlEncode(header) + "." + base64UrlEncode(payload),
+  secret_key
+)
+</pre>
+
+<h2>Parts Explained</h2>
+<table>
+  <tr><th>Part</th><th>Purpose</th><th>Key Fields</th></tr>
+  <tr><td><strong>Header</strong></td><td>Defines the signing algorithm and token type</td><td><code>alg</code> (HS256, RS256, ES256), <code>typ</code> (JWT)</td></tr>
+  <tr><td><strong>Payload</strong></td><td>Carries claims (data about the user/session)</td><td><code>sub</code> (subject), <code>exp</code> (expiry), <code>iat</code> (issued at), <code>role</code>, <code>scope</code></td></tr>
+  <tr><td><strong>Signature</strong></td><td>Ensures integrity — proves the token was not modified</td><td>HMAC or RSA signature over header + payload</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Common misconception:</strong> The payload is encoded (Base64URL), NOT encrypted. Anyone can decode a JWT and read its contents. Never put sensitive data (passwords, SSNs, credit cards) in the payload. The signature prevents tampering, not reading.
+</div>
+
+<h2>Signing Algorithms</h2>
+<table>
+  <tr><th>Algorithm</th><th>Type</th><th>How It Works</th><th>Use Case</th></tr>
+  <tr><td><strong>HS256</strong></td><td>Symmetric (HMAC)</td><td>Same secret for signing and verification</td><td>Single-service apps (one secret holder)</td></tr>
+  <tr><td><strong>RS256</strong></td><td>Asymmetric (RSA)</td><td>Private key signs, public key verifies</td><td>Microservices (distributed verification)</td></tr>
+  <tr><td><strong>ES256</strong></td><td>Asymmetric (ECDSA)</td><td>Private key signs, public key verifies</td><td>Microservices (smaller signatures than RSA)</td></tr>
+</table>
+
+<div class="callout">
+  <strong>For microservices:</strong> Use RS256 or ES256 (asymmetric). The auth service holds the private key and signs tokens. Every other service only needs the public key to verify — no shared secret needed. This is the key advantage for distributed systems.
+</div>
+
+<h2>Verification Process</h2>
+<div class="diagram">
+  Token received by service:
+
+  1. Check structure: three parts separated by dots
+  2. Decode header and payload (Base64URL)
+  3. Verify signature:
+     - Reconstruct signature input: header + "." + payload
+     - Compute HMAC/RSA with the signing key
+     - Compare with the signature in the token
+  4. Validate claims:
+     - exp: token not expired
+     - iat: issued in the past (not future-dated)
+     - iss: issued by a trusted authority
+     - aud: intended for this service
+  5. Extract identity/claims for authorization decisions
+</div>
+
+<h2>JWT vs Opaque Tokens</h2>
+<table>
+  <tr><th>Dimension</th><th>JWT (self-contained)</th><th>Opaque (random string)</th></tr>
+  <tr><td>Verification</td><td class="green">Local (verify signature, no DB)</td><td class="red">Network call to auth server</td></tr>
+  <tr><td>Size</td><td class="red">Large (typically 1-2KB)</td><td class="green">Small (16-32 bytes)</td></tr>
+  <tr><td>Revocation</td><td class="red">Difficult (need blacklist)</td><td class="green">Instant (delete from store)</td></tr>
+  <tr><td>Statelessness</td><td class="green">Fully stateless</td><td>Stateful (requires store)</td></tr>
+  <tr><td>Flexibility</td><td class="red">Claims fixed at issue time</td><td class="green">Can change server-side</td></tr>
+  <tr><td>Best for</td><td>Short-lived access tokens (15 min)</td><td>Refresh tokens, long-lived sessions</td></tr>
+</table>
+
+<h2>Security Best Practices</h2>
+<ul>
+  <li><strong>Short expiry:</strong> Access tokens should expire in 15-60 minutes. Use refresh tokens for long-lived sessions.</li>
+  <li><strong>Never use HS256 with untrusted clients:</strong> If a client can obtain the shared secret, it can forge tokens.</li>
+  <li><strong>Validate ALL claims:</strong> Not just the signature. Check exp, iat, iss, aud, nbf.</li>
+  <li><strong>Use the <code>kid</code> (Key ID) header:</strong> Enables key rotation without breaking existing tokens.</li>
+  <li><strong>Do not put sensitive data in the payload:</strong> JWT payload is readable by anyone who intercepts the token.</li>
+  <li><strong>Store in memory, not localStorage for SPAs:</strong> XSS attacks can read localStorage. Use httpOnly cookies instead.</li>
+</ul>
+
+<div class="callout green">
+  <strong>Interview tip:</strong> "I would use RS256 JWTs with 15-minute expiry for access tokens. The auth service signs with a private key; all downstream services verify with the public key — no shared secret or database lookup needed. For long-lived sessions, I use opaque refresh tokens stored in the database, rotated on each use."
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What is a JWT and what are its three parts?</li>
+  <li>Is a JWT encrypted? Can anyone read its contents?</li>
+  <li>Compare symmetric (HS256) vs asymmetric (RS256) signing.</li>
+  <li>How do you revoke a JWT?</li>
+  <li>Compare JWT with opaque tokens.</li>
+  <li>What security best practices would you follow for JWTs?</li>
+  <li>How do you handle key rotation with JWTs?</li>
+  <li>What claims should a JWT contain?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid diving into:</strong> JWE (encrypted JWT), JWK (key management), JWS (signed JWT specification details), or specific library implementations (jsonwebtoken in Node, pyjwt). Focus on the structure, signing, verification, and the JWT vs opaque token trade-off.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Standards</div>
+  <ul>
+    <li><strong>JWT RFC 7519</strong> — tools.ietf.org/html/rfc7519</li>
+    <li><strong>JWS RFC 7515</strong> — tools.ietf.org/html/rfc7515 (signature)</li>
+    <li><strong>JWA RFC 7518</strong> — tools.ietf.org/html/rfc7518 (algorithms)</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Articles</div>
+  <ul>
+    <li><strong>"Introduction to JSON Web Tokens"</strong> — jwt.io/introduction</li>
+    <li><strong>"The Ultimate Guide to JWT"</strong> — kdgregory.com</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="oauth.html">&larr; Previous: OAuth 2.0</a>
+  <a href="rbac.html">Next: RBAC &rarr;</a>
+</div>
+</body>
+</html>

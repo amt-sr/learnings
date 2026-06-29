@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.3.4 Checkpoint</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#3">3 Storage</a> / <a href="../index.html#3.3">3.3 Database Write Path</a> / 3.3.4
+</div>
+
+<h1>Checkpoint</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What checkpointing is — flushing dirty pages from the <a href="buffer-pool.html">buffer pool</a> to data files</li>
+  <li>Why checkpointing dramatically speeds up <a href="crash-recovery.html">crash recovery</a></li>
+  <li>Fuzzy vs sharp checkpoints and their tradeoffs</li>
+  <li>How often to checkpoint — balancing recovery time vs write performance</li>
+  <li>Impact of checkpointing on write throughput and latency</li>
+</ul>
+
+<h2>Definition</h2>
+<p>A checkpoint is a <strong>synchronization point where the database ensures all dirty pages modified before a specific LSN are flushed from the <a href="buffer-pool.html">buffer pool</a> to the data files on disk</strong>. The checkpoint records this LSN, establishing a known recovery starting point. During <a href="crash-recovery.html">crash recovery</a>, the database only needs to replay redo records after the last checkpoint LSN — everything before it is already on disk.</p>
+
+<h2>Why Checkpointing Matters</h2>
+<div class="diagram">  Without Checkpoint:
+
+  Crash at time T:
+  → Must replay ENTIRE WAL from the beginning
+  → If database ran for 30 days, replaying 30 days of changes
+  → Recovery takes hours
+
+  With Checkpoint every 5 minutes:
+
+  Checkpoint 1 (T=5min)   Checkpoint 2 (T=10min)   Checkpoint 3 (T=15min)
+  ──────┼─────────────────────┼─────────────────────┼──────────→ WAL
+        │                     │                     │
+  All dirty pages           All dirty pages       All dirty pages
+  before LSN 500            before LSN 1000       before LSN 1500
+  flushed to disk           flushed to disk       flushed to disk
+
+  Crash at T=12min (between checkpoint 2 and 3):
+  → Only replay WAL from LSN 1000 to LSN 1200
+  → Recovery takes seconds, not hours!</div>
+
+<div class="callout">
+  <strong>Key insight:</strong> Checkpoints limit the amount of WAL that must be replayed during <a href="crash-recovery.html">crash recovery</a>. Without checkpoints, recovery would replay the entire transaction history from database creation. With frequent checkpoints, recovery only replays changes since the last checkpoint.
+</div>
+
+<h2>Checkpoint Mechanics</h2>
+<div class="diagram">  Checkpoint Process:
+
+  1. Record checkpoint LSN (current position in WAL)
+  2. Flush all dirty pages with LSN <= checkpoint LSN
+  3. Write checkpoint record to data file header
+  4. (Optionally) advance the <a href="redo-log.html">redo log</a> circular write position
+
+  Dirty Pages in Buffer Pool:
+  ┌───────────────────────────────────────────┐
+  │ Page #5  │ LSN: 800  │ dirty │           │
+  │ Page #42 │ LSN: 1200 │ dirty │           │
+  │ Page #87 │ LSN: 900  │ dirty │           │
+  │ Page #15 │ LSN: 1100 │ dirty │           │
+  │ Page #201│ LSN: 950  │ dirty │           │
+  └───────────────────────────────────────────┘
+
+  Checkpoint at LSN 1000:
+  → Flush pages where LSN <= 1000: Page #5, Page #87, Page #201
+  → Do NOT flush: Page #42 (LSN 1200 > 1000), Page #15 (LSN 1100 > 1000)
+  → Pages with LSN > 1000 will be flushed by future checkpoints
+
+  After checkpoint, recovery from crash only needs
+  to replay WAL from LSN 1000 onward.</div>
+
+<h2>Fuzzy vs Sharp Checkpoints</h2>
+<table>
+  <tr><th></th><th>Sharp Checkpoint</th><th>Fuzzy Checkpoint</th></tr>
+  <tr><td>Behavior</td><td>Flush ALL dirty pages quickly</td><td>Gradually flush dirty pages over time</td></tr>
+  <tr><td>Write impact</td><td class="red">Brief write stall while flushing</td><td class="green">Spreads I/O, no significant stalls</td></tr>
+  <tr><td>Checkpoint duration</td><td>Short (burst of I/O)</td><td>Longer (spread over seconds)</td></tr>
+  <tr><td>Dirty pages at checkpoint</td><td class="green">Zero — all pages flushed</td><td class="red">Some may still be dirty (in-flight)</td></tr>
+  <tr><td>Recovery starting point</td><td>Exact checkpoint LSN</td><td>Approximate — must scan some WAL before</td></tr>
+  <tr><td>Used by</td><td>PostgreSQL</td><td>MySQL InnoDB</td></tr>
+</table>
+
+<h3>Sharp Checkpoint (PostgreSQL)</h3>
+<p>PostgreSQL forces a sharp checkpoint: it flushes all dirty pages to disk, writes the checkpoint record, and resumes. This causes a brief I/O spike.</p>
+<ul>
+  <li>Can be mitigated with <code>checkpoint_completion_target</code> (spread the flush over a longer window)</li>
+  <li>Default: 0.9 (use 90% of the checkpoint interval for flushing)</li>
+  <li><code>checkpoint_timeout</code> controls maximum time between checkpoints (default 5 min)</li>
+</ul>
+
+<h3>Fuzzy Checkpoint (MySQL InnoDB)</h3>
+<p>MySQL InnoDB performs fuzzy checkpointing: a background thread gradually flushes dirty pages, spread over time. The checkpoint position advances as pages are flushed.</p>
+<ul>
+  <li>No single point where all writes stop</li>
+  <li>Page flushing is driven by multiple triggers: dirty page ratio, <a href="redo-log.html">redo log</a> space pressure, and age of dirty pages</li>
+  <li><code>innodb_max_dirty_pages_pct</code>: controls when aggressive flushing begins (default 75%)</li>
+  <li><code>innodb_io_capacity</code>: controls how many pages per second the flush thread can write</li>
+</ul>
+
+<div class="diagram">  Fuzzy Checkpoint (MySQL InnoDB):
+
+  Time →
+  Dirty pages: ████████████████░░░░░░░░░░░░░░░
+  Flush rate:   ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+                          ↓ gradually decreasing
+  Checkpoint    ████████████████████████████████████
+  LSN advance:  ───────────────────────────────────→
+  (advances as pages are flushed)
+
+  Sharp Checkpoint (PostgreSQL):
+
+  Dirty pages: ████████████████░░░░░░░░░░░░░░░
+                      │
+               FLUSH ALL ──→ █░░░░░░░░░░░░░░░░░░░
+                      │  (burst of I/O)
+  Checkpoint:         ▼
+  LSN advance:  ──────┼───────────────────────────→</div>
+
+<h2>How Often to Checkpoint</h2>
+<div class="callout yellow">
+  <strong>The tradeoff:</strong> More frequent checkpoints = faster recovery but more I/O overhead. Less frequent checkpoints = less I/O overhead but slower recovery. The sweet spot depends on your recovery time objective (RTO) and write throughput tolerance.
+</div>
+
+<table>
+  <tr><th>Checkpoint Frequency</th><th>Recovery Time</th><th>I/O Overhead</th><th>Best For</th></tr>
+  <tr><td>Every 1–5 minutes</td><td class="green">Seconds</td><td class="red">Higher (more flushing)</td><td>OLTP with strict RTO requirements</td></tr>
+  <tr><td>Every 5–15 minutes</td><td>Seconds to minutes</td><td>Moderate</td><td>General-purpose OLTP</td></tr>
+  <tr><td>Every 15–60 minutes</td><td class="red">Minutes</td><td class="green">Lower (less flushing)</td><td>Write-heavy workloads with relaxed RTO</td></tr>
+</table>
+
+<h3>Checkpoint Triggers</h3>
+<ul>
+  <li><strong>Time-based</strong>: <code>checkpoint_timeout</code> (PostgreSQL) or age-based flushing (MySQL InnoDB — flush pages older than a threshold)</li>
+  <li><strong>WAL size-based</strong>: When WAL reaches <code>max_wal_size</code> (PostgreSQL) or redo log nears capacity (MySQL)</li>
+  <li><strong>Dirty page ratio</strong>: When dirty pages exceed a threshold (e.g., 75% of <a href="buffer-pool.html">buffer pool</a>)</li>
+  <li><strong>Manual</strong>: <code>CHECKPOINT</code> command (PostgreSQL), <code>FLUSH TABLES WITH READ LOCK</code> (MySQL)</li>
+</ul>
+
+<h2>Impact on Performance</h2>
+<p>Checkpointing generates a burst of disk writes (for sharp) or sustained background writes (for fuzzy). This impacts performance:</p>
+<ul>
+  <li><strong>Write throughput</strong>: Checkpoint I/O competes with normal write queries. On <a href="hdd.html">HDDs</a>, this can saturate disk bandwidth.</li>
+  <li><strong>Latency spikes</strong>: Sharp checkpoints can cause brief stalls while dirty pages are flushed. Queries may wait for page flushing to complete.</li>
+  <li><strong>Buffer pool hit ratio</strong>: After a checkpoint, recently flushed pages are still in the <a href="buffer-pool.html">buffer pool</a> (they are not evicted, just marked clean). No immediate impact.</li>
+</ul>
+
+<div class="callout green">
+  <strong>Best practice:</strong> Monitor checkpoint frequency and duration. If checkpoints are too frequent, increase <code>max_wal_size</code> (PostgreSQL) or <code>innodb_log_file_size</code> (MySQL). If recovery is too slow, decrease the checkpoint interval. Use a monitoring tool to track WAL generation rate (MB/s) and checkpoint duration.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What is a checkpoint and why is it important?"</strong><br>A checkpoint flushes all dirty pages from the <a href="buffer-pool.html">buffer pool</a> to the data files and records the corresponding LSN. This limits the amount of <a href="redo-log.html">redo log</a> that must be replayed during <a href="crash-recovery.html">crash recovery</a>. Without checkpoints, recovery would replay the entire WAL from database creation. With checkpoints every 5 minutes, recovery only replays the last 5 minutes of WAL.</li>
+  <li><strong>"What is the difference between a fuzzy and a sharp checkpoint?"</strong><br>A sharp checkpoint flushes all dirty pages at once (PostgreSQL), causing a brief I/O spike but providing an exact recovery starting point. A fuzzy checkpoint gradually flushes dirty pages over time (MySQL InnoDB), spreading I/O but providing an approximate recovery point. Fuzzy checkpoints are better for write throughput; sharp checkpoints provide more precise recovery boundaries.</li>
+  <li><strong>"How do checkpoints affect performance?"</strong><br>Checkpoints generate disk I/O to flush dirty pages. Sharp checkpoints cause latency spikes when they fire (a burst of writes). Fuzzy checkpoints generate sustained background I/O. Both compete with application queries for disk bandwidth. If checkpoints are too frequent, they waste I/O on pages that haven't been re-dirtied. If too infrequent, recovery takes too long and the redo log may fill up.</li>
+  <li><strong>"What happens if the redo log fills up before a checkpoint completes?"</strong><br>The <a href="redo-log.html">redo log</a> is circular — once the write position catches up to the checkpoint position, no more redo records can be written. Write operations block until the checkpoint advances the checkpoint LSN far enough to free space. This is called "log file full" or "checkpoint not complete" and is a serious performance problem that indicates the redo log is too small or checkpoints are not keeping up.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>PostgreSQL checkpoint flags (CHECKPOINT_FORCE, CHECKPOINT_WAIT)</li>
+    <li>MySQL InnoDB flush list and buffer pool list management details</li>
+    <li>Oracle fast_start_mttr_target and recovery advisor internals</li>
+    <li>Savepoint (nested transaction) implementation details</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Database Internals" by Alex Petrov</strong> — Chapter 7 (Checkpointing and Recovery)</li>
+    <li><strong>"Transaction Processing: Concepts and Techniques" by Gray &amp; Reuter</strong> — Checkpointing chapter</li>
+    <li><strong>PostgreSQL Documentation: Checkpoints</strong> — postgresql.org/docs/current/wal-configuration.html</li>
+    <li><strong>MySQL Reference Manual: InnoDB Checkpoint</strong> — dev.mysql.com/doc/refman/8.0/en/innodb-checkpoint.html</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="undo-log.html">&larr; 3.3.3 Undo Log</a>
+  <a href="crash-recovery.html">Next: 3.3.5 Crash Recovery &rarr;</a>
+</div>
+
+</body>
+</html>

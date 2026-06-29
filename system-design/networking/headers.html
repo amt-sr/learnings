@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.2.4 Headers</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#2">2 Networking</a> / <a href="../index.html#2.2">2.2 HTTP</a> / 2.2.4
+</div>
+
+<h1>Headers</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>The most important HTTP headers for system design</li>
+  <li>Request headers vs response headers</li>
+  <li>How headers affect caching, security, and performance</li>
+</ul>
+
+<h2>Definition</h2>
+<p>HTTP headers are <strong>key-value pairs sent with requests and responses</strong> that convey metadata — content type, caching rules, authentication, compression, and more.</p>
+
+<h2>Essential Headers</h2>
+<h3>Request Headers</h3>
+<table>
+  <tr><th>Header</th><th>Purpose</th><th>System Design Relevance</th></tr>
+  <tr><td>Host</td><td>Target host name</td><td><a href="reverse-proxy.html">Reverse proxy</a> routing</td></tr>
+  <tr><td>Authorization</td><td>Auth credentials (Bearer token)</td><td><a href="../security/authentication.html">Authentication</a></td></tr>
+  <tr><td>Content-Type</td><td>MIME type of request body</td><td>API input validation</td></tr>
+  <tr><td>Accept</td><td>Expected response format</td><td>Content negotiation</td></tr>
+  <tr><td>Accept-Encoding</td><td>Supported compression</td><td><a href="compression.html">Compression</a> negotiation</td></tr>
+  <tr><td>If-None-Match</td><td>ETag for conditional request</td><td><a href="caching-headers.html">Cache validation</a></td></tr>
+  <tr><td>Connection</td><td>keep-alive or close</td><td><a href="keep-alive.html">Connection reuse</a></td></tr>
+  <tr><td>X-Request-ID</td><td>Unique request identifier</td><td><a href="../observability/distributed-tracing.html">Distributed tracing</a></td></tr>
+</table>
+
+<h3>Response Headers</h3>
+<table>
+  <tr><th>Header</th><th>Purpose</th><th>System Design Relevance</th></tr>
+  <tr><td>Content-Type</td><td>MIME type of response body</td><td>Client parsing</td></tr>
+  <tr><td>Content-Length</td><td>Body size in bytes</td><td>Stream vs buffered response</td></tr>
+  <tr><td>Content-Encoding</td><td>Compression applied (gzip, br)</td><td><a href="compression.html">Compression</a></td></tr>
+  <tr><td>Cache-Control</td><td>Caching directives</td><td><a href="caching-headers.html">Caching</a> strategy</td></tr>
+  <tr><td>ETag</td><td>Resource version identifier</td><td><a href="caching-headers.html">Conditional requests</a></td></tr>
+  <tr><td>Location</td><td>Redirect target or created resource URL</td><td>201 Created response, redirects</td></tr>
+  <tr><td>Retry-After</td><td>Seconds until client should retry</td><td>429 rate limiting response</td></tr>
+  <tr><td>Strict-Transport-Security</td><td>HSTS directive</td><td><a href="https.html">HTTPS</a> enforcement</td></tr>
+  <tr><td>Set-Cookie</td><td>Cookie to store in client</td><td><a href="cookies.html">Session management</a></td></tr>
+  <tr><td>X-Cache</td><td>Cache hit/miss status</td><td><a href="cache-hit.html">CDN debugging</a></td></tr>
+</table>
+
+<h2>Headers in System Design</h2>
+<div class="diagram">  Request Flow:
+  Client → CDN → LB → App Server → Database
+
+  Key headers at each layer:
+
+  Client → CDN:
+    Accept-Encoding: gzip, br     (compression)
+    Cookie: session_id=abc123    (auth)
+    Authorization: Bearer token  (API auth)
+
+  CDN → App:
+    X-Forwarded-For: 10.0.1.5    (original client IP)
+    X-Request-ID: req-12345      (tracing correlation)
+    Host: api.example.com        (virtual host routing)
+
+  App → Database:
+    (not HTTP — uses TCP protocol like PostgreSQL wire protocol)</div>
+
+<div class="callout">
+  <strong>Interview tip:</strong> When asked about API design, mention key headers: "For authentication, we'd use Authorization: Bearer. For rate limiting, we'd return 429 with Retry-After header. For caching, we'd set Cache-Control and ETag headers. For tracing, we'd propagate X-Request-ID across all services."
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What headers would you set for a REST API?"</strong><br>Request: Authorization (auth), Content-Type (JSON), Accept (JSON). Response: Content-Type, Cache-Control, ETag, X-Request-ID for tracing.</li>
+  <li><strong>"What's the difference between Content-Type and Accept?"</strong><br>Content-Type describes what you're sending (request body format). Accept describes what you want back (response format). Client sets Accept: application/json. Server responds with Content-Type: application/json.</li>
+  <li><strong>"What's X-Forwarded-For?"</strong><br>A header added by <a href="reverse-proxy.html">proxies</a> containing the original client IP. Without it, the server only sees the proxy's IP. Multiple proxies chain: X-Forwarded-For: client, proxy1, proxy2.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>Full HTTP/1.1 header specification (50+ headers)</li>
+    <li>Obsolete headers (Pragma, TE, Transfer-Encoding details)</li>
+    <li>Cookie-specific headers (covered in <a href="cookies.html">Cookies</a>)</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>MDN Web Docs</strong> — HTTP Headers reference</li>
+    <li><strong>RFC 7230-7235</strong> — HTTP/1.1 Message Syntax and Routing</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="status-codes.html">&larr; 2.2.3 Status Codes</a>
+  <a href="cookies.html">Next: 2.2.5 Cookies &rarr;</a>
+</div>
+
+</body>
+</html>

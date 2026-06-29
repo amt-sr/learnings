@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.6.2 Non Repeatable Read</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb"><a href="#">System Design</a> / <a href="#">3 Storage</a> / <a href="#">3.6 Transaction Problems</a> / 3.6.2</div>
+
+<h1>Non Repeatable Read</h1>
+
+<div class="meta">
+  <span>Difficulty ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand what a non-repeatable read is, how it differs from a dirty read, why it is more common than dirty reads, and which isolation levels prevent it.</p>
+
+<h2>Definition</h2>
+<p>A <strong>non-repeatable read</strong> occurs when a transaction reads the same row twice within the same transaction and gets different values. This happens because another transaction modified and <strong>committed</strong> a change to that row between the two reads.</p>
+
+<div class="callout yellow">
+  <strong>Key distinction from dirty read:</strong> In a dirty read, you see uncommitted data that may be rolled back. In a non-repeatable read, you see <em>committed</em> data that changed between reads. The data is real -- the issue is inconsistency within your transaction's view.
+</div>
+
+<h2>Anatomy of a Non-Repeatable Read</h2>
+
+<div class="diagram">Non-Repeatable Read Timeline
+─────────────────────────────────────────────────────────────────
+
+  Transaction A (Checkout)              Transaction B (Price Update)
+  ────────────────────────────         ────────────────────────────
+  BEGIN;
+
+  SELECT price FROM products
+    WHERE id = 42;
+  -- returns $100.00
+
+                                       UPDATE products SET price = 120.00
+                                         WHERE id = 42;
+                                       COMMIT;
+
+  SELECT price FROM products
+    WHERE id = 42;
+  -- returns $120.00 (CHANGED!)
+
+  -- Transaction A calculated total based on $100
+  -- But by the time it charged, price was $120
+  -- Customer charged $100, product worth $120
+
+  COMMIT;</div>
+
+<h2>Non-Repeatable Read vs. Dirty Read vs. Phantom Read</h2>
+
+<table>
+  <tr>
+    <th>Aspect</th>
+    <th><a href="dirty-read.html">Dirty Read</a></th>
+    <th>Non-Repeatable Read</th>
+    <th><a href="phantom-read.html">Phantom Read</a></th>
+  </tr>
+  <tr>
+    <td>Data state</td>
+    <td>Uncommitted (may be rolled back)</td>
+    <td>Committed (permanent)</td>
+    <td>Committed (new/deleted rows)</td>
+  </tr>
+  <tr>
+    <td>What changes</td>
+    <td>Value of an existing row</td>
+    <td>Value of an existing row</td>
+    <td>Set of rows matching a query</td>
+  </tr>
+  <tr>
+    <td>Caused by</td>
+    <td>Reading in-progress modifications</td>
+    <td>UPDATE committed between reads</td>
+    <td>INSERT or DELETE committed between reads</td>
+  </tr>
+  <tr>
+    <td>Query type</td>
+    <td>Point query (single row)</td>
+    <td>Point query (same row)</td>
+    <td>Range query (WHERE clause)</td>
+  </tr>
+  <tr>
+    <td>Prevented by</td>
+    <td><a href="read-committed.html">Read Committed</a></td>
+    <td><a href="repeatable-read.html">Repeatable Read</a></td>
+    <td><a href="serializable.html">Serializable</a> (or gap locks)</td>
+  </tr>
+</table>
+
+<h2>Why Non-Repeatable Reads Are Common</h2>
+<p>Non-repeatable reads are far more common than dirty reads because <strong>Read Committed is the default isolation level</strong> in both PostgreSQL and Oracle. At this level, each statement gets a fresh snapshot of committed data, so any committed change between two statements in your transaction is visible.</p>
+
+<div class="diagram">Read Committed: fresh snapshot per statement
+
+  Transaction A (Read Committed):
+  ──────────────────────────────────
+  SELECT price FROM products WHERE id = 42;
+  -- Snapshot at t=1: price = $100
+
+  -- Transaction B commits price = $120 at t=2
+
+  SELECT price FROM products WHERE id = 42;
+  -- NEW snapshot at t=3: price = $120
+  -- Non-repeatable read occurs!</div>
+
+<div class="diagram">Repeatable Read: frozen snapshot for entire transaction
+
+  Transaction A (Repeatable Read):
+  ──────────────────────────────────
+  SELECT price FROM products WHERE id = 42;
+  -- Snapshot at t=1: price = $100 (frozen)
+
+  -- Transaction B commits price = $120 at t=2
+  -- A's snapshot is FROZEN at t=1
+
+  SELECT price FROM products WHERE id = 42;
+  -- SAME snapshot: price = $100
+  -- Non-repeatable read prevented!</div>
+
+<h2>Which Isolation Levels Prevent Non-Repeatable Reads?</h2>
+
+<table>
+  <tr>
+    <th>Isolation Level</th>
+    <th>Non-Repeatable Read</th>
+    <th>Mechanism</th>
+  </tr>
+  <tr>
+    <td><a href="read-uncommitted.html">Read Uncommitted</a></td>
+    <td class="red">Possible</td>
+    <td>No protection</td>
+  </tr>
+  <tr>
+    <td><a href="read-committed.html">Read Committed</a></td>
+    <td class="red">Possible</td>
+    <td>Fresh snapshot per statement</td>
+  </tr>
+  <tr>
+    <td><a href="repeatable-read.html">Repeatable Read</a></td>
+    <td class="green">Prevented</td>
+    <td>Frozen snapshot for entire transaction</td>
+  </tr>
+  <tr>
+    <td><a href="snapshot-isolation.html">Snapshot Isolation</a></td>
+    <td class="green">Prevented</td>
+    <td>Frozen snapshot at transaction start</td>
+  </tr>
+  <tr>
+    <td><a href="serializable.html">Serializable</a></td>
+    <td class="green">Prevented</td>
+    <td>Full serialization</td>
+  </tr>
+</table>
+
+<h2>Mitigation Strategies Without Changing Isolation</h2>
+
+<pre>-- 1. Explicit locking (pessimistic)
+SELECT price FROM products WHERE id = 42 FOR UPDATE;
+-- Locks the row; other transactions must wait
+
+-- 2. Optimistic concurrency control
+SELECT price, version FROM products WHERE id = 42;
+-- Application stores version
+UPDATE products SET price = @new_price, version = version + 1
+  WHERE id = 42 AND version = @stored_version;
+-- If version mismatch → concurrent modification detected
+
+-- 3. Accept and handle at application level
+-- Read once, make a decision, and commit atomically
+BEGIN;
+  SELECT price FROM products WHERE id = 42;  -- read once
+  INSERT INTO orders (product_id, price) VALUES (42, 100);
+  UPDATE products SET stock = stock - 1 WHERE id = 42;
+COMMIT;  -- all or nothing</pre>
+
+<div class="callout green">
+  <strong>Practical advice:</strong> For most applications, non-repeatable reads at Read Committed are benign. The key is to read a value and act on it within a single statement or a short transaction. The problem arises only when you read, perform application logic, then read again and make a different decision based on the changed value.
+</div>
+
+<h2>Common Interview Questions</h2>
+
+<ol>
+  <li>What is a non-repeatable read and how is it different from a dirty read?</li>
+  <li>How does PostgreSQL's Read Committed handle non-repeatable reads?</li>
+  <li>At which isolation levels are non-repeatable reads prevented?</li>
+  <li>Is a non-repeatable read always a bug? When is it acceptable?</li>
+  <li>How do you prevent non-repeatable reads without escalating to Repeatable Read?</li>
+  <li>How does MySQL's InnoDB prevent non-repeatable reads at its default isolation level?</li>
+</ol>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Depth to avoid in interviews:</strong>
+  <ul>
+    <li>The difference between row-level non-repeatable reads and block-level non-repeatable reads</li>
+    <li>Oracle-specific consistent read implementation details</li>
+    <li>Deep internals of PostgreSQL's snapshot creation per statement</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Sources</div>
+  <ul>
+    <li><a href="#">Designing Data-Intensive Applications</a> -- Chapter 7, "Isolation Levels and Anomalies" (Kleppmann)</li>
+    <li><a href="#">PostgreSQL Documentation</a> -- 13.2: Transaction Isolation</li>
+    <li><a href="#">MySQL Reference Manual</a> -- 15.7.2.1: Transaction Isolation Levels</li>
+    <li><a href="#">"A Critique of ANSI SQL Isolation Levels"</a> -- Berenson et al. (1995)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="dirty-read.html">&larr; 3.6.1 Dirty Read</a>
+  <a href="phantom-read.html">Next: 3.6.3 Phantom Read &rarr;</a>
+</div>
+
+</body>
+</html>

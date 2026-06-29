@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>14.5 — RBAC</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">Security</a> / 14.5 RBAC</div>
+<h1>RBAC (Role-Based Access Control)</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand RBAC in depth: the role-permission model, role hierarchy, assignment of roles to users, and how RBAC works in both monolithic and microservices architectures. This builds on the ABAC/RBAC overview in the Authorization topic (14.2).</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>RBAC</strong> assigns permissions to roles, and roles to users. Instead of managing individual user permissions (which does not scale), you define roles that bundle related permissions and assign users to those roles. A user's permissions are the union of all permissions from all their assigned roles.
+</div>
+
+<h2>RBAC Data Model</h2>
+<div class="diagram">
+  Users ──▶ Role Assignments ──▶ Roles ──▶ Permissions
+
+  ┌──────────┐     ┌──────────────────┐     ┌──────────┐     ┌─────────────────┐
+  │  Users   │     │ User_Roles       │     │  Roles   │     │ Role_Permissions│
+  ├──────────┤     ├──────────────────┤     ├──────────┤     ├─────────────────┤
+  │ alice    │────▶│ user: alice      │────▶│ admin    │────▶│ role: admin      │
+  │ bob      │────▶│ role: admin      │     │          │     │ perm: users:read │
+  │ carol    │────▶│                  │     │ editor   │────▶│ role: admin      │
+  │          │     │ user: bob        │────▶│          │     │ perm: users:write│
+  │          │     │ role: editor     │     │ viewer   │────▶│ role: admin      │
+  │          │     │                  │     │          │     │ perm: users:delete│
+  │          │     │ user: carol      │────▶│          │     │                  │
+  │          │     │ role: viewer     │     │          │     │ role: editor     │
+  └──────────┘     └──────────────────┘     └──────────┘     │ perm: posts:read  │
+                                                            │ role: editor      │
+                                                            │ perm: posts:write │
+                                                            └─────────────────┘
+
+  alice = admin  → users:read, users:write, users:delete, posts:read, posts:write
+  bob   = editor → posts:read, posts:write
+  carol = viewer → posts:read
+</div>
+
+<h2>Role Hierarchy</h2>
+<div class="diagram">
+  super_admin (inherits all)
+      │
+      ├── admin
+      │     │
+      │     ├── editor
+      │     │     │
+      │     │     └── viewer
+      │     │
+      │     └── moderator
+      │
+      └── auditor
+
+  Permission resolution:
+  - viewer:     posts:read
+  - editor:     posts:read, posts:write (inherits viewer)
+  - admin:      all permissions (inherits editor, viewer, moderator)
+  - super_admin: all permissions + system:config (inherits admin, auditor)
+</div>
+
+<div class="callout yellow">
+  <strong>Trade-off:</strong> Role hierarchies reduce management overhead but increase complexity. Deep hierarchies (5+ levels) are hard to reason about. Keep hierarchies flat (2-3 levels) and use ABAC for fine-grained decisions.
+</div>
+
+<h2>RBAC in Microservices</h2>
+<div class="diagram">
+  Approach: Embed roles in JWT + enforce in each service
+
+  1. Auth Service issues JWT:
+     {
+       "sub": "alice",
+       "roles": ["admin"],
+       "exp": 1516242622
+     }
+
+  2. API Gateway checks: role present? (coarse-grained)
+     "User has role 'admin' → allow to /admin/* routes"
+
+  3. Each service checks permissions (fine-grained)
+     OrderService: requires "admin" role for DELETE /orders/:id
+     OrderService: requires "viewer" role for GET /orders/:id
+
+  ┌──────────┐   JWT: {roles: ["admin"]}   ┌──────────────┐
+  │ Client   │──────────────────────────────▶│ API Gateway   │
+  └──────────┘                              │ Check: admin? │
+                                            └──────┬───────┘
+                                                   │
+                                      ┌────────────┼────────────┐
+                                      ▼                         ▼
+                              ┌──────────────┐         ┌──────────────┐
+                              │ Order Svc    │         │ User Svc     │
+                              │ Check: admin?│         │ Check: admin?│
+                              └──────────────┘         └──────────────┘
+</div>
+
+<h2>Design Considerations</h2>
+<table>
+  <tr><th>Concern</th><th>Recommendation</th></tr>
+  <tr><td><strong>Role naming</strong></td><td>Use descriptive names tied to job function, not people (not "alice_role")</td></tr>
+  <tr><td><strong>Least privilege</strong></td><td>Default to no permissions. Grant only what is needed.</td></tr>
+  <tr><td><strong>Separation of duties</strong></td><td>Prevent users from having conflicting roles (e.g., cannot be both "auditor" and "accountant")</td></tr>
+  <tr><td><strong>Principle of least roles</strong></td><td>Users should have the minimum roles needed for their job function.</td></tr>
+  <tr><td><strong>Role explosion</strong></td><td>If you have 50+ roles, you probably need ABAC. Role explosion signals over-granularity.</td></tr>
+  <tr><td><strong>Dynamic roles</strong></td><td>Consider time-bound roles (temporary admin access) and context-based activation.</td></tr>
+</table>
+
+<h2>When RBAC Falls Short</h2>
+<div class="callout red">
+  <strong>RBAC limitations:</strong> Cannot express "user X can edit document Y only if user X owns it" — that requires ABAC. Cannot express "users in department A can access resources in department A" without creating N department roles. For multi-tenant, contextual, or fine-grained access control, move to ABAC.
+</div>
+
+<div class="callout green">
+  <strong>Interview tip:</strong> "I would use RBAC for the base access control model — roles like admin, editor, viewer are intuitive and cover 80% of use cases. For the remaining 20% (resource-level permissions, multi-tenant access), I would add ABAC policies evaluated by a central policy engine (OPA). This gives me simplicity where possible and flexibility where needed."
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>How does RBAC work?</li>
+  <li>How do you design the database schema for RBAC?</li>
+  <li>What is role hierarchy and how does it work?</li>
+  <li>How would you implement RBAC in a microservices architecture?</li>
+  <li>What happens when RBAC does not provide fine-grained enough access control?</li>
+  <li>How would you handle "separation of duties" with RBAC?</li>
+  <li>What is "role explosion" and how do you prevent it?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid diving into:</strong> Specific database schema SQL, ORMs, or framework-specific role implementations (Spring Security @PreAuthorize). Focus on the conceptual model, role hierarchy, and the microservices integration pattern.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><strong>OWASP Authorization Cheat Sheet</strong> — cheatsheetseries.owasp.org</li>
+    <li><strong>Security Engineering</strong> (Ross Anderson) — Access control models</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Standards</div>
+  <ul>
+    <li><strong>NIST RBAC Standard (ANSI/INCITS 359)</strong> — Role-based access control specification</li>
+    <li><strong>Google Zanzibar Paper</strong> — research.google/pubs/pub48190 — Google's unified authorization system</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="jwt.html">&larr; Previous: JWT</a>
+  <a href="api-keys.html">Next: API Keys &rarr;</a>
+</div>
+</body>
+</html>

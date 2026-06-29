@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SLO — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">System Design</a> / <a href="./index.html">Reliability</a> / 10.1.2 SLO</div>
+
+<h1>Service Level Objective (SLO)</h1>
+<div class="meta">
+  <span>Difficulty ⭐⭐⭐</span>
+  <span>Interview Frequency ★★★</span>
+</div>
+
+<div class="callout">
+  <strong>Goal:</strong> Understand SLOs as internal reliability targets backed by SLI measurements, the concept of error budgets, and how SLOs balance reliability with velocity.
+</div>
+
+<h2>Definition</h2>
+<p>A <strong>Service Level Objective (SLO)</strong> is an internal target for a service's reliability, expressed as a measurable goal over a time window. Unlike SLAs (external contracts), SLOs are engineering targets that teams use to make tradeoff decisions. SLOs are defined in terms of <strong>SLIs</strong> (Service Level Indicators) — the actual measurements.</p>
+
+<h2>SLO Anatomy</h2>
+<p>Every well-formed SLO has these components:</p>
+
+<div class="diagram">
+  SLO = {
+      SLI:          "availability of the /api/orders endpoint",
+      target:       "99.95%",
+      time_window:  "rolling 30 days",
+      scope:        "excluding admin operations and batch jobs",
+      alerting:     "page on-call if 2% of 30-day budget consumed in 1 hour"
+  }
+</div>
+
+<h3>Example SLOs</h3>
+<table>
+  <tr><th>SLI</th><th>SLO Target</th><th>Time Window</th></tr>
+  <tr><td>API availability (5xx rate &lt; 0.1%)</td><td>99.9%</td><td>Rolling 30 days</td></tr>
+  <tr><td>p99 latency &lt; 200ms</td><td>99.5% of requests</td><td>Rolling 7 days</td></tr>
+  <tr><td>Read throughput &gt; 10k QPS</td><td>99.99%</td><td>Rolling 30 days</td></tr>
+  <tr><td>Replication lag &lt; 5s</td><td>99.9%</td><td>Rolling 1 hour</td></tr>
+</table>
+
+<h2>Error Budget</h2>
+<p>The <strong>error budget</strong> is the inverse of the SLO target. It defines how much unreliability is "allowed" within the time window. This is the key concept that makes SLOs actionable.</p>
+
+<div class="callout">
+  <strong>Core Insight:</strong> Error budgets are what let teams balance reliability work against feature work. When the budget is nearly exhausted, the team stops shipping features and focuses on reliability. When the budget is healthy, the team can move fast.
+</div>
+
+<h3>Error Budget Calculation</h3>
+<pre>
+// 30-day window, 99.9% SLO target
+Total minutes in 30 days = 30 × 24 × 60 = 43,200 minutes
+Allowed downtime         = 43,200 × (1 - 0.999) = 43.2 minutes
+
+// If current consumed budget is 20 minutes:
+//  Remaining budget = 43.2 - 20 = 23.2 minutes
+//  Budget health     = 20 / 43.2 = 46% consumed
+</pre>
+
+<h3>Error Budget Policy</h3>
+<table>
+  <tr><th>Budget Remaining</th><th>Action</th></tr>
+  <tr><td class="green">&gt; 50%</td><td>Normal feature velocity; experiments and aggressive deploys are fine</td></tr>
+  <tr><td>25-50%</td><td>Slow down risky releases; prioritize reliability bug fixes</td></tr>
+  <tr><td class="red">&lt; 25%</td><td>Feature freeze; all hands on reliability; canary-first deployments only</td></tr>
+  <tr><td class="red">Exhausted</td><td>Stop all non-essential changes; page on-call for any degradation</td></tr>
+</table>
+
+<h2>SLO vs SLA Relationship</h2>
+
+<div class="diagram">
+                    SLA: 99.9% (contract with customer)
+                         │
+                         │  Safety margin
+                         ▼
+                    SLO: 99.95% (internal engineering target)
+                         │
+                         │  Alerting threshold
+                         ▼
+                  Alert: 99.92% (page on-call)
+                         │
+                         │  Current measurement
+                         ▼
+               SLI: 99.96% (actual observed value)
+</div>
+
+<div class="callout yellow">
+  <strong>Why SLO &gt; SLA?</strong> Your internal target should be stricter than your external commitment. If your SLO equals your SLA, you will breach the SLA before you have time to react. A 0.05% gap gives the team time to respond before a breach.
+</div>
+
+<h2>Choosing the Right SLO Target</h2>
+<p>Higher SLOs are not always better. The cost curve is exponential past 99.9%.</p>
+
+<table>
+  <tr><th>Service Category</th><th>Typical SLO</th><th>Rationale</th></tr>
+  <tr><td>Payment processing</td><td>99.99%+</td><td>Direct revenue impact; every error costs money</td></tr>
+  <tr><td>Core API / Authentication</td><td>99.95%</td><td>Cascading failure risk; blocks all dependent services</td></tr>
+  <tr><td>Internal dashboard</td><td>99.5%</td><td>Non-critical; engineers can tolerate brief outages</td></tr>
+  <tr><td>Analytics pipeline</td><td>99.0%</td><td>Batch processing; delayed results are acceptable</td></tr>
+  <tr><td>Recommendations / ML serving</td><td>99.5%</td><td>Fallback to defaults is acceptable</td></tr>
+</table>
+
+<h2>Multi-SLO Services</h2>
+<p>Real services have multiple SLOs that must be tracked independently:</p>
+
+<div class="diagram">
+  Service: "Order Service"
+  ├── SLO 1: Availability ≥ 99.95%     (error budget: 21.9 min/month)
+  ├── SLO 2: p99 latency ≤ 200ms       (error budget: 5% of requests)
+  └── SLO 3: Correctness ≥ 99.999%     (error budget: 4.3 min/month)
+       ↑
+       Correctness SLO is much tighter because data corruption
+       is far worse than brief unavailability
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>"What is an error budget and how do you use it?" — Define remaining unreliability; use it to gate feature releases vs reliability work.</li>
+  <li>"How do you decide on an SLO target?" — Business impact analysis: cost of downtime vs cost of achieving higher reliability.</li>
+  <li>"What happens when you exhaust your error budget?" — Feature freeze, all-hands on reliability, canary-only deploys.</li>
+  <li>"How do SLOs and SLAs relate?" — SLO is the internal target, SLA is the external contract. SLO should be stricter than SLA.</li>
+  <li>"How would you set SLOs for a new microservice?" — Start conservative (99%), measure SLIs for 2-4 weeks, then tighten based on data.</li>
+  <li>"What if your dependency's SLO is worse than yours?" — Graceful degradation, caching, async fallbacks, or renegotiate the dependency SLO.</li>
+</ul>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Depth:</strong> Prometheus/OpenTelemetry SLO alerting syntax and specific query language. <br>
+  <strong>Depth:</strong> SLO burn-rate alerting mathematical formulas — concept is enough, not the PromQL. <br>
+  <strong>Depth:</strong> Organizational SLO review processes and compliance frameworks.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Google SRE Book — Chapter 4: Service Level Objectives</div>
+  <p>Defining SLIs, SLOs, and error budgets. The foundational text on SLO-based reliability engineering.</p>
+</div>
+<div class="source">
+  <div class="source-label">The Art of SLOs — Heather Hedden & Alex Hidalgo (O'Reilly)</div>
+  <p>Practical guide to implementing SLOs in production systems with real-world examples.</p>
+</div>
+<div class="source">
+  <div class="source-label">SRUM — Site Reliability Engineering Workbook (Google)</div>
+  <p>Chapter on implementing SLOs: defining SLIs, choosing time windows, setting error budget policies.</p>
+</div>
+
+<div class="nav">
+  <a href="sla.html">&larr; SLA</a>
+  <a href="sli.html">SLI &rarr;</a>
+</div>
+</body>
+</html>

@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.6.4 Cache Invalidation</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#2">2 Networking</a> / <a href="../index.html#2.6">2.6 CDN</a> / 2.6.4
+</div>
+
+<h1>Cache Invalidation</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>Three strategies for CDN cache invalidation: time-based (TTL), purge, and versioned URLs</li>
+  <li>Why "there are only two hard things in Computer Science: cache invalidation and naming things"</li>
+  <li>Best practices: content hashing in URLs as the gold standard</li>
+  <li>Trade-offs between each invalidation approach</li>
+</ul>
+
+<h2>Definition</h2>
+<p>Cache invalidation is the process of <strong>removing or updating cached content so that users receive fresh content instead of stale data</strong>. It is notoriously difficult because cached copies exist across hundreds of edge PoPs globally, and stale content can persist for hours or days if invalidation is not handled correctly.</p>
+
+<div class="callout red">
+  <strong>"There are only two hard things in Computer Science: cache invalidation and naming things."</strong> &mdash; Phil Karlton. This quote comes up frequently in interviews. The core problem: once a resource is cached at 300 edge PoPs, how do you ensure every single one serves the updated version, without causing a <a href="cache-miss.html">thundering herd</a> back to the origin?
+</div>
+
+<h2>Three Invalidation Strategies</h2>
+<div class="diagram">  ┌─────────────────────────────────────────────────────────────┐
+  │                                                             │
+  │  Strategy 1: Time-based (TTL)                                │
+  │  "Let it expire naturally"                                   │
+  │  ┌─────────────────────────────────────────────────────┐    │
+  │  │ Resource cached at T=0 with max-age=3600            │    │
+  │  │ T=0 to T=3599  → Serve from cache (may be stale!)   │    │
+  │  │ T=3600         → Expired, revalidate with origin    │    │
+  │  └─────────────────────────────────────────────────────┘    │
+  │  Pro: Zero operational effort                                │
+  │  Con: Up to TTL seconds of stale content                    │
+  │                                                             │
+  │  Strategy 2: Purge (explicit invalidation)                   │
+  │  "Tell the CDN to delete cached copies now"                 │
+  │  ┌─────────────────────────────────────────────────────┐    │
+  │  │ Content updated at origin                             │    │
+  │  │ API call: PURGE /api/products                        │    │
+  │  │ CDN removes from all PoPs → next request = MISS      │    │
+  │  │ Next fetch gets fresh content from origin             │    │
+  │  └─────────────────────────────────────────────────────┘    │
+  │  Pro: Immediate invalidation                                │
+  │  Con: Causes cache misses (thundering herd risk)           │
+  │                                                             │
+  │  Strategy 3: Versioned URLs (content hashing)               │
+  │  "Never invalidate — deploy new URLs instead"               │
+  │  ┌─────────────────────────────────────────────────────┐    │
+  │  │ v1: /css/app.a1b2c3.css  (cached forever)           │    │
+  │  │ v2: /css/app.d4e5f6.css  (new hash = new URL)       │    │
+  │  │ v1 stays in cache but is never requested again       │    │
+  │  │ v2 is fetched, cached, served                        │    │
+  │  └─────────────────────────────────────────────────────┘    │
+  │  Pro: No invalidation needed, no stale content, no misses   │
+  │  Con: Requires build system to generate hashed filenames    │
+  │                                                             │
+  └─────────────────────────────────────────────────────────────┘</div>
+
+<h2>Strategy 1: Time-Based (TTL)</h2>
+<p>The simplest approach. Set a <code>Cache-Control: max-age</code> header, and the CDN automatically evicts the resource after that duration. No active invalidation needed.</p>
+
+<table>
+  <tr><th>TTL Value</th><th>Use Case</th><th>Staleness Risk</th></tr>
+  <tr><td>10-60 seconds</td><td>API responses, live data</td><td class="yellow">10-60s stale</td></tr>
+  <tr><td>5-60 minutes</td><td>News articles, leaderboards</td><td>5-60 min stale</td></tr>
+  <tr><td>1-24 hours</td><td>Product pages, user profiles</td><td>1-24 hours stale</td></tr>
+  <tr><td>7-365 days</td><td>Static assets with hashed URLs</td><td class="green">N/A (never stale)</td></tr>
+</table>
+
+<h3>Problems with TTL-Only</h3>
+<pre>Scenario: Breaking news story published at 12:00
+  - Homepage has max-age=300 (5 minutes)
+  - CDN edge servers serve the old homepage until 12:05
+  - Users see stale (pre-breaking-news) homepage for 5 minutes
+  - Each edge PoP independently expires at different times
+    (if cached at 12:01, expires at 12:06)
+  - No way to force an immediate update
+
+  With stale-while-revalidate:
+  - max-age=300, stale-while-revalidate=3600
+  - At T=300s, edge serves stale + fetches fresh in background
+  - At T=301s, edge has fresh version for next request
+  - But T=300s user still sees the stale version</pre>
+
+<div class="callout yellow">
+  <strong>TTL is passive invalidation.</strong> You accept some staleness in exchange for zero operational complexity. It works for content where eventual consistency is acceptable. It does NOT work when you need immediate updates.
+</div>
+
+<h2>Strategy 2: Purge</h2>
+<p>Active invalidation: you explicitly tell the CDN to remove specific cached entries. This is done via API calls or the CDN's dashboard.</p>
+
+<h3>Types of Purge</h3>
+<table>
+  <tr><th>Purge Type</th><th>Scope</th><th>Speed</th><th>Risk</th></tr>
+  <tr><td><strong>URL purge</strong></td><td>Single URL: <code>/images/hero.jpg</code></td><td class="green">Fast (targeted)</td><td class="green">Low</td></tr>
+  <tr><td><strong>Tag purge</strong></td><td>All URLs with a cache tag: <code>product-123</code></td><td class="green">Fast (batched by tag)</td><td class="green">Low</td></tr>
+  <tr><td><strong>Directory purge</strong></td><td>All URLs under a path: <code>/images/*</code></td><td class="yellow">Moderate</td><td class="yellow">May invalidate too much</td></tr>
+  <tr><td><strong>Wildcard/host purge</strong></td><td>Entire site or hostname: <code>*.example.com</code></td><td class="red">Slow (every PoP)</td><td class="red">Massive miss storm</td></tr>
+</table>
+
+<h3>Purge API Example</h3>
+<pre>Cloudflare Purge API:
+  POST /zones/{zone_id}/purge_cache
+  {
+    "files": [
+      "https://example.com/images/hero.jpg",
+      "https://example.com/css/style.css"
+    ],
+    "tags": ["product-123", "homepage"]
+  }
+
+Fastly Purge API (instant soft purge):
+  POST /purge/https://example.com/images/hero.jpg
+  → Marks as stale, does not delete
+  → Next request revalidates with origin
+  → No thundering herd (stale copy available as fallback)
+
+Amazon CloudFront invalidation:
+  POST /2020-05-31/distribution/{dist_id}/invalidation
+  {
+    "InvalidationBatch": {
+      "Paths": {
+        "Quantity": 2,
+        "Items": ["/images/*", "/css/style.css"]
+      },
+      "CallerReference": "deploy-20260628-001"
+    }
+  }
+  → Note: AWS limits to 3,000 paths per request
+  → Propagation can take 60-300 seconds</pre>
+
+<div class="callout red">
+  <strong>The purge problem:</strong> After a purge, every edge PoP needs to re-fetch from origin on the next request. For a popular resource with 300 PoPs, that means 300 <a href="cache-miss.html">cache misses</a> in rapid succession. This is the thundering herd problem. Mitigations: use "soft purge" (mark stale but keep as fallback), origin shield to deduplicate, and pre-warm after purging.
+</div>
+
+<h3>Propagation Delay</h3>
+<pre>Purge is NOT instant. CDN must propagate the invalidation to all PoPs.
+
+  Cloudflare:  ~5-30 seconds  (fastest)
+  Fastly:      ~1-3 seconds   (designed for real-time purging)
+  CloudFront:  60-300 seconds (can be slow)
+  Akamai:      ~30-120 seconds
+
+  During propagation window:
+  - Some PoPs still serve stale content
+  - Some PoPs have already purged and need to re-fetch
+  - Users see inconsistent versions depending on their PoP
+
+  This is why purge alone is insufficient for consistency-critical content.</pre>
+
+<h2>Strategy 3: Versioned URLs (Content Hashing)</h2>
+<p>The gold standard for cache invalidation. Instead of invalidating cached content, you <strong>deploy a new URL that embeds a content hash</strong>. The old URL stays cached (harmlessly) while the new URL is a cache miss that gets populated.</p>
+
+<div class="diagram">  Content Hashing Strategy:
+
+  Build Process:
+  ┌──────────────────────────────────────────────────────────┐
+  │ 1. Compute hash of file contents:                        │
+  │    style.css (245 KB)  →  sha256 →  "d4e5f6..."        │
+  │                                                          │
+  │ 2. Rename file to include hash:                          │
+  │    style.css → style.d4e5f6a7b8.css                     │
+  │                                                          │
+  │ 3. Generate HTML reference:                              │
+  │    &lt;link href="/css/style.d4e5f6a7b8.css"&gt;            │
+  │                                                          │
+  │ 4. When content changes:                                 │
+  │    style.css (246 KB, updated) → sha256 → "f7a8b9..."  │
+  │    style.css → style.f7a8b9c0d1.css (NEW URL)          │
+  │                                                          │
+  │  Result:                                                 │
+  │    - Old URL (d4e5f6) stays in CDN cache forever        │
+  │    - No one requests it anymore                          │
+  │    - New URL (f7a8b9) is a cache miss, fetched once     │
+  │    - Zero invalidation needed                            │
+  └──────────────────────────────────────────────────────────┘
+
+  Timeline:
+  Deploy v1  →  /css/app.a1b2c3.css  →  CDN caches it (max-age=31536000)
+  User visits →  browser loads /css/app.a1b2c3.css → HIT
+  Deploy v2  →  /css/app.d4e5f6.css  →  CDN caches it (max-age=31536000)
+  User visits →  browser loads /css/app.d4e5f6.css → MISS (then HIT)
+  Old URL     →  /css/app.a1b2c3.css  →  still cached, never requested</pre>
+
+<h3>How Major Frameworks Handle Content Hashing</h3>
+<pre>Vite / Webpack:
+  Output:  app.a1b2c3.js, chunk.d4e5f6.js, style.f7a8b9.css
+  HTML:    &lt;script src="/assets/app.a1b2c3.js"&gt;&lt;/script&gt;
+  Headers: Cache-Control: max-age=31536000, immutable
+
+  HTML file itself:
+  Headers: Cache-Control: max-age=0, must-revalidate
+  (HTML is NOT hashed — it references the hashed assets)
+
+Next.js:
+  Output:  _next/static/chunks/app.a1b2c3.js
+  Headers: Cache-Control: public, max-age=31536000, immutable
+
+Ruby on Rails:
+  Output:  /assets/application-a1b2c3.css
+  Helper:  stylesheet_link_tag "application"  → auto-adds hash
+
+Django (whitenoise / django-storages):
+  Output:  /static/css/app.a1b2c3.css
+  Collectstatic + manifest.json maps original → hashed</pre>
+
+<div class="callout green">
+  <strong>This is the canonical solution to cache invalidation.</strong> In any system design interview, when asked about cache invalidation, lead with content hashing. It eliminates the invalidation problem entirely: old versions are never invalidated (they just become irrelevant), new versions are naturally fetched once and cached. The only "cost" is a build system that generates hashed filenames.
+</div>
+
+<h2>Comparison of All Strategies</h2>
+<table>
+  <tr><th></th><th>TTL (Time-based)</th><th>Purge (Active)</th><th>Versioned URLs</th></tr>
+  <tr><td><strong>Mechanism</strong></td><td>Wait for expiry</td><td>API call to delete</td><td class="green">New URL on deploy</td></tr>
+  <tr><td><strong>Staleness</strong></td><td class="red">Up to TTL duration</td><td class="yellow">Propagation delay (5-300s)</td><td class="green">Zero (immediate)</td></tr>
+  <tr><td><strong>Thundering herd risk</strong></td><td class="green">Low (staggered expiry)</td><td class="red">High (all PoPs miss at once)</td><td class="green">Low (natural stagger)</td></tr>
+  <tr><td><strong>Operational complexity</strong></td><td class="green">None</td><td class="yellow">Moderate (API integration)</td><td class="yellow">Moderate (build system)</td></tr>
+  <tr><td><strong>Immediate invalidation?</strong></td><td class="red">No</td><td class="green">Yes (with propagation delay)</td><td class="green">Yes (instant on deploy)</td></tr>
+  <tr><td><strong>Best for</strong></td><td>API data, eventually consistent content</td><td>Dynamic content, breaking news, user profile updates</td><td class="green">Static assets (JS, CSS, images, fonts)</td></tr>
+</table>
+
+<h2>Real-World Strategy: Combine All Three</h2>
+<p>Production systems typically use <strong>all three strategies together</strong>, each for different content types:</p>
+
+<pre>Typical web application:
+
+  ┌─────────────────────────────────────────────────────────┐
+  │ Layer 1: Versioned URLs (content hashing)               │
+  │   Content:  JS bundles, CSS, images, fonts             │
+  │   TTL:      1 year (max-age=31536000, immutable)       │
+  │   When updated: New hash → new URL → no invalidation   │
+  ├─────────────────────────────────────────────────────────┤
+  │ Layer 2: Short TTL + stale-while-revalidate            │
+  │   Content:  API responses (GET /products, /news)       │
+  │   TTL:      60s + stale-while-revalidate=600s          │
+  │   When updated: Stale served for ≤60s, background refresh│
+  ├─────────────────────────────────────────────────────────┤
+  │ Layer 3: Active purge                                  │
+  │   Content:  Homepage, dynamic pages with user content  │
+  │   TTL:      300s                                       │
+  │   When updated: Tag-based purge ("homepage", "user-42")│
+  │   Fallback:   stale-while-revalidate for safety        │
+  ├─────────────────────────────────────────────────────────┤
+  │ Layer 4: No caching                                    │
+  │   Content:  User dashboard, authenticated API calls    │
+  │   Cache-Control: no-store, private                     │
+  │   Always served from origin                            │
+  └─────────────────────────────────────────────────────────┘</pre>
+
+<h2>Cache Tags for Bulk Invalidation</h2>
+<p>Cache tags allow you to invalidate multiple URLs with a single API call, even if those URLs are different paths:</p>
+
+<pre>Setting cache tags (via origin response header):
+  GET /products/123  →  Cache-Tag: product-123, products-list
+  GET /products/123/reviews  →  Cache-Tag: product-123, reviews
+  GET /categories/electronics  →  Cache-Tag: category-electronics
+
+When product 123 is updated:
+  Purge tag: "product-123"
+  → Invalidates BOTH /products/123 AND /products/123/reviews
+
+When a product review is updated:
+  Purge tag: "product-123"
+  → Invalidates both the product page and its reviews page
+
+Cloudflare:  Cache-Tag header
+Fastly:      Surrogate-Key header (same concept)
+Akamai:      Edge-Cache-Tag header</pre>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"How would you handle cache invalidation in a system design?"</strong><br>Three strategies in order of preference: (1) Content hashing in URLs for static assets &mdash; eliminates invalidation entirely, can cache forever. (2) Short TTLs with stale-while-revalidate for semi-dynamic content &mdash; acceptable staleness with automatic refresh. (3) Active purge (tag-based) for content that must update immediately &mdash; purge by tag to batch invalidations, use soft purge to avoid thundering herd.</li>
+  <li><strong>"Why is cache invalidation hard?"</strong><br>Three reasons: (1) propagation delay &mdash; it takes time to reach all 300+ PoPs globally. (2) thundering herd &mdash; a purge creates simultaneous misses across all PoPs, potentially overwhelming origin. (3) consistency &mdash; during the propagation window, different users see different versions of the same content. Content hashing solves all three by making invalidation unnecessary.</li>
+  <li><strong>"A user updates their profile picture but still sees the old one. How do you fix this?"</strong><br>The issue is CDN caching. Solutions: (1) if using content hashing, the new profile picture has a new URL, so the old cached version is irrelevant. (2) If the URL is fixed (e.g., <code>/avatar.jpg</code>), purge the URL (or a tag like <code>user-42</code>) from all CDN PoPs. (3) Add a cache-busting query parameter as a fallback. (4) Set a shorter TTL for user-specific assets. Long-term fix: always use content-hashed URLs.</li>
+  <li><strong>"You deploy a new version of your CSS but users report seeing a broken site. What happened?"</strong><br>The CDN is still serving the old CSS file. The HTML references <code>/css/style.css</code>, which is cached at the edge with a long TTL. The new CSS was deployed to origin, but the CDN has not expired or purged the old version. Fix: use content hashing so the new CSS has a new URL (<code>/css/style.a1b2c3.css</code>), or reduce the TTL, or purge the old URL after deploy.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>CDN vendor-specific purge API syntax (know the concept, not the exact JSON format)</li>
+    <li>Cache hierarchy internals (L1/L2/L3 cache layers in a single PoP)</li>
+    <li>Deep dive into stale-if-error vs stale-while-revalidate edge cases</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Cache Invalidation Strategies" &mdash; web.dev</strong> &mdash; web.dev/articles/http-cache</li>
+    <li><strong>"High Performance Browser Networking" Ch. 3 &mdash; Caching</strong> &mdash; Ilya Grigorik (hpbn.co)</li>
+    <li><strong>"Cache Invalidation" &mdash; Cloudflare Learning Center</strong> &mdash; cloudflare.com/learning/cdn/caching</li>
+    <li><strong>"Surrogate Keys" &mdash; Fastly Documentation</strong> &mdash; developer.fastly.com</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="cache-miss.html">&larr; cache-miss.html</a>
+  <a href="reverse-proxy.html">Next: reverse-proxy.html &rarr;</a>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>15.8 News Feed — System Design</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../">Handbook</a> / <a href="../">System Design</a> / 15. Design Problems / 15.8 News Feed</p>
+
+<h1>News Feed</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Design a news feed system similar to Facebook, Twitter, or Instagram. The system must generate a personalized feed of posts from a user's social graph, support ranking and ranking updates, handle high write throughput (new posts), and serve millions of feed reads per second.</p>
+
+<h2>Functional Requirements</h2>
+<ul>
+  <li>Display a personalized, ranked feed of posts from followed users and pages</li>
+  <li>Support creating new posts (text, images, videos)</li>
+  <li>Support likes, comments, and shares on posts</li>
+  <li>Update the feed in near real-time when new posts are created</li>
+  <li>Support infinite scroll pagination</li>
+  <li>Handle feed ranking based on relevance, recency, and social signals</li>
+</ul>
+
+<h2>Non-Functional Requirements</h2>
+<ul>
+  <li><strong>Low latency:</strong> feed generation &lt; 500ms p99</li>
+  <li><strong>High throughput:</strong> 100K+ writes/sec (new posts), 10M+ reads/sec (feed views)</li>
+  <li><strong>Consistency:</strong> eventual consistency acceptable (feed may lag by seconds)</li>
+  <li><strong>Scalability:</strong> support billions of users, trillions of posts</li>
+  <li><strong>Personalization:</strong> ranking must consider individual user preferences</li>
+</ul>
+
+<h3>Capacity Estimates</h3>
+<table>
+  <tr><th>Metric</th><th>Estimate</th><th>Notes</th></tr>
+  <tr><td>Daily active users</td><td>1B</td><td></td></tr>
+  <tr><td>New posts/day</td><td>100M</td><td>~1.2K posts/sec average</td></tr>
+  <tr><td>Average followers per user</td><td>500</td><td>Varies widely (power law)</td></tr>
+  <tr><td>Average following per user</td><td>500</td><td></td></tr>
+  <tr><td>Feed reads/sec</td><td>10M</td><td>1B DAU * ~10 feed loads / 86400</td></tr>
+  <tr><td>Storage (posts, 1 year)</td><td>~50 TB</td><td>100M * 365 * ~1.5KB avg</td></tr>
+  <tr><td>Feed cache entries</td><td>1B</td><td>One per user</td></tr>
+</table>
+
+<h2>API Design</h2>
+<pre>
+POST   /api/v1/posts
+Body:  { "content": "Hello world!", "media_urls": [...], "visibility": "friends" }
+Resp:  { "post_id": "post_abc123", "created_at": "..." }
+
+GET    /api/v1/feed?cursor=post_xyz&limit=25
+Resp:  { "posts": [{ "post_id": "...", "author": {...}, "content": "...",
+                    "likes": 150, "comments": 23, "timestamp": "..." }],
+         "next_cursor": "post_abc", "has_more": true }
+
+POST   /api/v1/posts/{post_id}/like
+POST   /api/v1/posts/{post_id}/comments
+Body:  { "content": "Great post!" }
+</pre>
+
+<h2>High-Level Design</h2>
+<div class="diagram">
+  Client ────────► API Gateway
+                       │
+          ┌────────────┴────────────┐
+          │                         │
+     Write Path                Read Path
+          │                         │
+  ┌───────▼───────┐     ┌──────────▼──────────┐
+  │  Post Service  │     │   Feed Service        │
+  │  (Write Post)  │     │   (Generate Feed)     │
+  └───────┬───────┘     └──────────┬──────────┘
+          │                        │
+     ┌────┴─────┐           ┌──────┴──────┐
+     │          │           │             │
+     ▼          ▼           ▼             ▼
+┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐
+│ Post DB  │ │ Fan-out  │ │ Feed    │ │ Ranking │
+│(Cassandra│ │ Queue    │ │ Cache   │ │ Service │
+│ / MySQL) │ │ (Kafka)  │ │ (Redis) │ │         │
+└─────────┘ └────┬─────┘ └─────────┘ └─────────┘
+                 │
+          ┌──────▼──────┐
+          │  Fan-out    │
+          │  Workers    │
+          │  (Write to  │
+          │   feed cache│
+          │   or inbox)  │
+          └─────────────┘
+</div>
+
+<h2>Deep Dive: Fan-out on Write vs Fan-out on Read</h2>
+
+<h3>Fan-out on Write (Push Model)</h3>
+<p>When a user creates a post, the system immediately pushes (writes) the post to the feed of all their followers. Feed reads are fast (just read from cache) but writes are expensive (one write per follower).</p>
+
+<div class="diagram">
+  Alice posts → Write to Alice's outbox
+            → Fan-out: Write to feed of Follower 1, Follower 2, ..., Follower N
+
+  Write cost: O(N) where N = follower count
+  Read cost:  O(1) — just read from pre-computed feed
+  Best for:   Users with few followers (most users)
+</div>
+
+<h3>Fan-out on Read (Pull Model)</h3>
+<p>When a user requests their feed, the system gathers the latest posts from all followed users and merges/ranks them on the fly. Writes are cheap (one write) but reads are expensive (query N inboxes).</p>
+
+<div class="diagram">
+  User opens feed → Gather posts from: Following 1, Following 2, ..., Following M
+                 → Merge, rank, paginate
+                 → Return feed
+
+  Write cost: O(1) — just write to outbox
+  Read cost:  O(M) where M = following count
+  Best for:   Users with many followers (celebrities, influencers)
+</div>
+
+<h3>Hybrid Approach (Recommended)</h3>
+<div class="callout green">
+  <strong>Production strategy:</strong> Use fan-out on write for most users (followers &lt; 10K). For celebrity accounts with massive followings (followers &gt; 1M), use fan-out on read. The threshold between the two strategies is configurable. This avoids writing a single post to millions of inboxes.
+</div>
+
+<table>
+  <tr><th>Aspect</th><th>Fan-out on Write</th><th>Fan-out on Read</th></tr>
+  <tr><td>Write latency</td><td class="red">High (O(N))</td><td class="green">Low (O(1))</td></tr>
+  <tr><td>Read latency</td><td class="green">Low (O(1))</td><td class="red">High (O(M))</td></tr>
+  <tr><td>Consistency</td><td class="green">Feed is always up-to-date</td><td>May show stale data if caching</td></tr>
+  <tr><td>Storage</td><td class="red">High (replicated per user)</td><td class="green">Low (one copy per post)</td></tr>
+  <tr><td>Best for</td><td>Low-follower-count users</td><td>Celebrity/influencer accounts</td></tr>
+</table>
+
+<h2>Deep Dive: Feed Ranking</h2>
+<p>Rank posts in the feed using a scoring function that considers multiple signals:</p>
+
+<pre>
+score = f(recency, engagement, social_affinity, content_type, freshness)
+
+Where:
+  recency       = time_decay(post_timestamp, half_life=4h)
+  engagement    = log(likes + 2*comments + 3*shares + 1)
+  social_affinity = interaction_frequency(viewer, author)
+  content_type   = weight(video=1.5, photo=1.2, text=1.0, link=0.8)
+  freshness     = penalty for posts already seen by the user
+</pre>
+
+<div class="callout yellow">
+  <strong>Ranking at scale:</strong> Pre-compute a ranked feed for each user asynchronously (offline ranking). When the user loads their feed, serve the pre-computed feed from cache. Periodically re-rank based on updated engagement signals. This decouples the expensive ranking computation from the latency-critical feed read path.
+</div>
+
+<h2>Deep Dive: Feed Caching</h2>
+<ul>
+  <li><strong>Pre-computed feed cache:</strong> Store the top 100 ranked posts for each user in Redis. TTL of 5-15 minutes. Invalidate on new post creation (fan-out updates the cache).</li>
+  <li><strong>Feed assembly:</strong> The fan-out workers write new post IDs to each follower's sorted set in Redis (ZADD with score = rank). On feed read, ZRANGE returns the top N posts.</li>
+  <li><strong>Miss handling:</strong> If the cache is cold (new user, cache expiry), generate the feed on-the-fly from the user's following list. This is slower but only happens rarely.</li>
+</ul>
+
+<pre>
+# Redis feed structure (per user)
+ZADD feed:user:12345 1701234567 "post_abc"  # score = timestamp or rank
+ZADD feed:user:12345 1701234560 "post_def"
+ZADD feed:user:12345 1701234555 "post_ghi"
+
+# Get top 25 posts (most recent)
+ZREVRANGE feed:user:12345 0 24
+
+# Trim to keep only latest 1000 posts per user
+ZREMRANGEBYRANK feed:user:12345 0 -1001
+</pre>
+
+<h2>Deep Dive: Pagination</h2>
+<p>Use cursor-based pagination for efficient infinite scroll:</p>
+<ul>
+  <li>Each post has a unique, ordered ID (e.g., timestamp-based Snowflake ID)</li>
+  <li>Client sends the last seen post ID as the cursor</li>
+  <li>Server returns posts with IDs &lt; cursor, ordered descending</li>
+  <li>Avoids offset-based pagination problems (skipped duplicates, inconsistent results)</li>
+</ul>
+
+<div class="callout red">
+  <strong>Offset pagination pitfall:</strong> If new posts arrive between page loads, offset-based pagination can skip posts or show duplicates. Cursor-based pagination with deterministic ordering avoids this entirely.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>How do you handle a celebrity with 100M followers? <em>A: Fan-out on read for that user's posts. Store the post once, and when followers load their feed, pull in the celebrity's latest posts. Use a special "celebrity" flag in the follower graph to trigger this path.</em></li>
+  <li>How do you handle feed consistency? <em>A: Accept eventual consistency. Feed updates propagate within seconds. If a user sees stale data, a refresh (pull-to-refresh) fetches the latest. For critical updates (e.g., post deletion), use an invalidation event broadcast via WebSocket.</em></li>
+  <li>How do you handle the write fan-out latency for popular users? <em>A: Fan-out is async via Kafka. The user sees their post immediately (write to outbox). Fan-out workers process followers asynchronously. Followers see the post within seconds. This avoids blocking the write on fan-out completion.</em></li>
+  <li>What happens when Redis cache runs out of memory? <em>A: Use LRU eviction — less active users' feeds are evicted first. They are regenerated on next access. Monitor cache hit rate and scale Redis horizontally when hit rate drops below 95%.</em></li>
+  <li>How would you support a "Stories" feature (ephemeral, 24h content)? <em>A: Separate data path. Store stories in Redis with 24h TTL. On feed load, merge top stories into the feed. Use a separate carousel UI component. Simpler lifecycle than permanent posts.</em></li>
+</ul>
+
+<div class="callout red">
+  <strong>What to Skip:</strong>
+  <ul>
+    <li>Don't design the full social graph storage — mention it and focus on the feed</li>
+    <li>Don't implement the actual ML ranking model — describe the scoring function at a high level</li>
+    <li>Don't design media upload/processing — assume it's handled by a separate service</li>
+    <li>Don't get into notification design — it's a separate system covered elsewhere</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><em>System Design Interview Vol 1</em> — Alex Xu, Ch. 6: Design News Feed System</li>
+    <li><em>System Design Interview Vol 2</em> — Alex Xu, Ch. 2: Design News Feed</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Articles</div>
+  <ul>
+    <li>Facebook Engineering: "Scaling the Facebook News Feed" (engineering.fb.com)</li>
+    <li>Twitter Engineering: "Timelines at Scale" (engineering.twitter.com)</li>
+    <li>Instagram Engineering: "How Instagram's Feed Works" (instagram-engineering.com)</li>
+    <li>"Feeds: A Data Engineer's Guide" — Dan McKinley (mcfunley.com)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="chat-system.html">&larr; Previous: Chat System</a>
+  <a href="search-autocomplete.html">Next: Search Autocomplete &rarr;</a>
+</div>
+
+</body>
+</html>

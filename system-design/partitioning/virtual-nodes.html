@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.3.2 Virtual Nodes (VNodes) - System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">6 Partitioning</a> / <a href="index.html">6.3 Consistent Hashing</a> / 6.3.2
+</div>
+
+<h1>Virtual Nodes (VNodes)</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<div class="callout">
+  <strong>Goal:</strong> Understand how virtual nodes solve the data skew problem of basic hash rings by mapping each physical shard to multiple positions on the ring, enabling uniform distribution and granular rebalancing.
+</div>
+
+<h2>Definition</h2>
+
+<p><strong>Virtual nodes (VNodes)</strong> are multiple logical representations of a single physical shard on the hash ring. Instead of placing each physical shard at one position, you place it at many positions (typically 100-256). Each vnode is assigned a small random range of the hash space, and all vnodes belonging to the same physical shard store data on the same physical machine. VNodes are also called "tokens" in Cassandra terminology.</p>
+
+<div class="diagram">  WITHOUT Virtual Nodes (uneven distribution):
+
+              Shard A (owns 70% of ring)
+            /
+           /
+  0 ------
+  |        \
+  |         \
+  |          \
+   ------
+             /
+            /
+        Shard B (owns 30% of ring)
+
+  ========================================================
+
+  WITH Virtual Nodes (even distribution):
+
+  Physical Shard A = vnodes: A1, A2, A3, A4, A5, A6, A7, A8
+  Physical Shard B = vnodes: B1, B2, B3, B4, B5, B6, B7, B8
+
+         A1     B1     A2     B2     A3     B3
+        /  \   /  \   /  \   /  \   /  \   /  \
+       /    \ /    \ /    \ /    \ /    \ /    \
+  0 --      --     --     --     --     --     -- 0
+       \    / \    / \    / \    / \    / \    /
+        \  /   \  /   \  /   \  /   \  /   \  /
+         A4     B4     A5     B5     A6     B6
+
+  Each vnode owns ~1/16 of the ring
+  Shard A total: A1+A2+A3+A4+A5+A6+A7+A8 ~ 50%
+  Shard B total: B1+B2+B3+B4+B5+B6+B7+B8 ~ 50%</div>
+
+<h2>Why Basic Hash Rings Need VNodes</h2>
+
+<p>With a naive hash ring (one position per physical shard), distribution depends entirely on how the hash function maps shard IDs to ring positions. With few shards, it is common to get severe skew: one shard might own 70% of the key space while another owns only 5%. VNodes fix this by statistical averaging -- with 256 random positions per physical node, the law of large numbers ensures near-uniform distribution.</p>
+
+<h2>How VNodes Work</h2>
+
+<h3>Assignment</h3>
+
+<ol>
+  <li>Choose the number of vnodes per physical shard (e.g., 256 for Cassandra).</li>
+  <li>For each physical shard, generate N vnode identifiers: <code>shard_A_vnode_1</code>, <code>shard_A_vnode_2</code>, ..., <code>shard_A_vnode_256</code>.</li>
+  <li>Hash each vnode identifier to get its position on the ring.</li>
+  <li>Assign each data key to the nearest vnode clockwise, exactly as in a basic hash ring.</li>
+  <li>The physical shard owning that vnode handles the data.</li>
+</ol>
+
+<h3>Lookup</h3>
+
+<pre>// Pseudocode for key lookup with VNodes
+function findShard(key, ring) {
+    keyHash = consistentHash(key)
+    vnode = ring.clockwiseNext(keyHash)  // find nearest vnode
+    return vnode.physicalShard            // return the physical machine
+}</pre>
+
+<h2>Distribution Characteristics</h2>
+
+<table>
+  <tr>
+    <th>VNodes per Shard</th>
+    <th>Expected Max Skew</th>
+    <th>Use Case</th>
+  </tr>
+  <tr>
+    <td>1 (no vnodes)</td>
+    <td class="red">Can be 5-10x off</td>
+    <td>Small clusters, testing</td>
+  </tr>
+  <tr>
+    <td>10-50</td>
+    <td>~20% off ideal</td>
+    <td>Medium clusters</td>
+  </tr>
+  <tr>
+    <td>100</td>
+    <td class="green">~10% off ideal</td>
+    <td>Riak default (160)</td>
+  </tr>
+  <tr>
+    <td>256</td>
+    <td class="green">~5-7% off ideal</td>
+    <td>Cassandra default</td>
+  </tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Tradeoff:</strong> More vnodes means better distribution but higher metadata overhead. Each vnode adds an entry to the ring metadata that all clients/nodes must maintain. For Cassandra with 256 vnodes per node across 100 nodes, that is 25,600 vnode entries.
+</div>
+
+<h2>Rebalancing with VNodes</h2>
+
+<p>When adding or removing a physical shard, only its vnodes are affected. The rebalancing granularity is per-vnode rather than per-physical-node:</p>
+
+<ul>
+  <li><strong>Adding a shard:</strong> Its 256 vnodes are inserted at random ring positions. Each vnode takes over a small slice from the existing vnode that previously owned it. Data movement is spread evenly across all existing shards.</li>
+  <li><strong>Removing a shard:</strong> Its 256 vnodes are removed. Each vnode's data is redistributed to the nearest remaining vnodes. No single shard absorbs a disproportionate load.</li>
+</ul>
+
+<div class="callout green">
+  <strong>Key Benefit:</strong> Without vnodes, removing one shard means the next shard clockwise inherits all of its data -- a massive spike. With vnodes, the load of 256 small slices is distributed across multiple physical nodes.
+</div>
+
+<h2>Real-World Configurations</h2>
+
+<table>
+  <tr>
+    <th>System</th>
+    <th>Default VNodes</th>
+    <th>Notes</th>
+  </tr>
+  <tr>
+    <td>Cassandra</td>
+    <td>256 (num_tokens)</td>
+    <td>Configurable; recommended 256 for production</td>
+  </tr>
+  <tr>
+    <td>Riak</td>
+    <td>160 per node</td>
+    <td>Configurable per vnode type</td>
+  </tr>
+  <tr>
+    <td>DynamoDB</td>
+    <td>Internal (not user-facing)</td>
+    <td>Managed service abstracts vnode details</td>
+  </tr>
+  <tr>
+    <td>Memcached (Ketama)</td>
+    <td>160 per server</td>
+    <td>Standard Ketama hashing</td>
+  </tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+
+<ol>
+  <li>What problem do virtual nodes solve in a hash ring?</li>
+  <li>How many vnodes does Cassandra use per node, and why?</li>
+  <li>What happens to data distribution when you double the number of vnodes?</li>
+  <li>How does adding a physical shard work when using vnodes?</li>
+  <li>What is the downside of having too many vnodes?</li>
+  <li>How do vnodes improve the rebalancing process compared to a simple hash ring?</li>
+  <li>Can vnodes eliminate hot spots entirely?</li>
+</ol>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Avoid going deep into:</strong>
+  <ul>
+    <li>Cassandra token allocation algorithms (vnode placement strategies like random vs. rack-aware) unless the interview context is specifically Cassandra.</li>
+    <li>Weighted vnodes or heterogeneous hardware scenarios -- rarely discussed in interviews.</li>
+    <li>Specific vnode gossip protocol details.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Primary Sources</div>
+  <ul>
+    <li>Cassandra documentation: "Virtual nodes (vnodes)" and "Token allocation"</li>
+    <li>Dynamo: Amazon's Highly Available Key-value Store (2007) -- Section 4.2: Partitioning</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Recommended Reading</div>
+  <ul>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em>, Chapter 6: Partitioning</li>
+    <li>Alex Xu, <em>System Design Interview Vol. 2</em>, Chapter 6: Consistent Hashing</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="hash-ring.html">&larr; 6.3.1 Hash Ring</a>
+  <a href="rebalancing.html">6.3.3 Rebalancing &rarr;</a>
+</div>
+
+</body>
+</html>

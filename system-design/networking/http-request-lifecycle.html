@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.2.1 HTTP Request Lifecycle</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#2">2 Networking</a> / <a href="../index.html#2.2">2.2 HTTP</a> / 2.2.1
+</div>
+
+<h1>HTTP Request Lifecycle</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>Every step from typing a URL to receiving the response</li>
+  <li>Where time is spent in each step</li>
+  <li>How to optimize each step in a system design</li>
+  <li>What happens at each layer of the network stack</li>
+</ul>
+
+<h2>Definition</h2>
+<p>The HTTP request lifecycle is the <strong>complete journey of a request from the browser to the server and back</strong>, encompassing DNS resolution, TCP connection, TLS handshake, request sending, server processing, and response delivery.</p>
+
+<h2>Complete Lifecycle</h2>
+<div class="diagram">  Step 1: URL Parsing
+    Browser parses: https://api.example.com/users/123
+    → scheme: https, host: api.example.com, path: /users/123
+
+  Step 2: DNS Resolution
+    api.example.com → <a href="dns-resolution.html">DNS lookup</a> → 142.250.80.46
+    Cached: ~0ms. Uncached: 1-100ms.
+    See: <a href="dns-caching.html">DNS Caching</a>
+
+  Step 3: TCP Handshake
+    Client → SYN → Server
+    Client ← SYN-ACK ← Server
+    Client → ACK → Server
+    Cost: 1 RTT (~1ms same DC, ~50ms cross-region)
+    See: <a href="tcp.html">TCP</a>
+
+  Step 4: TLS Handshake
+    ClientHello → ServerHello + Certificate → Key Exchange
+    Cost: 1 RTT (TLS 1.3) or 2 RTTs (TLS 1.2)
+    See: <a href="tls.html">TLS</a>
+
+  Step 5: Send HTTP Request
+    GET /users/123 HTTP/1.1
+    Host: api.example.com
+    Authorization: Bearer token...
+    <a href="headers.html">Headers</a> + Body sent
+
+  Step 6: Server Processing
+    <a href="../cloud-architecture/api-gateway.html">API Gateway</a> → Route → Auth → Rate Limit
+    → App Server → Business Logic → Database Query
+    → Serialize response
+    Cost: 5-500ms (varies wildly)
+
+  Step 7: Receive HTTP Response
+    HTTP/1.1 200 OK
+    <a href="headers.html">Headers</a> + Body (JSON, HTML, etc.)
+    See: <a href="status-codes.html">Status Codes</a>
+
+  Step 8: Connection Handling
+    Close (HTTP/1.0) or Keep-Alive (HTTP/1.1+)
+    See: <a href="keep-alive.html">Keep Alive</a>
+
+  Total: ~10ms (cached, same DC) to ~500ms+ (uncached, cross-region)</div>
+
+<h2>Time Breakdown</h2>
+<table>
+  <tr><th>Step</th><th>Best Case</th><th>Worst Case</th><th>Optimization</th></tr>
+  <tr><td>DNS</td><td>~0ms (cached)</td><td class="red">~100ms</td><td><a href="dns-caching.html">DNS caching</a>, preconnect</td></tr>
+  <tr><td>TCP</td><td>~1ms (same DC)</td><td class="red">~200ms (cross-region)</td><td><a href="keep-alive.html">Keep-alive</a>, <a href="edge-servers.html">CDN</a></td></tr>
+  <tr><td>TLS</td><td>~1ms (same DC)</td><td class="red">~200ms (cross-region)</td><td>TLS 1.3, session resumption</td></tr>
+  <tr><td>Server</td><td>~5ms</td><td class="red">~5000ms+</td><td><a href="../caching/cache-aside.html">Caching</a>, <a href="../replication/read-replica.html">read replicas</a></td></tr>
+  <tr><td>Content transfer</td><td>~1ms</td><td class="red">~1000ms</td><td><a href="compression.html">Compression</a>, <a href="edge-servers.html">CDN</a></td></tr>
+</table>
+
+<h2>Optimization Points</h2>
+<pre>1. DNS: Use <a href="dns-caching.html">DNS prefetch</a> &lt;link rel="dns-prefetch" href="//api.example.com"&gt;
+   Reduces DNS time from ~50ms to ~0ms
+
+2. Connection: Use <a href="keep-alive.html">HTTP keep-alive</a> (default in HTTP/1.1)
+   Reuse TCP connections instead of handshake per request
+
+3. TLS: Enable TLS 1.3 with session resumption
+   0-RTT for repeat connections
+
+4. Request: Minimize <a href="headers.html">headers</a>, use <a href="compression.html">compression</a>
+   Smaller requests = faster transfer
+
+5. Server: Add <a href="../caching/cache-aside.html">Redis cache</a>, <a href="../replication/read-replica.html">read replicas</a>
+   Reduce server processing time from 100ms to 1ms
+
+6. Response: Use <a href="compression.html">gzip/brotli</a> compression
+   Typical 60-80% reduction in response size</pre>
+
+<div class="callout green">
+  <strong>Interview tip:</strong> When asked "how would you speed up this API?", walk through the lifecycle. "First, check DNS caching. Then, are we reusing TCP connections? Is TLS 1.3 enabled? Is the response cached? Are we compressing?" This structured approach shows methodical thinking.
+</div>
+
+<h2>Microservice Lifecycle</h2>
+<div class="diagram">  Client → [CDN] → [LB] → [Service A] → [Service B] → [DB]
+
+  Each arrow adds:
+  - Network latency (~0.5-1ms same DC per hop)
+  - Processing time (varies)
+  - Potential serialization/deserialization
+
+  5 internal hops × 1ms = 5ms network overhead alone
+  Plus TCP connection if not pooled, plus processing.
+
+  This is why microservice latency adds up and why
+  connection pooling, <a href="keep-alive.html">keep-alive</a>, and <a href="http2.html">HTTP/2</a> matter.</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What happens when you type a URL in the browser?"</strong><br>Parse URL → DNS lookup → TCP handshake → TLS handshake → Send HTTP request → Server processes → Response → Browser renders. Walk through each step and its latency cost.</li>
+  <li><strong>"Where is most time spent?"</strong><br>Server processing (typically 5-500ms) dominates. Network is 1-200ms depending on location. DNS is 0-100ms. Optimize server first (caching, indexes), then network (CDN, keep-alive), then DNS (caching).</li>
+  <li><strong>"How would you reduce API latency?"</strong><br>Cache at CDN → Cache at application layer (Redis) → Use read replicas → Add indexes → Enable compression → Reuse connections → Move closer to user (CDN/edge).</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>Browser rendering pipeline (DOM, CSSOM, layout, paint)</li>
+    <li>Service Worker processing</li>
+    <li>HTTP cache validation internals (If-None-Match, If-Modified-Since — see <a href="caching-headers.html">Caching Headers</a>)</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>High Performance Browser Networking (Ilya Grigorik)</strong> — Chapter 1-3</li>
+    <li><strong>Computer Networking: A Top-Down Approach (Kurose &amp; Ross)</strong> — Chapter 2 (Application Layer)</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="https.html">&larr; 2.1.6 HTTPS</a>
+  <a href="http-methods.html">Next: 2.2.2 HTTP Methods &rarr;</a>
+</div>
+
+</body>
+</html>

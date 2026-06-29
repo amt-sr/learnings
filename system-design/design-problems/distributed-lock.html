@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>15.4 Distributed Lock — System Design</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../">Handbook</a> / <a href="../">System Design</a> / 15. Design Problems / 15.4 Distributed Lock</p>
+
+<h1>Distributed Lock</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Design a mechanism for mutual exclusion across multiple machines/processes in a distributed system. The lock must prevent concurrent access to shared resources, handle node failures gracefully, and avoid deadlocks and race conditions.</p>
+
+<h2>Functional Requirements</h2>
+<ul>
+  <li>Acquire an exclusive lock on a named resource</li>
+  <li>Release the lock when work is complete or on lease expiration</li>
+  <li>Support lease/TTL to prevent permanent lock holding on crash</li>
+  <li>Support re-entrant locks (same owner can reacquire)</li>
+  <li>Provide fairness (FIFO ordering) or priority-based acquisition</li>
+  <li>Support lock metadata (owner ID, purpose, timestamp)</li>
+</ul>
+
+<h2>Non-Functional Requirements</h2>
+<ul>
+  <li><strong>Safety:</strong> mutual exclusion must be guaranteed — at most one holder at any time</li>
+  <li><strong>Liveness:</strong> lock must eventually become available even under failures</li>
+  <li><strong>Low latency:</strong> acquire/release &lt; 10ms in normal operation</li>
+  <li><strong>Availability:</strong> lock service remains available during partial network partitions</li>
+  <li><strong>Fault tolerance:</strong> survive minority node failures (with quorum)</li>
+</ul>
+
+<h3>Capacity Estimates</h3>
+<table>
+  <tr><th>Metric</th><th>Estimate</th><th>Notes</th></tr>
+  <tr><td>Lock acquisitions/sec</td><td>100K</td><td>Across all resources</td></tr>
+  <tr><td>Concurrent locks</td><td>50K</td><td>Active locks at any moment</td></tr>
+  <tr><td>Average hold time</td><td>5 sec</td><td>Application-dependent</td></tr>
+  <tr><td>Lock granularity</td><td>Per-resource</td><td>Lock name = resource identifier</td></tr>
+</table>
+
+<h2>API Design</h2>
+<pre>
+ACQUIRE lock_name [ttl_seconds] [wait_timeout]
+Resp: { "acquired": true, "lease_id": "abc123", "expires_at": "..." }
+
+RELEASE lock_name lease_id
+Resp: { "released": true }
+
+RENEW lock_name lease_id [ttl_seconds]
+Resp: { "renewed": true, "expires_at": "..." }
+
+TRY_LOCK lock_name ttl_seconds
+Resp: { "acquired": false }   // Non-blocking, immediate return
+</pre>
+
+<h2>High-Level Design</h2>
+<div class="diagram">
+  Client A          Client B
+     │                  │
+     │ ACQUIRE("job:1") │
+     │                  │ ACQUIRE("job:1")
+     │                  │
+     ▼                  ▼
+  ┌──────────────────────────────┐
+  │       Lock Service            │
+  │                               │
+  │  ┌─────────────────────────┐  │
+  │  │    Coordination Store   │  │
+  │  │    (Redis / ZooKeeper / │  │
+  │  │     etcd / Chubby)      │  │
+  │  │                         │  │
+  │  │  lock:job:1 → {         │  │
+  │  │    owner: "client_A",   │  │
+  │  │    lease: "abc123",     │  │
+  │  │    expires: 1701234567   │  │
+  │  │  }                      │  │
+  │  └─────────────────────────┘  │
+  └──────────────────────────────┘
+     │
+     │ ← ACQUIRED (client A gets lock)
+     │ ← BLOCKED   (client B waits or rejected)
+</div>
+
+<h2>Deep Dive: Redis SETNX-Based Lock</h2>
+<pre>
+# Acquire lock (atomic SET NX with expiration)
+SET lock:job:1 "client_A:abc123" NX EX 30
+
+# Release lock (Lua script for atomic check-and-delete)
+EVAL "
+  if redis.call('GET', KEYS[1]) == ARGV[1] then
+    return redis.call('DEL', KEYS[1])
+  else
+    return 0
+  end
+" 1 lock:job:1 "client_A:abc123"
+
+# Renew lease (extend TTL while still holding)
+EVAL "
+  if redis.call('GET', KEYS[1]) == ARGV[1] then
+    return redis.call('PEXPIRE', KEYS[1], ARGV[2])
+  else
+    return 0
+  end
+" 1 lock:job:1 "client_A:abc123" 30000
+</pre>
+
+<div class="callout yellow">
+  <strong>Why use Lua for release?</strong> A naive GET + DEL is not atomic. Between the GET (confirming ownership) and DEL, the lock might expire and another client could acquire it. The Lua script runs atomically in Redis, preventing this race condition.
+</div>
+
+<h2>Deep Dive: Redlock Algorithm</h2>
+<p>Redis single-instance locks have a critical flaw: if the Redis master crashes after a client acquires the lock, a promoted replica might not yet have the lock data. The Redlock algorithm addresses this by acquiring the lock on N independent Redis instances (typically 5) and requiring a majority (N/2 + 1 = 3) to succeed.</p>
+
+<div class="diagram">
+  Client ──┬──► Redis-1  ── acquired ✓
+           ├──► Redis-2  ── acquired ✓
+           ├──► Redis-3  ── acquired ✓  (majority: 3/5)
+           ├──► Redis-4  ── timeout   ✗
+           └──► Redis-5  ── acquired ✓
+
+  Lock is granted (3 of 5 nodes agreed)
+  Effective TTL = original_TTL - time_to_acquire
+</div>
+
+<div class="callout red">
+  <strong>Redlock criticism (Martin Kleppmann):</strong> The Redlock algorithm relies on clock synchronization (GC pauses can cause lease expiry). Distributed systems cannot guarantee lock safety with time-based leases alone. For true safety, use fencing tokens (see below). In practice, Redlock works well for most use cases where approximate safety is acceptable.
+</div>
+
+<h2>Deep Dive: Fencing Tokens</h2>
+<p>Even with distributed locks, resource servers (databases, storage) need a mechanism to reject stale lock holders. A fencing token is a monotonically increasing number that the lock service assigns to each lock acquisition. The client includes the fencing token in every request to the resource server, which rejects requests with tokens older than the highest seen.</p>
+
+<div class="diagram">
+  Lock Service          Client              Resource Server
+       │                   │                      │
+       │ ACQUIRE("lock")   │                      │
+       │──────────────────►│                      │
+       │ token=42          │                      │
+       │◄──────────────────│                      │
+       │                   │  WRITE(data, tok=42) │
+       │                   │─────────────────────►│
+       │                   │                      │ ✓ Accepted
+       │                   │                      │
+       │  (network delay,  │                      │
+       │   client retries) │                      │
+       │                   │  WRITE(data, tok=42) │
+       │                   │─────────────────────►│
+       │                   │                      │ ✗ Rejected (42 &lt; 43)
+</div>
+
+<div class="callout green">
+  <strong>Key insight:</strong> Fencing tokens move the safety guarantee to the resource server. Even if a client holds a stale lock (due to GC pause, network partition, or lease expiry), the resource server will reject its requests because the fencing token is outdated. This is the most robust approach for distributed mutual exclusion.
+</div>
+
+<h2>Deep Dive: ZooKeeper-Based Locks</h2>
+<p>ZooKeeper provides a different approach using ephemeral sequential znodes:</p>
+<ol>
+  <li>Client creates an ephemeral sequential znode under a lock path: <code>/locks/resource/lock-</code></li>
+  <li>ZooKeeper appends a monotonically increasing sequence number: <code>/locks/resource/lock-0000000001</code></li>
+  <li>Client reads all children of <code>/locks/resource</code></li>
+  <li>If the client's znode has the lowest sequence number, it holds the lock</li>
+  <li>Otherwise, it watches (sets a watcher on) the znode with the next-lower sequence number</li>
+  <li>When that predecessor is deleted (lock released), the client is notified and checks again</li>
+</ol>
+
+<div class="callout">
+  <strong>Herd effect mitigation:</strong> Instead of watching the lock directory (which triggers all waiting clients on every change), each client watches only its immediate predecessor. This ensures O(1) notifications per lock change rather than O(N).
+</div>
+
+<h2>Comparison of Approaches</h2>
+<table>
+  <tr><th>Aspect</th><th>Redis SETNX</th><th>Redlock</th><th>ZooKeeper</th><th>etcd</th></tr>
+  <tr><td>Safety</td><td class="red">Single point of failure</td><td>Good (majority)</td><td class="green">Strong (ZAB)</td><td class="green">Strong (Raft)</td></tr>
+  <tr><td>Performance</td><td class="green">Very fast (~1ms)</td><td>Slower (~5ms)</td><td>Moderate (~10ms)</td><td>Moderate (~10ms)</td></tr>
+  <tr><td>Fairness</td><td>No</td><td>No</td><td class="green">FIFO (sequential znodes)</td><td class="green">FIFO (queue)</td></tr>
+  <tr><td>Failure handling</td><td class="red">Master failover risk</td><td>Good</td><td class="green">Automatic (ephemeral nodes)</td><td class="green">Automatic (leases)</td></tr>
+  <tr><td>Complexity</td><td class="green">Low</td><td>Moderate</td><td class="red">High (ZK cluster)</td><td>Moderate</td></tr>
+  <tr><td>Best for</td><td>Simple cases, low stakes</td><td>Higher safety needs</td><td>Leader election, config</td><td>General coordination</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>What happens if a client acquires a lock and then crashes? <em>A: The TTL/lease expires automatically, releasing the lock. The lock service does not rely on the client sending a RELEASE.</em></li>
+  <li>How do you prevent deadlock? <em>A: TTL on every lock (lease). If a client crashes or is partitioned, the lease expires. Also, implement lock ordering (always acquire locks in the same order).</em></li>
+  <li>What is the difference between a lock and a lease? <em>A: A lease is time-bounded authority to perform an action. A lock is mutual exclusion. A lease can expire; a lock should be explicitly released. In practice, distributed locks use leases for safety.</em></li>
+  <li>Why not use a database for locking? <em>A: Databases are slower (disk-based commits), harder to make highly available, and don't natively support ephemeral nodes or automatic lease expiry. Use them only for low-frequency, coarse-grained locks.</em></li>
+  <li>How would you implement a re-entrant lock? <em>A: Track the owner ID and a re-entrant count. On acquire by the same owner, increment count. On release, decrement; when count reaches 0, delete the lock key.</em></li>
+  <li>When would you choose ZooKeeper over Redis for locking? <em>A: When you need strong consistency guarantees, FIFO fairness, automatic failure recovery, or the lock is used for leader election. ZooKeeper's ZAB consensus protocol provides stronger safety than Redis.</em></li>
+</ul>
+
+<div class="callout red">
+  <strong>What to Skip:</strong>
+  <ul>
+    <li>Don't implement a full ZooKeeper or etcd cluster design — focus on the lock semantics</li>
+    <li>Don't design the resource server that uses the lock — only the lock service itself</li>
+    <li>Don't get into the full Redlock debate unless the interviewer steers there</li>
+    <li>Don't forget to discuss fencing tokens — it's a senior-level differentiator</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Papers</div>
+  <ul>
+    <li>"How to do distributed locking" — Martin Kleppmann (martin.kleppmann.com) — Critical analysis of Redlock with fencing tokens</li>
+    <li>"How to do distributed locking, again" — Salvatore Sanfilippo (antirez.com) — Redlock creator's response</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Documentation</div>
+  <ul>
+    <li>Redis documentation: "Distributed locks with Redis" (redis.io/docs/reference/patterns/distributed-locks)</li>
+    <li>ZooKeeper recipes: "Locks" (zookeeper.apache.org/doc/current/zookeeperRecipes.html)</li>
+    <li>etcd documentation: "Distributed locking patterns" (etcd.io/docs/latest/learning/api)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="distributed-cache.html">&larr; Previous: Distributed Cache</a>
+  <a href="rate-limiter.html">Next: Rate Limiter &rarr;</a>
+</div>
+
+</body>
+</html>

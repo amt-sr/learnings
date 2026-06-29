@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.7.3 Read Repair</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">4 Replication</a> / 4.7 Recovery / 4.7.3
+</div>
+
+<h1>Read Repair</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand read repair as an eventual consistency mechanism &mdash; how it detects and fixes data inconsistencies across replicas during normal read operations, without requiring a separate reconciliation process.</p>
+
+<h2>Definition</h2>
+<p><strong>Read repair</strong> is a technique used in Dynamo-style distributed databases where inconsistencies across replicas are detected and corrected during read operations. When a client reads data, the coordinator reads from multiple replicas, compares the versions, resolves any conflicts, returns the most recent version to the client, and asynchronously updates (repairs) any replicas that returned stale data.</p>
+
+<h2>How Read Repair Works</h2>
+<div class="diagram">
+  SCENARIO: 3 replicas, one has stale data
+
+  Replicas:
+    Node-A: { key="user:42", value={name: "Alice", city: "NYC"},   v=7 }
+    Node-B: { key="user:42", value={name: "Alice", city: "NYC"},   v=7 }
+    Node-C: { key="user:42", value={name: "Alice", city: "Boston"}, v=5 }
+             ^^^ STALE (missed the city update from v5->v7)
+
+
+  READ REPAIR PROCESS:
+
+  1. Client sends: GET user:42, consistency=QUORUM (read from 2 of 3)
+
+  2. Coordinator reads from 2 replicas (say, A and C):
+     A returns: {name: "Alice", city: "NYC"},   v=7
+     C returns: {name: "Alice", city: "Boston"}, v=5
+
+  3. Coordinator compares versions:
+     v=7 > v=5  -->  A is more recent
+
+  4. Return to client: {name: "Alice", city: "NYC"}  (latest version)
+
+  5. BACKGROUND REPAIR (asynchronous):
+     Coordinator sends to C: PUT user:42, value={name: "Alice", city: "NYC"}, v=7
+     C updates to v=7
+
+  6. All replicas now consistent:
+     Node-A: v=7
+     Node-B: v=7
+     Node-C: v=7 (repaired!)
+</div>
+
+<h2>Read Repair in Dynamo-Style Systems</h2>
+<p>Read repair is a core mechanism in Amazon Dynamo and its derivatives (Cassandra, DynamoDB, Riak). It is part of the quorum-based read/write model:</p>
+
+<table>
+  <tr>
+    <th>Operation</th>
+    <th>Behavior</th>
+  </tr>
+  <tr>
+    <td>Write at consistency level W</td>
+    <td>Write sent to N replicas. Coordinator waits for W acknowledgments.</td>
+  </tr>
+  <tr>
+    <td>Read at consistency level R</td>
+    <td>Read sent to N replicas. Coordinator waits for R responses, compares, and returns the most recent.</td>
+  </tr>
+  <tr>
+    <td>Read repair (triggered by read)</td>
+    <td>If any of the R replicas returned stale data, the coordinator sends the latest version to all replicas that were stale.</td>
+  </tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Consistency guarantee:</strong> If R + W > N, every read is guaranteed to see the latest write because at least one of the R replicas must have received the write (since W replicas acknowledged it, and R + W > N means the read and write sets overlap).
+</div>
+
+<h2>When Read Repair Is Triggered</h2>
+
+<ul>
+  <li><strong>On every quorum read:</strong> In DynamoDB and Cassandra, read repair is triggered on every read at quorum consistency level. The coordinator reads from all N replicas (even though only R are needed), compares versions, and repairs any stale ones.</li>
+  <li><strong>On digest mismatch:</strong> When replicas return different digests (hashes) of their data, the coordinator fetches the full data from all replicas to determine the most recent version, then repairs.</li>
+  <li><strong>Background read repair:</strong> Some systems perform read repair in the background, not on the critical path of the read response. The client gets the answer immediately; repairs happen asynchronously.</li>
+</ul>
+
+<h2>Conflict Resolution During Read Repair</h2>
+<p>When replicas have truly divergent data (not just lag), read repair must resolve conflicts:</p>
+
+<ol>
+  <li><strong>Last-write-wins (LWW):</strong> Compare timestamps. The write with the latest timestamp wins. All replicas are updated to this version. Simple but may silently discard valid writes.</li>
+  <li><strong>Vector clock comparison:</strong> If one version is clearly newer (supersedes the other), use it. If versions are concurrent (neither supersedes the other), the conflict must be resolved.</li>
+  <li><strong>Application-level merge:</strong> For concurrent versions, call an application-provided merge function. E.g., for a shopping cart, merge (union) the items from both versions.</li>
+  <li><strong>Tombstones:</strong> Deleted data is handled via tombstones (special marker records). A read that encounters a tombstone ensures the tombstone is propagated to all replicas.</li>
+</ol>
+
+<h2>Limitations of Read Repair</h2>
+
+<table>
+  <tr>
+    <th>Limitation</th>
+    <th>Details</th>
+  </tr>
+  <tr>
+    <td>Only repairs data that is read</td>
+    <td>If a key is never read, its inconsistency is never repaired. Cold data can diverge indefinitely.</td>
+  </tr>
+  <tr>
+    <td>Read path latency increase</td>
+    <td>Reading from multiple replicas and comparing adds latency. Background repair mitigates this.</td>
+  </tr>
+  <tr>
+    <td>Does not replace anti-entropy</td>
+    <td>Read repair is opportunistic. Systems still need periodic anti-entropy repair (Merkle tree comparison) for data that is rarely accessed.</td>
+  </tr>
+  <tr>
+    <td>Conflict resolution may lose data</td>
+    <td>LWW silently discards one version. Application-level merge requires custom code and testing.</td>
+  </tr>
+</table>
+
+<div class="callout green">
+  <strong>Complementary mechanisms:</strong> Read repair handles hot data (frequently accessed keys). <strong>Anti-entropy repair</strong> (Merkle tree comparison) handles cold data (infrequently accessed keys). Together, they provide comprehensive eventual consistency. Cassandra runs both: read repair on every read and <code>nodetool repair</code> (anti-entropy) as a periodic background job.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li><strong>"How does DynamoDB ensure eventual consistency?"</strong> &mdash; Quorum-based reads and writes (R + W > N), read repair on every quorum read (propagate latest version to stale replicas), hinted handoff for temporarily unavailable replicas, and periodic anti-entropy for cold data.</li>
+  <li><strong>"What is read repair and when is it triggered?"</strong> &mdash> On every quorum read in Dynamo-style systems. The coordinator reads from multiple replicas, compares versions, returns the latest to the client, and asynchronously updates stale replicas. Only repairs data that is actually read.</li>
+  <li><strong>"What are the limitations of read repair?"</strong> &mdash> Only repairs read data (cold data stays inconsistent), adds read latency (mitigated by background repair), conflict resolution may lose data, and it does not replace periodic anti-entropy.</li>
+  <li><strong>"How does Cassandra handle read repair?"</strong> &mdash> On a read, Cassandra sends read requests to all replicas for the requested key. It compares versions using timestamps (LWW). If any replica is stale, it sends the latest version in a background repair. Additionally, <code>nodetool repair</code> runs periodic anti-entropy repair using Merkle trees.</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid Merkle tree implementation:</strong> Merkle trees are used in anti-entropy (covered separately), not in read repair. Do not confuse the two mechanisms.<br><br>
+  <strong>Avoid DynamoDB internal storage format:</strong> The B-tree/LSM tree details of DynamoDB storage are not relevant to read repair. Stay focused on the replication and consistency layer.<br><br>
+  <strong>Avoid read repair in single-leader systems:</strong> Read repair is specific to Dynamo-style (multi-leader / leaderless) systems. In single-leader systems, inconsistencies are resolved by replication itself, not by read repair.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary References</div>
+  <ul>
+    <li>Amazon Dynamo Paper: <a href="https://www.allthingsdistributed.com/2007/10/amazons_dynamo.html">Dynamo: Amazon's Highly Available Key-value Store</a> (DeCandia et al., 2007) &mdash; Section IV: Replication</li>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em> &mdash; Chapter 5: Replication (section: "Quorum consistency")</li>
+    <li>Apache Cassandra Documentation: <a href="https://cassandra.apache.org/doc/latest/cassandra/dml/dml.html">Read Repair</a></li>
+    <li>Alex Petrov, <em>Database Internals</em> &mdash; Chapter 7: Distributed Transactions (read repair and anti-entropy sections)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="failback.html">&larr; 4.7.2 Failback</a>
+  <a href="hinted-handoff.html">4.7.4 Hinted Handoff &rarr;</a>
+</div>
+
+</body>
+</html>

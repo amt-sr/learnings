@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.8.3 Clustered Index</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="#">System Design</a> / <a href="#">3 Storage</a> / <a href="#">3.8 Indexes</a> / 3.8.3
+</div>
+
+<h1>Clustered Index</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand that a clustered index merges the index and the table into a single structure where leaf nodes <em>are</em> the data pages, the implications for range scan performance, and the design trade-off between clustered and non-clustered storage.</p>
+
+<h2>Definition</h2>
+<p>A <strong>clustered index</strong> is an index where the leaf nodes contain the actual row data rather than pointers to the data. The index key determines the physical ordering of rows on disk. There can be only <strong>one</strong> clustered index per table, because the data can only be sorted in one physical order. InnoDB (MySQL) uses the primary key as the clustered index by default.</p>
+
+<h2>Structure</h2>
+
+<div class="diagram">
+  Clustered Index (InnoDB, primary key = order_id)
+
+                  [500|1000]
+                /            \
+         [100|200|300]    [600|700|800]    [1100|1200]
+          / |    |   \     / |    |   \     /    |    \
+       Leaf Leaf Leaf Leaf Leaf Leaf Leaf Leaf Leaf Leaf
+       ===== ===== ===== ===== ===== ===== ===== ===== =====
+       |  Row data for order_id=100  |  -- leaf IS the data page
+       |  (order_id, user_id, ...)  |
+       |  Row data for order_id=150  |
+       |  (order_id, user_id, ...)  |
+       ==================================
+       Pages are physically sorted by order_id on disk.
+       Sequential range scans are fast (sequential I/O).
+</div>
+
+<h2>Key Characteristics</h2>
+
+<table>
+  <tr>
+    <th>Property</th>
+    <th>Detail</th>
+  </tr>
+  <tr>
+    <td>Leaf nodes = data pages</td>
+    <td>No separate heap structure. The B+ tree leaves hold the full row.</td>
+  </tr>
+  <tr>
+    <td>One per table</td>
+    <td>Data can only be physically ordered one way. Only one clustered index allowed.</td>
+  </tr>
+  <tr>
+    <td>Physical ordering</td>
+    <td>Rows on disk are sorted by the clustered index key. Adjacent keys are co-located.</td>
+  </tr>
+  <tr>
+    <td>Range scan performance</td>
+    <td class="green">Excellent -- sequential I/O for range queries on the clustered key.</td>
+  </tr>
+  <tr>
+    <td>Point lookup</td>
+    <td class="green">Excellent -- single B+ tree traversal, no bookmark hop needed.</td>
+  </tr>
+  <tr>
+    <td>Secondary index bookmark</td>
+    <td>Secondary indexes store the clustered key as the bookmark, not a physical pointer.</td>
+  </tr>
+</table>
+
+<h2>Secondary Indexes in a Clustered Table</h2>
+
+<p>A critical consequence of the clustered architecture: secondary indexes cannot point directly to the physical row location (because the row may move due to page splits). Instead, they store the <strong>clustered key value</strong> as the bookmark.</p>
+
+<div class="diagram">
+  Clustered Table: Secondary Index Lookup
+
+  Secondary Index (on user_id)     Clustered Index (on order_id, = data)
+       [50|100]                        [500|1000]
+      /        \                      /            \
+  [10|30]   [60|80|90]          [100|200|300]  [600|700]
+    |   |     |   |   |            |    |   |     |    |
+  (PK) (PK) (PK)(PK)(PK)         Data Data Data  Data Data
+  =200 =100  =500=600=350              -- leaf pages hold full rows
+
+  1. Secondary index returns clustered key = order_id
+  2. Use order_id to look up full row in clustered index
+  3. Total: 2 B+ tree traversals
+</div>
+
+<div class="callout yellow">
+  <strong>Wide clustered keys increase secondary index size:</strong> If the clustered key is a VARCHAR(255) email column, every secondary index leaf must store that 255-byte value as a bookmark. This inflates secondary index size and degrades cache efficiency. Keep clustered keys narrow (e.g., 4-byte INT or 8-byte BIGINT).
+</div>
+
+<h2>Range Scan Benefits</h2>
+
+<p>Clustered indexes excel at range queries on the indexed key because adjacent rows are physically stored together. This turns random I/O into sequential I/O.</p>
+
+<pre>
+-- Time-series query: excellent with clustered index on timestamp-based key
+SELECT * FROM sensor_readings
+WHERE sensor_id = 42
+  AND reading_time BETWEEN '2025-01-01' AND '2025-01-31'
+ORDER BY reading_time;
+
+-- If clustered on (sensor_id, reading_time):
+-- All matching rows are on contiguous (or nearly contiguous) data pages.
+-- Sequential read: orders of magnitude faster than random page fetches.
+</pre>
+
+<h2>Drawbacks</h2>
+
+<ul>
+  <li><strong>Page fragmentation:</strong> Random inserts (e.g., UUID primary keys) cause frequent page splits, leaving pages partially empty and wasting space.</li>
+  <li><strong>Slower non-key inserts:</strong> When inserting in non-key order, the engine must find the correct position in the B+ tree, potentially splitting pages along the path.</li>
+  <li><strong>Secondary index cost:</strong> Every secondary index lookup requires a bookmark lookup into the clustered index (double traversal).</li>
+  <li><strong>Rebuild cost:</strong> Rebuilding (reorganizing) a clustered index rewrites the entire table.</li>
+</ul>
+
+<h2>Clustered Index by Engine</h2>
+
+<table>
+  <tr>
+    <th>Engine</th>
+    <th>Default Behavior</th>
+    <th>Configurable?</th>
+  </tr>
+  <tr>
+    <td>InnoDB (MySQL)</td>
+    <td>Always clustered on primary key (or hidden 6-byte row ID)</td>
+    <td class="red">Not configurable -- always clustered</td>
+  </tr>
+  <tr>
+    <td>SQL Server</td>
+    <td>Heap by default; clustered index optional</td>
+    <td class="green">Yes -- can choose clustering key or use heap</td>
+  </tr>
+  <tr>
+    <td>PostgreSQL</td>
+    <td>Heap table with separate indexes</td>
+    <td class="red">No native clustered index (CLUSTER rewrites but doesn't maintain order)</td>
+  </tr>
+  <tr>
+    <td>Oracle</td>
+    <td>Heap table with separate indexes (Index-Organized Table as alternative)</td>
+    <td class="green">IOT available for specific use cases</td>
+  </tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+
+<ul>
+  <li>What is a clustered index and how does it differ from a non-clustered index?</li>
+  <li>Why can there be only one clustered index per table?</li>
+  <li>How does InnoDB use the clustered index? What happens if no primary key is defined?</li>
+  <li>Why are range scans fast on a clustered index?</li>
+  <li>What bookmark do secondary indexes use in a clustered table?</li>
+  <li>Why is a large clustered key bad for secondary index performance?</li>
+  <li>What is page fragmentation and how does it relate to clustered indexes?</li>
+  <li>How does PostgreSQL differ from InnoDB in terms of clustered storage?</li>
+  <li>When designing a clustered key for an orders table, what factors would you consider?</li>
+</ul>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Depth to avoid in interviews:</strong>
+  <ul>
+    <li>InnoDB page compression internals within clustered index leaf pages.</li>
+    <li>Online DDL internals for rebuilding a clustered index (ALGORITHM=INPLACE details).</li>
+    <li>Adaptive hash index interaction with clustered index lookups.</li>
+    <li>Oracle IOT overflow segment internals.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><a href="#">Designing Data-Intensive Applications</a> -- Chapter 3: SSTables vs B-trees, clustering and index organization</li>
+    <li><a href="#">High Performance MySQL</a> (Baron Schwartz) -- InnoDB clustered index architecture, secondary index bookkeeping</li>
+    <li><a href="#">Database Internals</a> (Alex Petrov) -- Chapter 4: B-tree page layout, node structure</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Documentation</div>
+  <ul>
+    <li><a href="#">MySQL 8.0 Reference Manual</a> -- 15.6.1.2 Clustered Index and Secondary Indexes</li>
+    <li><a href="#">SQL Server Docs</a> -- Clustered Index Design Guidelines</li>
+    <li><a href="#">PostgreSQL Documentation</a> -- CLUSTER command (and its limitations)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="secondary-index.html">&larr; 3.8.2 Secondary Index</a>
+  <a href="non-clustered-index.html">3.8.4 Non Clustered Index &rarr;</a>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.3.2 Redo Log</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#3">3 Storage</a> / <a href="../index.html#3.3">3.3 Database Write Path</a> / 3.3.2
+</div>
+
+<h1>Redo Log</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What the redo log records — physical byte-level changes to pages</li>
+  <li>REDO phase during <a href="crash-recovery.html">crash recovery</a>: replaying committed changes</li>
+  <li>Relationship to the <a href="write-ahead-log.html">WAL</a> protocol</li>
+  <li>Redo log buffer: in-memory staging area before writing to log files</li>
+  <li>Log Sequence Numbers (LSN): global ordering of all redo records</li>
+  <li>Circular redo log files and how they are managed</li>
+</ul>
+
+<h2>Definition</h2>
+<p>The redo log is the <strong>physical log file that records byte-level changes to database pages</strong>. It is the concrete implementation of the <a href="write-ahead-log.html">WAL</a> protocol. During <a href="crash-recovery.html">crash recovery</a>, redo records are replayed in order to restore the database to the state it was in at the time of the crash. The redo log contains the exact byte changes needed to reconstruct dirty pages that were lost from the <a href="buffer-pool.html">buffer pool</a>.</p>
+
+<div class="callout">
+  <strong>Terminology note:</strong> In MySQL InnoDB, "redo log" and "WAL" refer to the same thing. In PostgreSQL, the WAL files serve as the redo log. In Oracle, the redo log is distinct from the undo log. Regardless of naming, the redo log always records forward changes for replay.
+</div>
+
+<h2>What Redo Records</h2>
+<p>The redo log records <strong>physical changes</strong> to database pages — the exact bytes that changed, where they changed, and what the new values are:</p>
+
+<div class="diagram">  Redo Log Record Structure:
+
+  ┌──────────────┬───────────┬──────────────┬─────────────────┐
+  │   LSN        │  TXN ID   │  Page ID     │  Change Data    │
+  │  (sequence)  │  (who)    │  (which page) │  (what changed) │
+  └──────────────┴───────────┴──────────────┴─────────────────┘
+
+  Example: UPDATE accounts SET balance = 900 WHERE id = 42
+  (Previous balance was 1000, stored at byte offset 120 of page 42)
+
+  Physical Redo Record (MySQL InnoDB style):
+  ┌──────────┬──────────┬──────────────┬────────────────────┐
+  │ LSN 1005 │ TXN 500  │ Page 42      │ Offset 120:         │
+  │          │          │              │ Before: 0x000003E8  │
+  │          │          │              │ After:  0x00000384  │
+  │          │          │              │ (1000 → 900)        │
+  └──────────┴──────────┴──────────────┴────────────────────┘
+
+  "At byte offset 120 of page 42, change the value
+   from 0x3E8 (1000) to 0x384 (900)"</div>
+
+<h2>Physical vs Logical Redo</h2>
+<table>
+  <tr><th></th><th>Physical Redo</th><th>Logical Redo</th></tr>
+  <tr><td>Records</td><td>Exact byte-level changes (page, offset, before, after)</td><td>High-level operations (INSERT row, UPDATE column)</td></tr>
+  <tr><td>Replay</td><td class="green">Idempotent — safe to replay any number of times</td><td class="red">Not naturally idempotent — needs care</td></tr>
+  <tr><td>Speed</td><td class="green">Fast — just write bytes at specific offsets</td><td>Slower — re-execute the logical operation</td></tr>
+  <tr><td>Page independence</td><td>Specific to page layout and format</td><td>Independent of page format</td></tr>
+  <tr><td>Used by</td><td>MySQL InnoDB, Oracle, SQL Server</td><td>PostgreSQL (hybrid approach)</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Idempotency is critical:</strong> During <a href="crash-recovery.html">crash recovery</a>, the database may crash again before completing. On the next recovery attempt, redo records are replayed again from the last <a href="checkpoint.html">checkpoint</a>. Physical redo is naturally idempotent — writing the same byte value to the same offset multiple times produces the same result. Logical redo needs additional logic to handle replay safely.
+</div>
+
+<h2>Redo Log Buffer</h2>
+<p>Before redo records are written to the log files on disk, they are staged in the <strong>redo log buffer</strong> — a contiguous block of memory:</p>
+
+<div class="diagram">  Redo Log Write Path:
+
+  Query modifies page
+       │
+       ↓
+  ┌──────────────────────┐
+  │  Redo Log Buffer     │  ← In-memory, shared by all threads
+  │  (typically 16-128 MB)│
+  │  [Record A][Record B]│
+  │  [Record C]...       │
+  └──────────┬───────────┘
+             │
+             │ Flush triggers:
+             │  1. Transaction commit (if sync commit)
+             │  2. Buffer is 1/2 full
+             │  3. Every 1 second (background)
+             ↓
+  ┌──────────────────────┐
+  │  Redo Log Files       │  ← On disk (circular files)
+  │  ib_logfile0 / ib_    │
+  │  logfile1 (InnoDB)    │
+  └──────────────────────┘</div>
+
+<ul>
+  <li><strong>Space check</strong>: If the redo log buffer is too full, the writing thread must wait for the flush thread to write to disk — this is a performance bottleneck.</li>
+  <li><strong>Sizing</strong>: MySQL <code>innodb_log_buffer_size</code> (default 16 MB). Large transactions (bulk INSERT, LOAD DATA) benefit from a larger buffer.</li>
+</ul>
+
+<h2>Log Sequence Numbers (LSN)</h2>
+<p>Every redo record is assigned a monotonically increasing <strong>Log Sequence Number (LSN)</strong>:</p>
+<ul>
+  <li><strong>Global ordering</strong>: LSNs order all modifications across all transactions</li>
+  <li><strong>Page-level tracking</strong>: Each data page in the <a href="buffer-pool.html">buffer pool</a> stores the LSN of the last redo record applied to it</li>
+  <li><strong>Checkpoint coordination</strong>: A checkpoint records the LSN up to which all dirty pages have been flushed to data files</li>
+  <li><strong>Replay starting point</strong>: After a crash, recovery starts replaying from the checkpoint LSN</li>
+</ul>
+
+<div class="diagram">  LSN Timeline:
+
+  Checkpoint LSN        Current LSN
+       │                    │
+       ▼                    ▼
+  ─────┼────────────────────┼──────→ WAL File
+       │                    │
+  LSN 1000              LSN 1500
+
+  All changes before LSN 1000 are guaranteed
+  to be in the data files (flushed at checkpoint).
+
+  Changes LSN 1001–1500 may be in the buffer
+  pool only (dirty pages not yet flushed).
+
+  If crash happens now → replay LSN 1001–1500 from WAL</div>
+
+<h2>Circular Redo Log Files</h2>
+<p>The redo log files are circular — once the write position reaches the end, it wraps around to the beginning:</p>
+
+<div class="diagram">  Circular Redo Log (2 files, 1 GB each):
+
+  File 0: [████████████████████████████████|        ]
+  File 1: [              |                    |        ]
+
+  Write position moves forward →→→
+  Checkpoint position follows →→→ (trailing behind)
+
+  ┌──────────────────────────────────────────────────┐
+  │ File 0 (1 GB)                                    │
+  │ [written][written][written][free  ][free      ]  │
+  │  ↑                                       ↑      │
+  │  Checkpoint LSN                    Write LSN   │
+  │  (safe to overwrite)               (active)    │
+  │                                                   │
+  │ File 1 (1 GB)                                    │
+  │ [free    ][free    ][free    ][free    ][free  ]  │
+  └──────────────────────────────────────────────────┘
+
+  When Write LSN catches up to Checkpoint LSN:
+  → "Log file full" → must checkpoint before writing more
+  → If checkpoint is slow → writes are BLOCKED
+  → This is why redo log sizing matters!</div>
+
+<div class="callout yellow">
+  <strong>Interview tip:</strong> If the redo log is too small, the write position catches up to the checkpoint position, forcing a "sharp" checkpoint. During this forced checkpoint, write operations block. If the redo log is too large, crash recovery takes longer because more WAL records must be replayed. The right size balances these tradeoffs.
+</div>
+
+<h2>REDO During Crash Recovery</h2>
+<div class="diagram">  Crash Recovery — REDO Phase:
+
+  1. Find last checkpoint LSN (from checkpoint file)
+  2. Read WAL from checkpoint LSN to end of WAL
+  3. For each redo record:
+     a. Check if the target page's LSN >= redo record LSN
+     b. If YES → page already has this change (was flushed) → skip
+     c. If NO → apply the byte change to the page → mark dirty
+  4. After all redo records processed:
+     - Buffer pool now reflects state at crash time
+     - All committed changes are present
+
+  Then UNDO phase: roll back uncommitted transactions
+  (using <a href="undo-log.html">undo log</a>)</div>
+
+<h2>Redo Log Sizing</h2>
+<table>
+  <tr><th>Database</th><th>Setting</th><th>Too Small</th><th>Too Large</th></tr>
+  <tr><td>MySQL InnoDB</td><td><code>innodb_log_file_size</code></td><td class="red">Forced checkpoints, write stalls</td><td class="red">Longer recovery time</td></tr>
+  <tr><td>PostgreSQL</td><td><code>max_wal_size</code></td><td class="red">WAL segment recycling too early</td><td class="red">Excessive disk usage</td></tr>
+  <tr><td>Oracle</td><td>Redo log group size</td><td class="red">"Checkpoint not complete" waits</td><td class="red">Longer media recovery</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What does the redo log record?"</strong><br>The redo log records physical byte-level changes to database pages — the exact offset within a page, the before-value, and the after-value. During <a href="crash-recovery.html">crash recovery</a>, these changes are replayed to reconstruct dirty pages that were lost from the <a href="buffer-pool.html">buffer pool</a> when the database crashed.</li>
+  <li><strong>"What is an LSN?"</strong><br>A Log Sequence Number is a monotonically increasing identifier assigned to every redo record. It provides a global total order of all modifications across all transactions. The LSN coordinates between the redo log, the <a href="buffer-pool.html">buffer pool</a>, and <a href="checkpoint.html">checkpoints</a>: each data page stores the LSN of the last redo applied to it, and checkpoints record the LSN up to which all changes are flushed.</li>
+  <li><strong>"Why must redo be idempotent?"</strong><br>During crash recovery, the database may crash again before completing. On the second recovery attempt, redo records from the first attempt are replayed again. If redo were not idempotent, replaying the same change twice would corrupt the data. Physical redo (byte-level) is naturally idempotent; logical redo needs careful design.</li>
+  <li><strong>"What happens when the redo log fills up?"</strong><br>The redo log files are circular. When the write position catches up to the checkpoint position, no more redo can be written. The database must perform a <a href="checkpoint.html">checkpoint</a> to flush dirty pages and advance the checkpoint position. If the checkpoint is slow, all write operations block. This is why sizing the redo log appropriately is critical — it must hold enough redo records for the busiest write period.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>MySQL InnoDB mini-transaction redo format (MLOG_* record types)</li>
+    <li>Oracle redo vector internals</li>
+    <li>Log writer (LGWR) thread scheduling and flush trigger details</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Database Internals" by Alex Petrov</strong> — Chapter 7 (Write-Ahead Logging and Redo)</li>
+    <li><strong>"Transaction Processing: Concepts and Techniques" by Gray &amp; Reuter</strong> — Recovery chapter</li>
+    <li><strong>MySQL Internals: InnoDB Redo Log</strong> — dev.mysql.com/doc/internals/en/innodb-redo-log.html</li>
+    <li><strong>PostgreSQL Documentation: WAL Internals</strong> — postgresql.org/docs/current/wal-internals.html</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="write-ahead-log.html">&larr; 3.3.1 WAL</a>
+  <a href="undo-log.html">Next: 3.3.3 Undo Log &rarr;</a>
+</div>
+
+</body>
+</html>

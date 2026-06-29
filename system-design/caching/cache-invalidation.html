@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.3.1 Cache Invalidation — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb"><a href="../../../">System Design</a> / <a href="../">7 Caching</a> / <a href="#">7.3 Cache Consistency</a> / 7.3.1</div>
+
+<h1>7.3.1 Cache Invalidation</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<div class="callout green">
+  <strong>Goal:</strong> Master cache invalidation — the hardest problem in caching. Understand why invalidation is fundamentally difficult, the major strategies (time-based, event-based, version-based), the stale cache problem, and how to design invalidation for real distributed systems.
+</div>
+
+<h2>Definition</h2>
+
+<p>Cache invalidation is the process of removing or updating cached data when the underlying source data has changed, ensuring that stale (outdated) data is not served to users. The challenge is that caches are, by definition, copies of data that can become outdated the moment the source data is modified.</p>
+
+<div class="callout">
+  <strong>"There are only two hard things in Computer Science: cache invalidation and naming things."</strong><br>
+  — Phil Karlton (attributed)
+</div>
+
+<div class="callout yellow">
+  <strong>Why it is hard:</strong> In a distributed system, there is always a window between when data changes in the source and when all cache copies are updated. The fundamental question is: how do you ensure that stale data is not served during this window, and how long can that window be before it violates business requirements?
+</div>
+
+<h2>The Stale Cache Problem</h2>
+
+<p>Stale data occurs when a cache entry no longer reflects the current state of the source data. This can happen due to:</p>
+
+<ul>
+  <li><strong>Delayed invalidation:</strong> The invalidation signal has not yet reached all cache instances.</li>
+  <li><strong>Race conditions:</strong> A read repopulates the cache with old data after an invalidation but before the DB reflects the update.</li>
+  <li><strong>Failed invalidation:</strong> The invalidation message is lost (network partition, cache node down).</li>
+  <li><strong>Missing invalidation:</strong> A code path modifies data but forgets to invalidate the corresponding cache entry.</li>
+</ul>
+
+<div class="diagram">
+  Time ──────────────────────────────────────────────────────>
+
+  Source DB:     [value: A]──────────[write: B]──────────[value: B]
+
+  Cache:         [value: A]──────────[stale!]────[invalidate]──[value: B]
+                                             ▲
+                                  Stale window: cache serves A
+                                  but DB has B
+</div>
+
+<h2>Invalidation Strategies</h2>
+
+<h3>1. Time-Based Invalidation (TTL)</h3>
+
+<p>The simplest strategy: set a time-to-live (TTL) on each cache entry. After the TTL expires, the entry is automatically removed or treated as stale.</p>
+
+<pre>
+cache.set("user:123", data, TTL=3600)   # Expires in 1 hour
+</pre>
+
+<table>
+  <tr><th>Pros</th><th>Cons</th></tr>
+  <tr><td>Zero coordination overhead</td><td>Always serves stale data until TTL expires</td></tr>
+  <tr><td>Simple to implement</td><td>Cannot react to data changes in real time</td></tr>
+  <tr><td>Failsafe — guarantees eventual freshness</td><td>Hard to choose optimal TTL</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Best for:</strong> Data that changes infrequently, where brief staleness is acceptable, or as a safety net alongside active invalidation. See <a href="ttl.html">7.3.3 TTL</a> for deep coverage.
+</div>
+
+<h3>2. Event-Based Invalidation (Active Invalidation)</h3>
+
+<p>When the source data is modified, an explicit invalidation event is triggered to remove or update the corresponding cache entries. This can be implemented via:</p>
+
+<h4>a) Application-Level Invalidation</h4>
+<pre>
+# After writing to the database
+db.execute("UPDATE users SET name = ? WHERE id = ?", "Alice", 123)
+cache.delete("user:123")        # Explicit invalidation
+cache.delete("user:123:profile") # Invalidate related keys
+cache.delete("users:popular")    # Invalidate computed aggregations
+</pre>
+
+<h4>b) Message Queue-Based Invalidation</h4>
+<div class="diagram">
+  Write Service        Message Queue          Cache Instances
+       │                    │                       │
+       │ 1. Update DB       │                       │
+       │ ───────────────────────────────────────>  │
+       │                    │                       │
+       │ 2. Publish event:  │                       │
+       │    {type: INVALIDATE│                       │
+       │     key: "user:123"}│                       │
+       │ ──────────────────>│                       │
+       │                    │                       │
+       │                    │ 3. Deliver to all      │
+       │                    │    cache instances    │
+       │                    │ ─────────────────────>│
+       │                    │                       │
+       │                    │                       │ 4. Delete key
+       │                    │                       │    from all
+       │                    │                       │    instances
+</div>
+
+<h4>c) Database Trigger / CDC (Change Data Capture)</h4>
+<p>Use database triggers or CDC tools (Debezium, Kafka Connect) to automatically publish change events when data is modified. The cache layer subscribes to these events.</p>
+
+<table>
+  <tr><th>Pros</th><th>Cons</th></tr>
+  <tr><td>Low staleness — near real-time</td><td>More complex infrastructure</td></tr>
+  <tr><td>Granular — invalidate only affected keys</td><td>Must track all cache keys that depend on a data change</td></tr>
+  <tr><td>Decoupled — writer does not need to know about cache</td><td>Event delivery not guaranteed (at-least-once requires idempotent invalidation)</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Best for:</strong> Systems that require low staleness, where data changes are infrequent enough that the invalidation infrastructure cost is justified, and where the cache-key-to-data mapping is well-defined.
+</div>
+
+<h3>3. Version-Based Invalidation</h3>
+
+<p>Attach a version number to each piece of data. The cache stores the data along with its version. On a read, compare the cached version with the current version from the source. If they differ, re-fetch and update the cache.</p>
+
+<pre>
+# Version stored in DB
+# users table: id, name, updated_at (or version column)
+
+cache_key = "user:123:v" + db.getVersion(123)
+cache.set(cache_key, data, TTL=3600)
+
+# On read: if version changed, key won't exist in cache
+data = cache.get("user:123:v" + db.getVersion(123))
+if data is null:
+    data = db.query("SELECT * FROM users WHERE id = 123")
+    cache.set("user:123:v" + db.getVersion(123), data)
+</pre>
+
+<table>
+  <tr><th>Pros</th><th>Cons</th></tr>
+  <tr><td>No explicit invalidation needed</td><td>Requires a version lookup on every read (reduces cache hit ratio)</td></tr>
+  <tr><td>Automatic staleness detection</td><td>Version lookup can become a bottleneck</td></tr>
+  <tr><td>Works across distributed caches</td><td>Old versions accumulate in cache until TTL expires</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Best for:</strong> Scenarios where you need cache consistency but cannot rely on explicit invalidation (e.g., data is modified by external systems that cannot publish invalidation events).
+</div>
+
+<h2>Choosing the Right Strategy</h2>
+
+<table>
+  <tr><th>Scenario</th><th>Recommended Strategy</th></tr>
+  <tr><td>Public CDN-cached content</td><td>TTL (long) + purge API for manual invalidation</td></tr>
+  <tr><td>User profile data</td><td>Event-based invalidation + short TTL as safety net</td></tr>
+  <tr><td>Inventory / stock levels</td><td>Very short TTL or write-through (strong consistency)</td></tr>
+  <tr><td>Computed aggregations (leaderboards)</td><td>Event-based: invalidate on any constituent data change</td></tr>
+  <tr><td>Data modified by external systems</td><td>Version-based + short TTL</td></tr>
+  <tr><td>Configuration / feature flags</td><td>Event-based (push invalidation) for immediate visibility</td></tr>
+</table>
+
+<h2>Challenges at Scale</h2>
+
+<h3>Identifying All Dependent Cache Keys</h3>
+
+<p>A single data change can affect multiple cache keys. For example, updating a user's name invalidates:</p>
+<ul>
+  <li><code>user:123</code> — the user object itself</li>
+  <li><code>user:123:profile</code> — a denormalized profile view</li>
+  <li><code>users:search:alice</code> — search results containing the user</li>
+  <li><code>leaderboard:global</code> — if the user appears in a leaderboard</li>
+  <li><code>feed:user:456</code> — if this user's posts appear in another user's feed</li>
+</ul>
+
+<p>Tracking all dependent keys is extremely difficult at scale. Solutions include:</p>
+<ul>
+  <li><strong>Tag-based invalidation:</strong> Assign tags to cache entries; invalidate by tag (e.g., invalidate all entries tagged <code>user:123</code>).</li>
+  <li><strong>Key pattern invalidation:</strong> Use SCAN + DEL for wildcard patterns (Redis KEYS/SCAN).</li>
+  <li><strong>Accept higher TTL:</strong> Let staleness expire naturally rather than tracking all dependencies.</li>
+</ul>
+
+<h3>Distributed Cache Invalidation</h3>
+
+<p>In a cluster of cache nodes, an invalidation must reach <em>all</em> nodes holding the relevant keys:</p>
+<ul>
+  <li><strong>Pub/Sub:</strong> Publish invalidation events; all cache nodes subscribe and delete locally.</li>
+  <li><strong>Consistent hashing:</strong> Key-based routing means invalidation goes to a specific node (but replicas need to be handled).</li>
+  <li><strong>Client-side invalidation:</strong> Each application instance invalidates from its local cache.</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+
+<ul>
+  <li>Why is cache invalidation considered one of the hardest problems in CS?</li>
+  <li>Explain three different cache invalidation strategies and when to use each.</li>
+  <li>How would you handle cache invalidation when a single data change affects multiple cache keys?</li>
+  <li>What is the stale cache problem? How do you minimize the staleness window?</li>
+  <li>How would you implement event-based cache invalidation using a message queue?</li>
+  <li>What happens when an invalidation message is lost in a distributed cache?</li>
+  <li>How do you design cache invalidation for a social media feed?</li>
+</ul>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>For a system design interview, skip:</strong>
+  <ul>
+    <li>CDN-specific purge APIs and invalidation headers (e.g., Cloudflare purge API details).</li>
+    <li>Low-level invalidation in CPU caches (MESI protocol details — that is cache coherence, covered in 7.3.2).</li>
+    <li>Implementation specifics of CDC tools (Debezium connector configuration).</li>
+    <li>Database trigger syntax for any specific RDBMS.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Books &amp; Papers</div>
+  <ul>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em> — Chapter 5: Replication</li>
+    <li>Alex Xu, <em>System Design Interview Vol. 2</em> — Chapter 5: Design Instagram</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Online Resources</div>
+  <ul>
+    <li>Facebook: Tao — Facebook's Distributed Cache — <a href="https://www.usenix.org/system/files/conference/atc13/atc13-bronson.pdf">usenix.org/system/files/conference/atc13</a></li>
+    <li>Netflix: EVCache — <a href="https://github.com/Netflix/EVCache">github.com/Netflix/EVCache</a></li>
+    <li>Debezium: Change Data Capture — <a href="https://debezium.io/">debezium.io</a></li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="write-back.html">← 7.2.5 Write Back</a>
+  <a href="cache-coherence.html">7.3.2 Cache Coherence →</a>
+</div>
+
+</body>
+</html>

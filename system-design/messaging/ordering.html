@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.4.4 Ordering - System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">8 Messaging</a> / <a href="index.html">8.4 Reliability</a> / 8.4.4
+</div>
+
+<h1>Ordering</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand message ordering guarantees in distributed messaging systems, how Kafka achieves per-partition ordering, the challenges of cross-partition ordering, and design patterns for maintaining order when parallelism is required.</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>Message Ordering</strong> is the guarantee that messages are consumed in the same sequence they were produced. In distributed systems, ordering is always relative to a specific partition or shard -- global ordering across all producers is extremely expensive and rarely needed.
+</div>
+
+<h2>Total Order vs. Partition Order</h2>
+
+<table>
+  <tr>
+    <th>Guarantee</th>
+    <th>Scope</th>
+    <th>Throughput</th>
+    <th>Implementation</th>
+    <th>When to Use</th>
+  </tr>
+  <tr>
+    <td>Total (global) order</td>
+    <td>All messages across all producers</td>
+    <td class="red">Single partition = single writer</td>
+    <td>One partition, one leader</td>
+    <td>Very rare (e.g., configuration changelog with &lt;100 msg/s)</td>
+  </tr>
+  <tr>
+    <td>Partition order</td>
+    <td>All messages within one partition</td>
+    <td class="green">Scales with partition count</td>
+    <td>Partitioning key</td>
+    <td>Standard for Kafka, most use cases</td>
+  </tr>
+  <tr>
+    <td>Key order</td>
+    <td>All messages with the same key</td>
+    <td class="green">High (parallel across keys)</td>
+    <td>Hash(key) mod partitions</td>
+    <td>Per-entity ordering (order events per user, account)</td>
+  </tr>
+  <tr>
+    <td>Causal order</td>
+    <td>Messages causally related</td>
+    <td class="green">Highest</td>
+    <td>Lamport timestamps, vector clocks</td>
+    <td>Event sourcing with causal dependencies</td>
+  </tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Key insight:</strong> You almost never need total order. Per-key or per-partition ordering is sufficient for the vast majority of applications (bank transactions per account, order status updates per order, chat messages per conversation). Total order is a bottleneck because it requires a single partition leader to sequence all messages.
+</div>
+
+<h2>Kafka Per-Partition Ordering</h2>
+
+<div class="diagram">
+  Producer ──► orders-topic (12 partitions)
+                    │
+                    ├─ Partition 0: key="user-42" ──► msg1, msg2, msg3 (ordered)
+                    ├─ Partition 1: key="user-17" ──► msg1, msg2      (ordered)
+                    ├─ Partition 2: key="user-42" ──► msg4, msg5      (ordered)
+                    │
+                    │   NOTE: "user-42" appears in both P0 and P2
+                    │   if hash(key) mod 12 changes (rare, re-partition only)
+                    │
+                    └─ Consumer reads each partition in append-only order
+</div>
+
+<p>Kafka guarantees:</p>
+<ul>
+  <li><strong>Append-only log:</strong> Messages in a partition are written in order and read in order.</li>
+  <li><strong>Single writer per partition:</strong> Only the partition leader accepts writes, preventing concurrent write conflicts.</li>
+  <li><strong>Consumer reads offset-sequential:</strong> A consumer within a partition reads messages at increasing offsets.</li>
+  <li><strong>Per-key routing:</strong> <code>partition = hash(key) % numPartitions</code> ensures all messages for the same key land in the same partition.</li>
+</ul>
+
+<h2>The Cross-Partition Ordering Challenge</h2>
+<p>When you need to maintain order but also need parallelism, you face a fundamental tension: more partitions = more throughput, but no ordering guarantee across partitions.</p>
+
+<div class="diagram">
+  Problem: Order events for user-42 must be processed in sequence,
+  but we want 12 consumers for throughput.
+
+  Scenario A (correct with partitioning key):
+    msg(order-100, user-42) ──► P3 ──► Consumer A ──► process
+    msg(order-101, user-42) ──► P3 ──► Consumer A ──► process
+    (Same partition, same consumer → ordered ✓)
+
+  Scenario B (BROKEN - no partitioning key):
+    msg(order-100, user-42) ──► P3 ──► Consumer A ──► process
+    msg(order-101, user-42) ──► P7 ──► Consumer B ──► process  (may run first!)
+    (Different partitions → NO ordering guarantee ✗)
+</div>
+
+<h2>Design Patterns for Ordering</h2>
+
+<h3>1. Partitioning Key (Primary Pattern)</h3>
+<p>Route messages by a natural key (user ID, account ID, order ID) so related messages always land in the same partition and are consumed sequentially.</p>
+<ul>
+  <li>Enforced at the producer: <code>producer.send(new ProducerRecord(topic, key, value))</code></li>
+  <li>Works as long as partition count does not change. Re-partitioning breaks the mapping.</li>
+</ul>
+
+<div class="callout green">
+  <strong>Best practice:</strong> Choose the coarsest key that still provides the ordering guarantee you need. If you need per-account ordering, use account ID as the key -- do not use transaction ID if you only need account-level order.
+</div>
+
+<h3>2. Single Writer Pattern</h3>
+<p>Ensure only one producer instance writes to a given partition. If multiple producers write to the same partition, Kafka serializes them but cannot establish inter-producer ordering semantics.</p>
+
+<div class="diagram">
+  Producer instances (sticky partition assignment):
+    Producer-1 owns: partitions 0, 1, 2
+    Producer-2 owns: partitions 3, 4, 5
+
+  Each producer maps entity keys to partitions it owns
+  → no two producers write to the same partition
+  → ordering is deterministic and conflict-free
+</div>
+
+<h3>3. Sequence Numbers</h3>
+<p>Embed a monotonically increasing sequence number per entity. Consumers can detect out-of-order delivery and buffer/reorder or reject.</p>
+
+<pre>
+message = {
+  "orderId": "order-123",
+  "seqNum": 5,         // 5th event for this order
+  "event": "shipped",
+  "timestamp": "2025-01-15T10:30:00Z"
+}
+
+consumer logic:
+  if (msg.seqNum != expectedSeqNum) {
+    // buffer or DLQ
+    buffer[msg.orderId].add(msg);
+  }
+</pre>
+
+<h3>4. Application-Level Sequencing</h3>
+<p>Use a separate ordering service or a single-leader sequence generator that assigns monotonically increasing IDs to events before they enter the message system.</p>
+
+<div class="diagram">
+  Producer ──► Sequence Service (single node) ──► assigns seqNum 1001
+                                    │
+                                    └─► Kafka topic (any partition)
+                                            │
+                                            └─ Consumers use seqNum to reorder
+</div>
+
+<ul>
+  <li>Effective but adds latency (extra network hop) and a single point of failure (sequence service must be HA).</li>
+</ul>
+
+<h2>Ordering and Retries</h2>
+<div class="callout red">
+  <strong>Critical interaction:</strong> If a consumer fails to process message N and retries with exponential backoff, messages N+1, N+2, N+3 may be processed by other consumers (or the same consumer after N) while N is still pending. This breaks per-partition ordering unless the consumer blocks subsequent messages until N succeeds.
+</div>
+
+<p>Strategies:</p>
+<ul>
+  <li><strong>Block-and-retry:</strong> Consumer pauses the partition until message N succeeds or goes to DLQ. Simple but reduces throughput.</li>
+  <li><strong>Buffer-and-reorder:</strong> Consumer buffers out-of-order messages, processes N when it arrives. More complex but preserves throughput.</li>
+  <li><strong>DLQ-fast:</strong> Send N to DLQ quickly, process N+1, N+2... Reinject N later via manual reprocessing. Requires downstream idempotency.</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>How does Kafka guarantee message ordering and what are its limitations?</li>
+  <li>How would you maintain per-user ordering in a chat application with 100 million users?</li>
+  <li>What happens to ordering when a consumer retries a failed message with exponential backoff?</li>
+  <li>When would you need total order, and why is it almost never the right answer?</li>
+  <li>How do you design a system that needs ordering across multiple data centers?</li>
+  <li>What is the impact of re-partitioning (changing partition count) on message ordering?</li>
+  <li>Compare Kafka's per-partition ordering with RabbitMQ's per-queue ordering.</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>In an interview, avoid:</strong>
+  <ul>
+    <li>Assuming global ordering exists in Kafka without qualification. Kafka only guarantees ordering within a partition.</li>
+    <li>Ignoring the throughput cost of strong ordering. More partitions = more throughput, but ordering scope narrows.</li>
+    <li>Forgetting the interaction between ordering and consumer failures/retries. This is a common follow-up.</li>
+    <li>Over-engineering with vector clocks unless the interviewer explicitly asks about causal ordering.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary Sources</div>
+  <ul>
+    <li>Kafka Documentation -- <a href="https://kafka.apache.org/documentation/#intro_concepts">Introduction: Concepts and Terms</a></li>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em>, Chapter 5 (replication and ordering)</li>
+    <li>Jay Kreps, "So you want to write a log?" -- <a href="https://engineering.linkedin.com/kafka/so-you-want-write-log-0">engineering.linkedin.com</a></li>
+    <li>Lamport, L. (1978). "Time, Clocks, and the Ordering of Events in a Distributed System"</li>
+    <li>RabbitMQ Documentation -- <a href="https://www.rabbitmq.com/confirms.html">Consumer Acknowledgements and Ordering</a></li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="exponential-backoff.html">&larr; 8.4.3 Backoff</a>
+  <a href="idempotency.html">8.4.5 Idempotency &rarr;</a>
+</div>
+
+</body>
+</html>

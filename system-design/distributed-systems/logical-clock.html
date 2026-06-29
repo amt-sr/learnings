@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.4.2 Logical Clock</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb"><a href="#">System Design</a> / <a href="#">5 Distributed Systems</a> / <a href="#">5.4 Time</a> / 5.4.2</div>
+<h1>Logical Clock</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand why physical clocks fail for causal ordering, how logical clocks solve this by tracking causality rather than wall-clock time, and what trade-offs they introduce.</p>
+
+<h2>Definition</h2>
+<p>A <strong>logical clock</strong> is a mechanism for capturing the <em>causal ordering</em> of events in a distributed system without relying on synchronized physical clocks. Instead of tracking "what time it is," a logical clock tracks "what happened before what." Each process maintains a counter that is incremented on local events and updated upon receiving messages.</p>
+
+<div class="callout">
+  <strong>Core idea:</strong> If event A causally happened before event B (A → B), then the logical clock value of A must be less than the logical clock value of B. This is a <strong>necessary but not sufficient</strong> condition for detecting causality.
+</div>
+
+<h2>Why Logical Clocks Are Needed</h2>
+<p>Physical clocks (see <a href="physical-clock.html">5.4.1 Physical Clock</a>) fail for event ordering because:</p>
+<ul>
+  <li>Clock skew means two nodes can disagree on the current time</li>
+  <li>Network delay means a message can arrive "after" its physical timestamp on the receiver</li>
+  <li>There is no universal time instant that all nodes agree on</li>
+</ul>
+<p>Logical clocks solve this by <strong>not trying to measure real time at all</strong>. Instead, they encode the <em>causal relationships</em> between events directly into the clock values.</p>
+
+<h2>The Happens-Before Relation (→)</h2>
+<p>The happens-before relation, defined by Lamport, is a <strong>partial order</strong> on events:</p>
+
+<ol>
+  <li><strong>Same process:</strong> If event a happens before event b in the same process, then a → b</li>
+  <li><strong>Message passing:</strong> If process P<sub>i</sub> sends message m (event a) and P<sub>j</sub> receives m (event b), then a → b</li>
+  <li><strong>Transitivity:</strong> If a → b and b → c, then a → c</li>
+</ol>
+
+<div class="callout yellow">
+  <strong>Partial order:</strong> The happens-before relation does <em>not</em> order all pairs of events. Two events are <strong>concurrent</strong> (a || b) if neither a → b nor b → a. Concurrent events are events with no causal relationship -- they could have happened in any order.
+</div>
+
+<h2>Basic Counter-Based Logical Clock</h2>
+
+<h3>Rules</h3>
+<ul>
+  <li><strong>LC1 (Local event):</strong> Before executing a local event, increment the local counter: <code>lc = lc + 1</code></li>
+  <li><strong>LC2 (Send):</strong> Before sending a message, increment the counter and attach it to the message: <code>lc = lc + 1</code>; send (message, lc)</li>
+  <li><strong>LC3 (Receive):</strong> On receiving a message with timestamp <code>lc_msg</code>, set <code>lc = max(lc, lc_msg) + 1</code></li>
+</ul>
+
+<h3>Simple Example</h3>
+<div class="diagram">  Process P1        Process P2
+  lc=0              lc=0
+   |
+  (local event)       |
+   lc = 1              |
+   |                   |
+  send(msg, lc=1) ---->
+   |                   receive(msg, lc=1)
+   |                   lc = max(0, 1) + 1 = 2
+   |                   |
+   |                  (local event)
+   |                   lc = 3
+   |                   |
+  <---- send(reply, lc=3)
+  receive(reply, lc=3)
+  lc = max(1, 3) + 1 = 4
+   |
+  (local event)
+   lc = 5
+
+Causal order:
+  P1:local(1) → send(1) → P2:recv(2) → P2:local(3) → send(3) → P1:recv(4) → P1:local(5)</div>
+
+<h2>How Logical Clocks Capture Causality</h2>
+<p>The fundamental property is:</p>
+
+<div class="callout green">
+  <strong>Correctness guarantee:</strong> If event A <strong>happens before</strong> event B (A → B), then LC(A) &lt; LC(B). This is always true by construction.
+</div>
+
+<p>However, the converse is <strong>NOT</strong> true:</p>
+
+<div class="callout red">
+  <strong>Limitation:</strong> If LC(A) &lt; LC(B), it does <em>not</em> mean A → B. Events A and B could be <strong>concurrent</strong> (independent). A simple counter-based logical clock <strong>cannot distinguish between causal and concurrent events</strong> when their clock values are ordered.
+</div>
+
+<h3>The Concurrency Blindspot</h3>
+<div class="diagram">  Process P1        Process P2        Process P3
+  lc=0              lc=0              lc=0
+   |
+  (local event)       |                  |
+   lc = 1              |                  |
+   |                   (local event)      |
+   |                   lc = 1             |
+   |                   |                  (local event)
+   |                   |                   lc = 1
+
+P1:local(1), P2:local(1), P3:local(1) -- all have the same timestamp
+But these events are CONCURRENT (no causal relationship).
+
+Even worse:
+  Process P1        Process P2
+  lc=0              lc=0
+  (local) lc=1        |
+  (local) lc=2        |
+  (local) lc=3      (local) lc=1
+
+P2:local(1) < P1:local(3) -- but P2:local(1) is NOT causally before P1:local(3).
+They are concurrent. The simple logical clock cannot detect this.</div>
+
+<h2>Properties of Simple Logical Clocks</h2>
+<table>
+  <tr><th>Property</th><th>Guaranteed?</th><th>Explanation</th></tr>
+  <tr><td>If A → B then LC(A) &lt; LC(B)</td><td class="green">Yes</td><td>By construction of the algorithm</td></tr>
+  <tr><td>If LC(A) &lt; LC(B) then A → B</td><td class="red">No</td><td>Concurrent events can have ordered timestamps</td></tr>
+  <tr><td>Can detect concurrent events</td><td class="red">No</td><td>This is the fundamental limitation</td></tr>
+  <tr><td>Total order achievable</td><td class="green">Yes</td><td>Break ties with process ID: (lc, pid)</td></tr>
+  <tr><td>Space overhead</td><td class="green">O(1)</td><td>Single integer per process</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Interview tip:</strong> The total order (lc, pid) is consistent across all processes but is <strong>arbitrary</strong> -- it orders concurrent events in a deterministic way, but that order has no causal meaning. It is useful for serialization (e.g., in a replicated log) but not for detecting conflicts.
+</div>
+
+<h2>Logical Clock vs Physical Clock</h2>
+<table>
+  <tr><th>Aspect</th><th>Physical Clock</th><th>Logical Clock</th></tr>
+  <tr><td>What it measures</td><td>Real-world time</td><td>Causal relationships</td></tr>
+  <tr><td>Guarantees causality</td><td class="red">No</td><td class="green">Yes (one direction)</td></tr>
+  <tr><td>Detects concurrency</td><td class="red">No</td><td class="red">No (simple counter)</td></tr>
+  <tr><td>Drift problem</td><td class="red">Yes</td><td class="green">No</td></tr>
+  <tr><td>Space per process</td><td class="green">O(1)</td><td class="green">O(1)</td></tr>
+  <tr><td>Useful for deadlines/SLAs</td><td class="green">Yes</td><td class="red">No</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li><strong>"Why do we need logical clocks in distributed systems?"</strong> -- Physical clocks have unbounded skew and cannot guarantee causal ordering. Logical clocks encode causality directly without relying on synchronized time.</li>
+  <li><strong>"What is the happens-before relation?"</strong> -- A partial order defined by Lamport: same-process ordering, message ordering, and transitivity. It captures causal dependence but leaves concurrent events unordered.</li>
+  <li><strong>"If LC(A) &lt; LC(B), does that mean A happened before B?"</strong> -- No. This is the critical limitation. LC(A) &lt; LC(B) is necessary but not sufficient for A → B. Concurrent events can have ordered clock values.</li>
+  <li><strong>"How do you create a total order from logical clocks?"</strong> -- Append the process ID: order by (lc, pid) lexicographically. This gives a consistent total order but is arbitrary for concurrent events.</li>
+  <li><strong>"Can logical clocks detect concurrent events?"</strong> -- A simple counter-based logical clock cannot. You need <a href="vector-clock.html">vector clocks</a> for that.</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Depth to avoid in interviews:</strong>
+  <ul>
+    <li>Formal proofs of the happens-before relation properties</li>
+    <li>Implementations of logical clocks in specific languages</li>
+    <li>The distinction between strong and weak clocks (advanced topic)</li>
+    <li>Matrix clocks (an extension beyond the scope of most interviews)</li>
+    <li>Fidge's theorem and formal lattice theory</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary References</div>
+  <ul>
+    <li>Time, Clocks, and the Ordering of Events in a Distributed System -- Leslie Lamport (1978)</li>
+    <li>Distributed Systems: Principles and Paradigms -- Tanenbaum & Van Steen, Chapter on Clock Synchronization</li>
+    <li>Distributed Systems: A Pragmatic Approach -- Warneke et al., Section on Logical Time</li>
+    <li>Making Sense of Lamport Timestamps -- Martin Kleppmann blog post</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="physical-clock.html">&larr; 5.4.1 Physical Clock</a>
+  <a href="lamport-clock.html">5.4.3 Lamport Clock &rarr;</a>
+</div>
+
+</body>
+</html>

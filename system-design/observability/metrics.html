@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>11.2 — Metrics</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">Observability</a> / 11.2 Metrics</div>
+<h1>Metrics</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the four metric types (counter, gauge, histogram, summary), how Prometheus collects and queries metrics, and the RED/USE methods for defining service-level indicators. This is one of the highest-frequency observability topics in interviews.</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>Metrics</strong> are numeric measurements collected at regular intervals that represent the state or performance of a system. Unlike logs (event-driven) and traces (request-driven), metrics are time-series data optimized for aggregation, alerting, and dashboarding.
+</div>
+
+<p>Metrics answer questions like "what is our p99 latency right now?" and "is our error rate above 1%?". They are the most efficient signal for monitoring because they compress large volumes of data into queryable numbers stored as time series.</p>
+
+<h2>Four Metric Types</h2>
+<table>
+  <tr><th>Type</th><th>Behavior</th><th>Use Cases</th><th>Example</th></tr>
+  <tr><td><strong>Counter</strong></td><td>Monotonically increasing (or reset on restart); cumulative</td><td>Total requests, errors, bytes sent</td><td><code>http_requests_total{method="GET", status="200"}</code></td></tr>
+  <tr><td><strong>Gauge</strong></td><td>Can go up or down; point-in-time value</td><td>Current connections, queue depth, temperature</td><td><code>http_connections_active</code></td></tr>
+  <tr><td><strong>Histogram</strong></td><td>Distribution of values in configurable buckets + sum + count</td><td>Latency, request sizes, response times</td><td><code>http_request_duration_seconds_bucket{le="0.5"}</code></td></tr>
+  <tr><td><strong>Summary</strong></td><td>Pre-computed quantiles on the client side</td><td>p50, p95, p99 latency (less flexible than histogram)</td><td><code>http_request_duration_seconds{quantile="0.99"}</code></td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Key distinction:</strong> Histograms calculate quantiles on the server (Prometheus), enabling accurate aggregation across multiple instances. Summaries calculate quantiles on the client, so you cannot meaningfully aggregate summaries across instances. For distributed systems, always prefer histograms.
+</div>
+
+<h3>Histogram Bucket Design</h3>
+<pre>
+# Exponential buckets for latency (in seconds)
+# Buckets: 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0
+histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m]))
+
+# For API latency with typical p99 at ~200ms:
+# Use custom buckets: 10ms, 25ms, 50ms, 100ms, 200ms, 500ms, 1s
+http_request_duration_seconds_bucket{le="0.01",le="0.025",le="0.05",le="0.1",le="0.2",le="0.5",le="1.0"}
+</pre>
+
+<h2>Prometheus Architecture</h2>
+<div class="diagram">
+  ┌─────────────┐   pull /metrics   ┌──────────────┐   PromQL    ┌──────────────┐
+  │  Application │◄──────────────────│  Prometheus  │────────────▶│   Grafana     │
+  │  (exporter)  │   every 15s       │  (TSDB)      │            │ (dashboards)  │
+  └─────────────┘                   └──────┬───────┘            └──────────────┘
+       ▲                                  │
+       │  instrumented code              │ scrape configs
+       │  (client library)               ▼
+  ┌─────────────┐                   ┌──────────────┐
+  │   Service A  │                   │  Service     │
+  │  :8080/metrics│                  │  Discovery   │
+  └─────────────┘                   │  (Consul,    │
+                                    │   K8s DNS,   │
+                                    │   static)    │
+  ┌─────────────┐                   └──────────────┘
+  │   Service B  │
+  │  :8080/metrics│
+  └─────────────┘
+       │
+       ▼
+  Alertmanager ──▶ PagerDuty / Slack / Email
+  (evaluates rules on PromQL)
+</div>
+
+<h3>PromQL Essentials</h3>
+<pre>
+# Rate of HTTP requests over 5 minutes (requests/sec)
+rate(http_requests_total[5m])
+
+# 99th percentile latency
+histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m]))
+
+# Error rate (4xx + 5xx as fraction of total)
+sum(rate(http_requests_total{status=~"5.."}[5m])) /
+sum(rate(http_requests_total[5m]))
+
+# Availability: 1 - error_rate
+(1 - sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m]))) * 100
+</pre>
+
+<h2>RED Method (Request-oriented)</h2>
+<div class="callout">
+  <strong>RED</strong> stands for <strong>Rate</strong>, <strong>Errors</strong>, <strong>Duration</strong>. Use it for monitoring request-driven services (HTTP APIs, gRPC services). Every service should expose these three metrics at minimum.
+</div>
+
+<table>
+  <tr><th>Metric</th><th>Question Answered</th><th>PromQL Example</th></tr>
+  <tr><td><strong>Rate</strong></td><td>How many requests per second?</td><td><code>rate(http_requests_total[5m])</code></td></tr>
+  <tr><td><strong>Errors</strong></td><td>What fraction of requests fail?</td><td><code>rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m])</code></td></tr>
+  <tr><td><strong>Duration</strong></td><td>How long do requests take?</td><td><code>histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[5m]))</code></td></tr>
+</table>
+
+<h2>USE Method (Resource-oriented)</h2>
+<div class="callout">
+  <strong>USE</strong> stands for <strong>Utilization</strong>, <strong>Saturation</strong>, <strong>Errors</strong>. Use it for monitoring resources (CPU, memory, disk, network, database connections).
+</div>
+
+<table>
+  <tr><th>Metric</th><th>Question Answered</th><th>Example</th></tr>
+  <tr><td><strong>Utilization</strong></td><td>What percentage of the resource is busy?</td><td><code>100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)</code></td></tr>
+  <tr><td><strong>Saturation</strong></td><td>How much work is queued or backlog?</td><td><code>node_filesystem_avail_bytes / node_filesystem_size_bytes</code>, run queue length, conn pool waiters</td></tr>
+  <tr><td><strong>Errors</strong></td><td>How many errors on this resource?</td><td><code>rate(node_network_receive_errs_total[5m])</code></td></tr>
+</table>
+
+<div class="callout green">
+  <strong>Interview tip:</strong> When designing a system, mention "I would use the RED method for service-level metrics and the USE method for infrastructure-level metrics." This demonstrates structured thinking about observability.
+</div>
+
+<h2>Cardinality Explosion</h2>
+<p>The most common production issue with metrics at scale. High-cardinality labels create exponential time series.</p>
+<pre>
+# BAD: user_id as a label → 10M users × 10 endpoints = 100M time series
+http_requests_total{user_id="12345", endpoint="/api/profile"}
+
+# GOOD: use a histogram with bucketed user IDs, or aggregate to tier/region
+http_requests_total{endpoint="/api/profile", region="us-east-1"}
+
+# Rule of thumb: keep total time series per server under 10,000
+</pre>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What are the four types of metrics? When would you use each?</li>
+  <li>Explain the difference between a histogram and a summary.</li>
+  <li>What is the RED method? The USE method? When do you use each?</li>
+  <li>How does Prometheus collect metrics? Why pull instead of push?</li>
+  <li>What is cardinality explosion and how do you prevent it?</li>
+  <li>How would you set up alerting for a service's SLA of 99.9%?</li>
+  <li>How do you calculate p99 latency from histogram buckets?</li>
+  <li>What metrics would you monitor for a database connection pool?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid diving into:</strong> Specific PromQL syntax beyond common examples, Grafana dashboard configuration details, or Prometheus storage internals (compaction, WAL). These are operational details. Focus on metric types, RED/USE methods, and alerting strategy.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><strong>Site Reliability Engineering</strong> (Google) — Chapter 6: Monitoring principles and the four golden signals</li>
+    <li><strong>The Art of Monitoring</strong> (James Turnbull) — Metrics collection and alerting strategies</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Documentation</div>
+  <ul>
+    <li><strong>Prometheus Documentation</strong> — prometheus.io/docs — Metric types, best practices, querying</li>
+    <li><strong>USE Method</strong> — brendangregg.com/usemethod.html — Original USE methodology</li>
+    <li><strong>Google SRE Book: Four Golden Signals</strong> — landing.google.com/sre/book/chapters/monitoring-distributed-systems.html</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="logging.html">&larr; Previous: Logging</a>
+  <a href="tracing.html">Next: Tracing &rarr;</a>
+</div>
+</body>
+</html>

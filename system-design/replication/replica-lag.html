@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.6.1 Replica Lag</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">4 Replication</a> / 4.6 Replication Problems / 4.6.1
+</div>
+
+<h1>Replica Lag</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand what replica lag is, why it occurs in asynchronously replicated systems, how to measure it, and how to mitigate it in production.</p>
+
+<h2>Definition</h2>
+<p><strong>Replica lag</strong> is the delay between a write being committed on the leader (primary) and that write being applied on a follower (replica). In asynchronous replication, followers pull changes from the leader at their own pace. The time gap between the leader's write position and the follower's applied position is the replica lag, typically measured in seconds or in bytes of WAL/redo log still pending.</p>
+
+<h2>How Replica Lag Manifests</h2>
+<div class="diagram">
+  Client          Leader (Primary)           Follower A         Follower B
+   |                  |                          |                  |
+   |-- WRITE(id=42) ->|                          |                  |
+   |                  |-- binlog entry            |                  |
+   |  OK (42)         |-- for id=42               |                  |
+   |<- OK ------------|                  [lag ~2s] |                  |
+   |                  |                          |                  |
+   |                  |<------- PULL --------|  |                  |
+   |                  |-- send binlog ------>|  |                  |
+   |                  |                          |-- apply id=42    |
+   |                  |                          |  [lag ~4s]       |
+   |                  |<------- PULL --------------------------|    |
+   |                  |-- send binlog ----------------------->|    |
+   |                  |                                       |-- apply id=42
+   |                  |                                       |  [lag ~6s]
+</div>
+
+<p>In this diagram, the leader acknowledges the write immediately to the client. Follower A applies it roughly 2 seconds later, and Follower B roughly 6 seconds later. Any read routed to Follower B during that window returns stale data.</p>
+
+<h2>Root Causes of Replica Lag</h2>
+
+<h3>1. Slow or Congested Network</h3>
+<p>Followers in a remote data center or availability zone experience higher round-trip latency when pulling binlog entries. Cross-region replication can add hundreds of milliseconds per round trip, compounding during burst writes.</p>
+
+<h3>2. Heavy Write Load on the Leader</h3>
+<p>The leader generates WAL/binlog entries faster than followers can consume them. A bulk import, schema change, or traffic spike can cause the replication queue to grow faster than it drains.</p>
+
+<h3>3. Disk I/O Bottleneck on the Follower</h3>
+<p>Followers must both fetch and persist changes. If a follower's disk is slow (e.g., HDD instead of NVMe, or competing workloads), applying writes falls behind.</p>
+
+<h3>4. Long-Running Transactions on the Follower</h3>
+<p>In statement-based replication, a slow query on the follower can block the replication thread from applying subsequent entries. Row-based replication mitigates this but does not eliminate it entirely.</p>
+
+<h3>5. Resource Contention</h3>
+<p>Followers may serve read queries concurrently with replication. A heavy analytical query can consume CPU or I/O, starving the replication thread.</p>
+
+<h2>Monitoring Replica Lag</h2>
+
+<table>
+  <tr>
+    <th>System</th>
+    <th>Metric / Command</th>
+    <th>Notes</th>
+  </tr>
+  <tr>
+    <td>MySQL</td>
+    <td><code>SHOW SLAVE STATUS \G</code> &mdash; <code>Seconds_Behind_Master</code></td>
+    <td>Can be misleading; shows time since last applied event, not true lag if replication thread is idle.</td>
+  </tr>
+  <tr>
+    <td>PostgreSQL</td>
+    <td><code>pg_stat_replication</code> view &mdash; <code>write_lag</code>, <code>flush_lag</code>, <code>replay_lag</code></td>
+    <td>More granular: measures lag at WAL write, flush, and replay stages.</td>
+  </tr>
+  <tr>
+    <td>Cassandra</td>
+    <td><code>nodetool netstats</code> &mdash; pending queue depth</td>
+    <td>Watch the DROPped messages counter for back-pressure signals.</td>
+  </tr>
+  <tr>
+    <td>MongoDB</td>
+    <td><code>rs.printSlaveReplicationInfo()</code> &mdash; <code>optimeDate</code> lag</td>
+    <td>Compares each secondary's optime against the primary.</td>
+  </tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Watchdog pattern:</strong> At L5+/Staff level, you should discuss alerting thresholds. A common production setup is a warning at 5s lag and a page at 30s lag. Some teams use multi-tier thresholds: P4 at 1s (potential stale reads), P3 at 5s, P2 at 30s, P1 at 120s.
+</div>
+
+<h2>How Lag Affects Consistency</h2>
+<ul>
+  <li><strong>Eventual consistency window:</strong> Reads from a lagging follower return stale data. The system is only eventually consistent within the lag duration.</li>
+  <li><strong>Read-after-write violation:</strong> A user writes a post, then reads from a follower &mdash; sees nothing. The user may retry or think the write failed.</li>
+  <li><strong>Constraint violations on failover:</strong> If the leader fails and a lagging follower is promoted, committed writes on the old leader that the follower never received are lost.</li>
+  <li><strong>Cascading failures:</strong> Lagging followers drain connection pools as clients wait for results. If a follower falls far behind, some systems remove it from the pool entirely, shifting more load to healthy replicas.</li>
+</ul>
+
+<h2>Remedies and Mitigations</h2>
+
+<h3>Parallel Replication (Multi-Threaded Apply)</h3>
+<p>Modern MySQL and PostgreSQL support parallel apply of replication events on the follower. Instead of a single SQL thread applying changes serially, multiple worker threads apply changes in parallel, grouped by database or partition.</p>
+
+<div class="callout green">
+  <strong>MySQL:</strong> <code>slave_parallel_workers = 8</code> with <code>slave_parallel_type = LOGICAL_CLOCK</code> enables commit-order parallel replication. This can reduce lag by 4-8x on multi-core followers.
+</div>
+
+<h3>Connection Pooling and Read Routing</h3>
+<p>ProxySQL, PgBouncer, or application-level middleware can route reads away from lagging replicas. A common pattern: if <code>Seconds_Behind_Master > threshold</code>, temporarily remove the follower from the read pool.</p>
+
+<h3>Semi-Synchronous Replication</h3>
+<p>For critical data paths, use semi-synchronous replication where the leader waits for at least one follower to acknowledge receipt (not apply) before committing. This trades write latency for reduced data loss on failover.</p>
+
+<h3>Tuning the Replication Pipeline</h3>
+<ul>
+  <li>Increase <code>binlog_group_commit</code> batch size to amortize fsync costs.</li>
+  <li>Use compressed replication traffic between data centers.</li>
+  <li>Dedicate a replication thread CPU core on the follower (CPU pinning).</li>
+  <li>Use faster storage (NVMe) for WAL and data directories on followers.</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li><strong>"You have a MySQL primary with 3 replicas. A traffic spike causes 30s replica lag. Walk me through your response."</strong> &mdash; Discuss immediate triage (remove lagging replicas from read pool, alert on-call), root cause analysis (check binlog rate, follower disk I/O, network), and mitigation (parallel replication, semi-sync for critical paths, rate limiting).</li>
+  <li><strong>"How do you design a system that can tolerate replica lag without users noticing?"</strong> &mdash; Read-after-write consistency for own writes, use Redis/leader for hot data, stale-while-revalidate pattern, background reconciliation.</li>
+  <li><strong>"What happens during failover if a replica is 10 seconds behind?"strong> &mdash; Committed writes in the last 10s are lost (durability gap). Discuss RPO and whether semi-sync is acceptable for this workload.</li>
+  <li><strong>"How does Google Spanner avoid replica lag entirely?"</strong> &mdash; TrueTime API provides synchronized clocks, allowing externally consistent transactions. Paxos-based replication commits only when a quorum acknowledges. It does not eliminate latency but eliminates inconsistency.</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid deep-dive into binlog formats:</strong> Statement-based vs. row-based vs. mixed replication internals are rarely asked. Know the difference at a high level but do not prepare binlog byte-format details.<br><br>
+  <strong>Avoid Galera/PXC internals:</strong> Multi-master synchronous replication specifics are niche unless the role specifically targets database infrastructure.<br><br>
+  <strong>Avoid replication topology details:</strong> Cascading replication (A -> B -> C) and circular replication are rarely tested. Focus on single-leader topology.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary References</div>
+  <ul>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em> &mdash; Chapter 5: Replication (sections on replication lag, read-after-write consistency)</li>
+    <li>High Availability MySQL &mdash; Chapter on monitoring and managing replication lag</li>
+    <li>PostgreSQL Documentation: <a href="https://www.postgresql.org/docs/current/monitoring-stats.html">pg_stat_replication</a></li>
+    <li>MySQL Reference Manual: <a href="https://dev.mysql.com/doc/refman/8.0/en/replication-delay.html">Replication Delay</a></li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="physical-replication.html">&larr; 4.5.5 Physical Replication</a>
+  <a href="stale-reads.html">4.6.2 Stale Reads &rarr;</a>
+</div>
+
+</body>
+</html>

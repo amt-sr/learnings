@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sliding Window — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">System Design</a> / <a href="./index.html">Reliability</a> / 10.3.4 Sliding Window</div>
+
+<h1>Sliding Window Rate Limiting</h1>
+<div class="meta">
+  <span>Difficulty ⭐⭐⭐</span>
+  <span>Interview Frequency ★★★★</span>
+</div>
+
+<div class="callout">
+  <strong>Goal:</strong> Understand the sliding window log and sliding window counter algorithms for rate limiting, how they solve the boundary spike problem of fixed windows, their memory and performance tradeoffs, and when to choose each variant.
+</div>
+
+<h2>Definition</h2>
+<p><strong>Sliding window</strong> rate limiting maintains a continuous time window rather than discrete fixed windows. For each incoming request, the algorithm counts all requests within the last N seconds (the window size). This eliminates the boundary spike problem entirely because the window is always the "last N seconds" regardless of alignment to discrete time boundaries.</p>
+
+<h2>Variant 1: Sliding Window Log</h2>
+<p>Store a timestamp for every request. To check the limit, count how many timestamps fall within the last N seconds.</p>
+
+<div class="diagram">
+  Sliding Window Log (limit=5 per minute):
+
+  Time →
+  ┃──0s──10s──20s──30s──40s──50s──60s──
+  ┃   ●    ●    ●    ●    ●    ●
+  ┃   ↑    ↑    ↑    ↑    ↑    ↑
+  ┃  req1 req2 req3 req4 req5
+  ┃
+  ┃  At t=55s: check last 60s → 5 requests → ALLOWED (≤5)
+  ┃  At t=55s: new request arrives → 6 requests → REJECTED (>5)
+  ┃
+  ┃  At t=65s: req1 falls outside window (older than 60s)
+  ┃  Count = 5 (req2-req6) → ALLOWED again
+  ┃
+  ┃  Memory: O(n) where n = requests in window
+  ┃  If limit=1000/min → up to 1000 log entries per key
+</div>
+
+<h3>Implementation</h3>
+
+<pre>
+class SlidingWindowLog {
+    int limit;              // max requests per window
+    int windowSeconds;      // window size
+    Queue&lt;Long&gt; log;        // timestamps of recent requests
+
+    synchronized boolean allowRequest() {
+        long now = System.currentTimeMillis();
+        long windowStart = now - windowSeconds * 1000;
+
+        // Remove expired entries
+        while (!log.isEmpty() && log.peek() < windowStart) {
+            log.remove();
+        }
+
+        if (log.size() < limit) {
+            log.add(now);
+            return true;   // allowed
+        }
+        return false;      // rejected
+    }
+}
+</pre>
+
+<h3>Distributed Implementation (Redis Sorted Set)</h3>
+<pre>
+-- Sliding window log using Redis sorted set
+-- Key: rate_limit:{user_id}
+-- Score: request timestamp
+-- Member: unique request ID
+
+local key = "rate_limit:" .. KEYS[1]
+local now = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+local limit = tonumber(ARGV[3])
+local requestId = ARGV[4]
+
+-- Remove entries outside the window
+redis.call("ZREMRANGEBYSCORE", key, 0, now - window)
+
+-- Count remaining entries
+local count = redis.call("ZCARD", key)
+
+if count < limit then
+    redis.call("ZADD", key, now, requestId)
+    redis.call("EXPIRE", key, math.ceil(window / 1000) + 1)
+    return 1   -- allowed
+else
+    return 0   -- rejected
+end
+</pre>
+
+<h2>Variant 2: Sliding Window Counter</h2>
+<p>A memory-efficient approximation that combines the simplicity of fixed windows with smoother rate limiting. Uses weighted counts from the current and previous fixed window.</p>
+
+<div class="diagram">
+  Sliding Window Counter:
+  ┃  ←── previous window ──→│←── current window ──→
+  ┃  ┃█████████████████████┃┃████████████████████┃
+  ┃  ┃  count = 70         ┃┃  count = 30        ┃
+  ┃
+  ┃  elapsed = 30% into current window
+  ┃  weight_of_previous = 1 - 0.30 = 0.70
+  ┃
+  ┃  estimated_rate = (70 × 0.70) + (30 × 1.0) = 49 + 30 = 79
+  ┃  if limit = 100 → ALLOWED
+  ┃
+  ┃  At 90%: estimated = (70 × 0.10) + (30 × 1.0) = 7 + 30 = 37
+  ┃  At 100%: estimated = (70 × 0.00) + (30 × 1.0) = 0 + 30 = 30
+</div>
+
+<h2>Comparison of All Rate Limiting Algorithms</h2>
+
+<table>
+  <tr><th>Algorithm</th><th>Boundary Spike</th><th>Memory</th><th>Accuracy</th><th>Burst</th><th>Distributed</th></tr>
+  <tr><td>Fixed Window</td><td class="red">Yes (2x)</td><td class="green">O(1)</td><td>Low</td><td class="red">No</td><td class="green">Easy (INCR)</td></tr>
+  <tr><td>Rolling Window</td><td>Reduced</td><td class="green">O(1)</td><td>Medium</td><td class="red">No</td><td>Moderate</td></tr>
+  <tr><td>Sliding Window Log</td><td class="green">No</td><td class="red">O(n)</td><td class="green">Exact</td><td class="red">No</td><td>Moderate (Sorted Set)</td></tr>
+  <tr><td>Sliding Window Counter</td><td class="green">No</td><td class="green">O(1)</td><td>Medium</td><td class="red">No</td><td>Easy (2 keys)</td></tr>
+  <tr><td>Token Bucket</td><td class="green">No</td><td class="green">O(1)</td><td class="green">High</td><td class="green">Yes</td><td>Moderate (Lua)</td></tr>
+  <tr><td>Leaky Bucket</td><td class="green">No</td><td>O(queue)</td><td>Medium</td><td class="red">No</td><td>Moderate</td></tr>
+</table>
+
+<h2>Tradeoffs Summary</h2>
+
+<div class="callout">
+  <strong>Decision Framework:</strong>
+  <ul>
+    <li>Need exact accuracy + few requests per window? → <strong>Sliding Window Log</strong></li>
+    <li>Need memory efficiency + smooth rate? → <strong>Sliding Window Counter</strong> or <strong>Token Bucket</strong></li>
+    <li>Need burst support? → <strong>Token Bucket</strong> (always the best choice)</li>
+    <li>Need maximum simplicity? → <strong>Fixed Window</strong> (accept boundary spike)</li>
+    <li>Need traffic shaping? → <strong>Leaky Bucket</strong></li>
+  </ul>
+</div>
+
+<h2>Redis Sorted Set Memory Concerns</h2>
+<p>The sliding window log with sorted sets can be memory-intensive at high limits:</p>
+
+<pre>
+// Memory per sorted set entry: ~64 bytes (timestamp + member)
+// If limit = 10,000 requests/minute and 1M users:
+// 10,000 × 1M × 64 bytes = 640 GB (impractical)
+
+// Solution: For high limits, use sliding window counter instead
+// Or: shard keys across multiple Redis instances
+// Or: use token bucket which is O(1) memory
+</pre>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>"What is the difference between sliding window and fixed window rate limiting?" — Sliding window looks at the "last N seconds" continuously; fixed window uses discrete time boundaries. Sliding window eliminates the boundary spike problem.</li>
+  <li>"How would you implement sliding window rate limiting?" — Sliding window log: store timestamps in a sorted set (Redis ZSET), remove expired entries, count remaining. Sliding window counter: weighted average of current and previous window.</li>
+  <li>"What are the memory tradeoffs of sliding window log?" — O(n) memory where n is the number of requests in the window. At high limits (e.g., 10k/min), this becomes expensive. Sliding window counter is O(1) memory as an approximation.</li>
+  <li>"Compare all rate limiting algorithms." — Token bucket (burst-friendly, O(1)), fixed window (simple, O(1), boundary spike), sliding window log (exact, O(n)), sliding window counter (smooth, O(1)), leaky bucket (constant rate).</li>
+  <li>"How would you rate limit a distributed system?" — Centralized counter in Redis using Lua for atomicity. Choose algorithm based on requirements: token bucket for bursty traffic, sliding window for smooth limiting.</li>
+</ul>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Depth:</strong> Redis CELL (Clippy) module implementation details. <br>
+  <strong>Depth:</strong> Generic Cell Rate Algorithm (GCRA) mathematical proofs. <br>
+  <strong>Depth:</strong> Nginx/Kong rate limiting plugin configuration specifics.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">System Design Primer — Rate Limiting (GitHub)</div>
+  <p>Comprehensive comparison of rate limiting algorithms with code examples, diagrams, and tradeoff analysis.</p>
+</div>
+<div class="source">
+  <div class="source-label">Redis — Rate Limiting with Sorted Sets</div>
+  <p>Redis documentation on implementing sliding window rate limiting using ZSET for timestamp-based tracking.</p>
+</div>
+<div class="source">
+  <div class="source-label">Cloudflare — Rate Limiting Algorithms Explained</div>
+  <p>Cloudflare's practical comparison of rate limiting approaches used at their edge network scale.</p>
+</div>
+
+<div class="nav">
+  <a href="fixed-window.html">&larr; Fixed Window</a>
+  <a href="backup.html">Backup &rarr;</a>
+</div>
+</body>
+</html>

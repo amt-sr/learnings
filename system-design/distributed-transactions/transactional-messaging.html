@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>9.2.3 Transactional Messaging</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb"><a href="../">System Design</a> / <a href="./">Section 9: Distributed Transactions</a> / 9.2.3 Transactional Messaging</div>
+
+<h1>Transactional Messaging</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the concept of transactional messaging as the combination of reliable message production (outbox), reliable message consumption (inbox), and idempotent processing. This unifying concept ties together the patterns needed for correct event-driven communication between services.</p>
+
+<h2>Definition</h2>
+<p>Transactional messaging ensures that message delivery between services is consistent with database state changes. It means that a database write and the corresponding message publication happen atomically (either both succeed or neither), and that message consumption is idempotent. In practice, transactional messaging is implemented by combining the <strong>Outbox Pattern</strong> (reliable sending) and the <strong>Inbox Pattern</strong> (reliable receiving).</p>
+
+<div class="callout">
+  <strong>Key Insight:</strong> Transactional messaging is not a single pattern but a combination that solves the end-to-end consistency problem: <em>How do I ensure that when I update my database, the downstream service eventually sees exactly that change, once?</em> The answer is: Outbox for sending, Inbox for receiving, and idempotent consumers for processing.
+</div>
+
+<h2>The End-to-End Guarantee</h2>
+
+<div class="diagram">
+  <strong>Transactional Messaging: Complete Data Flow</strong>
+
+  ┌──────────────────────────────────────────────────────────────┐
+  │                    SENDER SIDE (Outbox)                        │
+  │                                                               │
+  │  Application writes to DB + Outbox in single transaction      │
+  │                                                               │
+  │  ┌─────────────────────────────────────────┐                 │
+  │  │  BEGIN TX                               │                 │
+  │  │    UPDATE orders SET status = 'paid'     │                 │
+  │  │    INSERT INTO outbox (event:           │                 │
+  │  │      OrderPaid, payload: {...})          │                 │
+  │  │  COMMIT                                 │                 │
+  │  └─────────────────────────────────────────┘                 │
+  └──────────────────────────────────────────────────────────────┘
+                          |
+                          |  Relay (CDC or Polling)
+                          v
+  ┌──────────────────────────────────────────────────────────────┐
+  │                    MESSAGE BROKER                             │
+  │                                                               │
+  │  Kafka / SQS / RabbitMQ / Google PubSub                       │
+  │                                                               │
+  │  Guarantee: At-least-once delivery                            │
+  │  (messages may be delivered multiple times)                   │
+  └──────────────────────────────────────────────────────────────┘
+                          |
+                          |  Consumer receives message
+                          v
+  ┌──────────────────────────────────────────────────────────────┐
+  │                    RECEIVER SIDE (Inbox)                      │
+  │                                                               │
+  │  ┌─────────────────────────────────────────┐                 │
+  │  │  BEGIN TX                               │                 │
+  │  │    IF inbox.contains(message_id):       │                 │
+  │  │      SKIP (duplicate)                    │                 │
+  │  │    ELSE:                                │                 │
+  │  │      process_business_logic(payload)    │                 │
+  │  │      INSERT INTO inbox (message_id)      │                 │
+  │  │  COMMIT                                 │                 │
+  │  └─────────────────────────────────────────┘                 │
+  └──────────────────────────────────────────────────────────────┘
+</div>
+
+<h2>Components of Transactional Messaging</h2>
+
+<h3>1. Reliable Production (Outbox)</h3>
+<ul>
+  <li>Write business data + outbox event in same DB transaction</li>
+  <li>Separate relay process publishes events to message broker</li>
+  <li>Guarantee: If the DB transaction committed, the message will eventually be published</li>
+</ul>
+
+<h3>2. Reliable Delivery (Message Broker)</h3>
+<ul>
+  <li>Message broker provides at-least-once delivery (most common default)</li>
+  <li>Persistent storage ensures messages survive broker restarts</li>
+  <li>Retention policies keep messages until all consumers have processed them</li>
+</ul>
+
+<h3>3. Reliable Consumption (Inbox + Idempotency)</h3>
+<ul>
+  <li>Inbox table deduplicates messages by message ID</li>
+  <li>Business logic processes within same transaction as inbox insert</li>
+  <li>Guarantee: Even if a message is delivered 100 times, the effect is the same as processing it once</li>
+</ul>
+
+<h2>Comparison: Messaging Delivery Guarantees</h2>
+
+<table>
+  <tr><th>Guarantee</th><th>Description</th><th>Typical Implementation</th></tr>
+  <tr><td>At-most-once</td><td>Messages may be lost, never duplicated</td><td>Fire-and-forget, no retries</td></tr>
+  <tr><td>At-least-once</td><td>Messages are never lost, may be duplicated</td><td>Kafka manual commits, SQS with visibility timeout</td></tr>
+  <tr><td>Exactly-once (Kafka)</td><td>Kafka-side exactly-once for stream processing</td><td>Kafka Transactions API, idempotent producer</td></tr>
+  <tr><td style="color:#58a6ff">Effectively-once</td><td>At-least-once + idempotent consumer = correct semantics</td><td class="green">Outbox + Inbox pattern (recommended)</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Interview Clarification:</strong> Kafka's "exactly-once" guarantee applies to Kafka-internal stream processing (producer to broker to consumer within the Kafka ecosystem). For external consumers writing to databases, you still need inbox-based idempotency. Don't confuse Kafka's exactly-once with application-level exactly-once semantics.
+</div>
+
+<h2>Implementation Approaches</h2>
+
+<h3>Approach 1: Outbox + Inbox (Pattern-Based)</h3>
+<ul>
+  <li>Works with any database and any message broker</li>
+  <li>No special infrastructure required</li>
+  <li>Application-level guarantee, portable across stacks</li>
+  <li>Most commonly used in microservices architectures</li>
+</ul>
+
+<h3>Approach 2: Kafka Transactions + Idempotent Producer</h3>
+<ul>
+  <li>Kafka producer sends to multiple topics atomically</li>
+  <li>Consumer reads transactionally (read_committed isolation)</li>
+  <li>Limited to Kafka ecosystem</li>
+  <li>Does not cover database writes (still need inbox for DB consumers)</li>
+</ul>
+
+<h3>Approach 3: XA Transactions (Legacy)</h3>
+<ul>
+  <li>Uses 2PC between DB and message broker (XA-compliant MQ like IBM MQ)</li>
+  <li>Blocking, slow, complex to operate</li>
+  <li>Rarely recommended for modern systems</li>
+</ul>
+
+<table>
+  <tr><th>Approach</th><th>Latency</th><th>Complexity</th><th>Ecosystem Lock-in</th><th>Modern Recommendation</th></tr>
+  <tr><td>Outbox + Inbox</td><td>Low (async)</td><td>Moderate</td><td class="green">None</td><td class="green">Yes</td></tr>
+  <tr><td>Kafka Transactions</td><td>Low</td><td>Low</td><td class="red">Kafka only</td><td>For Kafka-native pipelines</td></tr>
+  <tr><td>XA Transactions</td><td class="red">High</td><td class="red">High</td><td>Moderate</td><td>No (legacy)</td></tr>
+</table>
+
+<h2>Design Considerations</h2>
+
+<h3>Ordering Guarantees</h3>
+<ul>
+  <li>Within a single aggregate/entity, events must be processed in order</li>
+  <li>Use a sequence number or version field in the inbox to detect out-of-order delivery</li>
+  <li>Kafka: partition key by aggregate ID to guarantee ordering per entity</li>
+</ul>
+
+<h3>Retry Strategy</h3>
+<ul>
+  <li>Failed message processing should retry with exponential backoff</li>
+  <li>After max retries, move to a Dead Letter Queue (DLQ) for manual inspection</li>
+  <li>Separate retry from inbox deduplication: retries of the same message ID are deduplicated</li>
+</ul>
+
+<h3>Monitoring</h3>
+<ul>
+  <li>Track outbox lag (unpublished messages count)</li>
+  <li>Track inbox size growth (potential deduplication issues)</li>
+  <li>Alert on DLQ depth</li>
+  <li>Measure end-to-end latency from outbox insert to inbox commit</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What is transactional messaging? How does it differ from regular messaging?</li>
+  <li>How do you achieve exactly-once semantics in an event-driven architecture?</li>
+  <li>Compare Kafka exactly-once with the outbox + inbox pattern. When would you use each?</li>
+  <li>What guarantees does the outbox pattern provide for message production?</li>
+  <li>How does the inbox pattern handle duplicate messages?</li>
+  <li>Design a payment notification system that must guarantee every payment is processed exactly once.</li>
+  <li>How do you handle ordering in transactional messaging?</li>
+  <li>What is a Dead Letter Queue and how does it fit into transactional messaging?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>For L5/L6/Staff interviews, skip:</strong>
+  <ul>
+    <li>Kafka Streams exactly-once internals (transactional API details, epoch fencing)</li>
+    <li>XA transaction manager configuration (XADataSource, XAResource)</li>
+    <li>Specific broker configurations for message retention, compaction</li>
+    <li>AMQP transaction model details unless asked</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><em>Microservices Patterns</em> (Chris Richardson) -- Chapter 6: Event Sourcing and Transactional Messaging</li>
+    <li><em>Designing Data-Intensive Applications</em> (Martin Kleppmann) -- Chapter 11: Stream Processing, Section on exactly-once</li>
+    <li><em>Kafka: The Definitive Guide</em> (Narkhede et al.) -- Chapter on exactly-once semantics</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Online</div>
+  <ul>
+    <li><a href="https://microservices.io/patterns/data/transactional-outbox.html">Chris Richardson: Transactional Outbox</a></li>
+    <li><a href="https://kafka.apache.org/documentation/#semantics">Kafka Documentation: Message Delivery Semantics</a></li>
+    <li><a href="https://www.confluent.io/blog/enabling-exactly-once-kafka-streaming/">Confluent: Exactly-once streaming</a></li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="inbox-pattern.html">&larr; 9.2.2 Inbox Pattern</a>
+  <a href="compensation.html">9.2.4 Compensation &rarr;</a>
+</div>
+
+</body>
+</html>

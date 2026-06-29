@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Design</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.6;
+    padding: 2rem;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 2rem;
+    color: #f0f6fc;
+    border-bottom: 2px solid #30363d;
+    padding-bottom: 0.75rem;
+    margin-bottom: 1.5rem;
+  }
+  .section { margin-bottom: 2rem; }
+  .section-header {
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: #58a6ff;
+    margin-bottom: 0.5rem;
+    padding: 0.35rem 0;
+    border-left: 3px solid #58a6ff;
+    padding-left: 0.75rem;
+  }
+  .subsection { margin-bottom: 1.25rem; margin-left: 1rem; }
+  .subsection-header {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #8b949e;
+    margin-bottom: 0.25rem;
+  }
+  .topics { margin-left: 1rem; }
+  .topic-list { list-style: none; }
+  .topic-list li { padding: 0.1rem 0; }
+  .topic-list a {
+    color: #c9d1d9;
+    text-decoration: none;
+    display: inline-block;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    transition: background 0.15s, color 0.15s;
+  }
+  .topic-list a:hover {
+    background: #1f6feb22;
+    color: #58a6ff;
+  }
+  a:visited { color: #c9d1d9; }
+  a:visited:hover { color: #58a6ff; }
+  .top-level { margin-left: 1rem; }
+  .top-level .topic-list li { padding: 0.15rem 0; }
+  .num {
+    color: #8b949e;
+    margin-right: 0.5em;
+    font-variant-numeric: tabular-nums;
+    user-select: none;
+  }
+</style>
+</head>
+<body>
+
+<h1>System Design</h1>
+
+<!-- 1 Fundamentals -->
+<div class="section">
+  <div class="section-header"><span class="num">1</span> Fundamentals</div>
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">1.1</span> System Design Basics</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="foundations/functional-requirements.html"><span class="num">1.1.1</span> Functional Requirements</a></li>
+        <li><a href="foundations/non-functional-requirements.html"><span class="num">1.1.2</span> Non-Functional Requirements</a></li>
+        <li><a href="foundations/scalability.html"><span class="num">1.1.3</span> Scalability</a></li>
+        <li><a href="foundations/availability.html"><span class="num">1.1.4</span> Availability</a></li>
+        <li><a href="foundations/reliability.html"><span class="num">1.1.5</span> Reliability</a></li>
+        <li><a href="foundations/durability.html"><span class="num">1.1.6</span> Durability</a></li>
+        <li><a href="foundations/fault-tolerance.html"><span class="num">1.1.7</span> Fault Tolerance</a></li>
+        <li><a href="foundations/latency.html"><span class="num">1.1.8</span> Latency</a></li>
+        <li><a href="foundations/throughput.html"><span class="num">1.1.9</span> Throughput</a></li>
+        <li><a href="foundations/capacity-planning.html"><span class="num">1.1.10</span> Capacity Planning</a></li>
+        <li><a href="foundations/bottleneck-analysis.html"><span class="num">1.1.11</span> Bottleneck Analysis</a></li>
+        <li><a href="foundations/trade-offs.html"><span class="num">1.1.12</span> Trade-offs</a></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- 2 Networking -->
+<div class="section">
+  <div class="section-header"><span class="num">2</span> Networking</div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">2.1</span> Network Basics</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="networking/ip-address.html"><span class="num">2.1.1</span> IP Address</a></li>
+        <li><a href="networking/port.html"><span class="num">2.1.2</span> Port</a></li>
+        <li><a href="networking/tcp.html"><span class="num">2.1.3</span> TCP</a></li>
+        <li><a href="networking/udp.html"><span class="num">2.1.4</span> UDP</a></li>
+        <li><a href="networking/tls.html"><span class="num">2.1.5</span> TLS</a></li>
+        <li><a href="networking/https.html"><span class="num">2.1.6</span> HTTPS</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">2.2</span> HTTP</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="networking/http-request-lifecycle.html"><span class="num">2.2.1</span> HTTP Request Lifecycle</a></li>
+        <li><a href="networking/http-methods.html"><span class="num">2.2.2</span> HTTP Methods</a></li>
+        <li><a href="networking/status-codes.html"><span class="num">2.2.3</span> Status Codes</a></li>
+        <li><a href="networking/headers.html"><span class="num">2.2.4</span> Headers</a></li>
+        <li><a href="networking/cookies.html"><span class="num">2.2.5</span> Cookies</a></li>
+        <li><a href="networking/sessions.html"><span class="num">2.2.6</span> Sessions</a></li>
+        <li><a href="networking/keep-alive.html"><span class="num">2.2.7</span> Keep Alive</a></li>
+        <li><a href="networking/compression.html"><span class="num">2.2.8</span> Compression</a></li>
+        <li><a href="networking/caching-headers.html"><span class="num">2.2.9</span> Caching Headers</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">2.3</span> HTTP Versions</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="networking/http1.1.html"><span class="num">2.3.1</span> HTTP/1.1</a></li>
+        <li><a href="networking/http2.html"><span class="num">2.3.2</span> HTTP/2</a></li>
+        <li><a href="networking/http3.html"><span class="num">2.3.3</span> HTTP/3</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">2.4</span> APIs</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="networking/rest.html"><span class="num">2.4.1</span> REST</a></li>
+        <li><a href="networking/graphql.html"><span class="num">2.4.2</span> GraphQL</a></li>
+        <li><a href="networking/grpc.html"><span class="num">2.4.3</span> gRPC</a></li>
+        <li><a href="networking/websockets.html"><span class="num">2.4.4</span> WebSockets</a></li>
+        <li><a href="networking/server-sent-events.html"><span class="num">2.4.5</span> Server Sent Events</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">2.5</span> DNS</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="networking/dns-resolution.html"><span class="num">2.5.1</span> DNS Resolution</a></li>
+        <li><a href="networking/recursive-resolver.html"><span class="num">2.5.2</span> Recursive Resolver</a></li>
+        <li><a href="networking/authoritative-dns.html"><span class="num">2.5.3</span> Authoritative DNS</a></li>
+        <li><a href="networking/dns-caching.html"><span class="num">2.5.4</span> DNS Caching</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">2.6</span> CDN</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="networking/edge-servers.html"><span class="num">2.6.1</span> Edge Servers</a></li>
+        <li><a href="networking/cache-hit.html"><span class="num">2.6.2</span> Cache Hit</a></li>
+        <li><a href="networking/cache-miss.html"><span class="num">2.6.3</span> Cache Miss</a></li>
+        <li><a href="networking/cache-invalidation.html"><span class="num">2.6.4</span> Cache Invalidation</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">2.7</span> Load Balancing</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="networking/reverse-proxy.html"><span class="num">2.7.1</span> Reverse Proxy</a></li>
+        <li><a href="networking/forward-proxy.html"><span class="num">2.7.2</span> Forward Proxy</a></li>
+        <li><a href="networking/l4-load-balancer.html"><span class="num">2.7.3</span> L4 Load Balancer</a></li>
+        <li><a href="networking/l7-load-balancer.html"><span class="num">2.7.4</span> L7 Load Balancer</a></li>
+        <li><a href="networking/health-checks.html"><span class="num">2.7.5</span> Health Checks</a></li>
+        <li><a href="networking/sticky-sessions.html"><span class="num">2.7.6</span> Sticky Sessions</a></li>
+        <li><a href="networking/round-robin.html"><span class="num">2.7.7</span> Round Robin</a></li>
+        <li><a href="networking/weighted-round-robin.html"><span class="num">2.7.8</span> Weighted Round Robin</a></li>
+        <li><a href="networking/least-connections.html"><span class="num">2.7.9</span> Least Connections</a></li>
+        <li><a href="networking/consistent-hashing.html"><span class="num">2.7.10</span> Consistent Hashing</a></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- 3 Storage Fundamentals -->
+<div class="section">
+  <div class="section-header"><span class="num">3</span> Storage Fundamentals</div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">3.1</span> Physical Storage</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="storage/hdd.html"><span class="num">3.1.1</span> HDD</a></li>
+        <li><a href="storage/ssd.html"><span class="num">3.1.2</span> SSD</a></li>
+        <li><a href="storage/ram.html"><span class="num">3.1.3</span> RAM</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">3.2</span> Storage Layout</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="storage/pages.html"><span class="num">3.2.1</span> Pages</a></li>
+        <li><a href="storage/blocks.html"><span class="num">3.2.2</span> Blocks</a></li>
+        <li><a href="storage/records.html"><span class="num">3.2.3</span> Records</a></li>
+        <li><a href="storage/buffer-pool.html"><span class="num">3.2.4</span> Buffer Pool</a></li>
+        <li><a href="storage/page-cache.html"><span class="num">3.2.5</span> Page Cache</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">3.3</span> Database Write Path</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="storage/write-ahead-log.html"><span class="num">3.3.1</span> Write Ahead Log</a></li>
+        <li><a href="storage/redo-log.html"><span class="num">3.3.2</span> Redo Log</a></li>
+        <li><a href="storage/undo-log.html"><span class="num">3.3.3</span> Undo Log</a></li>
+        <li><a href="storage/checkpoint.html"><span class="num">3.3.4</span> Checkpoint</a></li>
+        <li><a href="storage/crash-recovery.html"><span class="num">3.3.5</span> Crash Recovery</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">3.4</span> Transactions</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="storage/acid.html"><span class="num">3.4.1</span> ACID</a></li>
+        <li><a href="storage/atomicity.html"><span class="num">3.4.2</span> Atomicity</a></li>
+        <li><a href="storage/consistency.html"><span class="num">3.4.3</span> Consistency</a></li>
+        <li><a href="storage/isolation.html"><span class="num">3.4.4</span> Isolation</a></li>
+        <li><a href="storage/durability.html"><span class="num">3.4.5</span> Durability</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">3.5</span> Isolation Levels</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="storage/read-uncommitted.html"><span class="num">3.5.1</span> Read Uncommitted</a></li>
+        <li><a href="storage/read-committed.html"><span class="num">3.5.2</span> Read Committed</a></li>
+        <li><a href="storage/repeatable-read.html"><span class="num">3.5.3</span> Repeatable Read</a></li>
+        <li><a href="storage/serializable.html"><span class="num">3.5.4</span> Serializable</a></li>
+        <li><a href="storage/snapshot-isolation.html"><span class="num">3.5.5</span> Snapshot Isolation</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">3.6</span> Transaction Problems</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="storage/dirty-read.html"><span class="num">3.6.1</span> Dirty Read</a></li>
+        <li><a href="storage/non-repeatable-read.html"><span class="num">3.6.2</span> Non Repeatable Read</a></li>
+        <li><a href="storage/phantom-read.html"><span class="num">3.6.3</span> Phantom Read</a></li>
+        <li><a href="storage/lost-update.html"><span class="num">3.6.4</span> Lost Update</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">3.7</span> MVCC</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="storage/version-chains.html"><span class="num">3.7.1</span> Version Chains</a></li>
+        <li><a href="storage/snapshots.html"><span class="num">3.7.2</span> Snapshots</a></li>
+        <li><a href="storage/visibility-rules.html"><span class="num">3.7.3</span> Visibility Rules</a></li>
+        <li><a href="storage/garbage-collection.html"><span class="num">3.7.4</span> Garbage Collection</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">3.8</span> Indexes</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="storage/primary-index.html"><span class="num">3.8.1</span> Primary Index</a></li>
+        <li><a href="storage/secondary-index.html"><span class="num">3.8.2</span> Secondary Index</a></li>
+        <li><a href="storage/clustered-index.html"><span class="num">3.8.3</span> Clustered Index</a></li>
+        <li><a href="storage/non-clustered-index.html"><span class="num">3.8.4</span> Non Clustered Index</a></li>
+        <li><a href="storage/composite-index.html"><span class="num">3.8.5</span> Composite Index</a></li>
+        <li><a href="storage/covering-index.html"><span class="num">3.8.6</span> Covering Index</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">3.9</span> Storage Engines</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="storage/b-plus-tree.html"><span class="num">3.9.1</span> B+ Tree</a></li>
+        <li><a href="storage/lsm-tree.html"><span class="num">3.9.2</span> LSM Tree</a></li>
+        <li><a href="storage/memtable.html"><span class="num">3.9.3</span> MemTable</a></li>
+        <li><a href="storage/sstable.html"><span class="num">3.9.4</span> SSTable</a></li>
+        <li><a href="storage/bloom-filter.html"><span class="num">3.9.5</span> Bloom Filter</a></li>
+        <li><a href="storage/compaction.html"><span class="num">3.9.6</span> Compaction</a></li>
+        <li><a href="storage/tombstones.html"><span class="num">3.9.7</span> Tombstones</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">3.10</span> Database Models</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="storage/relational-database.html"><span class="num">3.10.1</span> Relational Database</a></li>
+        <li><a href="storage/key-value-store.html"><span class="num">3.10.2</span> Key Value Store</a></li>
+        <li><a href="storage/document-database.html"><span class="num">3.10.3</span> Document Database</a></li>
+        <li><a href="storage/wide-column-database.html"><span class="num">3.10.4</span> Wide Column Database</a></li>
+        <li><a href="storage/graph-database.html"><span class="num">3.10.5</span> Graph Database</a></li>
+        <li><a href="storage/time-series-database.html"><span class="num">3.10.6</span> Time Series Database</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="top-level">
+    <ul class="topic-list">
+      <li><a href="storage/sql-vs-nosql.html"><span class="num">3.11</span> SQL vs NoSQL</a></li>
+    </ul>
+  </div>
+</div>
+
+<!-- 4 Replication -->
+<div class="section">
+  <div class="section-header"><span class="num">4</span> Replication</div>
+
+  <div class="top-level">
+    <ul class="topic-list">
+      <li><a href="replication/why-replication.html"><span class="num">4.1</span> Why Replication</a></li>
+    </ul>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">4.2</span> Replication Models</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="replication/leader-follower.html"><span class="num">4.2.1</span> Leader-Follower</a></li>
+        <li><a href="replication/multi-leader.html"><span class="num">4.2.2</span> Multi-Leader</a></li>
+        <li><a href="replication/leaderless.html"><span class="num">4.2.3</span> Leaderless</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">4.3</span> Replication Types</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="replication/synchronous.html"><span class="num">4.3.1</span> Synchronous</a></li>
+        <li><a href="replication/asynchronous.html"><span class="num">4.3.2</span> Asynchronous</a></li>
+        <li><a href="replication/semi-synchronous.html"><span class="num">4.3.3</span> Semi Synchronous</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">4.4</span> Replication Topologies</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="replication/star-replication.html"><span class="num">4.4.1</span> Star Replication</a></li>
+        <li><a href="replication/chain-replication.html"><span class="num">4.4.2</span> Chain Replication</a></li>
+        <li><a href="replication/circular-replication.html"><span class="num">4.4.3</span> Circular Replication</a></li>
+        <li><a href="replication/cascading-replication.html"><span class="num">4.4.4</span> Cascading Replication</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">4.5</span> Replication Internals</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="replication/binlog.html"><span class="num">4.5.1</span> Binlog</a></li>
+        <li><a href="replication/wal-shipping.html"><span class="num">4.5.2</span> WAL Shipping</a></li>
+        <li><a href="replication/snapshot-replication.html"><span class="num">4.5.3</span> Snapshot Replication</a></li>
+        <li><a href="replication/logical-replication.html"><span class="num">4.5.4</span> Logical Replication</a></li>
+        <li><a href="replication/physical-replication.html"><span class="num">4.5.5</span> Physical Replication</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">4.6</span> Replication Problems</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="replication/replica-lag.html"><span class="num">4.6.1</span> Replica Lag</a></li>
+        <li><a href="replication/stale-reads.html"><span class="num">4.6.2</span> Stale Reads</a></li>
+        <li><a href="replication/read-after-write.html"><span class="num">4.6.3</span> Read After Write</a></li>
+        <li><a href="replication/split-brain.html"><span class="num">4.6.4</span> Split Brain</a></li>
+        <li><a href="replication/divergence.html"><span class="num">4.6.5</span> Divergence</a></li>
+        <li><a href="replication/network-partition.html"><span class="num">4.6.6</span> Network Partition</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">4.7</span> Recovery</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="replication/failover.html"><span class="num">4.7.1</span> Failover</a></li>
+        <li><a href="replication/failback.html"><span class="num">4.7.2</span> Failback</a></li>
+        <li><a href="replication/read-repair.html"><span class="num">4.7.3</span> Read Repair</a></li>
+        <li><a href="replication/hinted-handoff.html"><span class="num">4.7.4</span> Hinted Handoff</a></li>
+        <li><a href="replication/anti-entropy.html"><span class="num">4.7.5</span> Anti Entropy</a></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- 5 Distributed Systems -->
+<div class="section">
+  <div class="section-header"><span class="num">5</span> Distributed Systems</div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">5.1</span> CAP</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="distributed-systems/consistency.html"><span class="num">5.1.1</span> Consistency</a></li>
+        <li><a href="distributed-systems/availability.html"><span class="num">5.1.2</span> Availability</a></li>
+        <li><a href="distributed-systems/partition-tolerance.html"><span class="num">5.1.3</span> Partition Tolerance</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="top-level">
+    <ul class="topic-list">
+      <li><a href="distributed-systems/pacelc.html"><span class="num">5.2</span> PACELC</a></li>
+    </ul>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">5.3</span> Consistency Models</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="distributed-systems/strong-consistency.html"><span class="num">5.3.1</span> Strong Consistency</a></li>
+        <li><a href="distributed-systems/eventual-consistency.html"><span class="num">5.3.2</span> Eventual Consistency</a></li>
+        <li><a href="distributed-systems/sequential-consistency.html"><span class="num">5.3.3</span> Sequential Consistency</a></li>
+        <li><a href="distributed-systems/linearizability.html"><span class="num">5.3.4</span> Linearizability</a></li>
+        <li><a href="distributed-systems/causal-consistency.html"><span class="num">5.3.5</span> Causal Consistency</a></li>
+        <li><a href="distributed-systems/session-consistency.html"><span class="num">5.3.6</span> Session Consistency</a></li>
+        <li><a href="distributed-systems/read-your-writes.html"><span class="num">5.3.7</span> Read Your Writes</a></li>
+        <li><a href="distributed-systems/monotonic-reads.html"><span class="num">5.3.8</span> Monotonic Reads</a></li>
+        <li><a href="distributed-systems/monotonic-writes.html"><span class="num">5.3.9</span> Monotonic Writes</a></li>
+        <li><a href="distributed-systems/writes-follow-reads.html"><span class="num">5.3.10</span> Writes Follow Reads</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">5.4</span> Time</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="distributed-systems/physical-clock.html"><span class="num">5.4.1</span> Physical Clock</a></li>
+        <li><a href="distributed-systems/logical-clock.html"><span class="num">5.4.2</span> Logical Clock</a></li>
+        <li><a href="distributed-systems/lamport-clock.html"><span class="num">5.4.3</span> Lamport Clock</a></li>
+        <li><a href="distributed-systems/vector-clock.html"><span class="num">5.4.4</span> Vector Clock</a></li>
+        <li><a href="distributed-systems/hybrid-logical-clock.html"><span class="num">5.4.5</span> Hybrid Logical Clock</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">5.5</span> Conflict Resolution</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="distributed-systems/last-write-wins.html"><span class="num">5.5.1</span> Last Write Wins</a></li>
+        <li><a href="distributed-systems/crdt.html"><span class="num">5.5.2</span> CRDT</a></li>
+        <li><a href="distributed-systems/operational-transform.html"><span class="num">5.5.3</span> Operational Transform</a></li>
+        <li><a href="distributed-systems/merge-strategies.html"><span class="num">5.5.4</span> Merge Strategies</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">5.6</span> Consensus</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="distributed-systems/why-consensus.html"><span class="num">5.6.1</span> Why Consensus</a></li>
+        <li><a href="distributed-systems/leader-election.html"><span class="num">5.6.2</span> Leader Election</a></li>
+        <li><a href="distributed-systems/heartbeats.html"><span class="num">5.6.3</span> Heartbeats</a></li>
+        <li><a href="distributed-systems/failure-detector.html"><span class="num">5.6.4</span> Failure Detector</a></li>
+        <li><a href="distributed-systems/gossip-protocol.html"><span class="num">5.6.5</span> Gossip Protocol</a></li>
+        <li><a href="distributed-systems/membership.html"><span class="num">5.6.6</span> Membership</a></li>
+        <li><a href="distributed-systems/raft.html"><span class="num">5.6.7</span> Raft</a></li>
+        <li><a href="distributed-systems/paxos.html"><span class="num">5.6.8</span> Paxos</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">5.7</span> Quorums</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="distributed-systems/read-quorum.html"><span class="num">5.7.1</span> Read Quorum</a></li>
+        <li><a href="distributed-systems/write-quorum.html"><span class="num">5.7.2</span> Write Quorum</a></li>
+        <li><a href="distributed-systems/majority-quorum.html"><span class="num">5.7.3</span> Majority Quorum</a></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- 6 Partitioning -->
+<div class="section">
+  <div class="section-header"><span class="num">6</span> Partitioning</div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">6.1</span> Partitioning</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="partitioning/horizontal-partitioning.html"><span class="num">6.1.1</span> Horizontal Partitioning</a></li>
+        <li><a href="partitioning/vertical-partitioning.html"><span class="num">6.1.2</span> Vertical Partitioning</a></li>
+        <li><a href="partitioning/functional-partitioning.html"><span class="num">6.1.3</span> Functional Partitioning</a></li>
+        <li><a href="partitioning/geo-partitioning.html"><span class="num">6.1.4</span> Geo Partitioning</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">6.2</span> Sharding</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="partitioning/range-sharding.html"><span class="num">6.2.1</span> Range Sharding</a></li>
+        <li><a href="partitioning/hash-sharding.html"><span class="num">6.2.2</span> Hash Sharding</a></li>
+        <li><a href="partitioning/directory-sharding.html"><span class="num">6.2.3</span> Directory Sharding</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">6.3</span> Consistent Hashing</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="partitioning/hash-ring.html"><span class="num">6.3.1</span> Hash Ring</a></li>
+        <li><a href="partitioning/virtual-nodes.html"><span class="num">6.3.2</span> Virtual Nodes</a></li>
+        <li><a href="partitioning/rebalancing.html"><span class="num">6.3.3</span> Rebalancing</a></li>
+        <li><a href="partitioning/resharding.html"><span class="num">6.3.4</span> Resharding</a></li>
+        <li><a href="partitioning/hot-keys.html"><span class="num">6.3.5</span> Hot Keys</a></li>
+        <li><a href="partitioning/hot-partitions.html"><span class="num">6.3.6</span> Hot Partitions</a></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- 7 Caching -->
+<div class="section">
+  <div class="section-header"><span class="num">7</span> Caching</div>
+
+  <div class="top-level">
+    <ul class="topic-list">
+      <li><a href="caching/why-caching.html"><span class="num">7.1</span> Why Caching</a></li>
+    </ul>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">7.2</span> Cache Patterns</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="caching/cache-aside.html"><span class="num">7.2.1</span> Cache Aside</a></li>
+        <li><a href="caching/read-through.html"><span class="num">7.2.2</span> Read Through</a></li>
+        <li><a href="caching/write-through.html"><span class="num">7.2.3</span> Write Through</a></li>
+        <li><a href="caching/write-around.html"><span class="num">7.2.4</span> Write Around</a></li>
+        <li><a href="caching/write-back.html"><span class="num">7.2.5</span> Write Back</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">7.3</span> Cache Consistency</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="caching/cache-invalidation.html"><span class="num">7.3.1</span> Cache Invalidation</a></li>
+        <li><a href="caching/cache-coherence.html"><span class="num">7.3.2</span> Cache Coherence</a></li>
+        <li><a href="caching/ttl.html"><span class="num">7.3.3</span> TTL</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">7.4</span> Cache Problems</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="caching/cache-stampede.html"><span class="num">7.4.1</span> Cache Stampede</a></li>
+        <li><a href="caching/cache-penetration.html"><span class="num">7.4.2</span> Cache Penetration</a></li>
+        <li><a href="caching/cache-avalanche.html"><span class="num">7.4.3</span> Cache Avalanche</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">7.5</span> Eviction</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="caching/lru.html"><span class="num">7.5.1</span> LRU</a></li>
+        <li><a href="caching/lfu.html"><span class="num">7.5.2</span> LFU</a></li>
+        <li><a href="caching/fifo.html"><span class="num">7.5.3</span> FIFO</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">7.6</span> Redis</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="caching/redis-basics.html"><span class="num">7.6.1</span> Redis Basics</a></li>
+        <li><a href="caching/redis-cluster.html"><span class="num">7.6.2</span> Redis Cluster</a></li>
+        <li><a href="caching/distributed-cache.html"><span class="num">7.6.3</span> Distributed Cache</a></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- 8 Messaging -->
+<div class="section">
+  <div class="section-header"><span class="num">8</span> Messaging</div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">8.1</span> Messaging Models</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="messaging/queue.html"><span class="num">8.1.1</span> Queue</a></li>
+        <li><a href="messaging/pub-sub.html"><span class="num">8.1.2</span> Pub/Sub</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">8.2</span> Kafka</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="messaging/broker.html"><span class="num">8.2.1</span> Broker</a></li>
+        <li><a href="messaging/topic.html"><span class="num">8.2.2</span> Topic</a></li>
+        <li><a href="messaging/partition.html"><span class="num">8.2.3</span> Partition</a></li>
+        <li><a href="messaging/offset.html"><span class="num">8.2.4</span> Offset</a></li>
+        <li><a href="messaging/producer.html"><span class="num">8.2.5</span> Producer</a></li>
+        <li><a href="messaging/consumer.html"><span class="num">8.2.6</span> Consumer</a></li>
+        <li><a href="messaging/consumer-group.html"><span class="num">8.2.7</span> Consumer Group</a></li>
+        <li><a href="messaging/replication.html"><span class="num">8.2.8</span> Replication</a></li>
+        <li><a href="messaging/isr.html"><span class="num">8.2.9</span> ISR</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">8.3</span> Delivery Guarantees</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="messaging/at-most-once.html"><span class="num">8.3.1</span> At Most Once</a></li>
+        <li><a href="messaging/at-least-once.html"><span class="num">8.3.2</span> At Least Once</a></li>
+        <li><a href="messaging/exactly-once.html"><span class="num">8.3.3</span> Exactly Once</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">8.4</span> Reliability</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="messaging/retry.html"><span class="num">8.4.1</span> Retry</a></li>
+        <li><a href="messaging/dead-letter-queue.html"><span class="num">8.4.2</span> Dead Letter Queue</a></li>
+        <li><a href="messaging/exponential-backoff.html"><span class="num">8.4.3</span> Exponential Backoff</a></li>
+        <li><a href="messaging/ordering.html"><span class="num">8.4.4</span> Ordering</a></li>
+        <li><a href="messaging/idempotency.html"><span class="num">8.4.5</span> Idempotency</a></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- 9 Distributed Transactions -->
+<div class="section">
+  <div class="section-header"><span class="num">9</span> Distributed Transactions</div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">9.1</span> Distributed Transactions</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="distributed-transactions/two-phase-commit.html"><span class="num">9.1.1</span> Two Phase Commit</a></li>
+        <li><a href="distributed-transactions/three-phase-commit.html"><span class="num">9.1.2</span> Three Phase Commit</a></li>
+        <li><a href="distributed-transactions/saga.html"><span class="num">9.1.3</span> Saga</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">9.2</span> Reliability Patterns</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="distributed-transactions/outbox-pattern.html"><span class="num">9.2.1</span> Outbox Pattern</a></li>
+        <li><a href="distributed-transactions/inbox-pattern.html"><span class="num">9.2.2</span> Inbox Pattern</a></li>
+        <li><a href="distributed-transactions/transactional-messaging.html"><span class="num">9.2.3</span> Transactional Messaging</a></li>
+        <li><a href="distributed-transactions/compensation.html"><span class="num">9.2.4</span> Compensation</a></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- 10 Reliability -->
+<div class="section">
+  <div class="section-header"><span class="num">10</span> Reliability</div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">10.1</span> Availability</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="reliability/sla.html"><span class="num">10.1.1</span> SLA</a></li>
+        <li><a href="reliability/slo.html"><span class="num">10.1.2</span> SLO</a></li>
+        <li><a href="reliability/sli.html"><span class="num">10.1.3</span> SLI</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">10.2</span> Failure Handling</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="reliability/circuit-breaker.html"><span class="num">10.2.1</span> Circuit Breaker</a></li>
+        <li><a href="reliability/retry.html"><span class="num">10.2.2</span> Retry</a></li>
+        <li><a href="reliability/timeout.html"><span class="num">10.2.3</span> Timeout</a></li>
+        <li><a href="reliability/bulkhead.html"><span class="num">10.2.4</span> Bulkhead</a></li>
+        <li><a href="reliability/hedged-requests.html"><span class="num">10.2.5</span> Hedged Requests</a></li>
+        <li><a href="reliability/graceful-degradation.html"><span class="num">10.2.6</span> Graceful Degradation</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">10.3</span> Rate Limiting</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="reliability/token-bucket.html"><span class="num">10.3.1</span> Token Bucket</a></li>
+        <li><a href="reliability/leaky-bucket.html"><span class="num">10.3.2</span> Leaky Bucket</a></li>
+        <li><a href="reliability/fixed-window.html"><span class="num">10.3.3</span> Fixed Window</a></li>
+        <li><a href="reliability/sliding-window.html"><span class="num">10.3.4</span> Sliding Window</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">10.4</span> Disaster Recovery</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="reliability/backup.html"><span class="num">10.4.1</span> Backup</a></li>
+        <li><a href="reliability/restore.html"><span class="num">10.4.2</span> Restore</a></li>
+        <li><a href="reliability/rpo.html"><span class="num">10.4.3</span> RPO</a></li>
+        <li><a href="reliability/rto.html"><span class="num">10.4.4</span> RTO</a></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- 11 Observability -->
+<div class="section">
+  <div class="section-header"><span class="num">11</span> Observability</div>
+  <div class="top-level">
+    <ul class="topic-list">
+      <li><a href="observability/logging.html"><span class="num">11.1</span> Logging</a></li>
+      <li><a href="observability/metrics.html"><span class="num">11.2</span> Metrics</a></li>
+      <li><a href="observability/tracing.html"><span class="num">11.3</span> Tracing</a></li>
+      <li><a href="observability/distributed-tracing.html"><span class="num">11.4</span> Distributed Tracing</a></li>
+      <li><a href="observability/correlation-ids.html"><span class="num">11.5</span> Correlation IDs</a></li>
+    </ul>
+  </div>
+</div>
+
+<!-- 12 Cloud -->
+<div class="section">
+  <div class="section-header"><span class="num">12</span> Cloud</div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">12.1</span> Architecture</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="cloud-architecture/monolith.html"><span class="num">12.1.1</span> Monolith</a></li>
+        <li><a href="cloud-architecture/microservices.html"><span class="num">12.1.2</span> Microservices</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">12.2</span> Infrastructure</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="cloud-architecture/api-gateway.html"><span class="num">12.2.1</span> API Gateway</a></li>
+        <li><a href="cloud-architecture/service-discovery.html"><span class="num">12.2.2</span> Service Discovery</a></li>
+        <li><a href="cloud-architecture/docker.html"><span class="num">12.2.3</span> Docker</a></li>
+        <li><a href="cloud-architecture/kubernetes.html"><span class="num">12.2.4</span> Kubernetes</a></li>
+        <li><a href="cloud-architecture/pods.html"><span class="num">12.2.5</span> Pods</a></li>
+        <li><a href="cloud-architecture/deployments.html"><span class="num">12.2.6</span> Deployments</a></li>
+        <li><a href="cloud-architecture/services.html"><span class="num">12.2.7</span> Services</a></li>
+        <li><a href="cloud-architecture/ingress.html"><span class="num">12.2.8</span> Ingress</a></li>
+        <li><a href="cloud-architecture/autoscaling.html"><span class="num">12.2.9</span> Autoscaling</a></li>
+        <li><a href="cloud-architecture/service-mesh.html"><span class="num">12.2.10</span> Service Mesh</a></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- 13 Architecture Patterns -->
+<div class="section">
+  <div class="section-header"><span class="num">13</span> Architecture Patterns</div>
+  <div class="top-level">
+    <ul class="topic-list">
+      <li><a href="architectural-patterns/event-driven-architecture.html"><span class="num">13.1</span> Event Driven Architecture</a></li>
+      <li><a href="architectural-patterns/cqrs.html"><span class="num">13.2</span> CQRS</a></li>
+      <li><a href="architectural-patterns/event-sourcing.html"><span class="num">13.3</span> Event Sourcing</a></li>
+      <li><a href="architectural-patterns/materialized-view.html"><span class="num">13.4</span> Materialized View</a></li>
+      <li><a href="architectural-patterns/fan-out.html"><span class="num">13.5</span> Fan Out</a></li>
+      <li><a href="architectural-patterns/fan-in.html"><span class="num">13.6</span> Fan In</a></li>
+      <li><a href="architectural-patterns/scatter-gather.html"><span class="num">13.7</span> Scatter Gather</a></li>
+      <li><a href="architectural-patterns/backend-for-frontend.html"><span class="num">13.8</span> Backend For Frontend</a></li>
+      <li><a href="architectural-patterns/strangler-pattern.html"><span class="num">13.9</span> Strangler Pattern</a></li>
+    </ul>
+  </div>
+</div>
+
+<!-- 14 Security -->
+<div class="section">
+  <div class="section-header"><span class="num">14</span> Security</div>
+  <div class="top-level">
+    <ul class="topic-list">
+      <li><a href="security/authentication.html"><span class="num">14.1</span> Authentication</a></li>
+      <li><a href="security/authorization.html"><span class="num">14.2</span> Authorization</a></li>
+      <li><a href="security/oauth.html"><span class="num">14.3</span> OAuth</a></li>
+      <li><a href="security/jwt.html"><span class="num">14.4</span> JWT</a></li>
+      <li><a href="security/rbac.html"><span class="num">14.5</span> RBAC</a></li>
+      <li><a href="security/api-keys.html"><span class="num">14.6</span> API Keys</a></li>
+    </ul>
+  </div>
+</div>
+
+<!-- 15 System Design Problems -->
+<div class="section">
+  <div class="section-header"><span class="num">15</span> System Design Problems</div>
+  <div class="top-level">
+    <ul class="topic-list">
+      <li><a href="design-problems/url-shortener.html"><span class="num">15.1</span> URL Shortener</a></li>
+      <li><a href="design-problems/pastebin.html"><span class="num">15.2</span> Pastebin</a></li>
+      <li><a href="design-problems/distributed-cache.html"><span class="num">15.3</span> Distributed Cache</a></li>
+      <li><a href="design-problems/distributed-lock.html"><span class="num">15.4</span> Distributed Lock</a></li>
+      <li><a href="design-problems/rate-limiter.html"><span class="num">15.5</span> Rate Limiter</a></li>
+      <li><a href="design-problems/notification-system.html"><span class="num">15.6</span> Notification System</a></li>
+      <li><a href="design-problems/chat-system.html"><span class="num">15.7</span> Chat System</a></li>
+      <li><a href="design-problems/news-feed.html"><span class="num">15.8</span> News Feed</a></li>
+      <li><a href="design-problems/search-autocomplete.html"><span class="num">15.9</span> Search Autocomplete</a></li>
+      <li><a href="design-problems/payment-gateway.html"><span class="num">15.10</span> Payment Gateway</a></li>
+      <li><a href="design-problems/logging-system.html"><span class="num">15.11</span> Logging System</a></li>
+      <li><a href="design-problems/metrics-system.html"><span class="num">15.12</span> Metrics System</a></li>
+      <li><a href="design-problems/file-storage.html"><span class="num">15.13</span> File Storage</a></li>
+      <li><a href="design-problems/dropbox.html"><span class="num">15.14</span> Dropbox</a></li>
+      <li><a href="design-problems/google-docs.html"><span class="num">15.15</span> Google Docs</a></li>
+      <li><a href="design-problems/uber.html"><span class="num">15.16</span> Uber</a></li>
+      <li><a href="design-problems/youtube.html"><span class="num">15.17</span> YouTube</a></li>
+      <li><a href="design-problems/amazon-s3.html"><span class="num">15.18</span> Amazon S3</a></li>
+      <li><a href="design-problems/api-gateway.html"><span class="num">15.19</span> API Gateway</a></li>
+    </ul>
+  </div>
+</div>
+
+</body>
+</html>

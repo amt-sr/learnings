@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fixed Window Counter — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">System Design</a> / <a href="./index.html">Reliability</a> / 10.3.3 Fixed Window Counter</div>
+
+<h1>Fixed Window Counter</h1>
+<div class="meta">
+  <span>Difficulty ⭐⭐</span>
+  <span>Interview Frequency ★★★★</span>
+</div>
+
+<div class="callout">
+  <strong>Goal:</strong> Understand the fixed window counter rate limiting algorithm, its simplicity, the critical boundary spike problem, and the rolling window variant that mitigates it.
+</div>
+
+<h2>Definition</h2>
+<p>The <strong>Fixed Window Counter</strong> algorithm divides time into fixed-size windows (e.g., 1 minute, 1 hour) and maintains a simple counter for each window. Each request increments the counter. If the counter exceeds the limit, the request is rejected. When the window resets, the counter resets to zero.</p>
+
+<h2>How It Works</h2>
+
+<div class="diagram">
+  Time →
+  ┃  00:00  00:30  01:00  01:30  02:00  02:30  03:00
+  ┃──────────────────────────────────────────────────
+  ┃  Window 1 (limit=100)    │  Window 2 (limit=100)
+  ┃  Counter: 80             │  Counter: 40
+  ┃  ← 80 requests allowed → │  ← 40 requests so far →
+  ┃                           │
+  ┃  At 00:59:99 → counter=80 → ALLOWED
+  ┃  At 01:00:00 → new window → counter resets to 0
+  ┃  At 01:00:01 → counter=1  → ALLOWED (fresh window)
+</div>
+
+<h2>Implementation</h2>
+
+<pre>
+class FixedWindowCounter {
+    int limit;           // max requests per window
+    int windowSeconds;   // window size in seconds
+    Map&lt;String, int&gt; counters;  // key → count
+    Map&lt;String, long&gt; windowStart; // key → window start time
+
+    synchronized boolean allowRequest(String key) {
+        long now = System.currentTimeMillis();
+        long windowStart = (now / (windowSeconds * 1000)) * (windowSeconds * 1000);
+
+        // New window? Reset counter
+        if (windowStart != windowStart.getOrDefault(key, 0L)) {
+            counters.put(key, 0);
+            windowStart.put(key, windowStart);
+        }
+
+        int count = counters.getOrDefault(key, 0);
+        if (count < limit) {
+            counters.put(key, count + 1);
+            return true;   // allowed
+        }
+        return false;      // limit exceeded
+    }
+}
+</pre>
+
+<h3>Distributed Implementation (Redis)</h3>
+<pre>
+-- Fixed window counter in Redis (atomic)
+-- Key: rate_limit:{user_id}:{window}
+-- Window = current_minute
+
+local key = "rate_limit:" .. KEYS[1] .. ":" .. math.floor(now / 60)
+local count = redis.call("INCR", key)
+if count == 1 then
+    redis.call("EXPIRE", key, 120)  -- auto-cleanup after 2 minutes
+end
+if count > tonumber(ARGV[1]) then
+    return 0  -- rejected
+else
+    return 1  -- allowed
+end
+</pre>
+
+<h2>The Boundary Spike Problem</h2>
+<p>The critical flaw of fixed window counters. At the boundary between two windows, a client can send up to <strong>2x the limit</strong> in a short burst.</p>
+
+<div class="diagram">
+  Limit: 100 requests per minute
+
+  Window 1 (00:00 - 00:59)          Window 2 (01:00 - 01:59)
+  ┃                                    ┃
+  ┃  ...requests... 99 so far          ┃  60 requests arrive at 01:00
+  ┃                    99             ┃  counter = 60
+  ┃                                    ┃
+  ┃  At 00:59: send 1 more (count=100)│  (window just reset)
+  ┃  At 00:59: count = 100 → allowed  │
+  ┃                                    ┃
+  ┃  Wait 1 second...                  │
+  ┃  At 01:00: new window (count=0)   │
+  ┃  Send 100 more → count = 100       │  Total: 100 + 100 = 200
+  ┃                                    │  in 2 seconds!
+  ┃  ████████████████████████████████  ┃  ████████████████████████
+  ┃                                    ┃
+  ┃  ← 100 requests in last second     ┃  ← 100 requests in first second
+  ┃     of window 1                    ┃     of window 2
+  ┃                                    ┃
+  ┗━━━━━━━━━━━━ boundary spike ━━━━━━━━┛
+     200 requests in 2 seconds when limit should be 100/min
+</div>
+
+<div class="callout red">
+  <strong>Impact:</strong> This is a real problem in production. A malicious user can send 2x the allowed rate by timing requests at window boundaries. The solution is either rolling windows, sliding windows, or token buckets.
+</div>
+
+<h2>Rolling Window (Improved Variant)</h2>
+<p>Mitigates the boundary spike by averaging counts across the current and previous window weighted by time overlap:</p>
+
+<pre>
+// Weighted rolling window calculation
+// currentWindow: window that contains the current time
+// previousWindow: the window before current
+
+long now = System.currentTimeMillis();
+long elapsedInCurrentWindow = now % windowDuration;
+double weight = 1.0 - (double) elapsedInCurrentWindow / windowDuration;
+
+int currentCount = getCurrentWindowCount(key);
+int previousCount = getPreviousWindowCount(key);
+
+// Estimated count = previous weighted + current full
+double estimatedCount = (previousCount * weight) + currentCount;
+return estimatedCount <= limit;
+</pre>
+
+<div class="diagram">
+  Rolling Window Estimation:
+  ┃  ←──── previous window (weight: 10%) ────→│←── current (90%) ──→
+  ┃  ┃███████████████████████████████████████┃┃████████████████████┃
+  ┃  ┃  count: 80                             ┃┃  count: 30        ┃
+  ┃                                            │
+  ┃  estimated = 80 × 0.10 + 30 × 1.0 = 8 + 30 = 38
+  ┃  if limit = 100 → ALLOWED
+  ┃
+  ┃  As time passes, previous window weight decreases:
+  ┃  At 50%: estimated = 80 × 0.50 + 30 × 1.0 = 70
+  ┃  At 10%: estimated = 80 × 0.10 + 30 × 1.0 = 38
+  ┃  At  0%: estimated = 80 × 0.00 + 30 × 1.0 = 30
+</div>
+
+<h2>Comparison with Other Algorithms</h2>
+
+<table>
+  <tr><th>Aspect</th><th>Fixed Window</th><th>Rolling Window</th><th>Token Bucket</th></tr>
+  <tr><td><strong>Simplicity</strong></td><td class="green">Very simple</td><td>Moderate</td><td>Simple</td></tr>
+  <tr><td><strong>Memory</strong></td><td class="green">O(1) — single counter</td><td>O(1) — two counters</td><td>O(1) — tokens + timestamp</td></tr>
+  <tr><td><strong>Boundary spike</strong></td><td class="red">Yes (2x burst at boundary)</td><td>Significantly reduced</td><td class="green">No</td></tr>
+  <tr><td><strong>Burst support</strong></td><td class="red">No (hard cap per window)</td><td class="red">No</td><td class="green">Yes (up to bucket capacity)</td></tr>
+  <tr><td><strong>Distributed</strong></td><td>Easy (INCR + EXPIRE)</td><td>Moderate (two keys)</td><td>Moderate (Lua script)</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>"How does a fixed window counter work?" — Divide time into windows; increment counter per window; reject if counter exceeds limit; reset at window boundary.</li>
+  <li>"What is the boundary spike problem?" — At the transition between two windows, a client can send up to 2x the limit because the counter resets. Mitigate with rolling windows or token buckets.</li>
+  <li>"How would you implement rate limiting in Redis?" — INCR on a windowed key with EXPIRE for cleanup. Atomic, simple, scalable.</li>
+  <li>"How does the rolling window fix the boundary spike?" — Weighted average of current and previous window counts, where the weight of the previous window decreases linearly to zero.</li>
+  <li>"What is the advantage of fixed window over sliding window?" — Much simpler to implement; single counter per window; O(1) memory; easy to distribute with Redis INCR.</li>
+</ul>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Depth:</strong> Redis CELL (sliding window logarithmic) implementation internals. <br>
+  <strong>Depth:</strong> Nginx limit_req_zone configuration syntax. <br>
+  <strong>Depth:</strong> Time-series database approaches to rate limiting.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">System Design Primer — Rate Limiting (GitHub)</div>
+  <p>Comparison of rate limiting algorithms including fixed window, sliding window, and token bucket with code examples.</p>
+</div>
+<div class="source">
+  <div class="source-label">Redis INCR — Rate Limiting Pattern</div>
+  <p>Official Redis documentation on using INCR + EXPIRE for fixed window rate limiting at scale.</p>
+</div>
+<div class="source">
+  <div class="source-label">Stripe — How We Design Rate Limits</div>
+  <p>Stripe's approach to rate limiting with discussion of boundary spike and their chosen mitigation strategies.</p>
+</div>
+
+<div class="nav">
+  <a href="leaky-bucket.html">&larr; Leaky Bucket</a>
+  <a href="sliding-window.html">Sliding Window &rarr;</a>
+</div>
+</body>
+</html>

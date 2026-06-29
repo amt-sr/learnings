@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.3.1 HTTP/1.1</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#2">2 Networking</a> / <a href="../index.html#2.3">2.3 HTTP Versions</a> / 2.3.1
+</div>
+
+<h1>HTTP/1.1</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>Key features of HTTP/1.1 that made it the standard for 20+ years</li>
+  <li>Head-of-line blocking and its impact on performance</li>
+  <li>Pipelining — the failed attempt to solve HOL blocking</li>
+  <li>Why HTTP/2 was needed</li>
+</ul>
+
+<h2>Definition</h2>
+<p>HTTP/1.1 (1997, RFC 7230) is the most widely used HTTP version. Its key innovation over HTTP/1.0: <strong>persistent connections (keep-alive)</strong> by default and pipelining support.</p>
+
+<h2>Key Features</h2>
+<table>
+  <tr><th>Feature</th><th>Description</th></tr>
+  <tr><td>Persistent connections</td><td>Default keep-alive — reuse TCP connection for multiple requests</td></tr>
+  <tr><td>Chunked transfer encoding</td><td>Send response in chunks without knowing total size upfront (streaming)</td></tr>
+  <tr><td>Host header</td><td>Required — enables virtual hosting (multiple domains on one IP)</td></tr>
+  <tr><td>Pipelining</td><td>Send multiple requests without waiting for responses (theoretically)</td></tr>
+  <tr><td>Cache control</td><td>Cache-Control header for fine-grained caching</td></tr>
+  <tr><td>Byte ranges</td><td>Request partial content (Range header — resumable downloads)</td></tr>
+</table>
+
+<h2>Head-of-Line Blocking</h2>
+<p>HTTP/1.1's biggest limitation. A single TCP connection can only handle <strong>one request at a time</strong>. If a large response is being sent, all subsequent requests must wait.</p>
+<div class="diagram">  TCP Connection 1 (HTTP/1.1):
+  Request 1 (large image) → [...............sending...............]
+  Request 2 (small JS)    → BLOCKED (waiting for Request 1 to finish)
+  Request 3 (CSS)          → BLOCKED (waiting for Requests 1 and 2)
+
+  Solution: Open 6 TCP connections (browser default):
+  Connection 1: Request 1 → [sending image]
+  Connection 2: Request 2 → [small JS sent, response received ✓]
+  Connection 3: Request 3 → [CSS sent, response received ✓]
+  Connection 4: Request 4 → ...
+  Connection 5: Request 5 → ...
+  Connection 6: Request 6 → ...
+
+  Problem: 6 connections per domain × multiple domains =
+  hundreds of TCP connections. Wasteful and slow to set up.</div>
+
+<div class="callout yellow">
+  <strong>Why this matters:</strong> Head-of-line blocking is THE reason <a href="http2.html">HTTP/2</a> exists. HTTP/2 multiplexing solves this by allowing unlimited concurrent requests on a single TCP connection. Browsers open 6 connections per domain specifically to work around HTTP/1.1's HOL blocking.
+</div>
+
+<h2>Pipelining (Failed Solution)</h2>
+<pre>HTTP/1.1 pipelining: Send multiple requests without waiting for responses.
+
+  Request 1 ──→
+  Request 2 ──→  (sent before Response 1 arrives)
+  Request 3 ──→
+  ←──────── Response 1
+  ←──────── Response 2
+  ←──────── Response 3
+
+Why it failed:
+  ✗ Responses must arrive in order (still HOL blocked)
+  ✗ Many servers/proxies didn't implement it correctly
+  ✗ No performance benefit if responses arrive out of order
+  → Pipelining is effectively dead. No major browser uses it.</pre>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What's head-of-line blocking in HTTP/1.1?"</strong><br>On a single TCP connection, requests are queued. A slow response blocks all subsequent requests. Browsers work around this by opening 6 parallel connections, but that wastes resources and doesn't scale.</li>
+  <li><strong>"Why do browsers open 6 connections per domain?"</strong><br>To work around HTTP/1.1's head-of-line blocking. With 6 connections, 6 requests can be in-flight simultaneously. RFC 7230 recommends this limit. <a href="http2.html">HTTP/2</a> eliminates this need with multiplexing.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>Upgrade header and WebSocket upgrade mechanism</li>
+    <li>Transfer-Encoding: chunked internals</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>High Performance Browser Networking (Ilya Grigorik)</strong> — Chapter 1</li>
+    <li><strong>RFC 7230</strong> — HTTP/1.1 Message Syntax and Routing</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="caching-headers.html">&larr; 2.2.9 Caching Headers</a>
+  <a href="http2.html">Next: 2.3.2 HTTP/2 &rarr;</a>
+</div>
+
+</body>
+</html>

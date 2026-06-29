@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.8.1 Primary Index</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="#">System Design</a> / <a href="#">3 Storage</a> / <a href="#">3.8 Indexes</a> / 3.8.1
+</div>
+
+<h1>Primary Index</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the primary index as the foundational data structure that enforces uniqueness on the primary key, organizes data as a B+ tree, and in many engines determines the physical storage order of rows.</p>
+
+<h2>Definition</h2>
+<p>A <strong>primary index</strong> is an index built on a table's primary key column(s). It guarantees uniqueness and a NOT NULL constraint on the indexed column(s). Internally it is organized as a B+ tree. In clustered storage engines (e.g., InnoDB), the primary index <em>is</em> the table -- leaf nodes hold the actual row data and the key order determines physical layout on disk. Every table has exactly one primary index (or one implicit one if none is declared).</p>
+
+<h2>Structure</h2>
+
+<div class="diagram">
+  B+ Tree (Primary Index on user_id)
+
+              [50|100]
+             /        \
+         [10|30|40]  [60|80|90]   [110|120]
+         /  |   \    /  |   \      /    \
+       [5] [15] [35] [65] [85] [95] [115] [125]
+        |    |    |    |    |    |    |     |
+       Row  Row  Row Row  Row  Row  Row  Row
+       (PK=5)     (PK=35)         (PK=125)
+
+  Leaf nodes contain the full row data (clustered).
+  All keys are unique and NOT NULL.
+</div>
+
+<h2>Key Properties</h2>
+
+<table>
+  <tr>
+    <th>Property</th>
+    <th>Detail</th>
+  </tr>
+  <tr>
+    <td>Uniqueness</td>
+    <td>Every key value appears at most once; duplicates are rejected on INSERT.</td>
+  </tr>
+  <tr>
+    <td>NOT NULL</td>
+    <td>Primary key columns cannot contain NULL. The engine enforces this.</td>
+  </tr>
+  <tr>
+    <td>One per table</td>
+    <td>A table can have only one primary key. This is a fundamental constraint.</td>
+  </tr>
+  <tr>
+    <td>B+ tree organization</td>
+    <td>Internal nodes guide search; leaf nodes hold sorted key-value pairs (or full rows in clustered engines).</td>
+  </tr>
+  <tr>
+    <td>Physical ordering</td>
+    <td>In clustered engines, row order on disk follows primary key order. Range scans are sequential I/O.</td>
+  </tr>
+  <tr>
+    <td>Implicit primary key</td>
+    <td>If no primary key is defined, InnoDB creates a hidden 6-byte auto-increment row ID internally.</td>
+  </tr>
+</table>
+
+<h2>How It Works in Practice</h2>
+
+<h3>Point Lookup</h3>
+<p>A lookup by primary key traverses from the B+ tree root down to a leaf in O(log N) page reads. In a clustered table the leaf <em>is</em> the data page, so no extra hop is needed.</p>
+
+<pre>
+SELECT * FROM users WHERE user_id = 42;
+
+-- Execution path: root -> internal node -> leaf (data page)
+-- Cost: ~3-4 page reads for a 10M-row table (tree depth ~3-4)
+</pre>
+
+<h3>Range Scan</h3>
+<p>Because leaf nodes are linked in sorted order and physically co-located in clustered tables, a range query on the primary key benefits from sequential I/O -- one of the most important performance characteristics for time-series or append-only workloads.</p>
+
+<pre>
+SELECT * FROM orders WHERE order_id BETWEEN 1000 AND 2000;
+
+-- Leaf nodes are sequentially linked; minimal random I/O.
+</pre>
+
+<h3>Insert Path</h3>
+<p>Inserting a row requires finding the correct leaf position in the B+ tree (log N reads), writing the row into the leaf page, and potentially splitting the page if it is full. Page splits incur an extra random write.</p>
+
+<div class="callout yellow">
+  <strong>Random I/O on inserts:</strong> If the primary key is a random UUID, each insert targets a different leaf page, causing heavy random I/O and poor buffer pool utilization. Use auto-increment or time-ordered keys for append-heavy workloads.
+</div>
+
+<h2>Clustered vs Heap Storage</h2>
+
+<table>
+  <tr>
+    <th>Engine</th>
+    <th>Primary Index Behavior</th>
+    <th>Physical Order</th>
+  </tr>
+  <tr>
+    <td>InnoDB (MySQL)</td>
+    <td>Clustered -- leaf nodes ARE data pages</td>
+    <td class="green">Rows stored in PK order</td>
+  </tr>
+  <tr>
+    <td>MyISAM (MySQL)</td>
+    <td>Non-clustered -- leaf nodes point to heap rows</td>
+    <td class="red">Insertion order</td>
+  </tr>
+  <tr>
+    <td>PostgreSQL</td>
+    <td>Heap table with separate B-tree index</td>
+    <td class="red">Insertion order</td>
+  </tr>
+  <tr>
+    <td>SQL Server</td>
+    <td>Configurable -- clustered or non-clustered</td>
+    <td>Depends on design</td>
+  </tr>
+</table>
+
+<h2>Primary Key Selection Considerations</h2>
+
+<ul>
+  <li><strong>Query pattern:</strong> Choose a key that appears frequently in WHERE clauses and JOINs.</li>
+  <li><strong>Insert pattern:</strong> Monotonically increasing keys (auto-increment, snowflake IDs) avoid random I/O and page splits.</li>
+  <li><strong>Size:</strong> Smaller keys (4-byte INT vs 36-byte UUID) mean more keys fit per B+ tree page, reducing tree depth and I/O.</li>
+  <li><strong>Stability:</strong> The primary key should never change. Updating a primary key requires deleting and re-inserting the row across all indexes.</li>
+</ul>
+
+<div class="callout">
+  <strong>Interview tip:</strong> When asked "how would you design the primary key for a messaging table?", discuss trade-offs between auto-increment (sequential writes, single point of contention), UUID v4 (globally unique, terrible insert locality), UUID v7 / ULID (globally unique, time-ordered, best of both worlds), and snowflake IDs (distributed generation, time-ordered).
+</div>
+
+<h2>Common Interview Questions</h2>
+
+<ul>
+  <li>What is a primary index and how does it differ from a unique index?</li>
+  <li>Why can a table have only one primary key?</li>
+  <li>How does InnoDB organize data using the primary index?</li>
+  <li>What happens when you insert a row with a duplicate primary key?</li>
+  <li>Why is a random UUID a bad choice for a primary key in InnoDB?</li>
+  <li>What is the hidden row ID InnoDB creates when no primary key is defined?</li>
+  <li>How does primary key choice affect insert throughput and page fragmentation?</li>
+  <li>Explain the difference between clustered and non-clustered primary indexes.</li>
+</ul>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Depth to avoid in interviews:</strong>
+  <ul>
+    <li>Internal page split/merge algorithms (e.g., how sibling pointers are updated during a split).</li>
+    <li>Buffer pool LRU details specific to index page eviction.</li>
+    <li>Undo log structures for MVCC on primary index modifications.</li>
+    <li>Exact byte-level header format of InnoDB index pages.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><a href="#">Designing Data-Intensive Applications</a> -- Chapter 3 (Storage and Retrieval): B+ trees and SSTables</li>
+    <li><a href="#">High Performance MySQL</a> (Baron Schwartz) -- InnoDB primary index internals, page structure</li>
+    <li><a href="#">Database Internals</a> (Alex Petrov) -- Chapter 4 (B-Tree Based Storage): tree structure, page layout</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Documentation</div>
+  <ul>
+    <li><a href="#">MySQL 8.0 Reference Manual</a> -- 15.6.1 InnoDB Index Structures</li>
+    <li><a href="#">PostgreSQL Documentation</a> -- Chapter 11: Indexes (B-tree index types)</li>
+    <li><a href="#">SQL Server Docs</a> -- Clustered and Nonclustered Indexes Described</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="garbage-collection.html">&larr; 3.7.4 Garbage Collection</a>
+  <a href="secondary-index.html">3.8.2 Secondary Index &rarr;</a>
+</div>
+
+</body>
+</html>

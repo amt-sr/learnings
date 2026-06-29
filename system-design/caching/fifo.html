@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.5.3 FIFO (First In First Out)</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">7 Caching</a> / <a href="index.html">7.5 Eviction</a> / 7.5.3
+</div>
+
+<h1>FIFO (First In First Out)</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand FIFO as the simplest eviction policy, recognize its limitations, and articulate when it is an acceptable choice. Be prepared to compare it against LRU and LFU and explain why most production systems choose a more sophisticated alternative.</p>
+
+<h2>Definition</h2>
+<p><strong>FIFO (First In First Out)</strong> is a cache eviction policy that removes the oldest entry in the cache -- the one that was inserted first. Unlike LRU, it does not track access order after insertion. An item remains in its insertion position regardless of how many times it is subsequently read.</p>
+
+<div class="callout">
+  <strong>Key insight:</strong> FIFO is the simplest possible eviction policy. It requires only a queue data structure with no per-access bookkeeping. This makes it extremely fast and easy to implement, but at the cost of ignoring all access patterns.
+</div>
+
+<h2>How FIFO Works</h2>
+<p>New entries are appended to the tail of a queue. When the cache is full, the entry at the head (oldest) is removed. Cache hits do not change the item's position in the queue.</p>
+
+<div class="diagram">
+ FIFO Cache (capacity = 3)
+
+ Queue (oldest → newest):  [A] ← [B] ← [C]
+
+ put(D): evict A (oldest)
+   Queue: [B] ← [C] ← [D]
+
+ get(B) → hit (B's position unchanged)
+   Queue: [B] ← [C] ← [D]     ← B is NOT promoted
+
+ put(E): evict B (still oldest despite being just accessed)
+   Queue: [C] ← [D] ← [E]
+</div>
+
+<div class="callout red">
+  <strong>Core problem:</strong> FIFO evicts B immediately after it was accessed because it ignores recency. A frequently accessed item that happens to be old will be evicted over a rarely accessed but newly inserted item.
+</div>
+
+<h2>Second Chance (Clock) Algorithm</h2>
+<p>A practical improvement over naive FIFO is the <strong>Second Chance</strong> (or <strong>Clock</strong>) algorithm. Each entry gets a reference bit. On eviction, if the head entry's bit is set (it was accessed recently), clear the bit and move it to the tail instead of evicting. This gives frequently accessed items a second chance before eviction.</p>
+
+<div class="diagram">
+ Clock Algorithm (capacity = 4, circular buffer):
+
+   Head → [A:0] [B:1] [C:0] [D:1] ← Tail
+
+   Eviction check:
+     A has bit=0 → evict A
+   Result:  [B:1] [C:0] [D:1] [E:0]
+
+   If A had bit=1:
+     Clear bit, move to tail: [B:0] [C:0] [D:1] [A:0]
+     Then check B → if B:0, evict B
+</div>
+
+<div class="callout yellow">
+  <strong>Note:</strong> The Clock algorithm approximates LRU with O(1) amortized time and is widely used in OS page replacement. Linux's Active/Inactive LRU lists are conceptually derived from this idea.
+</div>
+
+<h2>LRU vs LFU vs FIFO Comparison</h2>
+<table>
+  <tr><th>Aspect</th><th>FIFO</th><th>LRU</th><th>LFU</th></tr>
+  <tr><td>Tracks</td><td>Insertion order</td><td>Access recency</td><td>Access frequency</td></tr>
+  <tr><td>Data structure</td><td>Queue</td><td>HashMap + DLL</td><td>HashMap + freq buckets + DLLs</td></tr>
+  <tr><td>Hit rate (general)</td><td class="red">Lowest</td><td class="green">Good</td><td class="green">Good (stable popularity)</td></tr>
+  <tr><td>Implementation complexity</td><td class="green">Lowest</td><td>Medium</td><td class="red">Highest</td></tr>
+  <tr><td>Per-access overhead</td><td class="green">None</td><td>DLL move (O(1))</td><td>Counter incr + bucket move</td></tr>
+  <tr><td>Sequential scan resistance</td><td class="red">Poor</td><td class="red">Poor</td><td class="green">Good</td></tr>
+  <tr><td>New-item starvation</td><td class="green">None</td><td class="green">None</td><td class="red">Yes (without decay)</td></tr>
+  <tr><td>Redis support</td><td><code>volatile-ttl</code> (approx)</td><td><code>allkeys-lru</code></td><td><code>allkeys-lfu</code></td></tr>
+  <tr><td>Memcached support</td><td>No</td><td>Default</td><td>No</td></tr>
+</table>
+
+<h2>When Is FIFO Acceptable?</h2>
+<p>FIFO can be a reasonable choice in specific scenarios:</p>
+<ul>
+  <li><strong>Write-through caches with TTL:</strong> When all entries have a natural expiration (TTL) and the eviction policy is only a backstop for TTL expiration delays, FIFO's simplicity is sufficient.</li>
+  <li><strong>Uniform access patterns:</strong> When all cached items have roughly equal access probability (no hot/cold skew), FIFO performs comparably to more complex policies.</li>
+  <li><strong>Hardware/constrained environments:</strong> In embedded systems or hardware caches where per-access bookkeeping is too expensive, FIFO's minimal overhead is a real advantage.</li>
+  <li><strong>Supplementary queue before LRU:</strong> FIFO is used as the "admission queue" in 2Q/LRU-K algorithms, filtering one-time accesses before they enter the main LRU cache.</li>
+</ul>
+
+<div class="callout green">
+  <strong>Redis has <code>volatile-fifo</code> and <code>allkeys-fifo</code></strong> policies available. While rarely chosen over LRU in production, they are useful for A/B testing or for workloads where simplicity is prioritized.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>Explain FIFO eviction and why it is the simplest policy. What is its main weakness?</li>
+  <li>How does the Second Chance (Clock) algorithm improve on FIFO?</li>
+  <li>Compare FIFO vs LRU hit rates for a social-media feed workload.</li>
+  <li>Under what circumstances would you choose FIFO over LRU?</li>
+  <li>How is FIFO used as part of more complex eviction schemes (2Q, LRU-K)?</li>
+  <li>What is the time complexity of FIFO eviction vs LRU eviction?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Skip in interviews:</strong>
+  <ul>
+    <li>Implementation details of enhanced FIFO variants like Clock-Pro or CAR (Clock with Adaptive Replacement) unless asked directly.</li>
+    <li>Theoretical cache hit-rate analysis using Belady's optimal algorithm -- mention it as the theoretical upper bound, don't derive it.</li>
+    <li>Detailed comparison of FIFO vs ARC vs 2Q unless the conversation naturally goes there.</li>
+    <li>Memcached slab allocator internals in the context of FIFO -- the slab allocator is orthogonal to eviction policy.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Primary</div>
+  <ul>
+    <li><a href="https://redis.io/docs/manual/eviction/">Redis Eviction Policies</a> -- official docs on all available policies including FIFO variants</li>
+    <li><a href="https://en.wikipedia.org/wiki/Page_replacement_algorithm">Wikipedia: Page Replacement Algorithms</a> -- FIFO, Second Chance, Clock, and their comparisons</li>
+    <li><a href="https://en.wikipedia.org/wiki/Cache_replacement_policies#First_In_First_Out_(FIFO)">Wikipedia: Cache Replacement Policies -- FIFO</a> -- formal definition and hit-rate characteristics</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Supplementary</div>
+  <ul>
+    <li><a href="https://www.cs.princeton.edu/courses/archive/fall06/cos318/Papers/2Q.pdf">2Q: A Low Overhead High Performance Buffer Management Replacement Algorithm</a> -- original paper on using FIFO as an admission queue</li>
+    <li><a href="https://lwn.net/Articles/23732/">Linux 2.6 Page Replacement</a> -- how the kernel's Active/Inactive lists relate to FIFO/Clock concepts</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="lfu.html">&larr; 7.5.2 LFU</a>
+  <a href="redis-basics.html">7.6.1 Redis Basics &rarr;</a>
+</div>
+
+</body>
+</html>

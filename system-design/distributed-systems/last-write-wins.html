@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.5.1 Last Write Wins (LWW)</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb"><a href="#">System Design</a> / <a href="#">5 Distributed Systems</a> / <a href="#">5.5 Conflict Resolution</a> / 5.5.1</div>
+<h1>Last Write Wins (LWW)</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand Last Write Wins conflict resolution: how it works, why it is deceptively simple, the data loss it causes under concurrent writes, clock skew problems, and when it is the right choice for a system.</p>
+
+<h2>Definition</h2>
+<p><strong>Last Write Wins (LWW)</strong> is a conflict resolution strategy where, when two replicas have different values for the same key, the one with the <strong>higher timestamp wins</strong>. All other values are silently discarded. It is the simplest conflict resolution strategy and is used by many databases (including Cassandra, Riak, and many key-value stores) as the default or optional behavior.</p>
+
+<div class="callout">
+  <strong>Key insight:</strong> LWW trades <strong>correctness for simplicity</strong>. It always converges (no manual conflict resolution needed) but can <strong>silently lose data</strong> when concurrent writes occur. Whether this is acceptable depends entirely on your application.
+</div>
+
+<h2>How LWW Works</h2>
+
+<div class="diagram">Replica A                  Replica B
+   |                          |
+   | write(X="hello", t=10)  |
+   |                          |
+   |        write(X="world", t=12)
+   |                          |
+   |<--- sync: B sends (X="world", t=12) --->|
+   |                          |
+   | X="world" wins (t=12 > t=10)
+   | "hello" is PERMANENTLY LOST
+   |                          |
+
+The write "hello" at t=10 was valid data written by a user.
+Because t=12 happened to have a higher timestamp (possibly
+just due to clock skew, not causal ordering), "hello" is
+silently discarded.</div>
+
+<h2>The Fundamental Problem: Clock Skew</h2>
+<p>In a distributed system, clocks are not perfectly synchronized. This means a <strong>later write with an earlier timestamp</strong> (due to clock skew) can be incorrectly discarded:</p>
+
+<div class="diagram">Client A (clock is 50ms behind)
+  writes "cancel_order" at t=0950
+
+Client B (clock is 50ms ahead)
+  writes "confirm_order" at t=1050
+
+Both write concurrently to the same key "order_status".
+
+LWW picks "confirm_order" (t=1050 > t=0950).
+
+But causally, Client A's cancel came FIRST.
+The timestamp difference is entirely due to clock skew,
+not causal ordering. LWW made the WRONG decision
+and an order was confirmed when it should have been cancelled.
+
+This is a real, production-impacting failure mode.</div>
+
+<div class="callout red">
+  <strong>Critical point for interviews:</strong> LWW with wall-clock timestamps is fundamentally unreliable for causal ordering. The timestamp reflects clock skew, not causality. Two writes that happen within the clock skew window (~50-250ms with NTP) can be resolved in the wrong order.
+</div>
+
+<h2>LWW + Dotted Version Vectors</h2>
+<p>Some systems improve LWW by combining it with <strong>version vectors</strong> for causality detection:</p>
+<ul>
+  <li>If version vectors show writes are <strong>causally ordered</strong>, the later one wins (correct)</li>
+  <li>If version vectors show writes are <strong>concurrent</strong>, fall back to timestamp comparison (may lose data)</li>
+  <li>This is better than raw LWW but still loses data on concurrent writes</li>
+</ul>
+
+<h2>When Is LWW Acceptable?</h2>
+
+<table>
+  <tr><th>Scenario</th><th>LWW Suitable?</th><th>Reason</th></tr>
+  <tr><td>User profile updates</td><td class="green">Yes</td><td>Most updates are non-concurrent; losing an old name/bio is tolerable</td></tr>
+  <tr><td>Configuration values</td><td class="green">Yes</td><td>Single admin typically changes config; conflicts are rare</td></tr>
+  <tr><td>Session tokens</td><td class="green">Yes</td><td>Each user generates their own token; overwriting is expected</td></tr>
+  <tr><td>Bank account balance</td><td class="red">No</td><td>Every write must be counted; losing any write = financial loss</td></tr>
+  <tr><td>Inventory count</td><td class="red">No</td><td>Concurrent decrements must all be counted</td></tr>
+  <tr><td>Chat messages</td><td class="red">No</td><td>Losing a message is never acceptable</td></tr>
+  <tr><td>Audit logs</td><td class="red">No</td><td>Every entry must be preserved for compliance</td></tr>
+  <tr><td>Shopping cart contents</td><td class="yellow">Depends</td><td>If clients always read-modify-write, LWW may suffice</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Interview tip:</strong> A good answer about LWW always includes a discussion of <strong>what data you're protecting</strong>. "It depends" is a valid answer -- the key is explaining which scenarios tolerate data loss and which do not.
+</div>
+
+<h2>Strategies to Mitigate LWW Data Loss</h2>
+<ol>
+  <li><strong>Use client-generated timestamps</strong> -- Let the client include the timestamp from their own clock. This ensures the order reflects the client's intent (assuming single-client writes per key).</li>
+  <li><strong>Add a tiebreaker</strong> -- When timestamps are equal (within epsilon), use a node ID or hash of the value as a deterministic tiebreaker. This ensures deterministic convergence even with identical timestamps.</li>
+  <li><strong>Use monotonic counters instead of wall-clock time</strong> -- A centralized counter or sequence number provides strict ordering without clock skew issues (but introduces a single point of coordination).</li>
+  <li><strong>Combine with version vectors</strong> -- Detect concurrent writes first; only use LWW as a last resort for true conflicts.</li>
+  <li><strong>Keep a conflict log</strong> -- Record discarded writes for potential manual reconciliation or auditing.</li>
+</ol>
+
+<h2>LWW in Production Systems</h2>
+<table>
+  <tr><th>System</th><th>LWW Behavior</th><th>Details</th></tr>
+  <tr><td>Apache Cassandra</td><td>Default for all writes</td><td>Tombstone-based; LWW with client-supplied timestamp</td></tr>
+  <tr><td>Riak</td><td>Optional (last_write_wins bucket type)</td><td>Must explicitly enable; otherwise uses sibling resolution</td></tr>
+  <tr><td>DynamoDB</td><td>Conditional (if no version vectors)</td><td>Puts without condition expressions use LWW implicitly</td></tr>
+  <tr><td>Redis</td><td>Effectively LWW</td><td>Last SET/INCR wins; no conflict detection</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li><strong>"What is Last Write Wins?"</strong> -- A conflict resolution strategy where the write with the higher timestamp wins. Simple, always converges, but can silently lose data from concurrent writes.</li>
+  <li><strong>"What are the problems with LWW?"</strong> -- Clock skew causes wrong ordering decisions; concurrent writes cause silent data loss; no way to detect or recover from lost data.</li>
+  <li><strong>"When would you use LWW?"</strong> -- When conflicts are rare, data loss is tolerable, or the cost of more sophisticated conflict resolution outweighs the benefit. Good for user profiles, config values, cached data.</li>
+  <li><strong>"How does Cassandra handle conflicts?"</strong> -- Cassandra uses LWW by default. The client provides a timestamp with each write. The write with the highest timestamp wins. If two writes have the same timestamp, the one from the replica with the highest replica ID wins.</li>
+  <li><strong>"How would you design a system that needs to avoid LWW data loss?"</strong> -- Use <a href="crdt.html">CRDTs</a> for data types that can be merged (counters, sets, registers). Use <a href="vector-clock.html">version vectors</a> to detect conflicts and prompt users to resolve. Use <a href="operational-transform.html">OT</a> or <a href="merge-strategies.html">merge strategies</a> for collaborative data.</li>
+  <li><strong>"What happens if two LWW writes have the same timestamp?"</strong> -- Need a deterministic tiebreaker: node ID, hash of value, or client ID. Without a tiebreaker, the result is non-deterministic and replicas may diverge.</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Depth to avoid in interviews:</strong>
+  <ul>
+    <li>Cassandra's tombstone mechanics and GC grace period details</li>
+    <li>Riak's sibling resolution pipeline internals</li>
+    <li>Specific client timestamp generation implementations</li>
+    <li>DynamoDB's conditional expression internals</li>
+    <li>NTP synchronization internals (covered in <a href="physical-clock.html">5.4.1</a>)</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary References</div>
+  <ul>
+    <li>Dynamo: Amazon's Highly Available Key-value Store -- DeCandia et al. (2007)</li>
+    <li>The Trouble with Timestamps -- Martin Kleppmann, ACM Queue (2016)</li>
+    <li>Cassandra: The Definitive Guide -- Jeff Carpenter & Eben Hewitt, chapters on write paths</li>
+    <li>Riak Handbook -- Mark Kirby, sections on conflict resolution</li>
+    <li>Please Set Your Timestamps Carefully -- Fikes et al. (Google), on lessons learned about time in Spanner</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="hybrid-logical-clock.html">&larr; 5.4.5 HLC</a>
+  <a href="crdt.html">5.5.2 CRDT &rarr;</a>
+</div>
+
+</body>
+</html>

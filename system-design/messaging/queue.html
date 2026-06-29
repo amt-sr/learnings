@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.1.1 Queue (Message Queue) — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">8. Messaging</a> / 8.1.1 Queue</p>
+
+<h1>8.1.1 Queue (Message Queue)</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+
+<p>Understand the message queue pattern as a fundamental building block for decoupling services, enabling asynchronous processing, and building resilient distributed systems.</p>
+
+<h2>Definition</h2>
+
+<p>A <strong>message queue</strong> is a communication mechanism that holds messages sent by producers until consumers are ready to process them. Messages are stored in FIFO (first-in, first-out) order. Each message is typically consumed by exactly one consumer, making queues ideal for task distribution and workload balancing.</p>
+
+<div class="callout">
+  <strong>Key Principle:</strong> A message queue decouples the producer from the consumer in time, space, and rate. The producer does not need to know who will process the message, when it will be processed, or whether the consumer is currently available.
+</div>
+
+<h2>Architecture</h2>
+
+<div class="diagram">
+  Producer(s)                  Queue                     Consumer(s)
+  ┌──────────┐            ┌──────────────┐            ┌──────────┐
+  │ Service A ├─push msg──►│  [msg1][msg2] │──pull msg─►│ Worker 1 │
+  │ Service B ├─push msg──►│  [msg3][msg4] │──pull msg─►│ Worker 2 │
+  └──────────┘            └──────────────┘──pull msg─►│ Worker 3 │
+                                                    └──────────┘
+
+  • Messages are stored durably in the queue
+  • Each message is delivered to exactly one consumer
+  • Consumers pull at their own pace (pull-based model)
+</div>
+
+<h2>Why Decouple?</h2>
+
+<h3>1. Async Processing</h3>
+<p>Synchronous HTTP calls chain services together. If the downstream service is slow or down, the upstream blocks. Queues turn synchronous chains into asynchronous workflows:</p>
+
+<div class="diagram">
+  Synchronous (coupled):
+  Client ──► API Server ──► Email Service ──► Database
+                                  │
+                                  ▼ (slow = client waits)
+
+  Asynchronous (decoupled):
+  Client ──► API Server ──► Queue ──► Email Worker
+                │                         │
+                ▼ (fast response)         ▼ (processes later)
+            Returns to client         Sends email in background
+</div>
+
+<h3>2. Rate Limiting &amp; Traffic Shaping</h3>
+<p>Producers can push messages at burst rates; the queue absorbs the spike. Consumers process at a steady, sustainable rate. This prevents downstream services from being overwhelmed during traffic spikes.</p>
+
+<h3>3. Failure Isolation</h3>
+<p>If a consumer crashes, messages remain in the queue and are not lost. Other consumers continue processing. The producer is unaware of consumer failures.</p>
+
+<h2>Common Use Cases</h2>
+
+<table>
+  <tr><th>Use Case</th><th>Why a Queue?</th></tr>
+  <tr><td>Email sending</td><td>Email delivery takes seconds; API returns instantly</td></tr>
+  <tr><td>Image/video processing</td><td>Resizing, transcoding is CPU-intensive and slow</td></tr>
+  <tr><td>Order fulfillment</td><td>Payment → inventory → shipping is a multi-step async workflow</td></tr>
+  <tr><td>Report generation</td><td>Heavy aggregation queries run in the background</td></tr>
+  <tr><td>Database writes</td><td>Buffer writes during high-traffic periods</td></tr>
+  <tr><td>Webhook delivery</td><td>Retry failed webhook calls without blocking the caller</td></tr>
+</table>
+
+<h2>Queue vs. Pub/Sub</h2>
+
+<div class="callout yellow">
+  <strong>Interview Tip:</strong> This comparison comes up constantly. Know the differences cold — especially the "each message to one consumer" (queue) vs. "each message to all subscribers" (pub/sub) distinction.
+</div>
+
+<table>
+  <tr><th>Aspect</th><th>Queue</th><th>Pub/Sub</th></tr>
+  <tr><td>Delivery</td><td>Each message → one consumer</td><td>Each message → all subscribers</td></tr>
+  <tr><td>Pattern</td><td>Point-to-point</td><td>Fan-out</td></tr>
+  <tr><td>Use case</td><td>Task distribution</td><td>Event notification</td></tr>
+  <tr><td>Example</td><td>SQS, Celery</td><td>SNS, Kafka topics</td></tr>
+  <tr><td>Scaling</td><td>Competing consumers</td><td>Independent subscriber scaling</td></tr>
+  <tr><td>Coupling</td><td>Producer knows queue exists</td><td>Publisher only knows topic</td></tr>
+</table>
+
+<h2>Implementation Considerations</h2>
+
+<h3>Queue Types</h3>
+<ul>
+  <li><strong>Standard queue:</strong> Best-effort ordering, at-least-once delivery, high throughput (e.g., AWS SQS Standard).</li>
+  <li><strong>FIFO queue:</strong> Strict ordering, exactly-once processing, lower throughput (e.g., AWS SQS FIFO). Message group IDs allow parallelism within a FIFO queue.</li>
+  <li><strong>Priority queue:</strong> Messages processed by priority rather than arrival time. Useful for urgent tasks mixed with background work.</li>
+</ul>
+
+<h3>Dead Letter Queue (DLQ)</h3>
+<p>When a message fails to process after N retries, it is moved to a DLQ for investigation. This prevents poison messages from blocking the queue indefinitely.</p>
+
+<div class="diagram">
+  Main Queue                    Processing              DLQ
+  ┌──────────┐              ┌──────────┐           ┌──────────┐
+  │ [msg1]   │──pull───────►│ Worker   │           │ [failed] │
+  │ [msg2]   │              │ process()│──fail 3x──►│ [poison] │
+  │ [msg3]   │              └──────────┘           └──────────┘
+  └──────────┘
+</div>
+
+<h3>Visibility Timeout</h3>
+<p>After a consumer pulls a message, it becomes invisible to other consumers for a configured period. If the consumer does not delete the message before the timeout expires, it reappears in the queue for reprocessing.</p>
+
+<h2>Common Interview Questions</h2>
+
+<ol>
+  <li>"Design an image upload and processing pipeline."</li>
+  <li>"How would you handle sending welcome emails at scale?"</li>
+  <li>"What happens when a consumer crashes mid-processing?"</li>
+  <li>"How do you prevent duplicate processing in a queue-based system?"</li>
+  <li>"Compare SQS Standard vs. SQS FIFO — when would you use each?"</li>
+  <li>"What is a dead letter queue and why is it important?"</li>
+  <li>"How would you handle ordering in a message queue?"</li>
+  <li>"What is visibility timeout and how do you choose the right value?"</li>
+</ol>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Do not dive into:</strong>
+  <ul>
+    <li>Low-level broker internals (Kafka storage internals, RabbitMQ Erlang VM details) — that is covered in later sections.</li>
+    <li>Specific SDK APIs or code-level producer/consumer implementations unless asked.</li>
+    <li>Complex routing patterns (content-based routing, header-based routing) unless the question specifically calls for it.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Books &amp; Guides</div>
+  <ul>
+    <li><a href="https://samnewman.io/books/building-microservices-2nd-edition/">Building Microservices, 2nd Ed.</a> — Sam Newman, Ch. 6 (Interprocess Communication)</li>
+    <li><a href="https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/welcome.html">AWS SQS Developer Guide</a> — Official docs covering queue concepts, DLQ, visibility timeout</li>
+    <li><a href="https://martinfowler.com/articles/patterns-of-distributed-systems/">Patterns of Distributed Systems</a> — Martin Fowler, Queue pattern</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="../caching/distributed-cache.html">&larr; 7.6.3 Distributed Cache</a>
+  <a href="pub-sub.html">8.1.2 Pub/Sub &rarr;</a>
+</div>
+
+</body>
+</html>

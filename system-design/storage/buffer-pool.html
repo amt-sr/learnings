@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.2.4 Buffer Pool</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#3">3 Storage</a> / <a href="../index.html#3.2">3.2 Storage Layout</a> / 3.2.4
+</div>
+
+<h1>Buffer Pool</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>Why databases use an in-memory buffer pool instead of reading directly from disk</li>
+  <li>Page replacement algorithms: LRU, LRU-K, clock sweep, and why naive LRU fails</li>
+  <li>Dirty pages: modified pages not yet flushed, and how they are managed</li>
+  <li><a href="checkpoint.html">Checkpointing</a> dirty pages to disk — fuzzy vs sharp</li>
+  <li>Concurrency control: pinning, shared vs exclusive latches</li>
+</ul>
+
+<h2>Definition</h2>
+<p>The buffer pool is the database's <strong>in-memory cache of frequently and recently accessed disk pages</strong>. It sits between the query executor and the storage engine: every page read passes through the buffer pool first, and every page modification is written to the buffer pool before eventually being flushed to disk. It is typically the largest consumer of <a href="ram.html">RAM</a> on a database server.</p>
+
+<h2>Why Not Read Directly from Disk?</h2>
+<div class="callout">
+  <strong>The core problem:</strong> Disk I/O is orders of magnitude slower than memory access. A single 8 KB page read from <a href="ssd.html">SSD</a> takes ~100 microseconds; from <a href="ram.html">RAM</a> it takes ~100 nanoseconds — a 1000x gap. Without a buffer pool, every query would hit disk for every page, limiting throughput to the disk's IOPS capacity.
+</div>
+
+<div class="diagram">  Query requests page #42 — two paths:
+
+  WITHOUT buffer pool (every query hits disk):
+  ┌──────────┐                    ┌──────────┐
+  │  Query   │───────────────────→│   Disk   │  ~100 μs per page
+  │ Executor │←──────────────────│  (SSD)   │
+  └──────────┘                    └──────────┘
+  1000 queries/sec * 3 pages each = 3000 disk reads/sec
+
+  WITH buffer pool (hot pages cached):
+  ┌──────────┐     ┌──────────────┐     ┌──────────┐
+  │  Query   │────→│ Buffer Pool  │────→│   Disk   │  cold path
+  │ Executor │←────│   (RAM)      │←────│  (SSD)   │
+  └──────────┘     └──────────────┘     └──────────┘
+       ↑                 │
+       └─────────────────┘
+         hot path: ~100 ns (99%+ hit rate)
+
+  With 99% hit rate: only 30 disk reads/sec
+  = 100x reduction in disk I/O</div>
+
+<h2>Buffer Pool Internals</h2>
+<div class="diagram">  Buffer Pool Architecture:
+
+  ┌───────────────────────────────────────────────────┐
+  │  Buffer Pool (contiguous RAM allocation)           │
+  │                                                    │
+  │  Page Frames (each holds one database page)        │
+  │  ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐    │
+  │  │Page #5 │ │Page #42│ │Page #87│ │Page #201│   │
+  │  │ dirty  │ │ clean  │ │ clean  │ │ dirty  │    │
+  │  │ pin: 0 │ │ pin: 1 │ │ pin: 0 │ │ pin: 0 │    │
+  │  └────────┘ └────────┘ └────────┘ └────────┘    │
+  │                                                    │
+  │  Hash Map: page_id → frame_address                 │
+  │  (O(1) lookup: "is page X in the pool?")           │
+  │                                                    │
+  │  Free List: empty frames available for new pages   │
+  │  LRU List: ordered by access recency (for eviction)│
+  │  Dirty List: pages modified but not yet flushed     │
+  └───────────────────────────────────────────────────┘</div>
+
+<h3>Key Data Structures</h3>
+<ul>
+  <li><strong>Page frames</strong>: Fixed-size slots in RAM, each holding one database page. The buffer pool has N frames (determined by configuration, e.g., 16 GB / 16 KB = 1M frames).</li>
+  <li><strong>Hash map</strong>: Maps page_id to frame address for O(1) lookup.</li>
+  <li><strong>Free list</strong>: Linked list of unoccupied frames, used when loading new pages from disk.</li>
+  <li><strong>LRU list</strong>: Ordered list of all occupied frames, used for eviction decisions.</li>
+  <li><strong>Dirty list</strong>: Ordered list of modified frames, used by the background flush thread.</li>
+</ul>
+
+<h2>Page Replacement Algorithms</h2>
+<h3>Simple LRU (Least Recently Used)</h3>
+<ul>
+  <li>Maintain a linked list ordered by last access time; evict the tail.</li>
+  <li class="red">Fatal flaw: A full table scan loads every page into the buffer pool, evicting all hot pages. After the scan, the buffer pool is cold and every subsequent OLTP query hits disk.</li>
+</ul>
+
+<h3>LRU-K (MySQL InnoDB, PostgreSQL)</h3>
+<p>Track the last K access timestamps to distinguish between pages accessed once (likely a scan) and pages accessed multiple times (hot data):</p>
+<div class="diagram">  MySQL InnoDB Midpoint Insertion LRU:
+
+  Old (hot) sublist ←────── Midpoint ──────→ Young (cold) sublist
+  ┌───────┬───────┬───────┬──────┬───────┬───────┬───────┐
+  │ Pg 42 │ Pg 87 │ Pg 15 │  MP  │ Pg300 │ Pg301 │ Pg302 │
+  │ 63/8  │ 45/8  │ 20/8  │      │  1/8  │  1/8  │  1/8  │
+  └───────┴───────┴───────┴──────┴───────┴───────┴───────┘
+    MRU end                       New pages enter here
+
+  Default ratio: 3/8 old, 5/8 young (innodb_old_blocks_pct=37)
+
+  Behavior:
+  - New page loaded → insert at midpoint (young sublist tail)
+  - Page accessed again while in young sublist → promote to old sublist (MRU)
+  - Table scan loads 10,000 pages → all go to young sublist
+    → they do NOT evict hot pages in old sublist
+    → they get evicted first when space is needed
+  - Hot pages (Pg 42, Pg 87) sit safely in old sublist</div>
+
+<h3>Clock Sweep (PostgreSQL)</h3>
+<p>A circular buffer with a "hand" pointer. Each page frame has a reference bit:</p>
+<ul>
+  <li>When a page is accessed, set its reference bit to 1.</li>
+  <li>When eviction is needed, the clock hand sweeps through frames. If reference bit = 1, clear it and skip. If reference bit = 0, evict.</li>
+  <li>Pages accessed multiple times get multiple "second chances" before eviction.</li>
+  <li>Effectively approximates LRU without maintaining an expensive sorted list.</li>
+</ul>
+
+<h2>Dirty Pages</h2>
+<p>A page is "dirty" when it has been modified in the buffer pool but not yet written to the data file on disk:</p>
+<div class="diagram">  Write Path (UPDATE users SET name = 'Bob' WHERE id = 42):
+
+  1. Request page #42 (read from pool or disk)
+  2. Modify page #42 in the buffer pool
+  3. Mark page #42 as DIRTY
+  4. Write the change to the <a href="write-ahead-log.html">WAL</a> log buffer
+  5. fsync WAL to disk (BEFORE acknowledging commit)
+  6. Return success to client
+
+  Background Thread (async, non-blocking):
+  ┌─────────────────────────────────────────┐
+  │ Dirty Page #42 in Buffer Pool          │
+  │ (modified, not yet on disk)             │
+  │           │                             │
+  │           ↓ (background flush thread)   │
+  │ Data File on Disk                      │
+  │ (page #42 eventually written here)     │
+  └─────────────────────────────────────────┘
+
+  Key: WAL flush is synchronous (blocks commit).
+  Data page flush is asynchronous (never blocks queries).
+  If crash happens before flush → WAL replay recovers changes.</div>
+
+<div class="callout green">
+  <strong>Core principle:</strong> The <a href="write-ahead-log.html">WAL</a> is the source of truth for crash recovery. Dirty pages in the buffer pool are a performance optimization — they avoid reading from disk on subsequent access. If the database crashes, dirty pages are lost from memory, but the WAL contains all the changes needed to reconstruct them.
+</div>
+
+<h2>Checkpointing Dirty Pages</h2>
+<p>A <a href="checkpoint.html">checkpoint</a> forces all dirty pages modified before a specific LSN to be written to disk:</p>
+<table>
+  <tr><th>Strategy</th><th>Description</th><th>Used By</th></tr>
+  <tr><td><strong>Sharp checkpoint</strong></td><td>Flush all dirty pages quickly, possibly blocking writes</td><td>PostgreSQL</td></tr>
+  <tr><td><strong>Fuzzy checkpoint</strong></td><td>Gradually flush dirty pages in the background over time</td><td>MySQL InnoDB</td></tr>
+</table>
+
+<h2>Pinning and Latches</h2>
+<p>The buffer pool uses latches (lightweight locks) to protect page frames from concurrent access:</p>
+<table>
+  <tr><th>Operation</th><th>Lock Type</th><th>Purpose</th></tr>
+  <tr><td>Reading a page</td><td><strong>Shared latch</strong> (S)</td><td>Multiple readers can read the same page concurrently</td></tr>
+  <tr><td>Modifying a page</td><td><strong>Exclusive latch</strong> (X)</td><td>Only one writer; blocks all readers</td></tr>
+  <tr><td>Preventing eviction</td><td><strong>Pin count</strong></td><td>Incremented when a thread is actively using a page; decremented when done. A page with pin > 0 cannot be evicted.</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Interview tip:</strong> When discussing buffer pool concurrency, mention that pinning prevents the background eviction thread from evicting a page that a query thread is actively reading. Without pinning, the eviction thread could evict a page between the time a query reads it from the hash map and the time it copies the data.
+</div>
+
+<h2>Buffer Pool Sizing</h2>
+<div class="callout yellow">
+  <strong>Rule of thumb:</strong> The buffer pool should be 1.25–1.5x the hot working set size. It should never exceed ~80% of total <a href="ram.html">RAM</a> (leaving room for the OS, connection buffers, and other memory).
+</div>
+
+<table>
+  <tr><th>Database</th><th>Setting</th><th>Default</th><th>Recommendation</th></tr>
+  <tr><td>MySQL InnoDB</td><td><code>innodb_buffer_pool_size</code></td><td>128 MB</td><td>50–75% of total RAM</td></tr>
+  <tr><td>PostgreSQL</td><td><code>shared_buffers</code></td><td>128 MB</td><td>25% of total RAM</td></tr>
+  <tr><td>SQL Server</td><td><code>max server memory</code></td><td>2 TB</td><td>70–80% of total RAM</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Why PostgreSQL recommends less:</strong> PostgreSQL relies on the OS <a href="page-cache.html">page cache</a> for additional buffering (no O_DIRECT by default), so shared_buffers is only part of the total memory picture. MySQL InnoDB uses O_DIRECT, bypassing the OS cache, so the buffer pool must be larger.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What is the buffer pool and why is it critical?"</strong><br>The buffer pool is an in-memory cache of database pages that avoids disk I/O for hot data. Since disk access is ~1000x slower than memory, the buffer pool is the single most important performance knob. A well-sized buffer pool with >99% hit ratio means almost all queries read from memory. If the hit ratio drops to 90%, every 10th query hits disk, causing tail latency spikes.</li>
+  <li><strong>"How does eviction work, and why does naive LRU fail?"</strong><br>Naive LRU evicts the least-recently-used page. But a full table scan loads every page, evicting hot data. MySQL InnoDB uses LRU with midpoint insertion: new pages enter at the midpoint of the LRU list and are only promoted to the hot end if accessed again. PostgreSQL uses a clock sweep algorithm that gives pages multiple "second chances" before eviction.</li>
+  <li><strong>"What happens to dirty pages during a crash?"</strong><br>Dirty pages in memory are lost. However, all modifications were written to the <a href="write-ahead-log.html">WAL</a> before the transaction was committed. During <a href="crash-recovery.html">crash recovery</a>, the database replays the WAL (<a href="redo-log.html">redo</a> log) to reconstruct the dirty pages and apply any committed changes that were not flushed.</li>
+  <li><strong>"What is page pinning?"</strong><br>Pinning increments a reference counter on a buffer pool frame while a thread is actively reading or modifying the page. A pinned page (pin count > 0) cannot be evicted by the replacement algorithm. This prevents the eviction thread from removing a page between the time a query locates the frame and the time it finishes accessing the data.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>Buffer pool hash table collision resolution internals</li>
+    <li>Multiple buffer pool instance partitioning (MySQL <code>innodb_buffer_pool_instances</code>)</li>
+    <li>Adaptive hash index internals (MySQL InnoDB)</li>
+    <li>Buffer pool pre-warming (dump/load at shutdown/startup)</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Database Internals" by Alex Petrov</strong> — Chapter 4 (Buffer Management and Eviction)</li>
+    <li><strong>"Designing Data-Intensive Applications" by Martin Kleppmann</strong> — Chapter 3</li>
+    <li><strong>MySQL Reference Manual: InnoDB Buffer Pool</strong> — dev.mysql.com/doc/refman/8.0/en/innodb-buffer-pool.html</li>
+    <li><strong>PostgreSQL Documentation: Memory Management</strong> — postgresql.org/docs/current/runtime-config-resource.html</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="records.html">&larr; 3.2.3 Records</a>
+  <a href="page-cache.html">Next: 3.2.5 Page Cache &rarr;</a>
+</div>
+
+</body>
+</html>

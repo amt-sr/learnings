@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Circuit Breaker — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">System Design</a> / <a href="./index.html">Reliability</a> / 10.2.1 Circuit Breaker</div>
+
+<h1>Circuit Breaker</h1>
+<div class="meta">
+  <span>Difficulty ⭐⭐⭐</span>
+  <span>Interview Frequency ★★★★★</span>
+</div>
+
+<div class="callout">
+  <strong>Goal:</strong> Understand the circuit breaker pattern, its three states, how it prevents cascading failures, configuration parameters, and when to use it in a system design.
+</div>
+
+<h2>Definition</h2>
+<p>The <strong>Circuit Breaker</strong> pattern monitors calls to an external service and "trips" (opens) the circuit when failures exceed a threshold. While open, requests are immediately rejected (or served from a fallback) without making the actual call. This prevents a failing downstream service from consuming upstream resources (threads, connections, memory), which would cause a <strong>cascading failure</strong> across the entire system.</p>
+
+<p>Named by analogy to electrical circuit breakers that trip to prevent fires when a short circuit occurs.</p>
+
+<h2>The Three States</h2>
+
+<div class="diagram">
+       ┌──────────────────────────────────────────────────────────────┐
+       │                                                              │
+       ▼                                                              │
+  ┌──────────┐   failures exceed    ┌──────────┐   timeout expires   ┌──────────┐
+  │  CLOSED   │ ──────────────────▶ │  OPEN     │ ─────────────────▶ │ HALF-OPEN │
+  │           │   threshold         │           │                     │           │
+  │ Requests  │                     │ Requests  │                     │ Limited   │
+  │ flow      │ ◀────────────────── │ FAIL FAST │                     │ requests  │
+  │ through   │   success rate      │ (reject   │   failures          │ pass       │
+  │ normally  │   recovered         │ or        │   exceed            │ through   │
+  │           │   (via half-open)   │ fallback) │   threshold ──────▶ │           │
+  └──────────┘                     └──────────┘                     └──────────┘
+       ▲                                                                │
+       │              success in half-open                              │
+       └────────────────────────────────────────────────────────────────┘
+</div>
+
+<h3>State Details</h3>
+
+<table>
+  <tr><th>State</th><th>Behavior</th><th>Transition Out</th></tr>
+  <tr><td><strong>Closed</strong></td><td>Normal operation. Requests pass through to the downstream service. A sliding window tracks success/failure counts.</td><td>Opens when failure rate exceeds threshold (e.g., &gt;50% failures in last 20 requests)</td></tr>
+  <tr><td><strong>Open</strong></td><td>Circuit is tripped. All requests are immediately rejected or served from a fallback. No actual calls to the downstream service are made.</td><td>Transitions to Half-Open after a wait/delay timer expires</td></tr>
+  <tr><td><strong>Half-Open</strong></td><td>Allows a limited number of probe requests through to test if the downstream service has recovered.</td><td>Closes if probes succeed; re-opens if probes fail</td></tr>
+</table>
+
+<h2>Without vs With Circuit Breaker</h2>
+
+<div class="diagram">
+  WITHOUT Circuit Breaker (Cascading Failure):
+  ┌──────────┐    ┌──────────┐    ┌──────────┐
+  │ Service A │───▶│ Service B │───▶│ Service C │ ← slow/dead
+  │ (50 threads)│  │(50 threads)│  │          │
+  └──────────┘    └──────────┘    └──────────┘
+        │               │               │
+  Threads accumulate waiting for C     C never responds
+        ↓               ↓
+  A's threads exhaust →  B's threads exhaust →
+  Entire system DOWN
+
+  WITH Circuit Breaker:
+  ┌──────────┐    ┌──────────┐    ┌──────────┐
+  │ Service A │───▶│ Service B │───[CB OPEN]──▶│ Service C │
+  │           │    │           │    (fail fast)  │          │
+  └──────────┘    └──────────┘                 └──────────┘
+        │               │
+  B returns fallback   A unaffected
+  immediately          Threads free, system stable
+</div>
+
+<h2>Configuration Parameters</h2>
+
+<table>
+  <tr><th>Parameter</th><th>Description</th><th>Typical Values</th></tr>
+  <tr><td><strong>Failure Rate Threshold</strong></td><td>Percentage of failed requests that triggers open</td><td>50% of last 20 requests</td></tr>
+  <tr><td><strong>Sliding Window Size</strong></td><td>Number of recent requests to evaluate</td><td>10-50 requests or time-based (60s)</td></tr>
+  <tr><td><strong>Wait Duration (Open)</strong></td><td>How long to stay open before trying half-open</td><td>30s - 5min (start short)</td></tr>
+  <tr><td><strong>Half-Open Max Probes</strong></td><td>Number of test requests in half-open state</td><td>3-5 requests</td></tr>
+  <tr><td><strong>Slow Call Duration Threshold</strong></td><td>Treat slow responses as failures (optional)</td><td>&gt;5s counts as failure</td></tr>
+  <tr><td><strong>Slow Call Rate Threshold</strong></td><td>What % of slow calls triggers open</td><td>&gt;80% of calls &gt;5s</td></tr>
+</table>
+
+<h2>Fallback Strategies</h2>
+<p>When the circuit is open, the caller needs a strategy for handling the rejected request:</p>
+
+<table>
+  <tr><th>Strategy</th><th>Use Case</th><th>Example</th></tr>
+  <tr><td><strong>Cache fallback</strong></td><td>Read-heavy services</td><td>Return stale data from Redis cache</td></tr>
+  <tr><td><strong>Default value</strong></td><td>Non-critical enrichment</td><td>Return empty recommendations list</td></tr>
+  <tr><td><strong>Fail fast</strong></td><td>Critical path — caller must know</td><td>Return 503 Service Unavailable</td></tr>
+  <tr><td><strong>Queue for retry</strong></td><td>Write operations</td><td>Enqueue to Kafka, process when circuit closes</td></tr>
+  <tr><td><strong>Secondary service</strong></td><td>Multi-provider setup</td><td>Failover to backup payment processor</td></tr>
+</table>
+
+<h2>Implementation: Netflix Hystrix / Resilience4j</h2>
+<p>Netflix open-sourced Hystrix in 2012 (now in maintenance mode). Resilience4j is the modern, lightweight alternative.</p>
+
+<pre>
+// Resilience4j circuit breaker configuration
+CircuitBreakerConfig config = CircuitBreakerConfig.custom()
+    .failureRateThreshold(50)               // 50% failures → open
+    .slidingWindowType(SlidingWindowType.COUNT_BASED)
+    .slidingWindowSize(20)                  // last 20 requests
+    .waitDurationInOpenState(Duration.ofSeconds(30))  // wait 30s
+    .permittedNumberOfCallsInHalfOpenState(5)         // 5 probes
+    .slowCallDurationThreshold(Duration.ofSeconds(5)) // 5s = slow
+    .slowCallRateThreshold(80)             // 80% slow = failure
+    .build();
+</pre>
+
+<h2>Where to Place Circuit Breakers</h2>
+
+<div class="callout">
+  <strong>Guideline:</strong> Place circuit breakers at <em>every</em> outbound dependency boundary. Each service should have its own circuit breaker — do not share circuit breakers across different downstream services.
+</div>
+
+<div class="diagram">
+  Order Service
+  ├── CB → Payment Service    (critical — fail fast)
+  ├── CB → Inventory Service  (critical — cache fallback)
+  ├── CB → Notification Service (non-critical — queue fallback)
+  ├── CB → Recommendation Service (non-critical — default fallback)
+  └── CB → Analytics Service   (non-critical — skip/drop)
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>"What is a circuit breaker and how does it work?" — Three states (closed/open/half-open), prevents cascading failures by fast-failing when downstream is unhealthy.</li>
+  <li>"How does it differ from a retry?" — Retries try the same call again; circuit breakers stop making the call entirely. They complement each other.</li>
+  <li>"What happens when the circuit is open?" — Requests are immediately rejected or served from a fallback. The downstream service gets no traffic, giving it time to recover.</li>
+  <li>"How do you choose the failure threshold?" — Too low: trips on transient errors. Too high: never trips. Start at 50% over last 20 requests and tune based on production data.</li>
+  <li>"Can a circuit breaker cause cascading failures?" — Yes, if the fallback itself is slow or resource-intensive. Fallbacks must be fast and lightweight.</li>
+  <li>"Where would you place circuit breakers in your designed system?" — At every outbound dependency boundary, each with its own circuit breaker and appropriate fallback strategy.</li>
+</ul>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Depth:</strong> Hystrix command properties, thread pool isolation details (covered in bulkhead). <br>
+  <strong>Depth:</strong> Resilience4j/Sentinel specific API syntax — concept matters, not library details. <br>
+  <strong>Depth:</strong> Circuit breaker in service mesh (Istio/Envoy) configuration unless the question is about infrastructure-level implementation.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Release It! — Michael Nygard (2nd Edition)</div>
+  <p>Chapter 5: Circuit Breaker. The original pattern definition with real-world failure case studies. Essential reading.</p>
+</div>
+<div class="source">
+  <div class="source-label">Netflix Hystrix Wiki (GitHub)</div>
+  <p>Design rationale, configuration patterns, and real-world production usage at Netflix scale.</p>
+</div>
+<div class="source">
+  <div class="source-label">Martin Fowler — Circuit Breaker (martinfowler.com)</div>
+  <p>Classic blog post explaining the pattern with clear state diagrams and implementation considerations.</p>
+</div>
+
+<div class="nav">
+  <a href="sli.html">&larr; SLI</a>
+  <a href="retry.html">Retry &rarr;</a>
+</div>
+</body>
+</html>

@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.2 PACELC</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">5 Distributed Systems</a> / 5.2
+</div>
+
+<h1>5.2 PACELC</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the <strong>PACELC theorem</strong> as an extension of CAP that captures the trade-off between latency and consistency even when the network is operating normally (no partition).</p>
+
+<h2>Definition</h2>
+<p><strong>PACELC</strong> stands for: <strong>If there is a Partition (P), the system trades off Availability (A) vs. Consistency (C); Else (E), when running normally, the system trades off Latency (L) vs. Consistency (C).</strong></p>
+
+<p>CAP only tells you what happens during a partition. PACELC adds the second half: even when everything is fine, do you choose low latency or strong consistency? This is the trade-off that most systems actually make in practice.</p>
+
+<div class="callout">
+  <strong>Why PACELC Matters:</strong> Partitions are rare in practice. Most design decisions are made during normal operation. A CP system (like Spanner) that provides consistency during partitions must also accept higher latency during normal operation due to cross-replica coordination. An AP system (like Cassandra) avoids this coordination cost.
+</div>
+
+<h2>PACELC Diagram</h2>
+
+<div class="diagram">
+                     PACELC Theorem
+  ┌──────────────────────────────────────────────────────┐
+  │                                                      │
+  │   If (P)artition:                                   │
+  │   ┌──────────────┐         ┌──────────────┐         │
+  │   │ (A)vailability│    OR   │ (C)onsistency │         │
+  │   │ Serve stale   │         │ Block / error │         │
+  │   └──────────────┘         └──────────────┘         │
+  │                                                      │
+  │   Else (E) — normal operation, no partition:         │
+  │   ┌──────────────┐         ┌──────────────┐         │
+  │   │ (L)atency     │    OR   │ (C)onsistency │         │
+  │   │ Fast, maybe   │         │ Slow, always   │         │
+  │   │ stale          │         │ up-to-date     │         │
+  │   └──────────────┘         └──────────────┘         │
+  │                                                      │
+  └──────────────────────────────────────────────────────┘
+
+  Two independent dimensions:
+  1. During partition:    A vs C   (this is the CAP trade-off)
+  2. During normal ops:   L vs C   (this is what PACELC adds)
+</div>
+
+<h2>PACELC Classification of Real Systems</h2>
+
+<table>
+  <tr>
+    <th>System</th>
+    <th>Partition Choice</th>
+    <th>Normal Ops Choice</th>
+    <th>Classification</th>
+  </tr>
+  <tr>
+    <td>Cassandra (default)</td>
+    <td>A (available)</td>
+    <td>L (low latency)</td>
+    <td><strong>PA/EL</strong></td>
+  </tr>
+  <tr>
+    <td>DynamoDB (eventual)</td>
+    <td>A (available)</td>
+    <td>L (low latency)</td>
+    <td><strong>PA/EL</strong></td>
+  </tr>
+  <tr>
+    <td>Cassandra (QUORUM)</td>
+    <td>A (available)</td>
+    <td>C (consistency)</td>
+    <td><strong>PA/EC</strong></td>
+  </tr>
+  <tr>
+    <td>MongoDB (default)</td>
+    <td>C (consistency)</td>
+    <td>C (consistency)</td>
+    <td><strong>PC/EC</strong></td>
+  </tr>
+  <tr>
+    <td>HBase</td>
+    <td>C (consistency)</td>
+    <td>C (consistency)</td>
+    <td><strong>PC/EC</strong></td>
+  </tr>
+  <tr>
+    <td>Bigtable</td>
+    <td>C (consistency)</td>
+    <td>L (low latency — single datacenter)</td>
+    <td><strong>PC/EL</strong></td>
+  </tr>
+  <tr>
+    <td>Spanner</td>
+    <td>C (consistency)</td>
+    <td>C (consistency)</td>
+    <td><strong>PC/EC</strong></td>
+  </tr>
+  <tr>
+    <td>Cosmos DB (multi-region)</td>
+    <td>Configurable</td>
+    <td>Configurable (5 levels)</td>
+    <td><strong>All four</strong> (tunable)</td>
+  </tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Interview Tip:</strong> Mentioning PACELC instead of just CAP immediately signals senior-level understanding. Most interviewers expect candidates to only know CAP. Demonstrating knowledge of PACELC shows you understand that consistency is a <em>spectrum</em>, not a binary choice, and that most decisions are made during normal operation, not during partitions.
+</div>
+
+<h2>PA/EL vs PC/EC vs PA/EC</h2>
+
+<div class="diagram">
+  PA/EL (e.g., Cassandra default):
+  ┌────────────────────────────────────────────┐
+  │ Partition? → Stay Available (serve stale)  │
+  │ Normal ops? → Minimize Latency (no sync)   │
+  │                                            │
+  │ Reads/writes hit nearest replica directly  │
+  │ Async gossip for replication               │
+  │ Lowest latency, highest availability       │
+  └────────────────────────────────────────────┘
+
+  PC/EC (e.g., MongoDB, HBase):
+  ┌────────────────────────────────────────────┐
+  │ Partition? → Preserve Consistency (block)  │
+  │ Normal ops? → Preserve Consistency (sync)  │
+  │                                            │
+  │ All writes go through leader/follower sync │
+  │ Reads from leader or sync'd followers      │
+  │ Highest consistency, highest latency        │
+  └────────────────────────────────────────────┘
+
+  PA/EC (e.g., Cassandra with QUORUM):
+  ┌────────────────────────────────────────────┐
+  │ Partition? → Stay Available (serve stale)  │
+  │ Normal ops? → Preserve Consistency (sync) │
+  │                                            │
+  │ Normal: QUORUM read/write for consistency  │
+  │ Partition: Fallback to local (ANY)         │
+  │ Flexible: strong when healthy, weak when   │
+  │ under partition                            │
+  └────────────────────────────────────────────┘
+</div>
+
+<h2>Why This Matters for System Design</h2>
+<p>In a system design interview, when you choose a consistency model, you are implicitly choosing from the PACELC menu:</p>
+
+<ul>
+  <li><strong>"We use eventual consistency" = PA/EL:</strong> Fast reads and writes, accept stale data</li>
+  <li><strong>"We use strong consistency with leader election" = PC/EC:</strong> Correct data, accept higher latency</li>
+  <li><strong>"We use read-after-write consistency" = somewhere between:</strong> Partial guarantees for specific operations</li>
+</ul>
+
+<p>The key insight is that <strong>latency and consistency are two ends of a single spectrum</strong>. You cannot have both simultaneously — every additional consistency guarantee requires an additional network round-trip, which adds latency.</p>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>"What is PACELC and how does it extend CAP?"</li>
+  <li>"Why is CAP incomplete for real-world system design decisions?"</li>
+  <li>"Classify Cassandra with QUORUM in the PACELC framework."</li>
+  <li>"When would you choose PA/EL vs PC/EC for a new service?"</li>
+  <li>"Can a system offer different PACELC profiles for different operations?"</li>
+  <li>"How does Cosmos DB implement tunable consistency in PACELC terms?"</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid in interviews:</strong>
+  <ul>
+    <li>Formal proofs of PACELC (the Abadi 2012 paper's theoretical framework)</li>
+    <li>Detailed analysis of Byzantine fault tolerance in PACELC context</li>
+    <li>Comparing PACELC to lesser-known alternatives like BASE, HAT, or CALM theorem</li>
+    <li>Specific consistency level tuning parameters for Cassandra unless asked</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary Sources</div>
+  <ul>
+    <li>Abadi, D. "Consistency Tradeoffs in Modern Distributed Database System Design: CAP is Only Part of the Story" (IEEE Computer, 2012)</li>
+    <li>Brewer, E. "CAP Twelve Years Later: How the 'Rules' Have Changed" (IEEE Computer, 2012)</li>
+    <li>Kleppmann, M. <strong>Designing Data-Intensive Applications</strong>, Chapter 9</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Supplementary</div>
+  <ul>
+    <li>Svore, B. et al. "Microsoft Azure Cosmos DB: Globally Distributed Database" (SIGMOD, 2021)</li>
+    <li>Abadi, D. "Consistency Models, Transactional Models, and PACELC" (Chapter in Principles of Distributed Database Systems, 2019)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="partition-tolerance.html">&larr; 5.1.3 Partition Tolerance</a>
+  <a href="strong-consistency.html">5.3.1 Strong Consistency &rarr;</a>
+</div>
+
+</body>
+</html>

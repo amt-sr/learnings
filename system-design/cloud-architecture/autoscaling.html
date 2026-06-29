@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>12.2.9 — Autoscaling</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">Cloud Architecture</a> / 12.2.9 Autoscaling</div>
+<h1>Autoscaling</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the three levels of Kubernetes autoscaling (HPA, VPA, Cluster Autoscaler), their triggers, how they interact, and how to design an effective autoscaling strategy for production systems.</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>Autoscaling</strong> is the ability to automatically adjust the number of compute resources based on current load. In Kubernetes, autoscaling operates at three levels: pod replicas (HPA), pod resource requests (VPA), and cluster nodes (Cluster Autoscaler).
+</div>
+
+<h2>Three Levels of Autoscaling</h2>
+<div class="diagram">
+  Level 3: Cluster Autoscaler
+  ┌──────────────────────────────────────────────────────────┐
+  │  Adds/removes worker NODES based on pending pods            │
+  │  Trigger: pods cannot be scheduled (insufficient resources) │
+  │  Action: add new EC2 instance / GCE instance                │
+  └──────────────────────────────────────────────────────────┘
+                           │
+  Level 2: VPA (Vertical Pod Autoscaler)
+  ┌──────────────────────────────────────────────────────────┐
+  │  Adjusts CPU/memory REQUESTS for pods                      │
+  │  Trigger: resource utilization too high or too low          │
+  │  Action: restart pod with updated resource limits           │
+  └──────────────────────────────────────────────────────────┘
+                           │
+  Level 1: HPA (Horizontal Pod Autoscaler)
+  ┌──────────────────────────────────────────────────────────┐
+  │  Scales NUMBER OF PODS based on metrics                    │
+  │  Trigger: CPU % > 70%, memory > 80%, custom metrics         │
+  │  Action: increase/decrease replicas in deployment           │
+  └──────────────────────────────────────────────────────────┘
+</div>
+
+<h2>HPA (Horizontal Pod Autoscaler)</h2>
+<div class="callout">
+  <strong>HPA</strong> adjusts the number of pod replicas based on observed metrics. It is the most commonly used autoscaler and should be your default scaling mechanism.
+</div>
+
+<table>
+  <tr><th>Metric Source</th><th>Metrics Available</th><th>Use Case</th></tr>
+  <tr><td><strong>Resource metrics</strong></td><td>CPU utilization, memory utilization (per pod)</td><td>General-purpose scaling</td></tr>
+  <tr><td><strong>Custom metrics</strong></td><td>Queue depth, request rate, concurrent connections (via Prometheus adapter)</td><td>Application-specific triggers</td></tr>
+  <tr><td><strong>External metrics</strong></td><td>CloudWatch, Datadog, external systems</td><td>Scale based on external events</td></tr>
+</table>
+
+<div class="diagram">
+  HPA Example: Scale based on CPU
+
+  Target: CPU average < 70%
+  Current: 3 replicas, CPU at 85%
+
+  Desired replicas = ceil(current_replicas × current_cpu / target_cpu)
+  Desired replicas = ceil(3 × 85 / 70) = ceil(3.64) = 4
+
+  HPA creates 1 more replica → 4 pods → CPU drops below 70%
+
+  Traffic drops:
+  CPU at 30% → HPA scales down to 2 replicas (min: 2)
+
+  Config:
+  ┌───────────────────────────────────┐
+  │ minReplicas: 2                   │
+  │ maxReplicas: 50                  │
+  │ targetCPUUtilizationPercentage: 70│
+  │ scaleDown:                       │
+  │   stabilizationWindowSeconds: 300 │  ← wait 5 min before scaling down
+  └───────────────────────────────────┘
+</div>
+
+<div class="callout yellow">
+  <strong>Stabilization window:</strong> Always configure a scale-down stabilization window (5-10 minutes). Without it, brief traffic dips will cause rapid scale-down, followed by scale-up when traffic returns — oscillation that wastes resources and increases latency.
+</div>
+
+<h2>VPA (Vertical Pod Autoscaler)</h2>
+<div class="callout">
+  <strong>VPA</strong> adjusts the CPU and memory resource requests for pods. When a pod needs more resources, VPA kills the existing pod and recreates it with higher requests.
+</div>
+
+<div class="callout red">
+  <strong>HPA and VPA conflict:</strong> Do not run HPA (CPU/memory-based) and VPA on the same workload. HPA scales horizontally (more pods), VPA scales vertically (bigger pods). They fight each other. Use HPA for scaling; use VPA only for right-sizing recommendations or on non-HPA workloads.
+</div>
+
+<h2>Cluster Autoscaler</h2>
+<div class="callout">
+  <strong>Cluster Autoscaler</strong> adds new nodes when pods cannot be scheduled due to insufficient resources, and removes nodes when utilization is low.
+</div>
+
+<div class="diagram">
+  Cluster Autoscaler Flow:
+
+  1. Pod pending (no node has enough resources)
+     └──▶ Cluster Autoscaler detects pending pods
+          └──▶ Adds new node (EC2 instance, GCE VM)
+               └──▶ Scheduler places pending pod on new node
+
+  2. Node underutilized (< 50% capacity)
+     └──▶ Cluster Autoscaler checks if pods can fit on other nodes
+          └──▶ Evicts pods (respecting PDB limits)
+          └──▶ Removes node
+
+  Requirements:
+  - Pods must have resource requests set (CPU, memory)
+  - Pod Disruption Budgets to prevent critical pod eviction
+  - Node groups with min/max bounds
+</div>
+
+<h2>Scaling Triggers</h2>
+<table>
+  <tr><th>Trigger</th><th>Level</th><th>Example</th><th>Response Time</th></tr>
+  <tr><td>CPU utilization</td><td>HPA</td><td>API server CPU > 70%</td><td>30-60 seconds</td></tr>
+  <tr><td>Memory utilization</td><td>HPA/VPA</td><td>Worker memory > 80%</td><td>Minutes (VPA requires restart)</td></tr>
+  <tr><td>Custom metric: queue depth</td><td>HPA</td><td>Kafka queue > 10K messages</td><td>30-60 seconds</td></tr>
+  <tr><td>Custom metric: RPS</td><td>HPA</td><td>Requests per second > 1000</td><td>30-60 seconds</td></tr>
+  <tr><td>Scheduled (cron)</td><td>HPA</td><td>Pre-scale before known traffic peak</td><td>Planned</td></tr>
+  <tr><td>Predictive</td><td>HPA (KEDA)</td><td>ML-based prediction of upcoming load</td><td>Proactive</td></tr>
+</table>
+
+<div class="callout green">
+  <strong>Interview tip:</strong> When designing a system, specify your autoscaling strategy. "I would use HPA with a CPU target of 70% and min 3/max 50 replicas. For event-driven workloads, I would use KEDA to scale based on Kafka queue depth. The cluster autoscaler handles node scaling with a 5-minute scale-down stabilization window."
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What are the three levels of autoscaling in Kubernetes?</li>
+  <li>How does HPA decide to scale up or down?</li>
+  <li>Why should you not run HPA and VPA together on the same workload?</li>
+  <li>What is the cluster autoscaler and when does it trigger?</li>
+  <li>What are good scaling triggers beyond CPU utilization?</li>
+  <li>How do you prevent scaling oscillation?</li>
+  <li>What is a Pod Disruption Budget and why does it matter for autoscaling?</li>
+  <li>How would you autoscale based on a Kafka queue depth?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid diving into:</strong> HPA YAML configuration, Kubernetes metrics server setup, or cloud-specific autoscaler implementations (EKS, GKE node pools). Focus on the three levels, their triggers, and the interaction between them.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Documentation</div>
+  <ul>
+    <li><strong>Kubernetes HPA</strong> — kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/</li>
+    <li><strong>Kubernetes VPA</strong> — github.com/kubernetes/autoscaler/tree/master/vertical-pod-autoscaler</li>
+    <li><strong>Cluster Autoscaler</strong> — github.com/kubernetes/autoscaler/tree/master/cluster-autoscaler</li>
+    <li><strong>KEDA</strong> — keda.sh — Event-driven autoscaler for Kubernetes</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="ingress.html">&larr; Previous: Ingress</a>
+  <a href="service-mesh.html">Next: Service Mesh &rarr;</a>
+</div>
+</body>
+</html>

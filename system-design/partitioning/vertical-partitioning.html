@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.1.2 Vertical Partitioning</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="../index.html">6 Partitioning</a> / <a href="index.html">6.1 Partitioning</a> / 6.1.2</p>
+
+<h1>Vertical Partitioning</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand how splitting columns (rather than rows) into separate tables or servers can improve performance, reduce I/O for common queries, and enable independent scaling of different data access patterns.</p>
+
+<h2>Definition</h2>
+<p>Vertical partitioning splits a table by <strong>columns</strong> rather than rows. Each partition contains the <strong>same rows but different columns</strong>. A single logical entity is decomposed into multiple physical tables, typically joined back together by a shared primary key. In its most aggressive form, different column groups can be placed on different servers.</p>
+
+<div class="diagram">
+  ┌────────────────────────────────────────────────────────────────┐
+  │  Original Table: users                                         │
+  │  id | name | email | bio | profile_pic | settings_json | ...  │
+  │  1  | Alice| a@x.c| ... | blob        | {...}          | ... │
+  └──────────────────────────────┬─────────────────────────────────┘
+                                 │  Split by column groups
+              ┌──────────────────┼──────────────────┐
+              ▼                  ▼                  ▼
+  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+  │ users_core       │  │ users_profile    │  │ users_settings   │
+  │ id | name | email│  │ id | bio | pic   │  │ id | settings    │
+  │ 1  | Alice| a@x.c│  │ 1  | ... | blob │  │ 1  | {...}       │
+  └──────────────────┘  └──────────────────┘  └──────────────────┘
+  Hot data (fast SSD)   Warm data (HDD)       Cold data (archive)
+</div>
+
+<h2>Wide Rows vs Narrow Rows</h2>
+<p>As a table accumulates columns, each row becomes "wide." A single query that only needs 3 columns still reads entire rows (including unused columns) if the table is not vertically partitioned. This wastes I/O bandwidth and buffer pool memory.</p>
+
+<div class="callout">
+  <strong>Key insight:</strong> In most databases, the smallest unit of I/O is a page (typically 4KB-16KB). If a user profile row is 8KB and spans 50 columns, but your query only needs <code>id</code>, <code>name</code>, and <code>email</code> (totaling 200 bytes), you still read the full 8KB page. Vertical partitioning means the "core" table fits more rows per page, improving cache hit rates.
+</div>
+
+<h2>When to Use Vertical Partitioning</h2>
+
+<h3>Separate Hot and Cold Columns</h3>
+<ul>
+  <li><strong>Hot:</strong> Columns accessed on every request (user_id, username, email). Keep on fast SSD storage, possibly in-memory.</li>
+  <li><strong>Cold:</strong> Columns rarely accessed (biography, profile picture blob, activity logs). Move to cheaper storage or a separate database.</li>
+</ul>
+
+<h3>Different Access Patterns</h3>
+<ul>
+  <li>Authentication queries need <code>email</code> and <code>password_hash</code> — these belong in a "credentials" table.</li>
+  <li>Profile page queries need <code>bio</code>, <code>avatar_url</code>, <code>location</code> — these belong in a "profile" table.</li>
+  <li>Admin/analytics queries need all columns — join across partitions.</li>
+</ul>
+
+<h3>Row-Level Security and Compliance</h3>
+<ul>
+  <li>PII columns (SSN, date of birth) can be isolated on a separate server with stricter access controls and encryption.</li>
+  <li>GDPR/right-to-deletion is simpler when personal data is in its own table rather than scattered across wide rows.</li>
+</ul>
+
+<h2>Vertical vs Horizontal Partitioning</h2>
+
+<table>
+  <tr>
+    <th>Dimension</th>
+    <th>Vertical Partitioning</th>
+    <th>Horizontal Partitioning</th>
+  </tr>
+  <tr>
+    <td>What is split</td>
+    <td>Columns</td>
+    <td>Rows</td>
+  </tr>
+  <tr>
+    <td>Each partition has</td>
+    <td>Same rows, fewer columns</td>
+    <td>Same columns, fewer rows</td>
+  </tr>
+  <tr>
+    <td>Primary benefit</td>
+    <td>Reduce I/O per query</td>
+    <td>Distribute storage and write load</td>
+  </tr>
+  <tr>
+    <td>Joins required</td>
+    <td>Yes (recombine columns)</td>
+    <td>No (single shard is self-contained)</td>
+  </tr>
+  <tr>
+    <td>Complexity</td>
+    <td>Low (schema change)</td>
+    <td>High (routing, resharding)</td>
+  </tr>
+  <tr>
+    <td>Scale limit</td>
+    <td>Each partition still holds all rows</td>
+    <td>True linear scaling across machines</td>
+  </tr>
+  <tr>
+    <td>Use together?</td>
+    <td colspan="2" style="text-align:center;">Yes — vertically partition columns, then horizontally partition each column-group by rows</td>
+  </tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Interview tip:</strong> Vertical partitioning is a useful first step before horizontal sharding. Many teams vertically partition first (cheaper, lower risk) and only introduce horizontal sharding when a single column-group table grows too large. In an interview, mention both and explain the sequencing.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>What is the difference between vertical and horizontal partitioning?</li>
+  <li>When would you choose vertical partitioning over horizontal sharding?</li>
+  <li>How does vertical partitioning affect JOIN performance?</li>
+  <li>Design a user table that separates authentication data from profile data — explain the tradeoffs.</li>
+  <li>How would vertical partitioning help with GDPR compliance?</li>
+</ul>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Do not over-complicate this topic.</strong> Vertical partitioning is conceptually simple. Do not get into debates about normalization vs denormalization — vertical partitioning is orthogonal to both. Skip discussions of column-oriented databases (like BigQuery or Redshift) unless the interviewer specifically asks about OLAP vs OLTP storage engines.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Recommended Reading</div>
+  <ul>
+    <li><a href="https://martin.kleppmann.com/book/">"Designing Data-Intensive Applications" — Martin Kleppmann, Ch. 3 (Storage and Retrieval)</a></li>
+    <li><a href="https://use-the-index-luke.com/">"Use The Index, Luke" — Markus Winand (covering page-level I/O and narrow tables)</a></li>
+    <li><a href="https://www.postgresql.org/docs/current/ddl-partitioning.html">PostgreSQL Documentation: Table Partitioning</a></li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="horizontal-partitioning.html">&larr; 6.1.1 Horizontal Partitioning</a>
+  <a href="functional-partitioning.html">6.1.3 Functional Partitioning &rarr;</a>
+</div>
+
+</body>
+</html>

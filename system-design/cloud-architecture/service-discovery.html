@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>12.2.2 — Service Discovery</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">Cloud Architecture</a> / 12.2.2 Service Discovery</div>
+<h1>Service Discovery</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the service discovery problem in dynamic environments where service instances are created and destroyed frequently, the difference between client-side and server-side discovery, and tools like Consul, Eureka, and Kubernetes DNS.</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>Service discovery</strong> is the mechanism by which services in a distributed system find each other. In dynamic environments (auto-scaling, container orchestration), service instances have ephemeral IP addresses, so a mechanism is needed to map logical service names to actual network locations.
+</div>
+
+<p>In a monolith, services call each other via function calls. In microservices, Service A needs to call Service B, but Service B might have 5 instances running at different IPs. How does Service A know where to send the request? That is the service discovery problem.</p>
+
+<h2>Client-Side Discovery</h2>
+<div class="diagram">
+  ┌──────────────┐           ┌──────────────┐
+  │ Service A    │           │  Service     │
+  │ (client)     │           │  Registry    │
+  │              │  1. Lookup │ (Consul,     │
+  │  ┌─────────┐ │──────────▶│   Eureka,    │
+  │  │Discovery│ │           │   etcd)      │
+  │  │ Client  │ │◀──────────│              │
+  │  └────┬────┘ │  2. Return │  Instances:  │
+  │       │      │   IPs      │  B: 10.0.1.2│
+  │       │      │           │  B: 10.0.1.3│
+  │       │  3. Direct call  │  B: 10.0.1.4│
+  │       ▼      │           └──────────────┘
+  │  ┌─────────┐ │
+  │  │Load     │ │   ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+  │  │Balancer │─┼──▶│ Service B    │ │ Service B    │ │ Service B    │
+  │  │(in SDK) │ │   │ :10.0.1.2    │ │ :10.0.1.3    │ │ :10.0.1.4    │
+  │  └─────────┘ │   └──────────────┘ └──────────────┘ └──────────────┘
+  └──────────────┘
+
+  Client has a discovery client library embedded (e.g., Ribbon, gRPC-LB)
+  Client picks an instance and load-balances locally
+</div>
+
+<p>The client queries the registry and gets a list of healthy instances, then uses its own load balancer to pick one. Netflix Ribbon, Spring Cloud LoadBalancer, and gRPC's built-in LB use this approach.</p>
+
+<h2>Server-Side Discovery</h2>
+<div class="diagram">
+  ┌──────────────┐                      ┌──────────────┐
+  │ Service A    │                      │  Service     │
+  │ (client)     │                      │  Registry    │
+  └──────┬───────┘                      │ (Consul,     │
+         │                              │  etcd)       │
+         │  1. Call                     └──────┬───────┘
+         ▼                                    │
+  ┌──────────────┐                           │
+  │ Load Balancer │  2. Query registry        │
+  │ / Router     │──────────────────────────▶│
+  │              │◀──────────────────────────│
+  │              │  3. Return IPs           │
+  └──────┬───────┘                           │
+         │  4. Route                        │
+         ▼                                  │
+  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+  │ Service B    │ │ Service B    │ │ Service B    │
+  │ :10.0.1.2    │ │ :10.0.1.3    │ │ :10.0.1.4    │
+  └──────────────┘ └──────────────┘ └──────────────┘
+
+  Client calls a single load balancer URL
+  LB handles discovery and routing transparently
+</div>
+
+<p>The client sends requests to a single load balancer/router, which handles registry lookup and routing. AWS ALB, NGINX, and Kubernetes Services use this approach.</p>
+
+<h2>Client-Side vs Server-Side</h2>
+<table>
+  <tr><th>Dimension</th><th>Client-Side</th><th>Server-Side</th></tr>
+  <tr><td>Client complexity</td><td class="red">Higher (needs discovery SDK)</td><td class="green">Lower (calls a single URL)</td></tr>
+  <tr><td>Network hop</td><td class="green">Direct (client → service)</td><td class="red">Extra hop (client → LB → service)</td></tr>
+  <tr><td>Load balancing</td><td>In client library</td><td>In centralized LB</td></tr>
+  <tr><td>Latency</td><td class="green">Lower (no extra hop)</td><td class="red">Higher (one extra hop)</td></tr>
+  <tr><td>Language coupling</td><td class="red">SDK per language</td><td class="green">Language-agnostic</td></tr>
+  <tr><td>LB bottleneck risk</td><td class="green">None</td><td class="red">LB can become bottleneck</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>In practice:</strong> Kubernetes uses server-side discovery (Services + kube-proxy). If you are on Kubernetes, you typically do not need a separate service discovery tool. Consul and Eureka are more relevant for non-Kubernetes environments (VMs, bare metal, AWS EC2).
+</div>
+
+<h2>Service Registration</h2>
+<p>Services must register themselves with the registry. Two approaches:</p>
+<table>
+  <tr><th>Approach</th><th>How It Works</th><th>Example</th></tr>
+  <tr><td><strong>Self-registration</strong></td><td>Service registers itself on startup, deregisters on shutdown</td><td>Eureka, Consul</td></tr>
+  <tr><td><strong>Third-party registration</strong></td><td>An external agent (registrar) monitors and registers instances</td><td>Kubernetes, Marathon</td></tr>
+</table>
+
+<h3>Health Checking</h3>
+<pre>
+# Consul health check config
+{
+  "check": {
+    "http": "http://localhost:8080/health",
+    "interval": "10s",
+    "timeout": "3s",
+    "deregister_critical_service_after": "30s"
+  }
+}
+
+# If health check fails for 30s, instance is removed from registry
+# Prevents traffic being routed to dead instances
+</pre>
+
+<h2>Tools Comparison</h2>
+<table>
+  <tr><th>Tool</th><th>Type</th><th>Key Feature</th><th>Best For</th></tr>
+  <tr><td><strong>Consul</strong></td><td>Client or server-side</td><td>Service mesh, KV store, multi-DC</td><td>Hybrid environments, multi-cloud</td></tr>
+  <tr><td><strong>Eureka</strong></td><td>Client-side</td><td>Netflix OSS, self-preserving mode</td><td>Java/Spring ecosystems</td></tr>
+  <tr><td><strong>etcd</strong></td><td>Server-side</td><td>Strong consistency, K8s backing store</td><td>Kubernetes environments</td></tr>
+  <tr><td><strong>Zookeeper</strong></td><td>Server-side</td><td>CP, watch mechanism, mature</td><td>Kafka, Hadoop ecosystems</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What is the service discovery problem and why does it exist?</li>
+  <li>Compare client-side vs server-side service discovery.</li>
+  <li>How does health checking work with service discovery?</li>
+  <li>What is the difference between Consul and Eureka?</li>
+  <li>How does Kubernetes handle service discovery?</li>
+  <li>What happens when a service instance goes down?</li>
+  <li>How do you prevent stale entries in the service registry?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid diving into:</strong> Specific Consul configuration (HCL syntax), Eureka server setup, or ZooKeeper internals (ZAB protocol). Focus on the architectural problem, the two approaches, and the Kubernetes-native alternative.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Patterns</div>
+  <ul>
+    <li><strong>"Service Discovery" — microservices.io</strong> — Comprehensive pattern description</li>
+    <li><strong>"Service Registry Pattern"</strong> — microsoft.com/architecture/patterns/service-registry</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Documentation</div>
+  <ul>
+    <li><strong>Consul Docs</strong> — consul.io/docs — Service discovery and health checking</li>
+    <li><strong>Kubernetes Services</strong> — kubernetes.io/docs/concepts/services-networking/service/</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="api-gateway.html">&larr; Previous: API Gateway</a>
+  <a href="docker.html">Next: Docker &rarr;</a>
+</div>
+</body>
+</html>

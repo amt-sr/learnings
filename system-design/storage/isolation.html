@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.4.4 Isolation Levels</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#3">3 Storage</a> / <a href="../index.html#3.4">3.4 Transactions</a> / 3.4.4
+</div>
+
+<h1>Isolation Levels</h1>
+<div class="meta">
+  <span>Difficulty: ★★★★☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What isolation is and why it is the "I" in ACID</li>
+  <li>The four standard SQL isolation levels and their trade-offs</li>
+  <li>Which concurrency anomalies each level prevents</li>
+  <li>Default isolation levels in popular databases</li>
+  <li>Why stronger isolation is not always better</li>
+</ul>
+
+<h2>Definition</h2>
+<p><strong>Isolation</strong> determines how and when the changes made by one transaction become visible to other concurrently running transactions. It is the mechanism that prevents <a href="dirty-read.html">dirty reads</a>, <a href="non-repeatable-read.html">non-repeatable reads</a>, and <a href="phantom-read.html">phantom reads</a>.</p>
+
+<p>Isolation is a spectrum: higher isolation means fewer anomalies but lower concurrency (and thus lower throughput). Every system must choose where to land on this spectrum based on its consistency requirements and performance targets.</p>
+
+<h2>The Isolation Spectrum</h2>
+<div class="diagram">  Low Isolation (High Concurrency)          High Isolation (Low Concurrency)
+  ─────────────────────────────────────────────────────────────────────────
+  ┌───────────────┐  ┌───────────────┐  ┌────────────────┐  ┌─────────────┐
+  │ READ          │  │ READ          │  │ REPEATABLE     │  │ SERIALIZABLE│
+  │ UNCOMMITTED   │→ │ COMMITTED     │→ │ READ           │→ │             │
+  └───────────────┘  └───────────────┘  └────────────────┘  └─────────────┘
+       ↓                    ↓                    ↓                  ↓
+  Dirty reads OK      Dirty reads          Non-repeatable     Phantoms OK
+  Non-repeatable OK   blocked              reads blocked      (everything
+  Phantoms OK         Non-repeatable OK    Phantoms OK         blocked)
+                       Phantoms OK
+
+  Performance ─────────────────────────────────────────────────────→ Slower
+  Anomalies  ─────────────────────────────────────────────────────→ Fewer</div>
+
+<h2>Anomaly Prevention by Level</h2>
+<table>
+  <tr>
+    <th>Isolation Level</th>
+    <th><a href="dirty-read.html">Dirty Read</a></th>
+    <th><a href="non-repeatable-read.html">Non-Repeatable Read</a></th>
+    <th><a href="phantom-read.html">Phantom Read</a></th>
+    <th>Performance</th>
+  </tr>
+  <tr>
+    <td><a href="read-uncommitted.html">Read Uncommitted</a></td>
+    <td class="red">Possible</td>
+    <td class="red">Possible</td>
+    <td class="red">Possible</td>
+    <td class="green">Best</td>
+  </tr>
+  <tr>
+    <td><a href="read-committed.html">Read Committed</a></td>
+    <td class="green">Prevented</td>
+    <td class="red">Possible</td>
+    <td class="red">Possible</td>
+    <td class="green">Good</td>
+  </tr>
+  <tr>
+    <td><a href="repeatable-read.html">Repeatable Read</a></td>
+    <td class="green">Prevented</td>
+    <td class="green">Prevented</td>
+    <td class="red">Possible</td>
+    <td>Moderate</td>
+  </tr>
+  <tr>
+    <td><a href="serializable.html">Serializable</a></td>
+    <td class="green">Prevented</td>
+    <td class="green">Prevented</td>
+    <td class="green">Prevented</td>
+    <td class="red">Slowest</td>
+  </tr>
+</table>
+
+<div class="callout">
+  <strong>Key insight:</strong> No single isolation level is "best." The right choice depends on your application's tolerance for anomalies vs. its need for throughput. Most production systems use Read Committed or Repeatable Read.
+</div>
+
+<h2>Default Isolation Levels in Major Databases</h2>
+<table>
+  <tr><th>Database</th><th>Default Level</th><th>Notes</th></tr>
+  <tr><td><strong>PostgreSQL</strong></td><td><a href="read-committed.html">Read Committed</a></td><td>Also supports Repeatable Read and Serializable</td></tr>
+  <tr><td><strong>MySQL (InnoDB)</strong></td><td><a href="repeatable-read.html">Repeatable Read</a></td><td>Uses <a href="snapshot-isolation.html">Snapshot Isolation</a> (MVCC) internally</td></tr>
+  <tr><td><strong>Oracle</strong></td><td><a href="read-committed.html">Read Committed</a></td><td>Uses MVCC; Serializable available</td></tr>
+  <tr><td><strong>SQL Server</strong></td><td><a href="read-committed.html">Read Committed</a></td><td>Read Committed Snapshot Isolation (RCSI) optional</td></tr>
+  <tr><td><strong>SQLite</strong></td><td><a href="serializable.html">Serializable</a></td><td>Uses serialized by default (external locking)</td></tr>
+  <tr><td><strong>CockroachDB</strong></td><td><a href="serializable.html">Serializable</a></td><td>Uses Serializable Snapshot Isolation (SSI)</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Interview tip:</strong> Know the defaults for PostgreSQL and MySQL cold. Interviewers frequently ask "What is the default isolation level in MySQL?" and "Why does MySQL default to Repeatable Read while PostgreSQL defaults to Read Committed?"
+</div>
+
+<h2>Why Not Always Use Serializable?</h2>
+<p>Serializable isolation guarantees correctness but at a steep cost:</p>
+<ul>
+  <li><strong>Locking overhead:</strong> Traditional implementations acquire locks on entire ranges of data, blocking all concurrent access</li>
+  <li><strong>Deadlocks:</strong> More locks mean more potential for deadlocks, requiring retry logic</li>
+  <li><strong>Throughput reduction:</strong> Serializing access means transactions run as if sequentially, negating concurrency benefits</li>
+  <li><strong>False positives:</strong> Even optimistic serializable implementations may abort transactions that were actually safe</li>
+</ul>
+
+<pre>-- Example: Serializable might abort this legitimately safe transaction
+-- because it detected a potential conflict
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+  SELECT balance FROM accounts WHERE id = 1;   -- reads 1000
+  SELECT balance FROM accounts WHERE id = 2;   -- reads 2000
+  -- another transaction modifies account 3 here
+  -- this transaction gets aborted due to serialization failure
+COMMIT;</pre>
+
+<h2>Isolation vs. the Real World</h2>
+<p>In practice, most applications rely on <strong>Read Committed</strong> or <strong>Repeatable Read</strong> and handle edge cases at the application level:</p>
+<ul>
+  <li><strong>Read Committed:</strong> Safeguards against reading garbage (uncommitted data) while allowing reasonable concurrency</li>
+  <li><strong>Repeatable Read:</strong> Ensures a consistent view during a transaction, preventing surprises from concurrent updates</li>
+  <li><strong>Serializable:</strong> Reserved for financial systems, inventory management, or any domain where anomalies are unacceptable</li>
+</ul>
+
+<div class="callout green">
+  <strong>Design principle:</strong> Start with the database default. Escalate to a stronger isolation level only when you can demonstrate a specific anomaly that the default does not prevent. Premature use of serializable isolation is a common source of performance problems.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What are the ACID properties and what does isolation guarantee?"</strong><br>Isolation ensures that concurrently executing transactions do not interfere with each other. It prevents three classes of anomalies: dirty reads, non-repeatable reads, and phantom reads. The SQL standard defines four levels with increasing strictness.</li>
+  <li><strong>"Why doesn't everyone just use Serializable isolation?"</strong><br>Serializable has the highest performance cost. It either requires locking entire data ranges (pessimistic) or aborting and retrying transactions that might conflict (optimistic). For most workloads, the anomaly risk at Read Committed or Repeatable Read is acceptable and the performance gain is significant.</li>
+  <li><strong>"What is the default isolation level in MySQL and PostgreSQL, and why are they different?"</strong><br>MySQL/InnoDB defaults to Repeatable Read because it was designed with MVCC from the start, making the cost of repeatable reads low. PostgreSQL defaults to Read Committed because it prioritizes throughput and uses explicit locking or serializable for cases that need it.</li>
+  <li><strong>"How does Snapshot Isolation relate to the SQL isolation levels?"</strong><br>Snapshot Isolation (SI) is not one of the four SQL standard levels. It falls between Repeatable Read and Serializable: it prevents dirty reads, non-repeatable reads, and phantom reads, but can still exhibit <a href="lost-update.html">write skew</a>. PostgreSQL's Repeatable Read is actually implemented as SI. See: <a href="snapshot-isolation.html">Snapshot Isolation</a></li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>CURSOR STABILITY isolation level (rarely used)</li>
+    <li>SQL-92 vs. SQL-99 vs. SQL:2003 isolation standard differences (academic)</li>
+    <li>Specific implementation details of each database's isolation internals unless asked</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Designing Data-Intensive Applications" (Chapter 7)</strong> — Martin Kleppmann — Transaction isolation levels, anomalies, and MVCC</li>
+    <li><strong>PostgreSQL Documentation</strong> — Chapter 13: Concurrency Control</li>
+    <li><strong>MySQL Reference Manual</strong> — 15.7 InnoDB Locking and Transactions</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="consistency.html">&larr; consistency.html</a>
+  <a href="read-uncommitted.html">Next: read-uncommitted.html →</a>
+</div>
+
+</body>
+</html>

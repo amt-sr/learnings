@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.3.9 Monotonic Writes</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">5 Distributed Systems</a> / <a href="../index.html">5.3 Consistency Models</a> / 5.3.9
+</div>
+
+<h1>5.3.9 Monotonic Writes</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the <strong>monotonic writes</strong> guarantee, the specific anomaly it prevents (write reordering), implementation strategies, and how it complements read-your-writes and other client-centric consistency models.</p>
+
+<h2>Definition</h2>
+<p><strong>Monotonic writes</strong> guarantees that writes from a single client are applied to replicas in the same order the client issued them. A later write from the same client will never be applied before an earlier write from that same client.</p>
+
+<div class="callout">
+  <strong>The Anomaly It Prevents:</strong> Without monotonic writes, a client sends write(X=5) then write(X=10), but the system might apply write(X=10) first, then write(X=5), leaving the value at X=5 — the older value. The final state does not reflect the client's intent. Monotonic writes prevents this reordering.
+</div>
+
+<h2>The Problem: Write Reordering</h2>
+
+<div class="diagram">
+  Without Monotonic Writes:
+
+  Client sends: write(X=5) at t0
+  Client sends: write(X=10) at t1
+
+  Network paths:
+    write(X=5)  → Replica 2 (slow path, arrives at t3)
+    write(X=10) → Replica 1 (fast path, arrives at t1)
+
+  Replica 1 applies: X=10 (at t1)
+  Replica 2 applies: X=5  (at t3, arrives LATE)
+
+  Now Replica 1 has X=10, Replica 2 has X=5
+  A read from Replica 2 returns X=5 — the OLD value wins!
+  → The later write (X=10) is lost on Replica 2
+
+  === Monotonic Writes Violation ===
+  Write(X=10) was issued AFTER write(X=5), but X=5 was applied AFTER
+  X=10 on Replica 2, effectively "undoing" the client's later write.
+
+  With Monotonic Writes:
+
+  Option A: Writes go through a sequencer (leader)
+    write(X=5)  → Leader → sequences at position 1 → replicates in order
+    write(X=10) → Leader → sequences at position 2 → replicates in order
+    All replicas apply: position 1 then position 2
+
+  Option B: Client tags writes with sequence numbers
+    write(X=5,  seq=1) → all replicas buffer until seq=1 applied
+    write(X=10, seq=2) → all replicas buffer until seq=1 applied, then apply seq=2
+</div>
+
+<h2>Implementation Strategies</h2>
+
+<h3>1. Write Through a Single Sequencer</h3>
+
+<div class="diagram">
+  All writes from a client go through the same ordering point:
+
+  Client writes ──→ Leader / Sequencer ──→ Ordered replication
+                        │
+                        ▼
+                   Replica 1 (X=5, then X=10)
+                   Replica 2 (X=5, then X=10)
+                   Replica 3 (X=5, then X=10)
+
+  The sequencer ensures: all replicas see writes in the same order
+  This is the most common approach (leader-based systems)
+</div>
+
+<h3>2. Sequence Numbers or Timestamps</h3>
+<p>Each write is tagged with a client-specific sequence number or timestamp. Replicas buffer out-of-order writes and apply them in sequence order.</p>
+
+<h3>3. FIFO Channels to Replicas</h3>
+<p>Ensure that writes from the same client travel over a FIFO (first-in-first-out) channel to each replica. TCP provides this guarantee naturally — as long as the client sends all writes to the same replica.</p>
+
+<table>
+  <tr>
+    <th>Approach</th>
+    <th>How It Works</th>
+    <th>Guarantee</th>
+    <th>Limitation</th>
+  </tr>
+  <tr>
+    <td>Single leader/sequencer</td>
+    <td>All writes pass through one node</td>
+    <td class="green">Global monotonic writes</td>
+    <td>Leader bottleneck, failover complexity</td>
+  </tr>
+  <tr>
+    <td>Client sequence numbers</td>
+    <td>Client tags writes with increasing numbers</td>
+    <td class="green">Per-client monotonic writes</td>
+    <td>Replicas must buffer and reorder</td>
+  </tr>
+  <tr>
+    <td>FIFO / TCP to same replica</td>
+    <td>Client writes to one replica over ordered channel</td>
+    <td>Per-replica monotonic writes</td>
+    <td>Tied to one replica</td>
+  </tr>
+</table>
+
+<h2>Relationship to Read-Your-Writes</h2>
+
+<div class="callout">
+  <strong>Key Relationship:</strong> Monotonic writes is necessary (but not sufficient) for read-your-writes. If writes can be reordered, then even reading from the leader might not show the client's latest write (the latest write might have been applied before the earlier one). Together, monotonic writes + read-your-writes form the core of session consistency.
+</div>
+
+<ul>
+  <li><strong>Monotonic writes + Read-your-writes = Session consistency</strong> (approximately, also needs monotonic reads and writes-follow-reads)</li>
+  <li>Read-your-writes does NOT automatically imply monotonic writes — you could read your write but have your writes applied out of order</li>
+  <li>Monotonic writes does NOT imply read-your-writes — writes are ordered, but you might read from a replica that has not received them</li>
+</ul>
+
+<h2>Real-World Examples</h2>
+
+<table>
+  <tr>
+    <th>System</th>
+    <th>Monotonic Writes Mechanism</th>
+  </tr>
+  <tr>
+    <td>Kafka</td>
+    <td>Partition leader sequences all writes; consumers read in order within partition</td>
+  </tr>
+  <tr>
+    <td>MongoDB</td>
+    <td>Primary node serializes all writes; secondaries apply in oplog order</td>
+  </tr>
+  <tr>
+    <td>Redis (cluster)</td>
+    <td>Single leader per shard; writes are sequenced per key by the leader</td>
+  </tr>
+  <tr>
+    <td>MySQL (binlog)</td>
+    <td>Binary log provides total order of all writes; replicas replay in order</td>
+  </tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Interview Tip:</strong> Monotonic writes is usually taken for granted in leader-based systems but becomes critical in multi-leader or leaderless systems. When asked "what happens if two writes from the same client arrive at replicas out of order?", monotonic writes is the answer. This is particularly relevant for multi-region write scenarios.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>"What is the monotonic writes guarantee?"</li>
+  <li>"What anomaly does monotonic writes prevent?"</li>
+  <li>"How does a leader-based system ensure monotonic writes?"</li>
+  <li>"Does monotonic writes imply read-your-writes? Why or why not?"</li>
+  <li>"How would you ensure monotonic writes in a multi-leader system?"</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid in interviews:</strong>
+  <ul>
+    <li>Kafka partition assignment and consumer group rebalancing internals</li>
+    <li>MySQL binlog format details (ROW vs. STATEMENT vs. MIXED)</li>
+    <li>TCP FIFO guarantee details (segment ordering, retransmission)</li>
+    <li>Formal verification of write ordering properties</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary Sources</div>
+  <ul>
+    <li>Terry, D. et al. "Session Guarantees for Weakly Consistent Replicated Data" (PDIS, 1994)</li>
+    <li>Kleppmann, M. <strong>Designing Data-Intensive Applications</strong>, Chapter 5</li>
+    <li>Vogels, W. "Eventually Consistent" (ACM Queue, 2009)</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Supplementary</div>
+  <ul>
+    <li>Terry, D. "Replicated Data Consistency Explained Through Baseball" (Microsoft Research, 2013)</li>
+    <li>Gray, J. et al. "The Dangers of Replication and a Solution" (ACM SIGMOD, 1996)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="monotonic-reads.html">&larr; 5.3.8 Monotonic Reads</a>
+  <a href="writes-follow-reads.html">5.3.10 Writes Follow Reads &rarr;</a>
+</div>
+
+</body>
+</html>

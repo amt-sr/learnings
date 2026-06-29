@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.3.6 Hot Partitions - System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">6 Partitioning</a> / <a href="index.html">6.3 Consistent Hashing</a> / 6.3.6
+</div>
+
+<h1>Hot Partitions</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<div class="callout">
+  <strong>Goal:</strong> Understand how a range of keys (not just a single key) can cause disproportionate load on one shard, identify common causes of hot partitions, and apply solutions including salting, composite keys, and range splitting.
+</div>
+
+<h2>Definition</h2>
+
+<p>A <strong>hot partition</strong> is a shard or partition that receives disproportionately high traffic compared to others, not because of a single hot key, but because an entire <em>range</em> of keys happens to be accessed far more frequently. Unlike hot keys (one key overwhelming one shard), hot partitions involve many keys within a contiguous or correlated range that collectively overwhelm the shard owning that range. This is particularly problematic for range-based partitioning but can also affect hash-based partitioning when key patterns correlate with access patterns.</p>
+
+<h2>Hot Keys vs. Hot Partitions</h2>
+
+<table>
+  <tr>
+    <th>Property</th>
+    <th>Hot Keys (6.3.5)</th>
+    <th>Hot Partitions</th>
+  </tr>
+  <tr>
+    <td>Scope</td>
+    <td>Single key</td>
+    <td>Range or group of keys</td>
+  </tr>
+  <tr>
+    <td>Cause</td>
+    <td>One key is extremely popular</td>
+    <td>Key access patterns are correlated</td>
+  </tr>
+  <tr>
+    <td>Hash-based partitioning</td>
+    <td>Cannot help (single key = single shard)</td>
+    <td>Can help (keys hash to different shards)</td>
+  </tr>
+  <tr>
+    <td>Range-based partitioning</td>
+    <td>Vulnerable (as with hash-based)</td>
+    <td class="red">Extremely vulnerable</td>
+  </tr>
+  <tr>
+    <td>Mitigation</td>
+    <td>Key splitting, caching, replicas</td>
+    <td>Salting, composite keys, split ranges</td>
+  </tr>
+</table>
+
+<h2>Common Causes</h2>
+
+<h3>Time-Based Keys</h3>
+
+<p>Keys that include a timestamp or date component often create hot partitions because recent data is accessed far more frequently than old data. In range-based partitioning, the "latest" partition receives nearly all traffic.</p>
+
+<pre>// Problematic key design:
+key = "user_activity:2026-06-28"     // Today's partition gets ALL writes
+key = "logs:2026-06-28:hour=14"       // Current hour gets all writes
+key = "events:timestamp=1751089200"   // Current time range is hot</pre>
+
+<div class="callout yellow">
+  <strong>Classic Example:</strong> In a logging system where keys are timestamps, the current day's partition receives 100% of writes. Yesterday's partition may receive 10% of reads. All other partitions are nearly idle.
+</div>
+
+<h3>Geographic Skew</h3>
+
+<p>When keys are based on geographic identifiers (country, region, city), populations are unevenly distributed. A shard holding data for a populous region (e.g., California, India) will receive far more traffic than one holding data for a small region.</p>
+
+<h3>Sequential Key Generation</h3>
+
+<p>Auto-incrementing IDs or monotonically increasing keys (e.g., UUID v1) cluster writes into a narrow range, causing the shard owning that range to become a hotspot.</p>
+
+<pre>// Auto-increment creates sequential hot range:
+insert: id=1001 -> shard A
+insert: id=1002 -> shard A    (same shard as 1001)
+insert: id=1003 -> shard A    (same shard again)
+// All writes hit shard A until the range crosses to shard B</pre>
+
+<div class="diagram">  Range-Based Partitioning with Time-Based Keys:
+
+  Partition 1: [2026-01 to 2026-03]   Cold: ~2% of reads
+  Partition 2: [2026-04 to 2026-05]   Cold: ~5% of reads
+  Partition 3: [2026-06 to 2026-06]   HOT:  ~80% of reads + 100% of writes
+  Partition 4: [2026-07 to 2026-12]   Cold: ~0% (future)
+
+  The "current" partition is always the hotspot.</div>
+
+<h2>Solutions</h2>
+
+<h3>Solution 1: Salting</h3>
+
+<p>Prefix keys with a random or deterministic salt value to distribute them across multiple partitions. Each logical key is spread across N physical keys.</p>
+
+<pre>// Original: all writes go to one partition
+key = "events:2026-06-28"
+
+// With salting: writes distributed across N partitions
+salt = hash(timestamp + event_id) % N
+key = "events:salt_{salt}:2026-06-28"
+
+// Reads must query all N salted partitions:
+for i in 0..N-1:
+    query("events:salt_{i}:2026-06-28")
+merge results</pre>
+
+<div class="callout green">
+  <strong>Tradeoff:</strong> Salting distributes write load but increases read complexity (must query N partitions and merge). Works best for write-heavy workloads where reads target a specific key (not a range scan).
+</div>
+
+<h3>Solution 2: Composite Keys</h3>
+
+<p>Redesign the key to include additional dimensions that break up the natural clustering. Instead of partitioning by time alone, partition by (time, user_id_hash) or (time, region).</p>
+
+<pre>// Instead of:
+key = "metric:2026-06-28"              // One partition
+
+// Use composite:
+key = "metric:2026-06-28:shard_{user_id % N}"  // Spread across N partitions
+
+// Each partition holds data for 1/N of users for that day</pre>
+
+<h3>Solution 3: Split Ranges</h3>
+
+<p>For range-based partitioning, proactively split hot ranges into smaller sub-partitions. This is a form of dynamic partitioning where the system detects a hot range and automatically splits it.</p>
+
+<div class="diagram">  BEFORE (hot partition):
+
+  [2026-06-01 ... 2026-06-30]    1 partition, ALL traffic
+
+  AFTER (split range):
+
+  [2026-06-01 ... 2026-06-07]    Split 1: cold
+  [2026-06-08 ... 2026-06-14]    Split 2: cold
+  [2026-06-15 ... 2026-06-21]    Split 3: cold
+  [2026-06-22 ... 2026-06-28]    Split 4: HOT, but 1/4 of original load
+  [2026-06-29 ... 2026-06-30]    Split 5: current
+
+  Or even finer granularity (daily partitions):
+
+  [2026-06-28]                   Today's partition: still hot, but isolated
+  [2026-06-27]                   Yesterday: moderate
+  ...</div>
+
+<h3>Solution 4: Reverse Keys or Hashed Prefixes</h3>
+
+<p>Reverse the key or hash the prefix to break sequential patterns. For example, instead of storing keys in order <code>0001, 0002, 0003</code>, store them as <code>1000, 2000, 3000</code> (reversed) or hash the first portion.</p>
+
+<pre>// Original (sequential):        // Reversed:
+key = "10000001"                  key = "10000001" (reversed: "10000001")
+key = "10000002"                  key = "20000001" (reversed: "20000001")
+key = "10000003"                  key = "30000001" (reversed: "30000001")
+
+// Original keys cluster in one range; reversed keys are spread across the key space.</pre>
+
+<h2>Monitoring and Detection</h2>
+
+<p>Detecting hot partitions requires monitoring at the partition level:</p>
+
+<table>
+  <tr>
+    <th>Metric</th>
+    <th>Alert Condition</th>
+    <th>Indicates</th>
+  </tr>
+  <tr>
+    <td>QPS per partition</td>
+    <td>&gt; 3x average across partitions</td>
+    <td>Hot partition (read or write)</td>
+  </tr>
+  <tr>
+    <td>CPU utilization per partition</td>
+    <td>&gt; 80% while cluster average is 30%</td>
+    <td>Likely hot partition</td>
+  </tr>
+  <tr>
+    <td>Disk I/O per partition</td>
+    <td>&gt; 5x average</td>
+    <td>Hot partition (often write-heavy)</td>
+  </tr>
+  <tr>
+    <td>Latency per partition</td>
+    <td>&gt; P99 is 3x higher than other partitions</td>
+    <td>Hot partition causing queueing</td>
+  </tr>
+</table>
+
+<h2>Comparing Solutions</h2>
+
+<table>
+  <tr>
+    <th>Solution</th>
+    <th>Best For</th>
+    <th>Read Impact</th>
+    <th>Write Impact</th>
+  </tr>
+  <tr>
+    <td>Salting</td>
+    <td>Write-heavy, point reads</td>
+    <td>Must query N partitions</td>
+    <td class="green">Spread across N partitions</td>
+  </tr>
+  <tr>
+    <td>Composite Keys</td>
+    <td>Multi-dimensional data</td>
+    <td>May require multi-partition queries</td>
+    <td class="green">Spread by secondary dimension</td>
+  </tr>
+  <tr>
+    <td>Split Ranges</td>
+    <td>Range-partitioned data</td>
+    <td class="green">No change if querying specific range</td>
+    <td class="green">Spread across sub-partitions</td>
+  </tr>
+  <tr>
+    <td>Reverse/Hash Prefix</td>
+    <td>Sequential keys</td>
+    <td class="green">Point reads unaffected</td>
+    <td class="green">Distributed across key space</td>
+  </tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+
+<ol>
+  <li>What is the difference between a hot key and a hot partition?</li>
+  <li>Why do time-based keys cause hot partitions?</li>
+  <li>How would you design a logging system that avoids hot partitions for the current day's logs?</li>
+  <li>Explain how salting helps with hot partitions. What are its downsides?</li>
+  <li>How do composite keys help distribute load more evenly?</li>
+  <li>How would you detect a hot partition in a production system?</li>
+  <li>Design a partitioning scheme for a messaging system that avoids hot partitions.</li>
+  <li>Why does hash-based partitioning naturally resist hot partitions (but not hot keys)?</li>
+</ol>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Avoid going deep into:</strong>
+  <ul>
+    <li>Specific database partition splitting implementations (e.g., MongoDB chunk splitting internals) unless the interview context requires it.</li>
+    <li>Dynamic partitioning algorithms beyond the basic concept (e.g., HBase region splitting heuristics).</li>
+    <li>Consistent hashing ring adjustments for hot partition correction -- this is more of a VNodes topic.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Primary Sources</div>
+  <ul>
+    <li>Dynamo: Amazon's Highly Available Key-value Store (2007) -- Section 4: Partitioning</li>
+    <li>Google Spanner: TrueTime and partitioning for global distribution (2012)</li>
+    <li>Cassandra documentation: "Compaction and tombstones" -- handling hot partitions from TTL data</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Recommended Reading</div>
+  <ul>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em>, Chapter 6: Partitioning</li>
+    <li>Alex Xu, <em>System Design Interview Vol. 2</em>, Chapter 10: Design a Chat System (hot partition in messaging)</li>
+    <li>Alex Xu, <em>System Design Interview Vol. 1</em>, Chapter 3: Design a URL Shortener (salting discussion)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="hot-keys.html">&larr; 6.3.5 Hot Keys</a>
+  <a href="../caching/why-caching.html">7.1 Why Caching &rarr;</a>
+</div>
+
+</body>
+</html>

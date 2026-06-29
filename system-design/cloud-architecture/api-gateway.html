@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>12.2.1 — API Gateway</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">Cloud Architecture</a> / 12.2.1 API Gateway</div>
+<h1>API Gateway</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the API gateway pattern, its responsibilities (routing, authentication, rate limiting, SSL termination, request aggregation), trade-offs, and when to use it versus when it adds unnecessary complexity.</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>API Gateway</strong> is a single entry point for all client requests into a microservices architecture. It acts as a reverse proxy that routes requests to the appropriate service, handles cross-cutting concerns (auth, rate limiting, SSL, logging), and can aggregate responses from multiple services.
+</div>
+
+<p>The API gateway decouples clients from services. Clients talk to one endpoint; the gateway routes to many services. This simplifies client code and centralizes infrastructure concerns.</p>
+
+<h2>Architecture</h2>
+<div class="diagram">
+  Clients (Web, Mobile, Third-party)
+              │
+              ▼
+  ┌───────────────────────────────────────┐
+  │            API Gateway                 │
+  │                                        │
+  │  ┌─────────────────────────────────┐  │
+  │  │  Routing & Path Mapping         │  │
+  │  │  /api/users/*  → User Service   │  │
+  │  │  /api/orders/* → Order Service  │  │
+  │  │  /api/pay/*    → Payment Service │  │
+  │  └─────────────────────────────────┘  │
+  │  ┌──────────┐ ┌──────────┐ ┌────────┐ │
+  │  │  Auth &   │ │  Rate    │ │  SSL   │ │
+  │  │ JWT Verif│ │ Limiting │ │ Term.  │ │
+  │  └──────────┘ └──────────┘ └────────┘ │
+  │  ┌──────────┐ ┌──────────┐ ┌────────┐ │
+  │  │ Logging  │ │ Response │ │Load    │ │
+  │  │ Metrics  │ │ Transform│ │Balancing│ │
+  │  └──────────┘ └──────────┘ └────────┘ │
+  └───────────────────┬───────────────────┘
+                      │
+      ┌───────────────┼───────────────┐
+      ▼               ▼               ▼
+┌───────────┐  ┌───────────┐  ┌───────────┐
+│User Service│  │Order Svc  │  │Payment Svc │
+└───────────┘  └───────────┘  └───────────┘
+</div>
+
+<h2>Core Responsibilities</h2>
+<table>
+  <tr><th>Concern</th><th>Description</th><th>Implementation</th></tr>
+  <tr><td><strong>Request Routing</strong></td><td>Map incoming URLs to downstream services</td><td>Path-based, header-based, query-param routing</td></tr>
+  <tr><td><strong>Authentication</strong></td><td>Verify JWT tokens, API keys, OAuth tokens</td><td>Reject unauthorized requests before they reach services</td></tr>
+  <tr><td><strong>Rate Limiting</strong></td><td>Limit requests per client/IP/tier</td><td>Token bucket, sliding window, per-service limits</td></tr>
+  <tr><td><strong>SSL Termination</strong></td><td>Handle TLS at the gateway; internal traffic is HTTP</td><td>Reduces cert management on every service</td></tr>
+  <tr><td><strong>Load Balancing</strong></td><td>Distribute requests across service instances</td><td>Round-robin, least-connections, or delegate to service mesh</td></tr>
+  <tr><td><strong>Request/Response Transform</strong></td><td>Normalize protocols (REST ↔ gRPC), strip/add headers</td><td>Protocol translation for polyglot services</td></tr>
+  <tr><td><strong>Caching</strong></td><td>Cache frequently requested responses</td><td>Redis-backed cache for GET requests</td></tr>
+  <tr><td><strong>Circuit Breaking</strong></td><td>Fail fast when downstream services are unhealthy</td><td>Prevent cascading failures</td></tr>
+</table>
+
+<h2>Rate Limiting Strategies</h2>
+<pre>
+# Token Bucket: burst-friendly, allows short bursts up to capacity
+# Leaky Bucket: steady rate, smooth output
+# Sliding Window: precise, memory-intensive
+# Fixed Window: simple, allows burst at window boundary
+
+# API Gateway rate limiting config:
+routes:
+  - path: /api/search/*
+    rate_limit:
+      requests_per_second: 100
+      burst: 50
+      key: api_key        # per-API-key limit
+  - path: /api/checkout/*
+    rate_limit:
+      requests_per_second: 10
+      burst: 5
+      key: user_id         # per-user limit
+  default:
+    rate_limit:
+      requests_per_second: 50
+      key: ip_address       # per-IP limit
+</pre>
+
+<h2>API Gateway Trade-offs</h2>
+<table>
+  <tr><th>Advantage</th><th>Disadvantage</th></tr>
+  <tr><td class="green">Single entry point for all clients</td><td class="red">Single point of failure (requires HA deployment)</td></tr>
+  <tr><td class="green">Centralizes cross-cutting concerns</td><td class="red">Becomes a bottleneck if overloaded</td></tr>
+  <tr><td class="green">Decouples clients from service topology</td><td class="red">Adds latency (extra hop)</td></tr>
+  <tr><td class="green">Simplifies client-side code</td><td class="red">Coupling: every routing change requires gateway update</td></tr>
+  <tr><td class="green">Enables request aggregation (BFF)</td><td class="red">Can become a "smart pipe" with too much business logic</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Deployment:</strong> The API gateway MUST be deployed in high-availability mode (minimum 2 instances behind a load balancer or using a managed service like AWS API Gateway, Kong, or Envoy). A single gateway instance is a critical reliability risk.
+</div>
+
+<h2>Gateway vs Ingress vs Service Mesh</h2>
+<table>
+  <tr><th>Component</th><th>Layer</th><th>Traffic</th><th>Scope</th></tr>
+  <tr><td><strong>API Gateway</strong></td><td>L7 (application)</td><td>North-south (client to service)</td><td>Business-facing: routing, auth, rate limiting</td></tr>
+  <tr><td><strong>Ingress</strong></td><td>L7 (Kubernetes)</td><td>North-south (external to cluster)</td><td>Kubernetes-specific entry point</td></tr>
+  <tr><td><strong>Service Mesh</strong></td><td>L7 (sidecar)</td><td>East-west (service to service)</td><td>Inter-service: mTLS, retries, circuit breaking</td></tr>
+</table>
+
+<div class="callout green">
+  <strong>Interview tip:</strong> When designing a system, include an API gateway early and justify it. "I would use an API gateway to centralize auth and rate limiting, preventing unauthenticated traffic from reaching backend services." Then mention that it must be HA-deployed to avoid a SPOF.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What is an API gateway and why do microservices need one?</li>
+  <li>How would you implement rate limiting at the API gateway?</li>
+  <li>What happens if the API gateway goes down?</li>
+  <li>How does SSL termination work and why do it at the gateway?</li>
+  <li>Compare API gateway with a service mesh — when do you need both?</li>
+  <li>How would you prevent the API gateway from becoming a bottleneck?</li>
+  <li>What is the difference between API gateway and BFF pattern?</li>
+  <li>How would you deploy the API gateway for high availability?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid diving into:</strong> Specific gateway product configurations (Kong plugins, AWS API Gateway YAML), detailed TLS handshake protocol, or WAF (Web Application Firewall) rules. Focus on the architectural role and trade-offs.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Patterns</div>
+  <ul>
+    <li><strong>API Gateway Pattern</strong> — microsoft.com/architecture/patterns/gateway — Microsoft Cloud Design Patterns</li>
+    <li><strong>"Pattern: API Gateway"</strong> — microservices.io/patterns/apigateway.html — Chris Richardson</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Documentation</div>
+  <ul>
+    <li><strong>Kong Gateway</strong> — konghq.com — Open-source API gateway</li>
+    <li><strong>Envoy Proxy</strong> — envoyproxy.io — L3/L4/L7 proxy used by many gateways</li>
+    <li><strong>AWS API Gateway</strong> — docs.aws.amazon.com/apigateway — Managed gateway service</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="microservices.html">&larr; Previous: Microservices</a>
+  <a href="service-discovery.html">Next: Service Discovery &rarr;</a>
+</div>
+</body>
+</html>

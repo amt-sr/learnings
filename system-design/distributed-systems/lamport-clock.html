@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.4.3 Lamport Clock</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb"><a href="#">System Design</a> / <a href="#">5 Distributed Systems</a> / <a href="#">5.4 Time</a> / 5.4.3</div>
+<h1>Lamport Clock</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Master Lamport's algorithm for logical timestamps: the rules, execution on a multi-process diagram, correctness properties, and critically -- what it cannot do.</p>
+
+<h2>Definition</h2>
+<p>A <strong>Lamport clock</strong> (also called a Lamport timestamp) is a simple, counter-based logical clock algorithm introduced by Leslie Lamport in his seminal 1978 paper. Each process maintains a single integer counter. The algorithm ensures that if event A causally precedes event B, then Lamport timestamp of A is strictly less than that of B.</p>
+
+<div class="callout">
+  <strong>Historical significance:</strong> Lamport's 1978 paper "Time, Clocks, and the Ordering of Events in a Distributed System" is one of the most cited papers in computer science. It established the theoretical foundation for all subsequent work on logical time, ordering, and consensus.
+</div>
+
+<h2>Algorithm Rules</h2>
+
+<h3>The Three Rules</h3>
+<ol>
+  <li><strong>R1 -- Local event (or send):</strong> Increment the counter before the event executes.<br>
+    <code>lc = lc + 1</code></li>
+  <li><strong>R2 -- Receive message:</strong> When process P<sub>j</sub> receives a message from P<sub>i</sub> with timestamp <code>ts</code>, set local counter to the maximum of local counter and received timestamp, then increment:<br>
+    <code>lc = max(lc, ts) + 1</code></li>
+  <li><strong>R3 -- Attach to messages:</strong> Every message sent includes the sender's current Lamport timestamp.</li>
+</ol>
+
+<div class="callout green">
+  <strong>Key insight:</strong> Rule R2 is the crucial one. The <code>max()</code> operation ensures the receiver "catches up" to any causally prior events it has not yet seen. The <code>+1</code> ensures the receive event itself gets a new, unique timestamp.
+</div>
+
+<h2>Example: Three Processes</h2>
+<div class="diagram">Time →
+      P0               P1               P2
+       |                |                |
+  a: lc=1               |                |
+       |                |                |
+  b: lc=2               |                |
+       |                |                |
+  c: lc=3   --------->  |                |
+       |           d: lc=max(0,3)+1=4     |
+       |                |                |
+       |           e: lc=5  -------->     |
+       |                |         f: lc=max(0,5)+1=6
+       |                |                |
+       |                |          g: lc=7
+       |                |                |
+       |                |          h: lc=8
+       |                |                |
+       |      <--------- |                |
+  i: lc=max(3,5)+1=6    |                |
+       |                |                |
+  j: lc=7               |                |
+
+Events and their Lamport timestamps:
+  a(1), b(2), c(3), d(4), e(5), f(6), g(7), h(8), i(6), j(7)
+
+Causal chains:
+  a → b → c → d → e → f → g → h  (chain from P0 to P1 to P2)
+  a → b → c → d → e → i → j      (chain back to P0)</div>
+
+<h2>Properties</h2>
+
+<h3>Property 1: Causality Preservation</h3>
+<div class="callout green">
+  <strong>If A → B, then C(A) &lt; C(B)</strong> -- where C(event) is the Lamport timestamp and → is the happens-before relation. This is the correctness guarantee of the algorithm.
+</div>
+<p><strong>Proof sketch:</strong> Consider each case of the happens-before relation:</p>
+<ul>
+  <li>Same process: LC monotonically increases, so consecutive events always have increasing timestamps</li>
+  <li>Send-receive: Receiver sets LC = max(local, ts) + 1 >= ts + 1 > ts, so receive timestamp > send timestamp</li>
+  <li>Transitivity: follows from the above two cases by induction</li>
+</ul>
+
+<h3>Property 2: Converse is NOT True</h3>
+<div class="callout red">
+  <strong>If C(A) &lt; C(B), it does NOT imply A → B.</strong> This is the fundamental limitation of Lamport clocks. Events with ordered timestamps may be <strong>concurrent</strong> (no causal relationship).
+</div>
+
+<div class="diagram">Counterexample:
+      P0               P1
+       |                |
+  a: lc=1               |
+       |          b: lc=1
+       |          c: lc=2
+       |          d: lc=3
+  e: lc=2               |
+       |                |
+
+C(b) = 1 < C(e) = 2, but b and e are CONCURRENT.
+There is no message or chain of messages between b and e.
+Lamport clock cannot detect this -- it sees C(b) < C(e) and wrongly
+suggests b happened before e.</div>
+
+<h3>Property 3: Total Order via (timestamp, process_id)</h3>
+<p>By breaking ties with process ID, we get a <strong>consistent total order</strong> across all processes:</p>
+<pre>total_order(A, B) = C(A) < C(B)  OR  (C(A) == C(B) AND pid(A) < pid(B))</pre>
+<p>This total order is consistent (all processes agree on it) but <strong>not</strong> causal -- it imposes an arbitrary order on concurrent events.</p>
+
+<h2>When to Use Lamport Clocks</h2>
+<table>
+  <tr><th>Scenario</th><th>Lamport Clock Suitable?</th><th>Reason</th></tr>
+  <tr><td>Assigning unique IDs to events</td><td class="green">Yes</td><td>Guaranteed unique (timestamp, pid) tuples</td></tr>
+  <tr><td>Ordering events in a single log</td><td class="green">Yes</td><td>Total order is consistent across replicas</td></tr>
+  <tr><td>Detecting conflicting writes</td><td class="red">No</td><td>Cannot distinguish causal from concurrent events</td></tr>
+  <tr><td>Mutual exclusion (distributed lock)</td><td class="green">Yes</td><td>Ricart-Agrawala algorithm uses Lamport timestamps</td></tr>
+  <tr><td>Debugging distributed systems</td><td class="yellow">Partial</td><td>Helps reconstruct partial ordering but misses concurrency</td></tr>
+</table>
+
+<h2>Comparison with Next Steps</h2>
+<table>
+  <tr><th>Feature</th><th>Lamport Clock</th><th><a href="vector-clock.html">Vector Clock</a></th></tr>
+  <tr><td>Space per process</td><td class="green">O(1)</td><td class="red">O(N) where N = number of processes</td></tr>
+  <tr><td>Message size</td><td class="green">O(1)</td><td class="red">O(N)</td></tr>
+  <tr><td>Causality: A→B ⟹ C(A)&lt;C(B)</td><td class="green">Yes</td><td class="green">Yes</td></tr>
+  <tr><td>Causality: C(A)&lt;C(B) ⟹ A→B</td><td class="red">No</td><td class="green">Yes</td></tr>
+  <tr><td>Detect concurrent events</td><td class="red">No</td><td class="green">Yes</td></tr>
+  <tr><td>Scalability</td><td class="green">Excellent</td><td class="red">Limited by N</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li><strong>"Walk me through Lamport's algorithm."</strong> -- State the three rules: increment on local/send, max+1 on receive, always attach timestamp to messages. Walk through the three-process example.</li>
+  <li><strong>"If C(A) &lt; C(B), does A causally precede B?"</strong> -- No. This is the most important thing to know about Lamport clocks. Give a concrete counterexample with two processes doing independent local events.</li>
+  <li><strong>"How do you create a total order from Lamport timestamps?"</strong> -- Break ties with process ID: (timestamp, pid) ordered lexicographically. This is consistent across all processes but arbitrary for concurrent events.</li>
+  <li><strong>"What is the space complexity of a Lamport clock?"</strong> -- O(1) per process (single integer). Compare to vector clocks at O(N).</li>
+  <li><strong>"How does Lamport clock compare to vector clock?"</strong> -- Lamport is simpler (O(1) space) but cannot detect concurrency. Vector clocks can detect concurrency but require O(N) space per process.</li>
+  <li><strong>"Can you use Lamport clocks for a distributed lock?"</strong> -- Yes, the Ricart-Agrawala algorithm uses them to order lock requests. Each request carries a Lamport timestamp, and processes defer to requests with higher timestamps.</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Depth to avoid in interviews:</strong>
+  <ul>
+    <li>Formal proof of the clock condition (Lamport's original paper does this, but you only need the intuition)</li>
+    <li>Implementation details of specific Lamport clock libraries</li>
+    <li>The connection between Lamport clocks and the Byzantine Generals problem</li>
+    <li>Lamport's Bakery algorithm (a mutual exclusion algorithm, not directly about logical clocks)</li>
+    <li>Optimizations like buffered timestamps or piggybacking</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary References</div>
+  <ul>
+    <li>Time, Clocks, and the Ordering of Events in a Distributed System -- Leslie Lamport (1978)</li>
+    <li>Distributed Systems: Principles and Paradigms -- Tanenbaum & Van Steen, Chapter 5</li>
+    <li>Distributed Systems: Concepts and Design -- Coulouris et al., Chapter 11</li>
+    <li>The Logical Clock -- Martin Kleppmann lecture notes (Cambridge)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="logical-clock.html">&larr; 5.4.2 Logical Clock</a>
+  <a href="vector-clock.html">5.4.4 Vector Clock &rarr;</a>
+</div>
+
+</body>
+</html>

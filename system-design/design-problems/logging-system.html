@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>15.11 Logging System — System Design</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../">Handbook</a> / <a href="../">System Design</a> / 15. Design Problems / 15.11 Logging System</p>
+
+<h1>Logging System</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Design a centralized logging system that ingests log events from thousands of services at high throughput, stores them for search and analysis, and provides a query interface for debugging, monitoring, and compliance. The system must handle variable volume with backpressure handling and tiered storage for cost-effective retention.</p>
+
+<h2>Functional Requirements</h2>
+<ul>
+  <li>Ingest structured log events from multiple services and hosts</li>
+  <li>Support log levels (DEBUG, INFO, WARN, ERROR) and metadata (service, host, trace_id)</li>
+  <li>Provide full-text search across logs with filters (service, time range, level, trace_id)</li>
+  <li>Support real-time log streaming (tail -f across services)</li>
+  <li>Retain logs based on configurable retention policies per service</li>
+  <li>Support log aggregation and pattern-based alerting</li>
+</ul>
+
+<h2>Non-Functional Requirements</h2>
+<ul>
+  <li><strong>High throughput:</strong> ingest 10TB+ of logs per day</li>
+  <li><strong>Low latency (ingest):</strong> logs searchable within 10 seconds of generation</li>
+  <li><strong>Low latency (query):</strong> search results returned within 1-5 seconds</li>
+  <li><strong>Durability:</strong> no log data loss (at-least-once delivery)</li>
+  <li><strong>Cost-effective:</strong> tiered storage (hot/warm/cold) for different retention needs</li>
+</ul>
+
+<h3>Capacity Estimates</h3>
+<table>
+  <tr><th>Metric</th><th>Estimate</th><th>Notes</th></tr>
+  <tr><td>Log volume/day</td><td>10 TB</td><td>Compressed after ingestion</td></tr>
+  <tr><td>Log events/day</td><td>100B</td><td>~1.2M events/sec</td></tr>
+  <tr><td>Average log size</td><td>1 KB</td><td>Structured JSON with metadata</td></tr>
+  <tr><td>Services generating logs</td><td>1K</td><td>Each with multiple instances</td></tr>
+  <tr><td>Search queries/day</td><td>500K</td><td>~6 QPS average, 60 QPS peak</td></tr>
+  <tr><td>Storage (30-day hot)</td><td>300 TB</td><td>Replicated 3x = 900 TB raw</td></tr>
+  <tr><td>Storage (1-year cold)</td><td>1 PB</td><td>Compressed, S3 Standard-IA</td></tr>
+</table>
+
+<h2>API Design</h2>
+<pre>
+# Ingest (push)
+POST   /api/v1/logs/ingest
+Body:  [{ "timestamp": "2026-06-28T10:00:00Z", "level": "ERROR",
+          "service": "payment-service", "host": "pod-abc",
+          "trace_id": "trace_123", "message": "Payment failed: timeout" }]
+
+# Query (search)
+POST   /api/v1/logs/search
+Body:  { "query": "error AND payment", "filters": {
+          "service": "payment-service", "level": ["ERROR"],
+          "from": "2026-06-28T00:00:00Z", "to": "2026-06-28T23:59:59Z",
+          "trace_id": "trace_123"
+        }, "limit": 100, "sort": "desc" }
+Resp:  { "total": 1543, "hits": [...], "took_ms": 234 }
+
+# Stream (real-time tail)
+GET    /api/v1/logs/stream?service=payment-service&level=ERROR
+Resp:  SSE stream of log events matching filter
+</pre>
+
+<h2>High-Level Design</h2>
+<div class="diagram">
+  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
+  │ Service A │ │ Service B │ │ Service C │ │ Service N │
+  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘
+       │            │            │            │
+  ┌────▼────────────▼────────────▼────────────▼────┐
+  │              Log Collectors                     │
+  │         (Fluentd / Fluent Bit)                 │
+  │   - Batch + compress                            │
+  │   - Add metadata (host, IP, service)            │
+  │   - Buffer during backpressure                  │
+  └────────────────────┬───────────────────────────┘
+                       │
+                  ┌────▼─────┐
+                  │  Kafka   │
+                  │ (Buffer) │
+                  └────┬─────┘
+                       │
+          ┌────────────┴────────────┐
+          │                         │
+   ┌──────▼──────┐          ┌───────▼──────┐
+   │ Hot Storage │          │ Cold Storage  │
+   │(Elasticsearch│        │ (S3 + Athena) │
+   │ / OpenSearch)│         │               │
+   │ 30-day TTL  │          │ 1-7 year TTL │
+   └──────┬──────┘          └───────┬──────┘
+          │                         │
+   ┌──────▼─────────────────────────▼──────┐
+   │           Query Service              │
+   │  (Routes queries to hot or cold      │
+   │   based on time range)               │
+   └──────────────────────────────────────┘
+</div>
+
+<h2>Deep Dive: Log Collection</h2>
+<p>Agents run on every host (or as a sidecar in Kubernetes) to collect logs.</p>
+<ul>
+  <li><strong>Fluent Bit:</strong> Lightweight agent (minimal CPU/memory). Runs on every node. Batches and compresses logs before sending to Kafka or directly to Elasticsearch.</li>
+  <li><strong>Fluentd:</strong> Heavier agent with rich plugin ecosystem. Used for log parsing, enrichment, and routing when complex processing is needed.</li>
+  <li><strong>Filebeat:</strong> Alternative agent (Elastic Stack). Reads log files and ships to Logstash or Elasticsearch.</li>
+</ul>
+
+<div class="callout">
+  <strong>Buffering and backpressure:</strong> When the downstream (Kafka/Elasticsearch) is slow or down, the collector buffers logs locally on disk. Fluent Bit uses a filesystem buffer (configurable size, e.g., 1GB). When the buffer is full, either drop oldest logs (lossy) or block the application (lossless, but risks affecting the application). For critical logs, prefer lossless with a large buffer.
+</div>
+
+<h2>Deep Dive: Ingest Pipeline</h2>
+<p>Raw logs arrive as semi-structured text. The pipeline must parse, enrich, and index them.</p>
+
+<ol>
+  <li><strong>Parse:</strong> Extract structured fields from log format (JSON, key=value, regex for unstructured). Most services should emit structured JSON logs.</li>
+  <li><strong>Enrich:</strong> Add metadata: host IP, service version, datacenter, availability zone, Kubernetes pod name, trace_id (from distributed tracing context).</li>
+  <li><strong>Index:</strong> Route to the appropriate Elasticsearch index based on service, date, and log level. Use index templates for consistent mapping.</li>
+</ol>
+
+<pre>
+# Index naming pattern:
+logs-{service}-{date}
+
+# Examples:
+logs-payment-service-2026.06.28
+logs-api-gateway-2026.06.28
+logs-auth-service-2026.06.28
+
+# Elasticsearch index template (per service)
+{
+  "index_patterns": ["logs-payment-service-*"],
+  "template": {
+    "settings": {
+      "number_of_shards": 5,
+      "number_of_replicas": 1,
+      "index.lifecycle.name": "logs-30-day-retention"
+    },
+    "mappings": {
+      "properties": {
+        "timestamp": { "type": "date" },
+        "level": { "type": "keyword" },
+        "service": { "type": "keyword" },
+        "trace_id": { "type": "keyword" },
+        "message": { "type": "text" }
+      }
+    }
+  }
+}
+</pre>
+
+<h2>Deep Dive: Tiered Storage</h2>
+<table>
+  <tr><th>Tier</th><th>Storage</th><th>Retention</th><th>Cost</th><th>Use Case</th></tr>
+  <tr><td>Hot</td><td>Elasticsearch SSD</td><td>7-30 days</td><td class="red">High ($/GB)</td><td>Active debugging, real-time dashboards</td></tr>
+  <tr><td>Warm</td><td>Elasticsearch HDD</td><td>30-90 days</td><td>Moderate</td><td>Less frequent queries, post-incident analysis</td></tr>
+  <tr><td>Cold</td><td>S3 + Athena/Parquet</td><td>1-7 years</td><td class="green">Low ($/GB)</td><td>Compliance, audit, rare investigation</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Index lifecycle management (ILM):</strong> Use Elasticsearch ILM policies to automatically transition indices: Hot (0-7 days) → Warm (7-30 days, reduce replicas) → Cold (30+ days, move to S3) → Delete (after retention period). This automates storage management and reduces cost.
+</div>
+
+<h2>Deep Dive: Search at Scale</h2>
+<ul>
+  <li><strong>Full-text search:</strong> Elasticsearch inverted index provides fast full-text search across log messages. Supports wildcard queries, regex, proximity search.</li>
+  <li><strong>Structured filters:</strong> Exact match on service, level, host, trace_id via keyword fields. These are cacheable and fast.</li>
+  <li><strong>Time-range queries:</strong> Always include a time range filter. This limits the search to specific indices (date-based), reducing the search space dramatically.</li>
+  <li><strong>Aggregations:</strong> Group by service, level, or host for dashboards. Pre-computed for hot data, on-the-fly for warm/cold.</li>
+</ul>
+
+<div class="callout">
+  <strong>Query routing:</strong> When a query spans hot and cold storage, the query service routes time-range segments to the appropriate backend. Recent data goes to Elasticsearch, older data goes to Athena/S3. Results are merged client-side.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>How do you handle log volume spikes (10x normal during incidents)? <em>A: Kafka absorbs spikes as a buffer. Collectors batch and compress to reduce per-message overhead. Scale Elasticsearch horizontally by adding nodes. Accept increased query latency during spikes.</em></li>
+  <li>How do you prevent logs from affecting application performance? <em>A: Async logging (application writes to an in-process buffer, background thread ships logs). Separate log disks. If the buffer is full, drop logs (lossy) to protect the application. Sidecar pattern isolates the collector from the application container.</em></li>
+  <li>How do you ensure log integrity for compliance? <em>A: Write-once semantics in the log store. Hash-chain log entries (blockchain-like) to detect tampering. Store audit-critical logs in an append-only store. Use S3 Object Lock for immutable cold storage.</em></li>
+  <li>How do you handle sensitive data in logs (PII, passwords)? <em>A: Parse and redact sensitive fields at collection time. Use regex patterns to detect SSN, credit cards, emails. Hash or mask the values. Never log authentication tokens or passwords. Implement as a collector plugin for consistency.</em></li>
+  <li>What is the cost breakdown of this system? <em>A: 80% storage cost, 15% compute (Elasticsearch), 5% network. Storage is the dominant cost. Mitigate with: compression (5-10x), tiered storage, aggressive retention policies, sampling for high-volume DEBUG logs.</em></li>
+</ul>
+
+<div class="callout red">
+  <strong>What to Skip:</strong>
+  <ul>
+    <li>Don't design log visualization/dashboards — focus on ingestion and search</li>
+    <li>Don't design the application-side logging libraries</li>
+    <li>Don't get into specific Elasticsearch query DSL syntax</li>
+    <li>Don't design alerting rules — mention it as a consumer of the log system</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Articles</div>
+  <ul>
+    <li>Elastic documentation: "Index Lifecycle Management" (elastic.co/guide/en/elasticsearch/reference/current/ilm-index-lifecycle.html)</li>
+    <li>Uber Engineering: "How Uber Manages Petabytes of Logging Data" (eng.uber.com)</li>
+    <li>Stripe Engineering: "Logging Infrastructure at Stripe"</li>
+    <li>Netflix Engineering: "Keystone: Real-time Event Pipeline" (netflixtechblog.com)</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Documentation</div>
+  <ul>
+    <li>Fluent Bit documentation: "Architecture and Deployment" (fluentbit.io)</li>
+    <li>OpenSearch documentation: "Log Analytics" (opensearch.org/docs)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="payment-gateway.html">&larr; Previous: Payment Gateway</a>
+  <a href="metrics-system.html">Next: Metrics System &rarr;</a>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.2.1 Range Sharding</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="../index.html">6 Partitioning</a> / <a href="index.html">6.2 Sharding</a> / 6.2.1</p>
+
+<h1>Range Sharding</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the simplest sharding strategy — assigning contiguous ranges of keys to shards. Learn why range sharding is efficient for range queries but dangerous when data distribution is uneven, and how to mitigate the "hot range" problem.</p>
+
+<h2>Definition</h2>
+<p>Range sharding assigns each shard a <strong>contiguous range of the shard key</strong>. A routing table maps key ranges to shard identifiers. For example, keys A-F go to Shard 1, G-N to Shard 2, O-Z to Shard 3. The router determines which shard a key belongs to by checking which range it falls in.</p>
+
+<div class="diagram">
+  Shard Key: last_name (alphabetical)
+
+  ┌────────────────────────────────────────────────────┐
+  │               Routing Table                        │
+  │                                                    │
+  │  [A - F]  ───────▶  Shard 0 (Server A)           │
+  │  [G - N]  ───────▶  Shard 1 (Server B)           │
+  │  [O - Z]  ───────▶  Shard 2 (Server C)           │
+  └────────────────────────────────────────────────────┘
+
+  Query: SELECT * FROM users WHERE last_name = 'Kumar'
+    → 'Kumar' in [G-N] → Route to Shard 1
+
+  Query: SELECT * FROM users WHERE last_name BETWEEN 'J' AND 'M'
+    → Range [J-M] entirely in [G-N] → Route to Shard 1 only (efficient!)
+</div>
+
+<h2>Range Query Efficiency</h2>
+<p>Range sharding's killer feature: <strong>range queries can be served by a single shard</strong> (or a small number of shards) instead of fan-out to all shards. If your workload involves frequent range scans (e.g., "all orders from January," "all users with names starting with J"), range sharding preserves query locality.</p>
+
+<div class="diagram">
+  SELECT * FROM orders WHERE order_date BETWEEN '2024-01-01' AND '2024-01-31'
+
+  Date-based range sharding:
+  ┌──────────────────────┬─────────────┐
+  │ Jan 2024 (Shard 0)   │ 1.2M orders  │  ← Query hits only this shard
+  ├──────────────────────┼─────────────┤
+  │ Feb 2024 (Shard 1)   │ 1.1M orders  │
+  ├──────────────────────┼─────────────┤
+  │ Mar 2024 (Shard 2)   │ 0.9M orders  │
+  └──────────────────────┴─────────────┘
+
+  Result: Single-shard lookup instead of fan-out to all shards.
+</div>
+
+<h2>Examples of Range Sharding</h2>
+
+<table>
+  <tr>
+    <th>Shard Key</th>
+    <th>Range Type</th>
+    <th>Common Use Case</th>
+    <th>Advantage</th>
+  </tr>
+  <tr>
+    <td>Timestamp / Date</td>
+    <td>Monthly or weekly ranges</td>
+    <td>Time-series data, logs</td>
+    <td>Natural temporal locality; old shards become read-only and can be archived</td>
+  </tr>
+  <tr>
+    <td>Alphabetical (last_name)</td>
+    <td>Letter ranges</td>
+    <td>User directories</td>
+    <td>Intuitive, easy to understand</td>
+  </tr>
+  <tr>
+    <td>Numeric ID ranges</td>
+    <td>0-999, 1000-1999, etc.</td>
+    <td>Auto-increment IDs</td>
+    <td>Simple to implement; sequential scan efficient</td>
+  </tr>
+  <tr>
+    <td>Geographic (postal code)</td>
+    <td>10000-19999, 20000-29999</td>
+    <td>Location-based services</td>
+    <td>Co-locates nearby users</td>
+  </tr>
+</table>
+
+<h2>The Hot Range Problem</h2>
+<p>Range sharding's fatal flaw: <strong>data is rarely uniformly distributed</strong>. If you shard by last_name, the "S" shard (Smith, Singh, Silva, Sanchez) will be massively larger than the "Q" shard. One shard becomes a hotspot while others sit idle.</p>
+
+<div class="callout red">
+  <strong>The hot range problem in production:</strong> If you shard orders by date, the current month's shard receives ALL writes while historical shards receive none. The "hot shard" becomes the bottleneck you were trying to eliminate by sharding in the first place. This is why most large-scale systems avoid pure date-based sharding for write-heavy workloads.
+</div>
+
+<h3>Mitigation Strategies</h3>
+<ul>
+  <li><strong>Dynamic range splitting:</strong> Monitor shard sizes and split hot ranges into smaller sub-ranges (similar to B-tree node splitting).</li>
+  <li><strong>Compound keys:</strong> Use <code>(date, user_id)</code> as the shard key to spread writes across users within a date range.</li>
+  <li><strong>Hybrid approach:</strong> Combine range sharding (for query locality) with hash-based distribution within each range.</li>
+  <li><strong>Manual rebalancing:</strong> Periodically analyze shard sizes and adjust range boundaries.</li>
+</ul>
+
+<div class="callout yellow">
+  <strong>Interview tip:</strong> Always mention the hot range problem when discussing range sharding. The interviewer wants to see that you understand the real-world failure mode, not just the textbook definition. Propose a mitigation strategy to demonstrate depth.
+</div>
+
+<h2>Uneven Distribution</h2>
+<p>Even without a single hot range, gradual skew accumulates. Over months, some shards grow faster than others. Without active management, you end up with:</p>
+
+<div class="diagram">
+  6 months after initial deployment:
+
+  Shard 0 [A-D]:  2.1 GB   (underutilized)
+  Shard 1 [E-J]:  8.7 GB   (overloaded!)
+  Shard 2 [K-P]:  5.3 GB
+  Shard 3 [Q-T]:  3.2 GB
+  Shard 4 [U-Z]:  6.8 GB
+
+  → Need to rebalance: split Shard 1 into [E-G] and [H-J]
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>Explain range sharding and give an example where it works well.</li>
+  <li>What is the hot range problem and how would you solve it?</li>
+  <li>How does range sharding compare to hash sharding for range queries?</li>
+  <li>Design a sharding scheme for a time-series database — which strategy would you choose and why?</li>
+  <li>How would you handle rebalancing when one shard becomes too large?</li>
+  <li>What happens to range queries when you switch from range sharding to hash sharding?</li>
+  <li>How does MongoDB's range-based sharding (tag-aware sharding) work?</li>
+</ul>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Do not confuse range sharding with range partitioning in a single database.</strong> Range partitioning (MySQL, PostgreSQL) splits a single table into partitions on one server. Range sharding distributes partitions across multiple servers. Also skip detailed discussions of B-tree internals — the interviewer wants the sharding concept, not a database internals lecture.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source>
+  <div class="source-label">Recommended Reading</div>
+  <ul>
+    <li><a href="https://martin.kleppmann.com/book/">"Designing Data-Intensive Applications" — Martin Kleppmann, Ch. 6 (Partitioning)</a></li>
+    <li><a href="https://www.mongodb.com/docs/manual/core/sharding/">MongoDB Documentation: Sharding (Range-based Shard Keys)</a></li>
+    <li><a href="https://www.youtube.com/watch?v=2HHtyxGWu5E">"Database Sharding: Everything You Need To Know" — Husam Hilal</a></li>
+    <li><a href="https://eng.uber.com/online-schema-change/">Uber Engineering: Schema Management in Sharded Databases</a></li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="geo-partitioning.html">&larr; 6.1.4 Geo Partitioning</a>
+  <a href="hash-sharding.html">6.2.2 Hash Sharding &rarr;</a>
+</div>
+
+</body>
+</html>

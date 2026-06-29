@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>11.1 — Structured Logging</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">Observability</a> / 11.1 Logging</div>
+<h1>Structured Logging</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐</span>
+  <span>Interview Frequency: ★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Design a logging architecture that provides structured, searchable, and correlated log data across a distributed system. Understand how logs fit into the three pillars of observability (logs, metrics, traces) and how to make logs actionable for incident response.</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>Structured logging</strong> emits log events as machine-parsable data (typically JSON) rather than unstructured text strings. Each log entry is a structured record with predefined fields: timestamp, level, service name, trace ID, message, and arbitrary key-value pairs for context.
+</div>
+
+<p>Structured logs enable programmatic querying, filtering, and aggregation across thousands of services. In distributed systems, unstructured logs are nearly useless at scale because grep-style searching cannot efficiently correlate events across services or filter by semantic fields.</p>
+
+<h2>Log Levels</h2>
+<table>
+  <tr><th>Level</th><th>Semantics</th><th>Typical Use</th></tr>
+  <tr><td>TRACE</td><td>Finest-grained debugging</td><td>Entry/exit of every function</td></tr>
+  <tr><td>DEBUG</td><td>Development-time diagnostics</td><td>Variable state, decision branches</td></tr>
+  <tr><td>INFO</td><td>Normal operational events</td><td>Service started, request completed</td></tr>
+  <tr><td>WARN</td><td>Potential problems, degraded state</td><td>Retry triggered, circuit breaker open</td></tr>
+  <tr><td>ERROR</td><td>Failures requiring attention</td><td>Unhandled exception, DB connection lost</td></tr>
+  <tr><td>FATAL</td><td>Catastrophic failure, process exiting</td><td>Cannot bind to port, OOM kill</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Production guidance:</strong> Set default level to INFO. Enable DEBUG/TRACE only for specific services or request IDs. ERROR-level logs should trigger alerts. WARN logs signal degradation before it becomes an outage.
+</div>
+
+<h2>Structured vs Unstructured</h2>
+<pre>
+// Unstructured (bad for production at scale)
+logger.error("User 12345 failed to checkout: payment timeout after 30000ms")
+
+// Structured (queryable, filterable, aggregatable)
+logger.error({
+  "event": "checkout_failed",
+  "user_id": 12345,
+  "reason": "payment_timeout",
+  "timeout_ms": 30000,
+  "trace_id": "abc123def456",
+  "service": "order-service",
+  "timestamp": "2025-06-28T14:32:01.003Z"
+})
+</pre>
+
+<h2>Log Aggregation: ELK Stack</h2>
+<h3>Architecture</h3>
+<div class="diagram">
+  Services ──▶ Filebeat / Fluentd ──▶ Logstash ──▶ Elasticsearch ──▶ Kibana
+                 (collect)              (parse/     (index +     (visualize/
+                                        enrich)      store)       query)
+                                    │
+                                    ▼
+                              (optional)
+                              Kafka / buffer queue
+                              (decouple spikes)
+</div>
+
+<h3>Components</h3>
+<table>
+  <tr><th>Component</th><th>Role</th><th>Why It Matters</th></tr>
+  <tr><td><strong>Elasticsearch</strong></td><td>Distributed search engine, stores indexed logs</td><td>Supports full-text search, structured queries, aggregations</td></tr>
+  <tr><td><strong>Logstash</strong></td><td>Pipeline: ingest, parse, enrich, transform</td><td>Adds geo-IP, parses unstructured logs into fields, drops noise</td></tr>
+  <tr><td><strong>Kibana</strong></td><td>Visualization dashboard</td><td>Query builder, charts, saved searches, alerting</td></tr>
+  <tr><td><strong>Filebeat / Fluentd</strong></td><td>Log shipper on each host/container</td><td>Lightweight agent, tails log files, sends to Logstash or ES directly</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Modern alternative:</strong> Many teams replace ELK with Grafana Loki + Grafana. Loki indexes only metadata (labels), not full log text, making it significantly cheaper at scale. Query using LogQL. Trade-off: full-text search is slower without full indexing.
+</div>
+
+<h2>Log Correlation</h2>
+<p>Logs become exponentially more valuable when correlated across services. Three correlation mechanisms:</p>
+
+<ol>
+  <li><strong>Trace ID propagation:</strong> Inject trace_id into every log line. When a request spans 5 services, all logs share the same trace_id, enabling a unified timeline view.</li>
+  <li><strong>Correlation ID (X-Request-ID):</strong> Header-based ID propagated through the entire request chain. Often embedded in the trace context.</li>
+  <li><strong>Span ID:</strong> Identifies a specific operation within a trace. Maps to a single service's processing of the request.</li>
+</ol>
+
+<div class="diagram">
+  Request arrives with trace_id=abc123
+
+  API Gateway  ──trace_id: abc123──▶  User Service   ──trace_id: abc123──▶  Order Service
+  [span: s1]                          [span: s2]                           [span: s3]
+  log: "auth OK"                      log: "user found"                     log: "order created"
+  {trace_id: abc123, span: s1}        {trace_id: abc123, span: s2}         {trace_id: abc123, span: s3}
+
+  Kibana query: trace_id:"abc123"
+  → Returns all 3 log entries in timeline order across all services
+</div>
+
+<h2>Log Sampling and Cost Control</h2>
+<p>At scale, logging volume is a top-3 infrastructure cost. Strategies:</p>
+<ul>
+  <li><strong>Head-based sampling:</strong> Sample a fixed percentage (e.g., 10%) of all requests. Simple but loses rare error patterns.</li>
+  <li><strong>Tail-based sampling:</strong> Buffer all logs for a trace, keep the full trace if any span is an error. Complex but preserves error context.</li>
+  <li><strong>Dynamic level adjustment:</strong> Use a configuration service to dynamically raise/lower log levels per-service without redeployment.</li>
+  <li><strong>Log retention tiers:</strong> Hot storage (7 days, full search) → Warm (30 days, metadata only) → Cold (1 year, archive only).</li>
+</ul>
+
+<div class="callout green">
+  <strong>Interview tip:</strong> When asked "how would you debug a production issue?", mention structured logging with trace correlation as the first step. Being able to say "I'd search Kibana for the trace_id" demonstrates operational maturity.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What is structured logging and why is it better than unstructured logging?</li>
+  <li>How would you aggregate logs from 100 microservices?</li>
+  <li>How do you correlate logs across services in a distributed system?</li>
+  <li>What are the log levels and when would you use each?</li>
+  <li>How would you control log costs in a high-throughput system?</li>
+  <li>What is the ELK stack and how do its components interact?</li>
+  <li>How would you handle log aggregation during traffic spikes (10x normal)?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid diving into:</strong> Specific logging library internals (log4j configuration, Python logging module details). These are implementation concerns. Focus on the architecture: how logs are collected, transported, stored, queried, and correlated. Also skip Syslog/rsyslog unless asked specifically about legacy infrastructure.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><strong>Designing Data-Intensive Applications</strong> (Kleppmann) — Chapter 11: "Reliability" covers failure logging and monitoring</li>
+    <li><strong>Site Reliability Engineering</strong> (Google) — Chapter 6: "Monitoring Distributed Systems"</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Documentation</div>
+  <ul>
+    <li><strong>Elasticsearch Guide</strong> — elasticsearch.org/guide — Log aggregation patterns and index lifecycle management</li>
+    <li><strong>Grafana Loki Documentation</strong> — grafana.com/docs/loki — LogQL and label-based indexing</li>
+    <li><strong>OpenTelemetry Logs</strong> — opentelemetry.io/docs/concepts/signals/logs/</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="../reliability/rto.html">&larr; Previous: RTO / RPO</a>
+  <a href="metrics.html">Next: Metrics &rarr;</a>
+</div>
+</body>
+</html>

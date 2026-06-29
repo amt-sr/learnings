@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.3.3 TTL (Time To Live) — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb"><a href="../../../">System Design</a> / <a href="../">7 Caching</a> / <a href="#">7.3 Cache Consistency</a> / 7.3.3</div>
+
+<h1>7.3.3 TTL (Time To Live)</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<div class="callout green">
+  <strong>Goal:</strong> Understand TTL as the simplest and most universally applicable cache invalidation strategy. Learn the difference between absolute and sliding TTL, how to choose TTL values, and advanced HTTP-style patterns like stale-while-revalidate and stale-if-error.
+</div>
+
+<h2>Definition</h2>
+
+<p>TTL (Time To Live) is an expiration mechanism that automatically invalidates a cache entry after a specified duration. Once the TTL elapses, the entry is either removed or treated as expired. TTL is the simplest form of cache invalidation — it requires no coordination, no event propagation, and no knowledge of when the underlying data actually changes.</p>
+
+<h2>Types of TTL</h2>
+
+<h3>Absolute TTL</h3>
+
+<p>The entry expires at a fixed point in time, regardless of when it was last accessed. The countdown starts when the entry is created.</p>
+
+<pre>
+# Absolute TTL: expires 1 hour from creation, regardless of reads
+cache.set("user:123", data, TTL=3600)
+
+# Even if accessed 59 minutes later, it expires at the 60-minute mark
+</pre>
+
+<h3>Sliding TTL (Rotating TTL)</h3>
+
+<p>The TTL is reset on every access. As long as the entry is being actively read, it never expires. The entry only expires after a period of inactivity.</p>
+
+<pre>
+# Sliding TTL: TTL resets to 1 hour on every read
+cache.set("user:123", data, TTL=3600, sliding=True)
+
+# If accessed at 59 minutes, TTL resets to 1 hour
+# Expires only if not accessed for 60 consecutive minutes
+</pre>
+
+<div class="diagram">
+  Absolute TTL:
+  Create:  ───────────────────────────────────────────> [EXPIRED]
+           |<────────── 60 minutes ──────────────────>|
+
+  Sliding TTL:
+  Create:      ────────────── Read ────────────── Read ───> [EXPIRED]
+               |<── 60m ──>|<──────── 60m ─────>|<─ 60m ─>|
+                            (reset)               (reset)
+</div>
+
+<table>
+  <tr><th>Aspect</th><th>Absolute TTL</th><th>Sliding TTL</th></tr>
+  <tr><td>Best for</td><td>Data with known staleness tolerance</td><td>Session data, frequently accessed items</td></tr>
+  <tr><td>Staleness guarantee</td><td>Bounded (max TTL)</td><td>Unbounded (if continuously accessed)</td></tr>
+  <tr><td>Cache eviction pressure</td><td>Predictable</td><td>Hot entries stay forever</td></tr>
+  <tr><td>Common use</td><td>Cached API responses, DB query results</td><td>Session tokens, user preferences</td></tr>
+</table>
+
+<h2>Choosing TTL Values</h2>
+
+<p>Selecting the right TTL is a balancing act between freshness and performance. There is no universal formula — it depends on the data type, access pattern, and business requirements.</p>
+
+<h3>Guidelines by Data Type</h3>
+
+<table>
+  <tr><th>Data Type</th><th>Recommended TTL</th><th>Rationale</th></tr>
+  <tr><td>User profiles</td><td>5–60 minutes</td><td>Profiles change infrequently; short TTL limits staleness</td></tr>
+  <tr><td>Feed / timeline</td><td>1–5 minutes</td><td>Users expect near-real-time updates</td></tr>
+  <tr><td>Product catalog</td><td>1–24 hours</td><td>Changes are batched; stale data is acceptable</td></tr>
+  <tr><td>Configuration / feature flags</td><td>10–60 seconds</td><td>Should propagate quickly but not overload DB</td></tr>
+  <tr><td>Search results</td><td>5–15 minutes</td><td>Index updates are eventual anyway</td></tr>
+  <tr><td>Computed aggregations (counts, stats)</td><td>1–60 minutes</td><td>Exactness is often not critical</td></tr>
+  <tr><td>Rate limit counters</td><td>1–60 seconds</td><td>Window-aligned with the rate limit period</td></tr>
+  <tr><td>Sessions</td><td>15–60 minutes (sliding)</td><td>Inactivity-based expiration</td></tr>
+</table>
+
+<h3>The TTL Tuning Framework</h3>
+
+<div class="callout">
+  <strong>Three factors to balance:</strong>
+  <ol>
+    <li><strong>Business staleness tolerance:</strong> How out-of-date can this data be without user complaints or business impact?</li>
+    <li><strong>DB load capacity:</strong> How many cache misses (DB reads) can your database handle per second?</li>
+    <li><strong>Data change frequency:</strong> How often does this data actually change? Set TTL close to the typical change interval.</li>
+  </ol>
+  <strong>Rule of thumb:</strong> TTL should be shorter than the business staleness tolerance but long enough that the database can handle the resulting miss rate.
+</div>
+
+<h2>Advanced TTL Patterns</h2>
+
+<h3>Stale-While-Revalidate</h3>
+
+<p>When a cache entry expires, serve the stale data immediately while asynchronously refreshing it from the source. The user never waits for a cache miss — they get stale data instantly, and the next request gets fresh data.</p>
+
+<div class="diagram">
+  Time ──────────────────────────────────────────────────────>
+
+  Cache entry: [FRESH]─────────[EXPIRED]────────[FRESH again]
+                                     │            ▲
+                            1. Serve stale data    3. Revalidation
+                            2. Background refresh   complete
+                               from source
+
+  User experience: Always fast response (stale, then fresh)
+</div>
+
+<pre>
+# HTTP header example (RFC 5861)
+Cache-Control: max-age=3600, stale-while-revalidate=86400
+
+# Application-level pseudocode
+function getUser(userId):
+    data, expired = cache.getWithExpiry("user:" + userId)
+    if data is not null:
+        if expired:
+            asyncRefresh(userId)   # Fire-and-forget background refresh
+        return data               # Serve stale data immediately
+    else:
+        data = db.query("SELECT * FROM users WHERE id = ?", userId)
+        cache.set("user:" + userId, data, TTL=3600)
+        return data
+</pre>
+
+<h3>Stale-If-Error</h3>
+
+<p>If the origin server returns an error (5xx, timeout), serve the stale cached data instead of an error page. This dramatically improves resilience.</p>
+
+<pre>
+# HTTP header example (RFC 5861)
+Cache-Control: max-age=3600, stale-if-error=86400
+
+# Application-level pseudocode
+function getUser(userId):
+    data, expired = cache.getWithExpiry("user:" + userId)
+    if data is not null:
+        if expired:
+            try:
+                newData = db.query("SELECT * FROM users WHERE id = ?", userId)
+                cache.set("user:" + userId, newData, TTL=3600)
+                return newData
+            catch (DBError):
+                return data   # Serve stale data on DB failure
+        return data
+    else:
+        # No data at all — cannot serve stale
+        raise NotFoundError
+</pre>
+
+<h2>Redis TTL Configuration</h2>
+
+<pre>
+# Set key with TTL (seconds)
+SET user:123 '{"name":"Alice"}' EX 3600
+
+# Set key with TTL (milliseconds)
+PSET user:123 '{"name":"Alice"}' PX 3600000
+
+# Set key with expiration at a specific Unix timestamp
+EXPIREAT user:123 1720000000
+
+# Get remaining TTL
+TTL user:123    # Returns seconds remaining (or -1 if no TTL, -2 if key missing)
+PTTL user:123   # Returns milliseconds remaining
+
+# Update TTL on access (sliding expiration) — must do manually
+# No built-in sliding TTL in Redis; implement in application code
+if exists("user:123"):
+    EXPIRE user:123 3600   # Reset TTL on access
+</pre>
+
+<h2>Common Pitfalls</h2>
+
+<ul>
+  <li><strong>TTL too long:</strong> Data becomes stale for extended periods. Users see outdated information (e.g., wrong price, old profile data).</li>
+  <li><strong>TTL too short:</strong> Cache hit ratio drops, defeating the purpose of caching. Database load increases.</li>
+  <li><strong>All keys with the same TTL:</strong> Causes <a href="cache-avalanche.html">Cache Avalanche</a> (7.4.3) — massive simultaneous expiration.</li>
+  <li><strong>No TTL at all:</strong> Memory leak if entries are never evicted. The cache grows unbounded until OOM.</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+
+<ul>
+  <li>What is TTL? Why is it the simplest cache invalidation strategy?</li>
+  <li>How would you choose TTL values for different types of cached data?</li>
+  <li>What is the difference between absolute and sliding TTL? Give an example of when to use each.</li>
+  <li>What is stale-while-revalidate? How does it improve user experience?</li>
+  <li>What is stale-if-error? When is it useful?</li>
+  <li>What happens if all cache entries have the same TTL? What problem does this cause?</li>
+</ul>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>For a system design interview, skip:</strong>
+  <ul>
+    <li>Redis TTL implementation internals (how Redis uses a hashed timer wheel for expiry).</li>
+    <li>DNS TTL mechanics (a different use of TTL in a different system).</li>
+    <li>IP packet TTL (network layer, not cache layer).</li>
+    <li>Exact RFC 5861 header syntax and edge cases — just explain the concept.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Books &amp; Papers</div>
+  <ul>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em> — Chapter 5: Replication</li>
+    <li>Alex Xu, <em>System Design Interview Vol. 1</em> — Chapter 6: Design a URL Shortener</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Online Resources</div>
+  <ul>
+    <li>Redis: EXPIRE Command — <a href="https://redis.io/commands/expire/">redis.io/commands/expire</a></li>
+    <li>RFC 5861: Stale-While-Revalidate — <a href="https://tools.ietf.org/html/rfc5861">tools.ietf.org/html/rfc5861</a></li>
+    <li>Cloudflare: HTTP Caching — <a href="https://developers.cloudflare.com/cache/about/default-cache-behavior/">developers.cloudflare.com/cache</a></li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="cache-coherence.html">← 7.3.2 Cache Coherence</a>
+  <a href="cache-stampede.html">7.4.1 Cache Stampede →</a>
+</div>
+
+</body>
+</html>

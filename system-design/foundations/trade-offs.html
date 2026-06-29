@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.1.12 Trade-offs</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .formula { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; text-align: center; font-size: 1.1rem; color: #79c0ff; }
+  .formula small { display: block; text-align: left; color: #8b949e; font-size: 0.8rem; margin-top: 0.75rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#1">1 Fundamentals</a> / <a href="../index.html#1.1">1.1 System Design Basics</a> / 1.1.12
+</div>
+
+<h1>Trade-offs</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>Why trade-offs are the #1 skill in senior system design interviews</li>
+  <li>The CAP Theorem and its practical implications</li>
+  <li>The consistency spectrum and when to pick each level</li>
+  <li>Key trade-off pairs and how to reason about them</li>
+  <li>The 5-step interview framework for discussing trade-offs</li>
+</ul>
+
+<h2>Definition</h2>
+<p>A trade-off is the <strong>result of choosing one alternative over another when both cannot be achieved simultaneously</strong>. In system design, every decision has a cost.</p>
+
+<div class="formula">
+  Every "yes" to one property is a "no" (or partial "no") to another.
+  <small>The only question is: which cost are you willing to pay?</small>
+</div>
+
+<div class="callout yellow">
+  <strong>The iron triangle:</strong> Fast, cheap, good — pick two. In distributed systems: consistency, availability, partition tolerance — pick two (CAP).
+</div>
+
+<h2>Why Trade-offs Are the #1 Interview Skill</h2>
+<p>At senior/staff level, interviewers test whether you can <strong>reason about trade-offs</strong>, not whether you know patterns.</p>
+
+<div class="callout green">
+  <strong>The questions that matter:</strong>
+  <ul>
+    <li>"Why did you choose X over Y?"</li>
+    <li>"What's the cost of that decision?"</li>
+    <li>"When would this be the wrong choice?"</li>
+    <li>"What would you give up to get that?"</li>
+  </ul>
+  <p>A junior says: "We'll use Redis caching." A senior says: "We'll use Redis caching, which gives us sub-millisecond reads, but we trade strong consistency for latency, and need a reliability strategy for when Redis goes down."</p>
+</div>
+
+<h2>CAP Theorem</h2>
+<p>The most famous trade-off in distributed systems. During a network partition, you must choose between consistency and availability.</p>
+
+<div class="diagram">                    CAP Theorem
+                    C (Consistency)
+                   / \
+                  /     \
+                 A       P
+        (Availability)   (Partition Tolerance)
+
+  During a partition:
+  CP: Reject writes or errors → data is correct but system may be unreachable
+  AP: Serve stale data → system stays up but data may be inconsistent
+
+  Outside of a partition: most well-designed systems are both C and A.</div>
+
+<table>
+  <tr><th>Category</th><th>Systems</th><th>During Partition</th></tr>
+  <tr><td><strong>CP</strong></td><td>ZooKeeper, etcd, HBase, MongoDB</td><td class="red">Errors to preserve correctness</td></tr>
+  <tr><td><strong>AP</strong></td><td>Cassandra, DynamoDB, CouchDB, Riak</td><td class="green">Serves stale data to stay up</td></tr>
+  <tr><td><strong>Tunable</strong></td><td>PostgreSQL, MySQL, DynamoDB</td><td>Configurable per request</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Nuance:</strong> CAP doesn't mean you always choose C or A. Most real systems are CP or AP with tuning knobs. PostgreSQL can do sync or async replication. DynamoDB offers strong reads per request.
+</div>
+
+<h2>Consistency Spectrum</h2>
+<table>
+  <tr><th>Level</th><th>Guarantee</th><th>Cost</th></tr>
+  <tr><td><strong>Strong</strong></td><td>Every read returns latest write</td><td class="red">Highest latency, sync replication</td></tr>
+  <tr><td><strong>Causal</strong></td><td>Causally related ops in order</td><td class="yellow">Moderate, causal tracking</td></tr>
+  <tr><td><strong>Session</strong></td><td>Consistent within a session</td><td class="yellow">Moderate, per-session routing</td></tr>
+  <tr><td><strong>Read-your-writes</strong></td><td>Your reads reflect your writes</td><td class="yellow">Low-moderate, version tracking</td></tr>
+  <tr><td><strong>Eventual</strong></td><td>Converges eventually if no new writes</td><td class="green">Lowest latency, async replication</td></tr>
+</table>
+
+<div class="callout">
+  <strong>When to use each:</strong> Bank transfers (strong), social feeds (eventual), shopping carts (read-your-writes). The answer is always "it depends on the use case."
+</div>
+
+<h2>Key Trade-off Pairs</h2>
+
+<h3>Latency vs Consistency</h3>
+<table>
+  <tr><th></th><th>Strong Consistency</th><th>Eventual Consistency</th></tr>
+  <tr><td>Replication</td><td>Synchronous (wait for replicas)</td><td>Asynchronous (local ack)</td></tr>
+  <tr><td>Latency</td><td class="red">Higher (bounded by slowest replica)</td><td class="green">Lower (local write)</td></tr>
+  <tr><td>Use when</td><td>Financial, auth, configuration</td><td>Social feeds, analytics, content</td></tr>
+</table>
+
+<h3>Throughput vs Latency</h3>
+<table>
+  <tr><th></th><th>Optimize Throughput</th><th>Optimize Latency</th></tr>
+  <tr><td>Batching</td><td class="green">Higher (amortized overhead)</td><td class="red">Higher (wait for batch)</td></tr>
+  <tr><td>Use when</td><td>ETL, analytics, log processing</td><td>APIs, real-time systems</td></tr>
+</table>
+
+<h3>Storage vs Computation</h3>
+<table>
+  <tr><th></th><th>Pre-compute (Storage)</th><th>Compute On-the-Fly (CPU)</th></tr>
+  <tr><td>Read latency</td><td class="green">Fast (just fetch)</td><td class="red">Slower (calculate + fetch)</td></tr>
+  <tr><td>Write latency</td><td class="red">Slower (update all views)</td><td class="green">Fast (write raw data only)</td></tr>
+  <tr><td>Use when</td><td>Read-heavy, dashboards</td><td>Write-heavy, ad-hoc queries</td></tr>
+</table>
+
+<h3>Normalization vs Denormalization</h3>
+<table>
+  <tr><th></th><th>Normalized</th><th>Denormalized</th></tr>
+  <tr><td>Reads</td><td class="red">Slower (JOINs)</td><td class="green">Fast (pre-computed)</td></tr>
+  <tr><td>Writes</td><td class="green">Fast (one row)</td><td class="red">Slower (update all copies)</td></tr>
+  <tr><td>Consistency</td><td class="green">Easy (single source)</td><td class="red">Hard (keep copies in sync)</td></tr>
+</table>
+
+<h3>Stateless vs Stateful</h3>
+<table>
+  <tr><th></th><th>Stateless</th><th>Stateful</th></tr>
+  <tr><td>Scaling</td><td class="green">Trivial horizontal</td><td class="red">Hard (sticky routing)</td></tr>
+  <tr><td>Failure</td><td class="green">Any instance handles any request</td><td class="red">Failover loses in-memory state</td></tr>
+  <tr><td>Latency</td><td class="red">Slight overhead (fetch state)</td><td class="green">Lower (state is local)</td></tr>
+</table>
+
+<h2>The 5-Step Interview Framework</h2>
+<div class="callout green">
+  <ol>
+    <li><strong>State the trade-off explicitly</strong> — Name both options</li>
+    <li><strong>Explain both sides</strong> — What each gives you, what each costs</li>
+    <li><strong>Choose one and justify</strong> — Link to the specific use case</li>
+    <li><strong>State when the other choice would be better</strong> — This shows maturity</li>
+    <li><strong>Show awareness of the cost</strong> — What did you sacrifice?</li>
+  </ol>
+</div>
+
+<pre>Example: "SQL or NoSQL?"
+
+1. STATE: "There's a trade-off — SQL gives us ACID transactions and rich queries,
+   while NoSQL gives us horizontal scalability and flexible schema."
+
+2. EXPLAIN: "SQL is better for relational data with complex queries.
+   NoSQL is better when write volume exceeds single-node capacity
+   or data is unstructured."
+
+3. CHOOSE: "For this messaging system with ordering guarantees,
+   I'd choose SQL (PostgreSQL) because message ordering and delivery
+   guarantees are critical."
+
+4. REVERSE: "If we were building a real-time analytics pipeline with
+   millions of events/sec, I'd choose NoSQL (Cassandra)."
+
+5. COST: "The cost is that we'll need to handle sharding ourselves
+   if write volume grows beyond what a single primary can handle."</pre>
+
+<div class="callout">
+  <strong>Interview tip:</strong> Never present a solution without addressing the alternative. Say "I'd use X" and immediately address "but if Y were needed..." This alone puts you in the top 20% of candidates.
+</div>
+
+<h2>Common Interview Questions</h2>
+
+<h3>"When would you choose SQL over NoSQL?"</h3>
+<pre>Choose SQL when: Data has relationships, ACID transactions needed, complex queries, team has SQL expertise
+Choose NoSQL when: Write volume exceeds single node, data is unstructured, schema evolves rapidly
+Cost of SQL: Vertical scaling ceiling, schema migrations. Cost of NoSQL: No ACID, no joins.</pre>
+
+<h3>"Cache-aside vs write-through?"</h3>
+<pre>Cache-aside: Check cache first, miss → DB → populate cache. Good for read-heavy.
+Write-through: Write to cache AND DB simultaneously. Reads always fresh. Better for write-heavy or freshness-critical.
+
+Default to cache-aside for most systems because reads are more common.
+Use write-through when stale reads are unacceptable (user settings, configuration).</pre>
+
+<h3>"Synchronous vs asynchronous replication?"</h3>
+<pre>Sync: Primary waits for replica ack → zero data loss, higher latency
+Async: Primary acks immediately → potential data loss, lower latency
+
+For financial: synchronous. For logging/analytics: asynchronous.
+Most databases offer both as a tuning knob.</pre>
+
+<h3>"Monolith vs microservices?"</h3>
+<pre>Monolith: Simple to develop and deploy, shared DB, lower ops overhead.
+  Cost: Coupling grows, single point of failure, scaling is all-or-nothing.
+Microservices: Independent scaling and deployment, tech diversity per service.
+  Cost: Network latency, distributed transactions, operational complexity, serial
+  dependency chain reduces <a href="availability.html">availability</a>.
+
+Rule: Start monolith. Extract services when you have clear boundaries and
+independent scaling needs.</pre>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>PACELC theorem (academic extension of CAP)</li>
+    <li>Formal consistency model proofs</li>
+    <li>Academic consensus algorithm proofs (Paxos, Raft)</li>
+  </ul>
+  <p>Focus on practical reasoning, not formal proofs.</p>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>Designing Data-Intensive Applications</strong> — Chapters 5, 8, 9 (Consistency &amp; consensus)</li>
+    <li><strong>System Design Interview Vol. 1 &amp; 2 (Alex Xu)</strong> — Every chapter demonstrates trade-off reasoning</li>
+    <li><strong>Brewer's CAP Theorem (2000)</strong> — Original paper</li>
+    <li><strong>"Please Stop Calling It CAP Theorem"</strong> — Martin Kleppmann on common CAP misunderstandings</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="bottleneck-analysis.html">&larr; 1.1.11 Bottleneck Analysis</a>
+  <a href="../networking/ip-address.html">Next: 2 Networking &rarr;</a>
+</div>
+
+</body>
+</html>

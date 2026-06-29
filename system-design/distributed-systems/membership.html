@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.6.6 Membership - System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">5 Distributed Systems</a> / <a href="index.html">5.6 Consensus</a> / 5.6.6
+</div>
+
+<h1>5.6.6 Membership</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<div class="callout green">
+  <strong>Goal:</strong> Understand the cluster membership problem, how nodes join and leave, and the different approaches to maintaining a consistent membership view. Know how Cassandra, ZooKeeper, and consensus-based systems handle membership. Be able to discuss the tradeoffs between gossip-based and consensus-based membership.
+</div>
+
+<h2>Definition</h2>
+
+<p><strong>Cluster membership</strong> is the problem of maintaining an authoritative, up-to-date list of nodes that are part of a distributed system. Every node must know who the other members are so that it can route requests, replicate data, and participate in consensus protocols. The membership list must handle nodes joining, leaving voluntarily, and failing unexpectedly.</p>
+
+<h2>The Membership Problem</h2>
+
+<p>Maintaining membership seems simple -- keep a list of nodes -- but becomes complex when nodes can fail or the network can partition:</p>
+
+<ul>
+  <li><strong>Node join:</strong> How does a new node discover existing members and announce itself?</li>
+  <li><strong>Node leave:</strong> How does a node gracefully deregister itself?</li>
+  <li><strong>Node failure:</strong> How do remaining nodes detect and remove a failed node?</li>
+  <li><strong>Split brain:</strong> During a network partition, how do nodes on each side handle membership?</li>
+  <li><strong>Convergence:</strong> How do all nodes agree on the same membership list?</li>
+</ul>
+
+<div class="callout yellow">
+  <strong>Why membership matters:</strong> Incorrect membership leads to routing errors, data inconsistency, and split-brain. If Node A thinks Node B is alive but B has crashed, A will route requests to B that will never be served. If two partitions each believe they are the full cluster, both may accept writes independently, creating unreconcilable conflicts.
+</div>
+
+<h2>Failure Detection + Gossip for Membership</h2>
+
+<p>The most common membership approach in modern distributed databases combines failure detection with gossip protocols:</p>
+
+<div class="diagram">
+  Gossip-Based Membership (Cassandra-style)
+  ─────────────────────────────────────────
+
+  1. Seed nodes: Bootstrap with known contact points
+     New Node ──join request──→ Seed Node (known address)
+                              │
+                              ├── Returns current membership list
+                              └── Starts gossiping new node's info
+
+  2. Gossip propagation:
+     Every 1 second, each node:
+       - Picks a random peer
+       - Sends its own state + states of up to 3 other nodes
+       - Receives peer's state
+       - Merges: newer generation timestamp wins
+
+  3. Failure detection:
+     Phi accrual detector monitors heartbeat intervals
+     If phi > threshold → mark as SUSPECT
+     After confirmation by others → mark as DEAD
+
+  4. State reconciliation:
+     Seed:  [A:gen1, B:gen1, C:gen1, D:gen1]
+     Gossip from A: [A:gen2, B:gen1, E:gen1]  (A updated, E joined)
+     After merge:   [A:gen2, B:gen1, C:gen1, D:gen1, E:gen1]
+
+  5. All nodes converge within O(log N) gossip rounds
+</div>
+
+<h3>Generation Timestamps</h3>
+
+<p>Each node maintains a <strong>generation timestamp</strong> that increments every time the node restarts or its state changes significantly. When two gossip messages contain different state for the same node, the one with the higher generation timestamp wins. This prevents stale information from overwriting fresh information.</p>
+
+<h2>Ring Membership in Cassandra</h2>
+
+<p>Cassandra uses a consistent hashing ring where each node owns a token range. Membership and token assignment are tightly coupled:</p>
+
+<div class="diagram">
+  Cassandra Ring Membership
+  ───────────────────────────
+
+  Token Range: 0 ─────────────────────────────────────── 2^127
+
+  Node A: owns [0, 42)      ← token = 0
+  Node B: owns [42, 85)     ← token = 42
+  Node C: owns [85, 170)    ← token = 85
+  Node D: owns [170, 200)   ← token = 170
+  Node E: owns [200, 0)     ← token = 200
+
+  When Node C joins:
+  1. C contacts seed node via gossip
+  2. C is assigned token 85 (or auto-selected with vnodes)
+  3. C gossips: {C: token=85, gen=1}
+  4. Other nodes update their routing tables
+  5. C streams data from its predecessors for its token range
+
+  When Node C fails:
+  1. Phi accrual detector marks C as SUSPECT
+  2. Gossip propagates SUSPECT status
+  3. After timeout, C marked as DEAD
+  4. Other nodes stream replicas to fill C's range
+  5. Hinted handoff re-delivers writes that arrived during failure
+</div>
+
+<h2>SWIM Protocol</h2>
+
+<p>SWIM (Scalable Weakly-consistent Infection-style Process Group Membership) combines failure detection with gossip-based membership dissemination. Used in HashiCorp Memberlist and Consul.</p>
+
+<h3>How SWIM Works</h3>
+
+<ol>
+  <li><strong>Probing:</strong> Each node periodically probes a random target via a direct ping.</li>
+  <li><strong>Indirect probing:</strong> If the direct ping fails, the prober asks K random nodes to also ping the target (indirect probes). This reduces false positives.</li>
+  <li><strong>Suspicion:</strong> If all probes fail, the target is marked as SUSPECT. This suspicion is disseminated via gossip.</li>
+  <li><strong>Dissemination:</strong> Membership updates (joins, leaves, suspicions) are piggybacked on probe messages and gossiped through the cluster.</li>
+</ol>
+
+<div class="diagram">
+  SWIM Indirect Probing
+  ──────────────────────
+
+  Node A probes Node B:
+       │
+  [A]──ping──→[B]  ✗ no response
+       │
+  [A]──ping-req──→[C]──ping──→[B]  ✗ no response
+  [A]──ping-req──→[D]──ping──→[B]  ✗ no response
+       │
+  [A] marks [B] as SUSPECT
+  [A] gossips: "B is suspected"
+       │
+  All nodes eventually learn B is suspected
+  After timeout, B promoted to DEAD
+
+  Advantage: Reduces false positives because B is checked from
+  multiple network paths. If A cannot reach B due to a local
+  network issue, C or D likely can.
+</div>
+
+<h2>Consensus-Based Membership</h2>
+
+<p>Systems like etcd, ZooKeeper, and CockroachDB use consensus protocols (Raft or Zab) to maintain membership. The membership list is stored as part of the replicated log, ensuring strong consistency.</p>
+
+<h3>Viewstamped Replication for Membership</h3>
+
+<p>Viewstamped Replication (VR) was one of the first protocols to explicitly address membership changes. The current membership is called a <strong>view</strong>. View changes occur when:</p>
+
+<ul>
+  <li>A node joins or leaves the cluster.</li>
+  <li>The leader is suspected of failure.</li>
+  <li>A network partition is detected.</li>
+</ul>
+
+<p>View changes are committed through the consensus protocol, so all nodes agree on the current view. Raft implements this as <strong>joint consensus</strong> -- a two-phase membership change where the cluster transitions through an intermediate configuration that includes both old and new members.</p>
+
+<h2>Gossip vs. Consensus Membership Comparison</h2>
+
+<table>
+  <tr>
+    <th>Aspect</th>
+    <th>Gossip-Based (Cassandra)</th>
+    <th>Consensus-Based (etcd)</th>
+  </tr>
+  <tr>
+    <td>Consistency</td>
+    <td>Eventual (may see stale membership briefly)</td>
+    <td>Strong (all nodes agree via Raft)</td>
+  </tr>
+  <tr>
+    <td>Join speed</td>
+    <td class="green">Fast (contact seed + gossip)</td>
+    <td class="red">Slower (must be committed to Raft log)</td>
+  </tr>
+  <tr>
+    <td>Failure detection speed</td>
+    <td>Fast (phi accrual)</td>
+    <td>Slower (based on election timeouts)</td>
+  </tr>
+  <tr>
+    <td>Split brain risk</td>
+    <td class="red">Higher (each partition has its own view)</td>
+    <td class="green">Lower (only majority partition can commit)</td>
+  </tr>
+  <tr>
+    <td>Scalability</td>
+    <td class="green">Thousands of nodes</td>
+    <td class="red">Typically 3-9 nodes</td>
+  </tr>
+  <tr>
+    <td>Best for</td>
+    <td>Data stores, large clusters</td>
+    <td>Configuration stores, coordination services</td>
+  </tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+
+<ul>
+  <li>How does a new node join a Cassandra cluster?</li>
+  <li>What happens when a node fails in a gossip-based membership system?</li>
+  <li>What is the SWIM protocol and how does it reduce false positives?</li>
+  <li>How does etcd handle membership changes?</li>
+  <li>What is a generation timestamp and why is it important?</li>
+  <li>How do you handle a network partition in a membership system?</li>
+  <li>Compare gossip-based and consensus-based membership approaches.</li>
+  <li>What happens to data when a node leaves a Cassandra ring?</li>
+</ul>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Do NOT memorize Cassandra's gossip message format</strong> or the internal data structures. Skip the details of the HyParView protocol for gossip overlay networks unless asked. Do not dive deep into Raft's joint consensus implementation details (covered in the Raft section). Skip the specific token allocation strategies (vnode random allocation, rack-aware allocation) unless the question specifically asks about data distribution.
+</div>
+
+<div class="source">
+  <div class="source-label">Reading Sources</div>
+  <ul>
+    <li>SWIM: Scalable Weakly-consistent Infection-style Process Group Membership Protocol (Das et al., 2002)</li>
+    <li>Cassandra Architecture documentation -- Gossip and Ring Membership</li>
+    <li>Viewstamped Replication: A New Primary-Backup Method (Oki &amp; Liskov, 1988)</li>
+    <li>Designing Data-Intensive Applications (Kleppmann) -- Chapter 5, cluster membership</li>
+    <li>etcd documentation on membership and Raft configuration changes</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="gossip-protocol.html">&larr; 5.6.5 Gossip Protocol</a>
+  <a href="raft.html">5.6.7 Raft &rarr;</a>
+</div>
+
+</body>
+</html>

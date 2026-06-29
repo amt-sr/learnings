@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.1 Why Caching — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb"><a href="../../../">System Design</a> / <a href="../">7 Caching</a> / 7.1</div>
+
+<h1>7.1 Why Caching</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<div class="callout green">
+  <strong>Goal:</strong> Understand why caching is a foundational technique in distributed systems, the performance gains it delivers, where it sits in the request lifecycle, and when caching is the wrong approach.
+</div>
+
+<h2>Definition</h2>
+
+<p>Caching is the technique of storing a copy of frequently accessed data in a faster, closer storage layer so that subsequent requests can be served without hitting the origin data source. The cached data is typically a subset of the full dataset, chosen based on access patterns, size constraints, and consistency requirements.</p>
+
+<h2>Why Caching Matters</h2>
+
+<h3>1. Latency Reduction</h3>
+
+<p>The primary motivation for caching is to serve data from a storage layer that is orders of magnitude faster than the origin. In a typical web stack, each layer adds latency:</p>
+
+<table>
+  <tr><th>Storage Layer</th><th>Typical Latency</th><th>Relative Speed</th></tr>
+  <tr><td>L1 CPU Cache</td><td>~1 ns</td><td class="green">Fastest</td></tr>
+  <tr><td>L2 CPU Cache</td><td>~4 ns</td><td class="green">Very fast</td></tr>
+  <tr><td>Main Memory (RAM)</td><td>~100 ns</td><td class="green">Fast</td></tr>
+  <tr><td>SSD</td><td>~100 μs</td><td>Moderate</td></tr>
+  <tr><td>Network (same DC)</td><td>~0.5 ms</td><td>Slow</td></tr>
+  <tr><td>Disk (HDD)</td><td>~10 ms</td><td class="red">Slow</td></tr>
+  <tr><td>DB Query (complex)</td><td>~50–500 ms</td><td class="red">Very slow</td></tr>
+</table>
+
+<p>Caching in memory (Redis, Memcached) reduces latency from milliseconds to sub-milliseconds — a 100x to 1000x improvement for read-heavy workloads.</p>
+
+<h3>2. Database Load Reduction</h3>
+
+<p>Every cache hit is a request that never reaches the database. For systems where the read-to-write ratio is high (common ratios are 100:1 or 1000:1), caching can eliminate 90–99% of database reads. This directly translates to:</p>
+
+<ul>
+  <li>Lower database CPU and I/O utilization</li>
+  <li>Ability to defer or avoid database vertical/horizontal scaling</li>
+  <li>Reduced connection pool contention</li>
+  <li>Longer hardware lifespan for expensive database infrastructure</li>
+</ul>
+
+<h3>3. Throughput Increase</h3>
+
+<p>By serving reads from cache, the system's overall throughput (requests per second) increases significantly. A single Redis instance can handle 100K+ ops/sec on a single thread, while a typical relational database query might consume 5–50 ms of connection time. The math is straightforward:</p>
+
+<pre>
+Without cache:  DB handles 100K reads/sec → requires 100 DB connections (1ms per query, idealistic)
+With 95% hit ratio: DB handles 5K reads/sec  → requires 5 DB connections
+Throughput gain: ~20x with same DB infrastructure
+</pre>
+
+<h2>Caching Hierarchy</h2>
+
+<p>Caching is not a single layer — modern systems employ multiple caching tiers, each at a different point in the request path:</p>
+
+<div class="diagram">
+  Client Request
+       │
+       ▼
+  ┌──────────┐    ┌──────────────────────────────────────────────┐
+  │ Browser  │────│ Browser Cache (HTTP cache headers,           │
+  │          │    │ localStorage, service workers)                │
+  └──────────┘    └──────────────────────────────────────────────┘
+       │
+       ▼
+  ┌──────────┐    ┌──────────────────────────────────────────────┐
+  │   CDN    │────│ Edge Cache (CloudFront, Cloudflare,           │
+  │          │    │ Fastly) — static assets, pre-warmed pages      │
+  └──────────┘    └──────────────────────────────────────────────┘
+       │
+       ▼
+  ┌──────────┐    ┌──────────────────────────────────────────────┐
+  │ API      │────│ API / Application Cache (Redis/Memcached,    │
+  │ Gateway  │    │ response caching, rate limit counters)       │
+  └──────────┘    └──────────────────────────────────────────────┘
+       │
+       ▼
+  ┌──────────┐    ┌──────────────────────────────────────────────┐
+  │ App      │────│ Application-level cache (in-process caches,  │
+  │ Server   │    │ computed aggregations, session data)         │
+  └──────────┘    └──────────────────────────────────────────────┘
+       │
+       ▼
+  ┌──────────┐    ┌──────────────────────────────────────────────┐
+  │ Database │────│ DB Buffer Pool / Query Cache                 │
+  │          │    │ (InnoDB buffer pool, MySQL query cache*)     │
+  └──────────┘    └──────────────────────────────────────────────┘
+
+  * MySQL query cache was removed in 8.0; PostgreSQL has no query cache.
+</div>
+
+<div class="callout">
+  <strong>Key insight for interviews:</strong> Each layer has different characteristics — TTL policies, invalidation mechanisms, storage capacity, and consistency guarantees. A strong answer discusses the tradeoffs at each tier rather than treating "caching" as a single monolithic concept.
+</div>
+
+<h2>Cache Hit Ratio</h2>
+
+<p>The cache hit ratio is the fundamental metric for evaluating cache effectiveness:</p>
+
+<pre>
+Hit Ratio = Cache Hits / (Cache Hits + Cache Misses)
+
+Example:
+  10,000 requests served
+  9,200 served from cache (hits)
+  800  served from origin (misses)
+  Hit Ratio = 9200 / 10000 = 92%
+</pre>
+
+<h3>What constitutes a "good" hit ratio?</h3>
+
+<table>
+  <tr><th>Hit Ratio</th><th>Assessment</th><th>Implication</th></tr>
+  <tr><td>> 95%</td><td class="green">Excellent</td><td>Cache is well-tuned, data fits working set</td></tr>
+  <tr><td>85–95%</td><td class="green">Good</td><td>Typical for well-designed systems</td></tr>
+  <tr><td>70–85%</td><td>Acceptable</td><td>May indicate cold cache or suboptimal key design</td></tr>
+  <tr><td>< 70%</td><td class="red">Poor</td><td>Cache may be too small, TTL too short, or wrong data cached</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Interview tip:</strong> Hit ratio alone is misleading. A 99% hit ratio on 10 requests/day is less valuable than a 90% hit ratio on 10M requests/day. Always discuss hit ratio in the context of traffic volume and the cost of a miss (i.e., how expensive is the origin query?).
+</div>
+
+<h2>When NOT to Cache</h2>
+
+<p>Caching introduces complexity (consistency, invalidation, memory overhead). It is not always the right choice:</p>
+
+<ul>
+  <li><strong>Write-heavy workloads:</strong> If reads are rare relative to writes, caching adds overhead without proportional benefit. The invalidation cost may exceed the read savings.</li>
+  <li><strong>Frequently mutated data:</strong> Data that changes constantly (e.g., real-time stock prices, live counters) becomes stale immediately, making cache hit ratios low and consistency burdens high.</li>
+  <li><strong>Large result sets:</strong> If individual responses are too large to fit in memory efficiently, caching them may evict many smaller, more useful entries. Consider caching computed aggregations instead.</li>
+  <li><strong>Low-traffic endpoints:</strong> The operational complexity of maintaining cache invalidation logic may not be justified for endpoints with minimal traffic.</li>
+  <li><strong>Strong consistency requirements:</strong> If your system cannot tolerate any stale reads (e.g., financial transaction balances), caching introduces a consistency window that may violate business invariants.</li>
+  <li><strong>Data with unpredictable access patterns:</strong> Zipfian or uniform random access makes cache eviction aggressive and hit ratios poor. Caching works best with skewed (power-law) access distributions.</li>
+</ul>
+
+<div class="callout red">
+  <strong>Common mistake:</strong> Adding a cache to every endpoint by default. Caching should be a deliberate decision driven by measured performance characteristics, not a reflexive architectural choice. Always profile before caching.
+</div>
+
+<h2>Common Interview Questions</h2>
+
+<ul>
+  <li>Why would you add a cache to your system? What problems does it solve?</li>
+  <li>What is a cache hit ratio, and what is a good target?</li>
+  <li>Explain the caching hierarchy in a typical web application.</li>
+  <li>When would you choose NOT to use a cache?</li>
+  <li>How do you decide what data to cache and what to leave behind?</li>
+  <li>What are the tradeoffs between caching at the CDN layer vs. the application layer?</li>
+  <li>How does caching affect your database capacity planning?</li>
+</ul>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>For a system design interview, skip:</strong>
+  <ul>
+    <li>Deep dives into specific vendor implementations (e.g., Redis internals like SDS, ziplist encoding) unless the question specifically targets Redis.</li>
+    <li>Browser caching mechanics beyond mentioning it as a layer (no need for ETag/If-None-Match header details).</li>
+    <li>Cache hardware architecture (L1/L2/L3 CPU cache details) unless discussing low-latency trading systems.</li>
+    <li>The mathematical derivation of eviction policies (e.g., Belady's optimal algorithm proof).</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Books &amp; Papers</div>
+  <ul>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em> — Chapter 5: Replication (covers caching in the context of read replicas)</li>
+    <li>Alex Xu, <em>System Design Interview Vol. 1</em> — Chapter 6: Designing a URL Shortener (caching discussion)</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Online Resources</div>
+  <ul>
+    <li>Redis University — <a href="https://university.redis.com/">redis.io/university</a></li>
+    <li>Memcached vs. Redis — <a href="https://redis.io/docs/manual/memcache/">redis.io/docs/manual/memcache</a></li>
+    <li>Cloudflare: What is Caching? — <a href="https://www.cloudflare.com/learning/cdn/what-is-caching/">cloudflare.com/learning/cdn/what-is-caching</a></li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="../partitioning/hot-partitions.html">← 6.3.6 Hot Partitions</a>
+  <a href="cache-aside.html">7.2.1 Cache Aside →</a>
+</div>
+
+</body>
+</html>

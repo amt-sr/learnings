@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>15.3 Distributed Cache — System Design</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../">Handbook</a> / <a href="../">System Design</a> / 15. Design Problems / 15.3 Distributed Cache</p>
+
+<h1>Distributed Cache</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Design a distributed in-memory caching system that provides fast key-value lookups across a cluster of machines. The system must handle data partitioning, node failures, cache eviction, and replication while maintaining low latency and high throughput.</p>
+
+<h2>Functional Requirements</h2>
+<ul>
+  <li>Store and retrieve key-value pairs with sub-millisecond latency</li>
+  <li>Support TTL (time-to-live) for automatic expiration</li>
+  <li>Distribute data across multiple nodes with rebalancing on topology changes</li>
+  <li>Replicate data for fault tolerance</li>
+  <li>Support configurable eviction policies (LRU, LFU, FIFO)</li>
+  <li>Support optional persistence to disk</li>
+</ul>
+
+<h2>Non-Functional Requirements</h2>
+<ul>
+  <li><strong>Low latency:</strong> reads/writes &lt; 1ms for single key operations</li>
+  <li><strong>High throughput:</strong> 1M+ operations/second per cluster</li>
+  <li><strong>Scalability:</strong> linear scaling with node additions</li>
+  <li><strong>Availability:</strong> survive N/2 - 1 node failures (with replication factor N)</li>
+  <li><strong>Consistency:</strong> eventual consistency acceptable; tunable for strong consistency</li>
+</ul>
+
+<h3>Capacity Estimates</h3>
+<table>
+  <tr><th>Metric</th><th>Estimate</th><th>Notes</th></tr>
+  <tr><td>Cache size</td><td>1 TB</td><td>Total data across cluster</td></tr>
+  <tr><td>Key count</td><td>1 billion</td><td>Average value size ~1KB</td></tr>
+  <tr><td>Ops/sec</td><td>2M</td><td>Read-heavy (80% reads, 20% writes)</td></tr>
+  <tr><td>Replication factor</td><td>3</td><td>Each key stored on 3 nodes</td></tr>
+  <tr><td>Node memory</td><td>64 GB</td><td>~20 nodes for 1TB with RF=3 overhead</td></tr>
+</table>
+
+<h2>API Design</h2>
+<pre>
+SET    key value [EX seconds] [NX|XX]
+GET    key
+DELETE key [key ...]
+EXPIRE key seconds
+TTL    key
+INCR   key
+MGET   key [key ...]
+MSET   key value [key value ...]
+SCAN   cursor [MATCH pattern] [COUNT count]
+INFO   [section]
+</pre>
+
+<h2>High-Level Design</h2>
+<div class="diagram">
+                    ┌──────────────┐
+    Client ────────►│  Proxy Layer  │
+                    │ (Hash Router) │
+                    └──────┬───────┘
+                           │
+              ┌────────────┼────────────┐
+              │            │            │
+              ▼            ▼            ▼
+      ┌──────────┐ ┌──────────┐ ┌──────────┐
+      │  Node A   │ │  Node B   │ │  Node C   │
+      │ [keys:    │ │ [keys:    │ │ [keys:    │
+      │  0-127]   │ │  128-255] │ │  256-383] │
+      │           │ │           │ │           │
+      │ Primary:  │ │ Primary:  │ │ Primary:  │
+      │  0-127    │ │  128-255  │ │  256-383  │
+      │ Replica:  │ │ Replica:  │ │ Replica:  │
+      │  256-383  │ │  0-127    │ │  128-255  │
+      └──────────┘ └──────────┘ └──────────┘
+              │            │            │
+              └────────────┼────────────┘
+                           │
+                    ┌──────▼───────┐
+                    │ Gossip Protocol │
+                    │ (Cluster Mgmt)  │
+                    └────────────────┘
+</div>
+
+<h2>Deep Dive: Consistent Hashing</h2>
+<p>Use consistent hashing to map keys to nodes. Each node is placed on a virtual circle (hash ring). Keys are hashed and placed on the ring; each key is assigned to the nearest node clockwise. When nodes are added or removed, only K/N keys are remapped (K = total keys, N = total nodes).</p>
+
+<div class="callout">
+  <strong>Virtual nodes:</strong> Each physical node is represented by multiple virtual nodes (e.g., 150-200 vnodes per physical node) on the hash ring. This ensures more uniform data distribution even when physical nodes have different capacities or when hashing produces uneven distribution.
+</div>
+
+<h3>Hash Ring Diagram</h3>
+<div class="diagram">
+           0
+     ┌──────────┐
+  355│ Node A    │  10
+     │  (v0,v1, │
+  340│   v2,...) │  25
+     │          │
+  310│  Node C  │  40
+     │ (v0,v1)  │  55
+  295│          │  70
+     └──────────┘
+
+  Key "user:1234" → hash=32  → Node A (nearest clockwise)
+  Key "user:5678" → hash=280 → Node C (nearest clockwise)
+  Key "user:9012" → hash=60  → Node A (nearest clockwise)
+</div>
+
+<h2>Deep Dive: Replication</h2>
+<p>For a replication factor of N, each key is stored on N distinct nodes. The primary node is the first node clockwise on the hash ring. The next N-1 distinct nodes clockwise serve as replicas.</p>
+
+<table>
+  <tr><th>Strategy</th><th>Consistency</th><th>Availability</th><th>Description</th></tr>
+  <tr><td> synchronous</td><td class="green">Strong</td><td>Lower</td><td>Wait for all replicas to acknowledge before returning</td></tr>
+  <tr><td> asynchronous</td><td class="red">Eventual</td><td class="green">High</td><td>Return immediately, replicate in background</td></tr>
+  <tr><td> quorum (W &lt; N)</td><td>Tunable</td><td>Tunable</td><td>Wait for W of N replicas (R + W &gt; N for strong reads)</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Read repair:</strong> When a read detects stale data on a replica (version mismatch), trigger a background read repair that updates the stale replica. This is a lazy anti-entropy mechanism. For more aggressive consistency, use a gossip-based anti-entropy protocol (Merkle trees) to detect and repair inconsistencies proactively.
+</div>
+
+<h2>Deep Dive: Eviction Policies</h2>
+<table>
+  <tr><th>Policy</th><th>When to Evict</th><th>Pros</th><th>Cons</th></tr>
+  <tr><td>LRU</td><td>Least recently used first</td><td class="green">Good for temporal locality</td><td class="red">O(1) with doubly-linked list + hashmap, but memory overhead</td></tr>
+  <tr><td>LFU</td><td>Least frequently used first</td><td class="green">Better for stable popularity</td><td class="red">Memory overhead, cold-start problem</td></tr>
+  <tr><td>ARC</td><td>Adaptive replacement</td><td class="green">Self-tuning between LRU and LFU</td><td>Complex implementation</td></tr>
+  <tr><td>FIFO</td><td>Oldest first</td><td class="green">Simple, low overhead</td><td class="red">Poor hit rate for repeated access</td></tr>
+  <tr><td>TTL-based</td><td>Expired keys first</td><td class="green">Deterministic, application-aligned</td><td>Keys may accumulate before cleanup</td></tr>
+</table>
+
+<div class="callout green">
+  <strong>Redis approach:</strong> Redis uses a combination of LRU and LFU via the <code>maxmemory-policy</code> configuration. It samples a small number of keys (default 5) and evicts the best candidate from the sample, avoiding O(N) scans. This probabilistic approach achieves near-optimal eviction with O(1) amortized cost.
+</div>
+
+<h2>Deep Dive: Memcached vs Redis</h2>
+<table>
+  <tr><th>Feature</th><th>Memcached</th><th>Redis</th></tr>
+  <tr><td>Data structures</td><td>Simple key-value</td><td class="green">Strings, lists, sets, hashes, sorted sets, streams</td></tr>
+  <tr><td>Persistence</td><td class="red">None (in-memory only)</td><td class="green">RDB snapshots + AOF</td></tr>
+  <tr><td>Distributed locking</td><td class="red">No</td><td class="green">Yes (SETNX-based)</td></tr>
+  <tr><td>Pub/Sub</td><td class="red">No</td><td class="green">Yes</td></tr>
+  <tr><td>Cluster mode</td><td>Client-side sharding</td><td class="green">Native cluster with hash slots</td></tr>
+  <tr><td>Memory efficiency</td><td class="green">Slightly better (no metadata overhead)</td><td>Good (optimizations in Redis 7+)</td></tr>
+  <tr><td>Multi-threaded</td><td class="green">Yes</td><td>Single-threaded (cluster = multiple threads)</td></tr>
+  <tr><td>Eviction</td><td>LRU only</td><td class="green">LRU, LFU, TTL, FIFO, allkeys/volatile variants</td></tr>
+</table>
+
+<h2>Deep Dive: Cache Invalidation</h2>
+<ul>
+  <li><strong>Cache-aside (lazy loading):</strong> Application checks cache first; on miss, reads from DB and populates cache. Pro: simple. Con: stale data until TTL expires.</li>
+  <li><strong>Write-through:</strong> Write to cache and DB simultaneously. Pro: data is never stale. Con: write latency increased.</li>
+  <li><strong>Write-behind (write-back):</strong> Write to cache immediately, batch-write to DB asynchronously. Pro: low write latency. Con: data loss risk on crash.</li>
+  <li><strong>Cache invalidation:</strong> On DB update, delete or update the corresponding cache key. Pro: immediate consistency. Con: thundering herd on repopulation.</li>
+</ul>
+
+<div class="callout red">
+  <strong>Thundering herd:</strong> When a popular cache key expires, many requests simultaneously try to repopulate it. Mitigate with: request coalescing (only one request fetches from DB, others wait), probabilistic early expiration (expire ~10% of keys slightly before TTL to stagger refreshes), or a lock-per-key approach.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>How does consistent hashing minimize data movement when nodes are added/removed? <em>A: Only keys in the affected range (K/N) are remapped. Virtual nodes ensure balanced redistribution.</em></li>
+  <li>How do you handle a node failure? <em>A: Detect via heartbeat timeout. Promote a replica to primary for the affected key ranges. Trigger rebalancing to maintain the replication factor.</em></li>
+  <li>What is the "hot key" problem and how do you solve it? <em>A: A single key receives disproportionate traffic. Solutions: micro-sharding (split the key across multiple cache nodes), local caching at the application layer, or request-level fanout.</em></li>
+  <li>How do you achieve strong consistency in a distributed cache? <em>A: Quorum reads/writes (R + W &gt; N), synchronous replication, and read repair. Trade off availability for consistency.</em></li>
+  <li>When would you choose Memcached over Redis? <em>A: When you need simple caching, multi-threaded performance for large values, and don't need data structures or persistence. Memcached has lower per-key overhead.</em></li>
+  <li>How do you handle cache warming? <em>A: Pre-populate cache from DB during startup or low-traffic periods. Use a dedicated warmup service that reads hot keys from analytics and loads them into the cache.</em></li>
+</ul>
+
+<div class="callout red">
+  <strong>What to Skip:</strong>
+  <ul>
+    <li>Don't implement the actual cache server internals (memory allocator, I/O threads) unless asked</li>
+    <li>Don't get deep into Redis Sentinel vs Cluster unless the interviewer asks</li>
+    <li>Don't design a general-purpose database — stay focused on caching semantics</li>
+    <li>Don't skip the eviction policy discussion — it's a key differentiator at L5/L6 level</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><em>Designing Data-Intensive Applications</em> — Martin Kleppmann, Ch. 5: Replication, Ch. 6: Partitioning</li>
+    <li><em>Redis in Action</em> — Josiah Carlson</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Articles</div>
+  <ul>
+    <li>"Dynamo: Amazon's Highly Available Key-value Store" — DeCandia et al. (consistent hashing with virtual nodes)</li>
+    <li>Redis documentation: "Redis Cluster Specification" (redis.io/docs/reference/cluster-spec)</li>
+    <li>Instagram Engineering: "Sharding and_IDS at Instagram" (sharding strategy)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="pastebin.html">&larr; Previous: Pastebin</a>
+  <a href="distributed-lock.html">Next: Distributed Lock &rarr;</a>
+</div>
+
+</body>
+</html>

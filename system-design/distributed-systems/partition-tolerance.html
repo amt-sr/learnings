@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.1.3 Partition Tolerance</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">5 Distributed Systems</a> / <a href="../index.html">5.1 CAP</a> / 5.1.3
+</div>
+
+<h1>5.1.3 Partition Tolerance</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand why <strong>partition tolerance</strong> is a mandatory property of distributed systems, what network partitions look like in practice, and how the CAP theorem's trade-off between consistency and availability plays out when partitions occur.</p>
+
+<h2>Definition</h2>
+<p><strong>Partition tolerance</strong> means the system continues to operate despite an arbitrary number of messages being dropped or delayed between nodes. In other words, the network may split into groups of nodes that cannot communicate with each other, and the system must still function.</p>
+
+<div class="callout">
+  <strong>Why P Is Mandatory:</strong> In any distributed system with multiple nodes communicating over a network, partitions <em>will</em> happen. Network cables get cut, switches fail, DNS goes down, congestion causes timeouts. You cannot opt out of partitions — you can only choose how to handle them: sacrifice consistency (AP) or sacrifice availability (CP).
+</div>
+
+<h2>What a Network Partition Looks Like</h2>
+
+<div class="diagram">
+  Normal Operation:
+  ┌──────────┐         ┌──────────┐
+  │  Node A  │◄───────►│  Node B  │
+  └──────────┘         └──────────┘
+       ↕                     ↕
+  ┌──────────┐         ┌──────────┐
+  │  Node C  │◄───────►│  Node D  │
+  └──────────┘         └──────────┘
+       All nodes communicate freely
+
+  === Network Partition ===
+
+  ┌──────────┐  ╳╳╳╳╳  ┌──────────┐
+  │  Node A  │  ╳ LINK ╳ │  Node B  │
+  └──────────┘  ╳ DOWN ╳ └──────────┘
+       ↕          ╳╳╳╳╳       ↕
+  ┌──────────┐         ┌──────────┐
+  │  Node C  │◄───────►│  Node D  │
+  └──────────┘         └──────────┘
+
+  Left group:  {A, C}  — can communicate with each other
+  Right group: {B, D}  — can communicate with each other
+  Cross-group: NO COMMUNICATION
+
+  Question: What does each group do when it cannot reach the other?
+</div>
+
+<h2>The CAP Theorem Explained</h2>
+
+<div class="diagram">
+         Consistency (C)          Availability (A)
+         ┌────────────┐           ┌────────────┐
+         │ All nodes   │           │ All requests│
+         │ see same    │           │ get a       │
+         │ data        │           │ response    │
+         └──────┬─────┘           └──────┬─────┘
+                │                        │
+                │  You MUST pick one     │
+                │  during a partition:   │
+                │                        │
+                ▼                        ▼
+         ┌──────────────────────────────────┐
+         │   Partition Tolerance (P)         │
+         │   Network splits are inevitable   │
+         │   In distributed systems          │
+         └──────────────────────────────────┘
+
+  CAP Theorem: In a distributed system, when a partition occurs,
+  you must choose between C and A. You cannot have both.
+
+  CA is impossible in distributed systems (single-node only).
+  CP: Preserve consistency, sacrifice availability (error on partition).
+  AP: Preserve availability, sacrifice consistency (stale reads ok).
+</div>
+
+<h2>CP vs. AP Trade-off</h2>
+
+<table>
+  <tr>
+    <th>Aspect</th>
+    <th>CP (Consistency + Partition Tolerance)</th>
+    <th>AP (Availability + Partition Tolerance)</th>
+  </tr>
+  <tr>
+    <td>During Partition</td>
+    <td>Minority partition rejects requests</td>
+    <td>All nodes continue serving requests</td>
+  </tr>
+  <tr>
+    <td>Data Guarantee</td>
+    <td class="green">Always correct (or error)</td>
+    <td class="red">May return stale data</td>
+  </tr>
+  <tr>
+    <td>Response</td>
+    <td>May return errors/timeouts</td>
+    <td class="green">Always returns a response</td>
+  </tr>
+  <tr>
+    <td>Post-Partition</td>
+    <td>Resume normally (no divergence)</td>
+    <td>Conflict resolution / merge required</td>
+  </tr>
+  <tr>
+    <td>Examples</td>
+    <td>HBase, ZooKeeper, etcd, MongoDB (default), Spanner</td>
+    <td>Cassandra, DynamoDB (eventual), CouchDB, Eureka</td>
+  </tr>
+  <tr>
+    <td>Best For</td>
+    <td>Financial systems, metadata, leader election</td>
+    <td>Social feeds, shopping carts, IoT telemetry</td>
+  </tr>
+</table>
+
+<h3>Decision Framework</h3>
+
+<div class="callout green">
+  <strong>Choose CP when:</strong> Incorrect data is worse than no data (banking, inventory, configuration, locking, leader election).
+</div>
+
+<div class="callout yellow">
+  <strong>Choose AP when:</strong> No response is worse than stale data (user timelines, product catalogs, caching, logging, analytics).
+</div>
+
+<h2>Partitions in Practice</h2>
+<p>Partitions are not just network cable cuts. They include:</p>
+<ul>
+  <li><strong>Network failures:</strong> Switch failures, routing issues, misconfigured firewalls</li>
+  <li><strong>GC pauses:</strong> A long garbage collection pause makes a node "invisible" to others — effectively a partition</li>
+  <li><strong>CPU throttling:</strong> A throttled node cannot respond fast enough, causing timeouts that look like partitions</li>
+  <li><strong>DNS failures:</strong> Nodes cannot resolve each other's addresses</li>
+  <li><strong>Asymmetric partitions:</strong> Node A can send to Node B, but Node B cannot send to Node A (one-way links)</li>
+</ul>
+
+<div class="callout yellow">
+  <strong>Interview Tip:</strong> Mentioning GC pauses and CPU throttling as "hidden partitions" demonstrates operational maturity. These are the most common causes of production "partitions" in real-world Java/Go systems, not cable cuts.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>"Why is partition tolerance mandatory in distributed systems?"</li>
+  <li>"Explain the CAP theorem in your own words."</li>
+  <li>"When would you choose CP over AP?"</li>
+  <li>"Is CA a valid choice? Explain."</li>
+  <li>"What are some non-obvious causes of network partitions?"</li>
+  <li>"How does a CP system handle a partition between its leader and followers?"</li>
+  <li>"Give an example of a system that dynamically switches between CP and AP."</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid in interviews:</strong>
+  <ul>
+    <li>Mathematical proof details of the CAP theorem (Gilbert &amp; Lynch proof specifics)</li>
+    <li>Network-level partition detection algorithms (Phi Accrual failure detector internals)</li>
+    <li>Specific TCP retransmission or network layer details</li>
+    <li>Arguments about whether CAP is "dead" or "misunderstood" — acknowledge nuance, but do not debate semantics</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary Sources</div>
+  <ul>
+    <li>Gilbert, S. &amp; Lynch, N. "Brewer's Conjecture and the Feasibility of Consistent, Available, Partition-Tolerant Web Services" (ACM SIGACT News, 2002)</li>
+    <li>Brewer, E. "CAP Twelve Years Later: How the 'Rules' Have Changed" (IEEE Computer, 2012)</li>
+    <li>Kleppmann, M. <strong>Designing Data-Intensive Applications</strong>, Chapter 9 (Consistency and Consensus)</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Supplementary</div>
+  <ul>
+    <li>Kleppmann, M. "Please Stop Calling Databases CP or AP" (blog, 2015)</li>
+    <li>Abadi, D. "Consistency Tradeoffs in Modern Distributed Database System Design" (Computer, 2012)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="availability.html">&larr; 5.1.2 Availability</a>
+  <a href="pacelc.html">5.2 PACELC &rarr;</a>
+</div>
+
+</body>
+</html>

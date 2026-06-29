@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.3.5 Crash Recovery</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="index.html">System Design</a> / <a href="index.html">3 Storage</a> / <a href="index.html">3.3 Database Write Path</a> / 3.3.5
+</div>
+
+<h1>3.3.5 Crash Recovery</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<ul>
+  <li>Understand the ARIES recovery algorithm (Analysis, Redo, Undo) and why it is the industry standard</li>
+  <li>Explain WAL replay mechanics and how the database reconstructs a consistent state after a crash</li>
+  <li>Describe the full crash recovery pipeline step by step, including checkpoint interaction</li>
+  <li>Evaluate recovery time trade-offs, fuzzy checkpoints, and their implications on system availability</li>
+  <li>Reason about recovery in the context of FAANG-scale systems handling millions of TPS</li>
+</ul>
+
+<h2>Definition</h2>
+<p><strong>Crash recovery</strong> is the process by which a database restores itself to a consistent state after an unplanned shutdown (power failure, kernel panic, process crash). It uses the Write-Ahead Log (WAL) to replay committed operations, undo uncommitted changes, and bring the database back to the state it was in at the moment of the crash. The dominant algorithm is <strong>ARIES (Algorithm for Recovery and Isolation Exploiting Semantics)</strong>, used by IBM DB2, SQL Server, PostgreSQL (via WAL), and many others.</p>
+
+<h2>Why Crash Recovery Matters at Scale</h2>
+<p>At FAANG scale, databases serve millions of QPS across thousands of nodes. Crashes are not rare events -- they are routine. Pods get OOM-killed, hardware fails, kernel panics occur, and rolling deployments restart processes constantly. The key metric is <strong>Mean Time to Recovery (MTTR)</strong>: how fast can a node come back online and serve traffic? Fast crash recovery directly impacts SLA targets and the blast radius of any single node failure.</p>
+
+<div class="callout yellow">
+  <strong>Key insight:</strong> Recovery time is a function of (1) how much WAL must be scanned and (2) how many dirty pages must be flushed. Checkpointing reduces both, but introduces write amplification. This is a fundamental trade-off in write-heavy workloads.
+</div>
+
+<h2>The ARIES Recovery Algorithm</h2>
+<p>ARIES is a WAL-based recovery algorithm with three phases. It achieves steal/no-force buffer management, meaning dirty pages from uncommitted transactions can be flushed to disk (steal), and committed transactions need not force all dirty pages to disk before commit (no-force). This maximizes I/O efficiency at the cost of more complex recovery.</p>
+
+<h3>ARIES Three Phases</h3>
+
+<div class="diagram">
+  Phase 1: ANALYSIS                 Phase 2: REDO                   Phase 3: UNDO
+  ─────────────────────          ─────────────────────          ─────────────────────
+  Scan WAL from last             Replay all log records         Reverse all changes
+  checkpoint toward end          (committed AND uncommitted)     for transactions that
+  to determine:                  to bring DB to crash-time       did NOT commit
+                                  physical state
+  • Active transaction set                                              ┌──────────────┐
+    (which TXNs were in           ┌──────────────────────┐        │ Page LSN &    │
+     progress at crash)          │ Apply ALL logged      │        │ Undo Next LSN │
+                                  │ modifications to      │        │ tracked in    │
+  • Dirty page table              │ pages on disk          │        │ CLRs          │
+    (which pages were             └──────────────────────┘        └──────────────┘
+     dirty at crash)
+                                        ▲                               ▲
+  • DPT starts from                │                               │
+    checkpoint's dirty             Uses LSN on each page            Uses Compensation
+    page list                      to skip already-applied          Log Records (CLRs)
+                                    changes                        to guarantee
+                                                                   idempotent undo
+  Output:
+  ┌─────────────────────┐          Output:                         Output:
+  │ Active TXN list     │          ┌─────────────────────┐          ┌──────────────┐
+  │ Dirty Page Table    │          │ DB at crash-time    │          │ Consistent   │
+  │ Last checkpoint LSN │          │ physical state      │          │ DB state     │
+  └─────────────────────┘          └─────────────────────┘          └──────────────┘
+</div>
+
+<h3>Phase 1: Analysis</h3>
+<p>The analysis phase scans the WAL starting from the <strong>last checkpoint record</strong> to reconstruct two critical data structures:</p>
+<ul>
+  <li><strong>Active Transaction Table (ATT):</strong> All transactions that were in progress at the time of the crash. Any transaction with a begin record but no commit record is considered active.</li>
+  <li><strong>Dirty Page Table (DPT):</strong> All pages that were dirty (modified in buffer pool but potentially not flushed to disk) at crash time. Built by tracking page-level LSNs in log records.</li>
+</ul>
+<p>This phase is purely a scan -- no data pages are read or written. It is fast because it only reads the sequential WAL.</p>
+
+<div class="callout green">
+  <strong>Optimization:</strong> The checkpoint record contains a snapshot of the ATT and DPT at checkpoint time, so analysis only needs to scan WAL records written after the checkpoint, not the entire WAL history.
+</div>
+
+<h3>Phase 2: Redo</h3>
+<p>The redo phase replays all logged operations to bring the database to the exact physical state it was in at the moment of the crash. It processes log records in LSN order, starting from the earliest dirty page's LSN (the <strong>redo LSN</strong>, which is the minimum LSN across all pages in the DPT).</p>
+
+<p>For each log record, ARIES checks the page's on-disk LSN (stored in the page header). If the page's on-disk LSN is already >= the log record's LSN, that modification was already persisted and can be skipped. This <strong>LSN-based filtering</strong> makes redo idempotent and avoids unnecessary I/O.</p>
+
+<div class="callout">
+  <strong>Important:</strong> Redo replays ALL logged changes, including those from uncommitted transactions. This is because dirty pages from uncommitted transactions may have been flushed to disk before the crash (steal policy). The undo phase will clean these up.
+</div>
+
+<h3>Phase 3: Undo</h3>
+<p>The undo phase reverses all changes made by transactions that were active (uncommitted) at the time of the crash. It processes the active transaction list from the ATT in reverse order of their last LSN, following the <strong>prev-LSN chain</strong> backward through the WAL.</p>
+
+<p>Each undo operation generates a <strong>Compensation Log Record (CLR)</strong> that is written to the WAL. CLRs record the undo action and contain an <strong>Undo-Next-LSN</strong> pointer to the next record to undo for that transaction. This ensures that:</p>
+<ul>
+  <li>Undo is <strong>idempotent</strong> -- if recovery crashes again during undo, the CLRs allow it to pick up where it left off</li>
+  <li>Undone operations are themselves logged, maintaining the write-ahead invariant</li>
+</ul>
+
+<h2>WAL Record Structure</h2>
+<p>Each WAL record contains the metadata ARIES needs for recovery:</p>
+
+<table>
+  <tr><th>Field</th><th>Purpose</th></tr>
+  <tr><td>LSN</td><td>Monotonically increasing log sequence number (unique ID)</td></tr>
+  <tr><td>Prev-LSN</td><td>Previous log record for same transaction (undo chain)</td></tr>
+  <tr><td>Transaction ID</td><td>Which transaction made this change</td></tr>
+  <tr><td>Page ID</td><td>Which data page was modified</td></tr>
+  <tr><td>Offset</td><td>Position within the page</td></tr>
+  <tr><td>Before Image</td><td>Old value (needed for undo)</td></tr>
+  <tr><td>After Image</td><td>New value (needed for redo)</td></tr>
+  <tr><td>Undo-Next-LSN</td><td>(CLRs only) Next record to undo for this TXN</td></tr>
+</table>
+
+<h2>Crash Recovery Step-by-Step</h2>
+
+<div class="diagram">
+  Crash occurs
+       │
+       ▼
+  ┌─────────────────────────────────────────────────────┐
+  │  1. Database restarts, reads last checkpoint from   │
+  │     control file / fixed location in WAL             │
+  └──────────────────────┬──────────────────────────────┘
+                         ▼
+  ┌─────────────────────────────────────────────────────┐
+  │  2. ANALYSIS PHASE                                  │
+  │     • Start scanning WAL from checkpoint LSN         │
+  │     • Reconstruct ATT (active transactions)          │
+  │     • Reconstruct DPT (dirty pages)                 │
+  │     • Determine redo start point (min LSN in DPT)   │
+  └──────────────────────┬──────────────────────────────┘
+                         ▼
+  ┌─────────────────────────────────────────────────────┐
+  │  3. REDO PHASE                                      │
+  │     • Scan WAL from redo LSN to end                  │
+  │     • For each record: check page LSN on disk        │
+  │       - If page_LSN < log_LSN → apply change         │
+  │       - If page_LSN >= log_LSN → skip (already done)  │
+  │     • Database now at exact crash-time state         │
+  └──────────────────────┬──────────────────────────────┘
+                         ▼
+  ┌─────────────────────────────────────────────────────┐
+  │  4. UNDO PHASE                                      │
+  │     • For each transaction in ATT (no commit):       │
+  │       - Follow prev-LSN chain backward               │
+  │       - Apply before-image to reverse changes        │
+  │       - Write CLR for each undo action                │
+  │     • Database now in consistent state                │
+  └──────────────────────┬──────────────────────────────┘
+                         ▼
+  ┌─────────────────────────────────────────────────────┐
+  │  5. Write end-of-recovery checkpoint                 │
+  │     • Flush all dirty pages to disk                   │
+  │     • Write checkpoint record (clean state)          │
+  │     • Database is ready to accept new transactions    │
+  └─────────────────────────────────────────────────────┘
+</div>
+
+<h2>Fuzzy Checkpoints and Recovery Implications</h2>
+<p>A <strong>fuzzy checkpoint</strong> does not flush all dirty pages to disk or stop the world. Instead, it:</p>
+<ul>
+  <li>Writes a checkpoint record to the WAL containing the current ATT and DPT</li>
+  <li>Asynchronously flushes dirty pages in the background</li>
+  <li>Does not guarantee all pages are clean at checkpoint completion</li>
+</ul>
+
+<p>This is critical for write-heavy workloads because a <strong>sharp (consistent) checkpoint</strong> that flushes all dirty pages would stall writes for seconds to minutes on a large database.</p>
+
+<table>
+  <tr><th>Aspect</th><th>Fuzzy Checkpoint</th><th>Sharp Checkpoint</th></tr>
+  <tr><td>Write stall</td><td>None (non-blocking)</td><td>Stalls until all dirty pages flushed</td></tr>
+  <tr><td>Recovery scope</td><td>Must scan from checkpoint DPT's earliest LSN</td><td>Only scans WAL from checkpoint forward</td></tr>
+  <tr><td>Recovery time</td><td>Longer (more WAL to replay)</td><td>Shorter (minimal WAL to replay)</td></tr>
+  <tr><td>Production use</td><td>Standard in all major DBs</td><td>Rarely used (only in SQLite-like systems)</td></tr>
+  <tr><td>Dirty page flush</td><td>Background, incremental</td><td>Synchronous, all-at-once</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Recovery time formula:</strong> Recovery time is approximately proportional to (WAL_size_since_earliest_dirty_page / WAL_scan_throughput) + (dirty_page_count * average_flush_time). In practice, checkpoint interval is tuned so recovery completes within the SLA's downtime budget (typically 30-60 seconds for single-node databases).
+</div>
+
+<h2>Recovery Time at FAANG Scale</h2>
+<p>For systems handling millions of TPS, WAL generation can be tens of GB per minute. Recovery strategies diverge:</p>
+
+<ul>
+  <li><strong>PostgreSQL:</strong> Uses fuzzy checkpoints with a configurable <code>checkpoint_completion_target</code>. Recovery scans WAL from the last checkpoint. For very large databases, checkpoint tuning is critical -- too-frequent checkpoints cause write amplification; too-infrequent checkpoints cause long recovery.</li>
+  <li><strong>MySQL/InnoDB:</strong> Similar fuzzy checkpoint approach. InnoDB's <code>innodb_log_file_size</code> and <code>innodb_flush_log_at_trx_commit</code> directly affect recovery scope.</li>
+  <li><strong>RocksDB:</strong> Uses MANIFEST file (a checkpoint-like structure) plus WAL replay. Recovery is fast because the MANIFEST captures the consistent state and only a small tail of the WAL needs replay.</li>
+  <li><strong>CockroachDB / Spanner:</strong> Use Raft replication for durability. A node crash is recovered by replaying the Raft log, not a traditional ARIES-style WAL. Recovery time depends on the Raft log segment size.</li>
+</ul>
+
+<h2>Design Considerations for Interviews</h2>
+
+<div class="callout">
+  <strong>When designing a storage system:</strong>
+  <ul>
+    <li>Always use WAL-based recovery -- it is the only proven approach for crash safety</li>
+    <li>Choose checkpoint intervals based on your recovery time SLA and write amplification budget</li>
+    <li>Consider WAL pre-allocation to avoid filesystem fragmentation during high-throughput writes</li>
+    <li>Group commit multiple transactions' log records to amortize fsync cost</li>
+    <li>In distributed systems, Raft log replay replaces ARIES for many use cases</li>
+  </ul>
+</div>
+
+<div class="callout red">
+  <strong>Pitfall:</strong> Never assume that a flushed data page means the transaction is durable. Pages can be flushed at any time (steal policy). Only the WAL commit record with a subsequent fsync guarantees durability. Data pages without corresponding WAL records are considered corrupt.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>Walk me through what happens when a database process crashes mid-transaction.</li>
+  <li>Explain the ARIES recovery algorithm. Why are there three phases?</li>
+  <li>What is the difference between redo and undo? Can you skip redo if you have all before-images?</li>
+  <li>Why does ARIES replay changes from uncommitted transactions during redo?</li>
+  <li>What is a fuzzy checkpoint and how does it affect recovery time?</li>
+  <li>How would you reduce recovery time for a database generating 10 GB of WAL per minute?</li>
+  <li>What happens if the system crashes again during the undo phase?</li>
+  <li>How does crash recovery interact with replication? Does a replica need to run ARIES?</li>
+  <li>Compare crash recovery strategies in PostgreSQL vs. a log-structured engine like RocksDB.</li>
+  <li>Design a system where crash recovery must complete within 5 seconds. What trade-offs do you make?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>In an interview setting, skip:</strong>
+  <ul>
+    <li>Exact byte-level WAL record formats for specific databases -- focus on the concepts</li>
+    <li>Implementation details of shadow paging recovery (ARIES is the dominant approach)</li>
+    <li>Filesystem-level journaling internals (ext4 journal, ZFS TXG) unless designing storage infrastructure</li>
+    <li>Specific PostgreSQL configuration parameters -- talk about the concepts they control instead</li>
+    <li>Historical recovery algorithms (No-Undo/Redo, No-Redo/Undo variants) that are not ARIES</li>
+  </ul>
+</div>
+
+<h2>Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ul>
+    <li>"Database System Concepts" (Silberschatz, Korth, Sudarshan) -- Chapter 19: Recovery System, ARIES algorithm walkthrough</li>
+    <li>"Transaction Processing: Concepts and Techniques" (Gray &amp; Reuter) -- Chapters on recovery and logging</li>
+    <li>Mohan, C., Haderle, D., Lindsay, B., et al. (1992) "ARIES: A Transaction Recovery Method Supporting Fine-Granularity Locking and Partial Rollbacks Using Write-Ahead Logging" -- the original ARIES paper</li>
+    <li>PostgreSQL Documentation: WAL and Recovery Configuration</li>
+    <li>"Designing Data-Intensive Applications" (Martin Kleppmann) -- Chapter on durability and crash recovery</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="index.html">&larr; 3.3.4 Checkpoint</a>
+  <a href="acid.html">Next: 3.4.1 ACID &rarr;</a>
+</div>
+
+</body>
+</html>

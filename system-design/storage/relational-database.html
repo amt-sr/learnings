@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.10.1 Relational Database</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#3">3 Storage</a> / <a href="../index.html#3.10">3.10 Database Models</a> / 3.10.1
+</div>
+
+<h1>Relational Database</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What a relational database is: tables, rows, columns, SQL, schemas</li>
+  <li>ACID properties and why they matter</li>
+  <li>Normalization and joins</li>
+  <li>When relational databases are the right (or wrong) choice</li>
+</ul>
+
+<h2>Definition</h2>
+<p>A <strong>relational database organizes data into tables (relations) with defined relationships between them, accessed via SQL (Structured Query Language)</strong>. Each table has a fixed schema (columns and types), rows represent individual records, and keys (primary, foreign) enforce relationships and integrity constraints.</p>
+
+<div class="diagram">  Relational Database Schema Example
+
+  ┌──────────────────────┐       ┌──────────────────────┐
+  │       users           │       │        orders         │
+  ├──────────────────────┤       ├──────────────────────┤
+  │ PK  id (INT)         │──┐    │ PK  id (INT)         │
+  │     username (VARCHAR)│  │    │ FK  user_id (INT)    │──┐
+  │     email (VARCHAR)   │  │    │     total (DECIMAL)   │  │
+  │     created_at (TIMESTAMP)    │     status (VARCHAR)  │  │
+  └──────────────────────┘  │    │     created_at (TIMESTAMP)
+                            │    └──────────────────────┘  │
+                            │                              │
+  ┌──────────────────────┐  │                              │
+  │     addresses         │  │                              │
+  ├──────────────────────┤  │                              │
+  │ PK  id (INT)         │  │                              │
+  │ FK  user_id (INT)    │◄─┘                              │
+  │     street (VARCHAR)  │                                 │
+  │     city (VARCHAR)    │    ┌──────────────────────┐    │
+  │     zip (VARCHAR)     │    │     order_items       │    │
+  └──────────────────────┘    ├──────────────────────┤    │
+                               │ PK  id (INT)         │    │
+                               │ FK  order_id (INT)    │◄───┘
+                               │ FK  product_id (INT)  │
+                               │     quantity (INT)    │
+                               │     price (DECIMAL)   │
+                               └──────────────────────┘
+
+  Relationships:
+  - users  1──N orders        (one user has many orders)
+  - users  1──N addresses     (one user has many addresses)
+  - orders 1──N order_items  (one order has many items)</div>
+
+<h2>ACID Properties</h2>
+<div class="callout green">
+  <strong>ACID is the fundamental guarantee of relational databases.</strong> It ensures that transactions are processed reliably and consistently, even in the face of crashes, power failures, and concurrent access.
+</div>
+
+<table>
+  <tr><th>Property</th><th>Meaning</th><th>Example</th></tr>
+  <tr><td><strong>Atomicity</strong></td><td>A transaction is all-or-nothing. Either all operations succeed, or none do.</td><td>Transfer $100: debit account A AND credit account B. If credit fails, debit is rolled back.</td></tr>
+  <tr><td><strong>Consistency</strong></td><td>Transaction moves the database from one valid state to another. All constraints (FK, unique, check) are enforced.</td><td>Cannot create an order for a user that doesn't exist (FK constraint).</td></tr>
+  <tr><td><strong>Isolation</strong></td><td>Concurrent transactions don't interfere with each other. Each transaction sees a consistent snapshot.</td><td>Two users buying the last item: only one succeeds (row-level lock).</td></tr>
+  <tr><td><strong>Durability</strong></td><td>Once a transaction commits, it persists even through crashes. Data is written to the WAL before acknowledging commit.</td><td>After COMMIT, data survives server reboot.</td></tr>
+</table>
+
+<h3>Isolation Levels</h3>
+<table>
+  <tr><th>Level</th><th>Dirty Read</th><th>Non-Repeatable Read</th><th>Phantom Read</th><th>Performance</th></tr>
+  <tr><td><strong>Read Uncommitted</strong></td><td class="red">Possible</td><td class="red">Possible</td><td class="red">Possible</td><td class="green">Fastest</td></tr>
+  <tr><td><strong>Read Committed</strong></td><td class="green">Prevented</td><td class="red">Possible</td><td class="red">Possible</td><td>Good</td></tr>
+  <tr><td><strong>Repeatable Read</strong></td><td class="green">Prevented</td><td class="green">Prevented</td><td class="red">Possible</td><td>Moderate</td></tr>
+  <tr><td><strong>Serializable</strong></td><td class="green">Prevented</td><td class="green">Prevented</td><td class="green">Prevented</td><td class="red">Slowest</td></tr>
+</table>
+
+<h2>Normalization</h2>
+<p>Normalization reduces data redundancy by splitting data into multiple related tables. Key normal forms:</p>
+
+<table>
+  <tr><th>Normal Form</th><th>Rule</th><th>Problem Solved</th></tr>
+  <tr><td><strong>1NF</strong></td><td>Each cell holds atomic values. No repeating groups.</td><td>"phone: 555-1234, 555-5678" → separate rows or separate phone table</td></tr>
+  <tr><td><strong>2NF</strong></td><td>1NF + all non-key columns depend on the entire primary key.</td><td>Order(item_id, item_name, qty): item_name depends on item_id alone, not the full key</td></tr>
+  <tr><td><strong>3NF</strong></td><td>2NF + no transitive dependencies. Non-key columns depend only on the primary key.</td><td>User(zip, city): city depends on zip, not user_id → move to a zip_codes table</td></tr>
+</table>
+
+<div class="callout">
+  <strong>In practice:</strong> Most production databases use 3NF. However, analytical systems (data warehouses) intentionally denormalize for faster reads — see <a href="sql-vs-nosql.html">SQL vs NoSQL</a>.
+</div>
+
+<h2>Joins</h2>
+<pre>-- INNER JOIN: users who have placed orders
+SELECT u.username, o.total
+FROM users u
+INNER JOIN orders o ON u.id = o.user_id;
+
+-- LEFT JOIN: all users, with their orders (NULL if no orders)
+SELECT u.username, o.total
+FROM users u
+LEFT JOIN orders o ON u.id = o.user_id;
+
+-- Self-JOIN: manager-employee relationship
+SELECT e.name AS employee, m.name AS manager
+FROM employees e
+LEFT JOIN employees m ON e.manager_id = m.id;
+
+-- JOIN performance: indexed join columns are critical
+-- Without index on orders.user_id: full table scan O(n)
+-- With index on orders.user_id: index lookup O(log n) per user</pre>
+
+<h2>Indexing</h2>
+<p>Relational databases use <a href="b-plus-tree.html">B+ tree</a> indexes as the primary access method. Understanding index types is critical for interview performance:</p>
+
+<table>
+  <tr><th>Index Type</th><th>Use Case</th><th>Example</th></tr>
+  <tr><td><strong>Primary Key (clustered)</strong></td><td>Row lookup by ID</td><td><code>WHERE user_id = 42</code></td></tr>
+  <tr><td><strong>Secondary (non-clustered)</strong></td><td>Lookup by non-key column</td><td><code>WHERE email = "a@b.com"</code></td></tr>
+  <tr><td><strong>Composite</strong></td><td>Multi-column queries</td><td><code>WHERE last_name = "X" AND first_name = "Y"</code></td></tr>
+  <tr><td><strong>Covering</strong></td><td>Index contains all needed columns</td><td>See: <a href="covering-index.html">Covering Index</a></td></tr>
+  <tr><td><strong>Full-text</strong></td><td>Text search</td><td><code>WHERE MATCH(body) AGAINST("search term")</code></td></tr>
+</table>
+
+<h2>Popular Relational Databases</h2>
+<table>
+  <tr><th>Database</th><th>Strengths</th><th>Storage Engine</th></tr>
+  <tr><td><strong>PostgreSQL</strong></td><td class="green">Best feature set, JSONB, extensions, MVCC</td><td>Heap + B+ tree (or GiST, GIN, BRIN)</td></tr>
+  <tr><td><strong>MySQL</strong></td><td>Fastest for simple OLTP, huge community</td><td>InnoDB (B+ tree, clustered index)</td></tr>
+  <tr><td><strong>Oracle</strong></td><td>Enterprise features, partitioning, RAC</td><td>Heap + B+ tree</td></tr>
+  <tr><td><strong>SQLite</strong></td><td>Embedded, zero-config, single file</td><td>B+ tree</td></tr>
+  <tr><td><strong>SQL Server</strong></td><td>Windows ecosystem, BI integration, T-SQL</td><td>B+ tree (clustered + non-clustered)</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"Explain ACID properties."</strong><br>Atomicity: transactions are all-or-nothing. Consistency: database moves between valid states. Isolation: concurrent transactions don't interfere. Durability: committed data survives crashes. All four are guaranteed by the database engine using WAL, locking, and MVCC.</li>
+  <li><strong>"When would you NOT use a relational database?"</strong><br>When your data doesn't fit a fixed schema (rapidly evolving attributes), when you need extremely high write throughput (time-series, IoT), when you need horizontal scaling beyond a single node, or when your access patterns are simple key-value lookups (caching). See: <a href="sql-vs-nosql.html">SQL vs NoSQL</a></li>
+  <li><strong>"How does a JOIN work under the hood?"</strong><br>Nested Loop Join: for each row in table A, scan matching rows in table B. O(n*m). Hash Join: build hash table on smaller table, probe with larger. O(n+m). Merge Join: both tables sorted by join key. O(n+m). The optimizer chooses based on table sizes, indexes, and statistics.</li>
+  <li><strong>"What is the difference between a clustered and non-clustered index?"</strong><br>Clustered index: determines physical row order. The table IS the index. One per table (usually the primary key). Non-clustered index: separate structure pointing to rows. Many per table allowed. Covering indexes (non-clustered with all needed columns) avoid the row lookup entirely.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>SQL syntax details (the interviewer expects you to know basic SQL)</li>
+    <li>BCNF, 4NF, 5NF (3NF is enough)</li>
+    <li>Stored procedures, triggers (implementation details)</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Designing Data-Intensive Applications" — Chapter 3</strong> (Kleppmann)</li>
+    <li><strong>"Database Internals" — Chapters 1-7</strong> (Petrova)</li>
+    <li><strong>"Use The Index, Luke"</strong> — use-the-index-luke.com</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="tombstones.html">&larr; tombstones.html</a>
+  <a href="key-value-store.html">Next: key-value-store.html &rarr;</a>
+</div>
+
+</body>
+</html>

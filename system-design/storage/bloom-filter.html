@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.9.5 Bloom Filter</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#3">3 Storage</a> / <a href="../index.html#3.9">3.9 Storage Engines</a> / 3.9.5
+</div>
+
+<h1>Bloom Filter</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What a bloom filter is: a space-efficient probabilistic data structure</li>
+  <li>How it works: bit array + multiple hash functions</li>
+  <li>False positives vs true negatives (the critical tradeoff)</li>
+  <li>Why bloom filters are essential for <a href="sstable.html">SSTable</a> reads in LSM trees</li>
+</ul>
+
+<h2>Definition</h2>
+<p>A <strong>bloom filter is a space-efficient probabilistic data structure that tests whether an element is a member of a set</strong>. It can definitively say "NO" (element is not in the set) but can only say "MAYBE" (element might be in the set). The tradeoff is a configurable false positive rate in exchange for dramatically reduced memory usage compared to storing the full set.</p>
+
+<div class="diagram">  Bloom Filter — bit array with k hash functions
+
+  Bit array: [0] [0] [0] [0] [0] [0] [0] [0] [0] [0] [0] [0] [0] [0] [0] [0]
+              1   2   3   4   5   6   7   8   9  10  11  12  13  14  15  16
+
+  Insert "apple" using 3 hash functions:
+    h1("apple") = 2   → set bit[2] = 1
+    h2("apple") = 7   → set bit[7] = 1
+    h3("apple") = 14  → set bit[14] = 1
+
+  Bit array: [0] [0] [1] [0] [0] [0] [0] [1] [0] [0] [0] [0] [0] [0] [1] [0]
+              1   2   3   4   5   6   7   8   9  10  11  12  13  14  15  16
+
+  Insert "banana":
+    h1("banana") = 3  → set bit[3] = 1
+    h2("banana") = 7  → set bit[7] = 1 (already set)
+    h3("banana") = 11 → set bit[11] = 1
+
+  Bit array: [0] [0] [1] [1] [0] [0] [0] [1] [0] [0] [0] [1] [0] [0] [1] [0]
+
+  Lookup "cherry":
+    h1("cherry") = 4  → bit[4] = 0  → DEFINITELY NOT IN SET ✗
+    (can stop checking other hashes immediately)
+
+  Lookup "grape":
+    h1("grape") = 2   → bit[2] = 1  ✓
+    h2("grape") = 7   → bit[7] = 1  ✓
+    h3("grape") = 14  → bit[14] = 1 ✓
+    → MIGHT be in set (false positive possible)</div>
+
+<h2>The Two Answers</h2>
+<table>
+  <tr><th>Result</th><th>Meaning</th><th>Guarantee</th></tr>
+  <tr><td><strong>"Definitely not in set"</strong></td><td>At least one bit position is 0</td><td class="green">100% accurate (no false negatives)</td></tr>
+  <tr><td><strong>"Possibly in set"</strong></td><td>All bit positions are 1</td><td class="red">False positive possible (all bits set by other elements)</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Key insight:</strong> Bloom filters never produce false negatives. If it says an element is not present, it is definitively not there. If it says an element might be present, you need a secondary check (e.g., reading the actual SSTable) to confirm.
+</div>
+
+<h2>Bloom Filter Parameters</h2>
+<table>
+  <tr><th>Parameter</th><th>Typical Value</th><th>Effect</th></tr>
+  <tr><td><strong>n</strong> (number of elements)</td><td>Varies by dataset</td><td>More elements → larger bit array needed</td></tr>
+  <tr><td><strong>m</strong> (bit array size)</strong></td><td>~10 bits per element</td><td>Larger → lower false positive rate, more memory</td></tr>
+  <tr><td><strong>k</strong> (number of hash functions)</td><td>~7 hash functions</td><td>Optimal k = (m/n) * ln(2). Too few → more false positives. Too many → slower, fills array faster.</td></tr>
+  <tr><td><strong>p</strong> (false positive rate)</td><td>1% (default) or 0.1%</td><td>Lower → more memory and more hash functions</td></tr>
+</table>
+
+<pre>  Space efficiency:
+  - Storing 1 million URLs as strings:  ~50 MB
+  - Bloom filter for 1 million URLs:    ~1.2 MB (10 bits per element)
+
+  That's a 40x memory savings for 1% false positive rate.
+
+  For databases:
+  - SSTable with 100K keys: bloom filter ≈ 120 KB
+  - Kept in memory, saves millions of disk reads</pre>
+
+<h2>Role in LSM Trees</h2>
+<p>Bloom filters are the <strong>critical optimization that makes LSM tree reads practical</strong>. Without them, every read would need to check every SSTable at every level on disk. With bloom filters, most SSTables are eliminated from consideration before any disk I/O occurs.</p>
+
+<div class="diagram">  Read path with bloom filters:
+
+  GET("user:42")
+
+  1. Check memtable                    → not found
+  2. SSTable L0 (3 files):
+     [sst_001] bloom filter: NO  → skip    (saved 1 disk read)
+     [sst_002] bloom filter: YES → check   → not found
+     [sst_003] bloom filter: NO  → skip    (saved 1 disk read)
+  3. SSTable L1 (2 files):
+     [sst_010] bloom filter: NO  → skip    (saved 1 disk read)
+     [sst_011] bloom filter: YES → check   → found! return value
+
+  Without bloom filters: check ALL 5 SSTables on disk = 5 disk reads
+  With bloom filters:    check 2 SSTables on disk = 2 disk reads (60% reduction)</div>
+
+<h2>Real-World Use Cases</h2>
+<table>
+  <tr><th>System</th><th>How Bloom Filters Are Used</th></tr>
+  <tr><td><strong>Cassandra</strong></td><td>One bloom filter per SSTable. Checks filter before reading any data blocks. Reduces disk I/O by 80-95%.</td></tr>
+  <tr><td><strong>RocksDB</strong></td><td>Per-SSTable bloom filter, cached in block cache. Configurable bits-per-key.</td></tr>
+  <tr><td><strong>HBase</strong></td><td>Bloom filters at region and store level. Optional per-column family.</td></tr>
+  <tr><td><strong>Chrome browser</strong></td><td>Maintains bloom filter of malicious URLs. Check locally before querying Google's Safe Browsing API.</td></tr>
+  <tr><td><strong>CDN / proxy caches</strong></td><td>Check if URL might be cached before looking up in cache storage.</td></tr>
+  <tr><td><strong>Password check</strong></td><td>Check if password has been breached (HaveIBeenPwned uses bloom filters for privacy-preserving checks).</td></tr>
+</table>
+
+<h2>Limitations</h2>
+<div class="callout red">
+  <strong>Cannot delete elements.</strong> Setting a bit back to 0 could falsely mark other elements as absent. Solutions:
+</div>
+
+<ul>
+  <li><strong>Counting Bloom Filter</strong> — use counters (4-bit integers) instead of bits. Decrement on delete. More memory (4x).</li>
+  <li><strong>Rebuild the filter</strong> — regenerate from source data periodically.</li>
+  <li><strong>Scalable Bloom Filter</strong> — add new bloom filters for new elements, expire old ones.</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What is a bloom filter?"</strong><br>A space-efficient probabilistic data structure for membership testing. It uses a bit array and k hash functions. Can definitively say an element is NOT in the set (no false negatives) but may incorrectly say an element IS in the set (false positives, rate is configurable, typically 1%).</li>
+  <li><strong>"Why does Cassandra use bloom filters?"</strong><br>Cassandra stores data in SSTables organized in levels. Without bloom filters, a read would need to check every SSTable on disk. Bloom filters are kept in memory and can quickly eliminate SSTables that definitely don't contain the key, reducing disk I/O by 80-95%.</li>
+  <li><strong>"How do you size a bloom filter?"</strong><br>Given n elements and desired false positive rate p: m = -(n * ln(p)) / (ln(2))^2 bits. For n=1M and p=1%: m ≈ 9.6 million bits ≈ 1.2 MB. Optimal k = (m/n) * ln(2) ≈ 7 hash functions. In practice, use 10 bits per element for 1% FPR.</li>
+  <li><strong>"Can you remove elements from a bloom filter?"</strong><br>Standard bloom filters don't support deletion because multiple elements may share the same bit positions. Setting a bit to 0 could invalidate other elements. Solutions: use a counting bloom filter (counters instead of bits, 4x memory), or rebuild the filter periodically.</li>
+  <li><strong>"Bloom filter vs hash set?"</strong><br>Hash set: exact membership testing, but memory proportional to element size. Bloom filter: approximate, but memory is constant per element (~10 bits) regardless of element size. For 1 million 100-byte URLs: hash set needs ~100 MB, bloom filter needs ~1.2 MB. The tradeoff is a 1% false positive rate.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>Cuckoo filters — interesting alternative, but bloom filters dominate in interviews</li>
+    <li>Exact optimal hash function construction</li>
+    <li>Golomb-coded bloom filters</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Designing Data-Intensive Applications" — Chapter 3</strong> (Kleppmann) — Bloom filters in database reads</li>
+    <li><strong>"Bloom Filters — the math"</strong> — en.wikipedia.org/wiki/Bloom_filter</li>
+    <li><strong>Cassandra documentation: Bloom Filters</strong> — datastax.com</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="sstable.html">&larr; sstable.html</a>
+  <a href="compaction.html">Next: compaction.html &rarr;</a>
+</div>
+
+</body>
+</html>

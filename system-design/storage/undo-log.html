@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.3.3 Undo Log</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#3">3 Storage</a> / <a href="../index.html#3.3">3.3 Database Write Path</a> / 3.3.3
+</div>
+
+<h1>Undo Log</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What the undo log records — old values (before-images) for rollback</li>
+  <li>Rollback: reversing uncommitted changes using undo records</li>
+  <li>Crash recovery order: REDO first, then UNDO</li>
+  <li>MVCC: how undo logs provide consistent snapshots for readers</li>
+  <li>Undo log segments and space management</li>
+</ul>
+
+<h2>Definition</h2>
+<p>The undo log (also called the <strong>rollback log or before-image log</strong>) stores <strong>the previous values of data before it was modified</strong>. It serves two critical purposes: enabling transaction rollback (undoing uncommitted changes) and providing consistent snapshots for MVCC (allowing readers to see the state of data as it existed before a concurrent writer modified it).</p>
+
+<h2>Undo vs Redo</h2>
+<div class="diagram">  UPDATE accounts SET balance = 900 WHERE id = 42;
+  (Previous balance was 1000)
+
+  Redo Log (forward — for recovery):
+  ┌────────────────────────────────────────────┐
+  │ LSN 1005 │ Page 42, offset 120:           │
+  │ Write 0x384 (900) at offset 120           │
+  │ This replays the change after a crash      │
+  └────────────────────────────────────────────┘
+
+  Undo Log (backward — for rollback):
+  ┌────────────────────────────────────────────┐
+  │ TXN 501 │ Page 42, offset 120:            │
+  │ Previous value was 0x3E8 (1000)           │
+  │ This reverses the change if rolled back   │
+  └────────────────────────────────────────────┘
+
+  Together: Redo replays forward, Undo reverses backward.
+  Both are needed for full recovery guarantees.</div>
+
+<table>
+  <tr><th></th><th><a href="redo-log.html">Redo Log</a></th><th>Undo Log</th></tr>
+  <tr><td>Purpose</td><td>Replay changes after crash (forward)</td><td>Reverse uncommitted changes (backward)</td></tr>
+  <tr><td>Records</td><td>After-images (new values)</td><td>Before-images (old values)</td></tr>
+  <tr><td>Written when</td><td>Before data page flush (WAL rule)</td><td>Before the in-memory modification</td></tr>
+  <tr><td>Needed for</td><td><a href="crash-recovery.html">Crash recovery</a></td><td>Rollback, MVCC snapshots</td></tr>
+  <tr><td>Scope</td><td>All modifications (committed + uncommitted)</td><td>Active (uncommitted) transactions</td></tr>
+  <tr><td>Lifetime</td><td>Until next <a href="checkpoint.html">checkpoint</a></td><td>Until no active reader needs the snapshot</td></tr>
+</table>
+
+<h2>Rollback with Undo</h2>
+<p>When a transaction issues ROLLBACK (or is terminated), the database follows the undo chain to reverse each modification:</p>
+<div class="diagram">  Transaction T1: UPDATE accounts SET balance = 900 WHERE id = 42;
+                     UPDATE accounts SET balance = 800 WHERE id = 43;
+                     ROLLBACK;  ← user cancels
+
+  Undo Chain for T1:
+  ┌──────────┐     ┌──────────┐
+  │ Undo #2  │ ←── │ Undo #1  │ ← T1's undo pointer
+  │ Page 43  │     │ Page 42  │
+  │ bal: 1000│     │ bal: 2000│
+  │ (prev)   │     │ (prev)   │
+  └──────────┘     └──────────┘
+
+  Rollback process:
+  1. Follow undo chain from newest to oldest
+  2. Undo #2: Write balance=1000 back to page 43
+  3. Undo #1: Write balance=2000 back to page 42
+  4. T1 is fully rolled back — all changes reversed
+
+  Important: The rollback itself generates redo records
+  (undo operations are also logged for crash safety)</div>
+
+<h2>Crash Recovery: REDO First, Then UNDO</h2>
+<p>The order matters. During <a href="crash-recovery.html">crash recovery</a>, the database must:</p>
+<ol>
+  <li><strong>REDO phase (forward)</strong>: Replay all redo records from the last <a href="checkpoint.html">checkpoint</a> to reconstruct the state at crash time. This replays both committed and uncommitted changes.</li>
+  <li><strong>UNDO phase (backward)</strong>: Identify uncommitted transactions (no COMMIT record in the WAL) and use the undo log to reverse their changes.</li>
+</ol>
+
+<div class="callout red">
+  <strong>Why REDO before UNDO:</strong> After a crash, the <a href="buffer-pool.html">buffer pool</a> is empty — all dirty pages are lost. Before we can undo uncommitted transactions, we must first restore the pages to their crash-time state. The redo log contains all changes (committed and uncommitted). Once redo reconstructs the pages, the undo log reverses the uncommitted changes.
+</div>
+
+<div class="diagram">  Crash Recovery Order:
+
+  Step 1: REDO (replay all changes from checkpoint LSN)
+  ┌─────────────────────────────────────────────┐
+  │ Replay LSN 1001 → page 30 (committed TXN)   │
+  │ Replay LSN 1002 → page 42 (uncommitted TXN) │
+  │ Replay LSN 1003 → page 30 (committed TXN)   │
+  │ Replay LSN 1004 → COMMIT TXN 500            │
+  │ Replay LSN 1005 → page 42 (uncommitted TXN) │
+  │                                              │
+  │ Pages now reflect state at crash time       │
+  └─────────────────────────────────────────────┘
+
+  Step 2: UNDO (reverse uncommitted transactions)
+  ┌─────────────────────────────────────────────┐
+  │ TXN 501 has no COMMIT record                │
+  │ → Follow TXN 501's undo chain               │
+  │ → Undo LSN 1005: restore page 42 old value  │
+  │ → Undo LSN 1002: restore page 42 old value  │
+  │                                              │
+  │ Uncommitted changes are reversed            │
+  └─────────────────────────────────────────────┘
+
+  Result: Database is consistent with only committed data.</div>
+
+<h2>Undo and MVCC</h2>
+<p>Multi-Version Concurrency Control (MVCC) allows readers to see a consistent snapshot without blocking writers. The undo log provides the old row versions needed for snapshots:</p>
+
+<div class="diagram">  MVCC Snapshot Example:
+
+  Timeline:
+  T1: BEGIN;
+  T2: BEGIN;
+  T1: UPDATE accounts SET balance = 900 WHERE id = 42; COMMIT;
+  T2: SELECT balance FROM accounts WHERE id = 42;
+       → What does T2 see?
+
+  If T2 uses READ COMMITTED:
+  → Sees T1's committed change → balance = 900
+
+  If T2 uses REPEATABLE READ:
+  → T2's snapshot was taken before T1 committed
+  → Needs the OLD value → balance = 1000
+  → Obtained from undo log!
+
+  ┌─────────────────────────────────────────┐
+  │ Current page: balance = 900 (T1 commit)│
+  │                                         │
+  │ Undo chain for row 42:                  │
+  │   Current:  balance = 900 (T1)          │
+  │   Undo #1: balance = 1000 (before T1)  │
+  └─────────────────────────────────────────┘
+
+  T2's REPEATABLE READ query follows the undo chain
+  to find the version visible at T2's snapshot timestamp.
+
+  This provides isolation without locks!</div>
+
+<h2>Undo in Different Databases</h2>
+<table>
+  <tr><th>Database</th><th>Undo Storage</th><th>MVCC Implementation</th></tr>
+  <tr><td><strong>MySQL InnoDB</strong></td><td>Separate undo tablespace (undo_001, undo_002)</td><td>Undo log provides old versions; data page has current value + pointer to undo chain</td></tr>
+  <tr><td><strong>Oracle</strong></td><td>Separate undo tablespace (undo segments)</td><td>Same approach — undo provides old row versions</td></tr>
+  <tr><td><strong>PostgreSQL</strong></td><td class="green">No separate undo log — old row versions stored in-place on data pages</td><td>Multi-version tuples directly in the table; VACUUM reclaims old versions</td></tr>
+  <tr><td><strong>SQL Server</strong></td><td>Separate version store in tempdb</td><td>Old row versions in tempdb (since SQL Server 2005)</td></tr>
+</table>
+
+<div class="callout">
+  <strong>PostgreSQL's approach is different:</strong> Instead of maintaining a separate undo log, PostgreSQL keeps old row versions directly in the main table's data pages (as new tuples with xmin/xmax headers). Each tuple header records which transaction created it (xmin) and which deleted it (xmax). To find an older version, follow the tuple chain within the data pages. The VACUUM process cleans up old tuples no longer visible to any snapshot.
+</div>
+
+<h2>Undo Log Segments</h2>
+<p>Undo logs are organized into segments for space management:</p>
+<ul>
+  <li><strong>Undo segment</strong>: A logical container for undo records from multiple transactions. MySQL InnoDB uses up to 128 rollback segments.</li>
+  <li><strong>Undo page</strong>: Physical pages within the undo tablespace that store undo records. Filled sequentially.</li>
+  <li><strong>Purge thread</strong>: A background process that asynchronously removes undo records for committed transactions that are no longer needed by any active snapshot.</li>
+  <li><strong>Undo retention</strong>: Undo data must be kept as long as any active transaction (or long-running query) might need it for its MVCC snapshot.</li>
+</ul>
+
+<div class="callout yellow">
+  <strong>Common pitfall:</strong> Long-running queries (e.g., a 30-minute analytics query) prevent the purge thread from recycling undo space. This causes the undo tablespace to grow and can eventually cause ORA-01555 "snapshot too old" errors (Oracle) or undo tablespace exhaustion (MySQL). Solution: avoid long-running queries alongside write-heavy workloads.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What is the undo log and what are its two purposes?"</strong><br>The undo log stores before-images of modified data. Purpose 1: enables <strong>transaction rollback</strong> by providing the old values to reverse uncommitted changes. Purpose 2: enables <strong>MVCC</strong> by providing old row versions that concurrent readers can see without waiting for writers to release locks. See: <a href="redo-log.html">Redo Log</a></li>
+  <li><strong>"During crash recovery, why is REDO done before UNDO?"</strong><br>After a crash, the <a href="buffer-pool.html">buffer pool</a> is empty — all dirty pages in memory are lost. Before the database can undo uncommitted transactions, it must first reconstruct the pages to their crash-time state. The redo log replays all changes (committed and uncommitted) to rebuild the pages. Then the undo log reverses only the uncommitted changes. Without redo first, undo would have no pages to operate on.</li>
+  <li><strong>"How does the undo log enable MVCC?"</strong><br>When a reader starts a transaction, it gets a snapshot timestamp. If it reads a row that was modified by a later transaction, the database follows the undo chain to find the version of the row as it existed at the reader's snapshot timestamp. This provides repeatable reads without any locking — readers never block writers and writers never block readers.</li>
+  <li><strong>"What happens if the undo log runs out of space?"</strong><br>If undo data is needed by an active transaction but has been overwritten or recycled, the transaction cannot maintain its snapshot. In Oracle, this causes ORA-01555 "snapshot too old." In MySQL, the purge thread is delayed and the undo tablespace grows. Solution: size undo appropriately, avoid long-running queries alongside short transactions, and tune undo retention parameters.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>Undo segment internals (slot allocation, wrap-around mechanics)</li>
+    <li>PostgreSQL tuple header byte-level format (xmin/xmax encoding)</li>
+    <li>Oracle undo quorum and RAC undo transport</li>
+    <li>MySQL InnoDB undo compression</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Database Internals" by Alex Petrov</strong> — Chapter 7 (WAL, Undo, and Recovery)</li>
+    <li><strong>"Transaction Processing: Concepts and Techniques" by Gray &amp; Reuter</strong> — Undo and Recovery chapter</li>
+    <li><strong>MySQL Internals: InnoDB Undo Log</strong> — dev.mysql.com/doc/internals/en/innodb-undo-log.html</li>
+    <li><strong>"The Internals of PostgreSQL" — InterDB</strong> — interdb.jp/pg/pgsql05.html (MVCC and tuple versioning)</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="redo-log.html">&larr; 3.3.2 Redo Log</a>
+  <a href="checkpoint.html">Next: 3.3.4 Checkpoint &rarr;</a>
+</div>
+
+</body>
+</html>

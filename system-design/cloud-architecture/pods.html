@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>12.2.5 — Pods</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">Cloud Architecture</a> / 12.2.5 Pods</div>
+<h1>Pods</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the pod as the smallest deployable unit in Kubernetes, how containers within a pod share resources, lifecycle management, and the implications for system design.</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>Pod</strong> is the smallest and simplest deployable unit in Kubernetes. A pod encapsulates one or more containers that share the same network namespace (IP, ports), storage volumes, and lifecycle. Containers within a pod can communicate via localhost.
+</div>
+
+<p>Pods exist because Kubernetes schedules at the pod level, not the container level. The pod provides the shared context (network, storage) that tightly-coupled containers need to work together.</p>
+
+<h2>Pod Anatomy</h2>
+<div class="diagram">
+  ┌──────────────────────────────────────────────────┐
+  │                    POD                            │
+  │  (shared network namespace: one IP, one port space)│
+  │  (shared storage: volumes mounted into all containers)│
+  │                                                    │
+  │  ┌─────────────────┐  ┌─────────────────────────┐│
+  │  │  Main Container  │  │   Sidecar Container      ││
+  │  │                  │  │                          ││
+  │  │  App: API Server │  │  App: Log forwarder     ││
+  │  │  Port: 8080      │  │  Reads: /var/log/app/    ││
+  │  │                  │  │                          ││
+  │  │                  │  │  Communicates via        ││
+  │  │                  │  │  localhost:8080          ││
+  │  └─────────────────┘  └─────────────────────────┘│
+  │                                                    │
+  │  ┌─────────────────────────────────────────────────┐│
+  │  │         Shared Volume (emptyDir / PVC)           ││
+  │  │   /var/log/app/  ← writable by both containers  ││
+  │  └─────────────────────────────────────────────────┘│
+  │                                                    │
+  │  IP: 10.244.1.5  (shared across all containers)    │
+  └──────────────────────────────────────────────────┘
+
+  Pause container: holds the network namespace (always runs)
+</div>
+
+<h2>Shared Resources in a Pod</h2>
+<table>
+  <tr><th>Resource</th><th>Shared?</th><th>Details</th></tr>
+  <tr><td><strong>Network namespace</strong></td><td>Yes</td><td>All containers share one IP address and port space. Container A talks to Container B via localhost.</td></tr>
+  <tr><td><strong>Storage volumes</strong></td><td>Yes</td><td>Volumes mounted at the pod level are accessible to all containers in the pod.</td></tr>
+  <tr><td><strong>IPC namespace</strong></td><td>Yes</td><td>Containers can share System V semaphores and POSIX message queues.</td></tr>
+  <tr><td><strong>Process namespace</strong></td><td>Configurable</td><td>By default separate. Set <code>shareProcessNamespace: true</code> to see all processes.</td></tr>
+  <tr><td><strong>Resource limits</strong></td><td>No</td><td>Each container has its own CPU/memory limits.</td></tr>
+</table>
+
+<h2>Multi-Container Pod Patterns</h2>
+<table>
+  <tr><th>Pattern</th><th>Description</th><th>Example</th></tr>
+  <tr><td><strong>Sidecar</strong></td><td>Extends the main container's functionality without changing it</td><td>Log forwarder (Fluentd), proxy (Envoy), health checker</td></tr>
+  <tr><td><strong>Ambassador</strong></td><td>Proxy that handles external communication for the main container</td><td>DB connection proxy, SSL terminator</td></tr>
+  <tr><td><strong>Adapter</strong></td><td>Transforms output/input to match external expectations</td><td>Metrics exporter (Prometheus format), log format normalizer</td></tr>
+</table>
+
+<div class="callout green">
+  <strong>Most common pattern:</strong> The sidecar pattern is by far the most used. A web server container + a sidecar that forwards logs to ELK, or a main container + Envoy sidecar for service mesh. Mention this in interviews to show practical K8s knowledge.
+</div>
+
+<h2>Pod Lifecycle</h2>
+<div class="diagram">
+  Pending ──▶ Running ──▶ Succeeded (completed successfully)
+                    │
+                    ├──▶ Failed (exit code != 0)
+                    └──▶ CrashLoopBackOff (repeatedly fails and restarts)
+
+  Pod phases:
+  ┌──────────┐  ┌──────────┐  ┌──────────┐
+  │ Pending  │──│ Running  │──│ Succeeded │  (one-shot containers)
+  └──────────┘  └────┬─────┘  └──────────┘
+                     │
+                     ▼
+                ┌──────────┐
+                │  Failed  │
+                └──────────┘
+
+  Restart policy (per pod):
+  - Always:     continuously restart (default for deployments)
+  - OnFailure: restart only on non-zero exit (jobs, cronjobs)
+  - Never:     never restart (one-shot tasks)
+</div>
+
+<h3>Why Pods Are Ephemeral</h3>
+<div class="callout yellow">
+  <strong>Key insight:</strong> Pods are intentionally ephemeral. If a node fails, the pod dies and is recreated elsewhere. Never store persistent data inside a container filesystem — use PersistentVolumes. Never rely on a pod's IP address — use Services with stable DNS names.
+</div>
+
+<h2>Anti-Patterns</h2>
+<ul>
+  <li><strong>Multiple independent apps in one pod:</strong> If containers do not need to share network or storage, they should be in separate pods. Put nginx and a web app together (sidecar), but do not put a web app and a cron job together.</li>
+  <li><strong>Storing state in container filesystem:</strong> Container filesystem is ephemeral. When a pod is rescheduled, the container is recreated and data is lost.</li>
+  <li><strong>Pinpointing pod IPs:</strong> Pods get new IPs on recreation. Always use Services for stable networking.</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What is a pod and why does Kubernetes use pods instead of running containers directly?</li>
+  <li>What resources do containers share within a pod?</li>
+  <li>Explain the sidecar pattern with an example.</li>
+  <li>Why are pods ephemeral and what are the implications?</li>
+  <li>What is the pause container and why does it exist?</li>
+  <li>What happens when a container in a pod crashes?</li>
+  <li>When would you use multiple containers in a single pod?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid diving into:</strong> Pod spec YAML details (resource requests/limits syntax, volume mount configuration), init container specifics, or pod disruption budgets (covered in deployments). Focus on the conceptual model: what a pod is, why it exists, and the sharing semantics.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Documentation</div>
+  <ul>
+    <li><strong>Kubernetes Pods</strong> — kubernetes.io/docs/concepts/workloads/pods/</li>
+    <li><strong>Pod Lifecycle</strong> — kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="kubernetes.html">&larr; Previous: Kubernetes</a>
+  <a href="deployments.html">Next: Deployments &rarr;</a>
+</div>
+</body>
+</html>

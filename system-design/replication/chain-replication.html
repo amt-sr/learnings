@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.4.2 Chain Replication - System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">4 Replication</a> / 4.4 Replication Topologies / 4.4.2
+</div>
+
+<h1>Chain Replication</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the chain replication topology where the leader replicates to a single follower, which replicates to the next, forming a linear chain. Recognize its bandwidth efficiency and its fragility when any single link fails.</p>
+
+<h2>Definition</h2>
+<p><strong>Chain replication</strong> is a topology in which replicas are arranged in a linear sequence. The leader sends replication data to only one follower (the first link in the chain), which forwards it to the next follower, and so on down the chain. Each node in the chain has exactly one upstream and at most one downstream partner.</p>
+
+<div class="callout">
+  <strong>Key idea:</strong> The leader only ships replication data once. The burden of distributing to downstream replicas is shared across the chain. This is the replication model used by systems like <strong>Chain Replication</strong> (the academic protocol by Renesse and Schneider) and is conceptually similar to daisy-chained relay replication in MySQL.
+</div>
+
+<h2>Topology Diagram</h2>
+
+<div class="diagram">
+  Leader ──► Follower 1 ──► Follower 2 ──► Follower 3 ──► Follower 4
+   (H0)        (H1)          (H2)          (H3)          (H4)
+
+  Replication flows in one direction: left to right.
+  The leader ships data only ONCE (to H1).
+  Each intermediate node forwards to the next.
+
+  ┌────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
+  │ LEADER │───►│ Follower1│───►│ Follower2│───►│ Follower3│
+  │  (H0)  │    │  (H1)    │    │  (H2)    │    │  (H3)    │
+  └────────┘    └──────────┘    └──────────┘    └──────────┘
+
+  Write path:  Client → H0 → H1 → H2 → H3
+  Read path:   Client → H3 (tail)  [strongly consistent reads from tail]
+</div>
+
+<h2>How It Works</h2>
+
+<h3>Write Path (Academic Chain Replication Protocol)</h3>
+<ol>
+  <li>Client sends a write request to the <strong>head</strong> (leader H0).</li>
+  <li>H0 appends the operation to its log and forwards it to H1.</li>
+  <li>H1 appends and forwards to H2, and so on down the chain.</li>
+  <li>The <strong>tail</strong> (last node, Hn) receives the operation, appends it, and sends an acknowledgment back along the chain to H0.</li>
+  <li>H0 responds to the client once the ack traverses back.</li>
+</ol>
+
+<h3>Read Path</h3>
+<ol>
+  <li>Client sends a read request to the <strong>tail</strong> (Hn).</li>
+  <li>Because the write has fully propagated through the chain before the client is acked, the tail always has the latest state.</li>
+  <li>This provides <strong>strong consistency</strong> for reads without additional coordination.</li>
+</ol>
+
+<h2>Advantages</h2>
+
+<ul>
+  <li><strong>Reduced leader bandwidth:</strong> The leader ships replication data only once, regardless of how many followers exist. This is a major advantage over star topology for large replica sets.</li>
+  <li><strong>Strong read consistency:</strong> Reads from the tail are strongly consistent because writes propagate through the entire chain before acknowledgment.</li>
+  <li><strong>Simple ordering:</strong> Total order of operations is naturally maintained by the chain. Each node sees operations in the same sequence.</li>
+  <li><strong>Efficient for geo-replication:</strong> A single cross-region link can fan out to multiple replicas within that region.</li>
+</ul>
+
+<h2>Disadvantages</h2>
+
+<ul>
+  <li><strong>Single point of failure at every link:</strong> If any node in the chain fails, the chain is broken. Downstream nodes stop receiving updates. Recovery requires reconfiguring the chain.</li>
+  <li><strong>High latency for writes:</strong> A write must travel the full length of the chain (H0 → H1 → ... → Hn) and the acknowledgment must travel back (Hn → ... → H0). Write latency is proportional to chain length.</li>
+  <li><strong>Tail becomes a bottleneck:</strong> All reads go to the tail, making it a hotspot. Only one node serves consistent reads.</li>
+  <li><strong>Cumulative lag:</strong> Each hop adds a small amount of latency. Follower 5 has 5x the propagation delay of Follower 1.</li>
+  <li><strong>Reconfiguration complexity:</strong> Adding or removing a node requires breaking and re-establishing chain links, which can cause brief unavailability.</li>
+</ul>
+
+<h2>Chain vs Star Comparison</h2>
+
+<table>
+  <tr>
+    <th>Property</th>
+    <th>Star</th>
+    <th>Chain</th>
+  </tr>
+  <tr>
+    <td>Leader outbound connections</td>
+    <td>N (one per follower)</td>
+    <td>1 (only to first link)</td>
+  </tr>
+  <tr>
+    <td>Write latency</td>
+    <td class="green">Low (parallel fan-out)</td>
+    <td class="red">High (sequential through chain)</td>
+  </tr>
+  <tr>
+    <td>Read consistency from follower</td>
+    <td class="red">Eventual (each follower varies)</td>
+    <td class="green">Strong (if reading from tail)</td>
+  </tr>
+  <tr>
+    <td>Fault tolerance</td>
+    <td class="green">High (independent links)</td>
+    <td class="red">Low (any break halts chain)</td>
+  </tr>
+  <tr>
+    <td>Leader bandwidth usage</td>
+    <td class="red">O(N) data sent</td>
+    <td class="green">O(1) data sent</td>
+  </tr>
+  <tr>
+    <td>Adding a follower</td>
+    <td class="green">Simple (connect to leader)</td>
+    <td class="red">Requires chain reconfiguration</td>
+  </tr>
+</table>
+
+<h2>Practical Use Cases</h2>
+
+<h3>MySQL Relay Log Chaining</h3>
+<p>MySQL does not implement true chain replication natively, but you can approximate it using <strong>cascading replication</strong> where a relay follower (configured with <code>log_slave_updates</code>) acts as an intermediate node, forwarding replication to leaf followers.</p>
+
+<h3>Geo-Distributed Replication</h3>
+<p>Chain topology is commonly used for cross-datacenter replication: the primary data center ships to a regional relay, which fans out locally. The WAN link is traversed only once per write.</p>
+
+<div class="callout yellow">
+  <strong>Interview Tip:</strong> When designing a cross-region system, chain replication over WAN + star within a region is the typical pattern. The chain handles expensive WAN links; the star handles cheap intra-DC fan-out.
+</div>
+
+<h2>Failure Recovery</h2>
+
+<p>Chain breakage requires reconfiguration:</p>
+<ol>
+  <li>Detect the failed node (via heartbeat timeout).</li>
+  <li>Remove the failed node from the chain logically.</li>
+  <li>Reconnect the upstream node to the next alive downstream node.</li>
+  <li>Resume replication from the last consistent position.</li>
+</ol>
+
+<div class="callout">
+  <strong>Recovery challenge:</strong> If H2 fails, H1 must start shipping to H3. But H3 may be behind H2's position. H1 must either wait for H3 to catch up or ship the delta. This recovery complexity is why pure chain replication is rare in production systems.
+</div>
+
+<h2>Common Interview Questions</h2>
+
+<ul>
+  <li>"How does chain replication differ from star replication?" Answer: In chain, the leader ships to one follower, which forwards to the next. This reduces leader bandwidth but increases write latency and creates a single point of failure at every link.</li>
+  <li>"When would you choose chain over star?" Answer: When the leader's outbound bandwidth is the bottleneck and you need to replicate across expensive WAN links. Chain is ideal for geo-distributed setups where a single cross-region link feeds multiple regional replicas.</li>
+  <li>"What happens when a node in the middle of the chain fails?" Answer: The chain breaks. Downstream nodes stop receiving updates. Recovery requires reconfiguring the chain to bypass the failed node.</li>
+  <li>"How does read consistency work in chain replication?" Answer: Strongly consistent reads are served from the tail node. Since writes must propagate through the entire chain before acknowledgment, the tail always has the latest data.</li>
+</ul>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Avoid going deep into:</strong>
+  <ul>
+    <li>The original Chain Replication paper's formal proofs and consensus protocols. Understand the concept; skip the TLA+ specifications.</li>
+    <li>MySQL <code>log_slave_updates</code> configuration details. The concept of relay forwarding is important; the syntax is not.</li>
+    <li>Paxos/Raft-based chain reconfiguration algorithms. This is an advanced topic rarely asked directly.</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Reading Sources</div>
+  <ul>
+    <li><strong>Chain Replication for Supporting High Throughput and Availability</strong> - Renesse & Schneider (OSDI 2004). The foundational academic paper.</li>
+    <li><strong>Designing Data-Intensive Applications (Kleppmann)</strong> - Chapter 5, section on replication topologies.</li>
+    <li><strong>High Performance MySQL (4th Ed.)</strong> - Chapter 7 on cascading and relay replication.</li>
+    <li><strong>MySQL 8.0 Reference Manual</strong> - "Replication and Binary Logging" for relay log and cascading setup.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="star-replication.html">&larr; 4.4.1 Star Replication</a>
+  <a href="circular-replication.html">4.4.3 Circular Replication &rarr;</a>
+</div>
+
+</body>
+</html>

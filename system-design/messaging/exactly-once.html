@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.3.3 Exactly Once - System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">8 Messaging</a> / <a href="index.html">8.3 Delivery Guarantees</a> / 8.3.3
+</div>
+
+<h1>Exactly-Once Delivery</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand how exactly-once semantics (EOS) work in distributed messaging systems, particularly Kafka's approach using idempotent producers and transactional consumers. Be able to explain why true exactly-once is hard, where it applies, and how to reason about trade-offs between delivery guarantees.</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>Exactly-Once Semantics (EOS)</strong> means each message is delivered to the consumer precisely one time -- neither lost nor duplicated. The effect of processing the message is applied exactly once to the downstream state.
+</div>
+
+<p>In practice, "exactly-once" in Kafka means exactly-once <em>processing</em>: the message may be delivered multiple times over the network, but the combination of producer idempotence, transactional writes, and consumer offset management ensures the <em>outcome</em> is equivalent to processing each message once.</p>
+
+<h2>Delivery Guarantee Comparison</h2>
+
+<table>
+  <tr>
+    <th>Guarantee</th>
+    <th>Message Lost?</th>
+    <th>Duplicates?</th>
+    <th>Throughput</th>
+    <th>Latency</th>
+    <th>Complexity</th>
+  </tr>
+  <tr>
+    <td>At-Most-Once</td>
+    <td class="red">Yes (on failure)</td>
+    <td class="green">No</td>
+    <td class="green">Highest</td>
+    <td class="green">Lowest</td>
+    <td class="green">Lowest</td>
+  </tr>
+  <tr>
+    <td>At-Least-Once</td>
+    <td class="green">No</td>
+    <td class="red">Yes (on retry)</td>
+    <td class="green">High</td>
+    <td>Medium</td>
+    <td>Medium</td>
+  </tr>
+  <tr>
+    <td>Exactly-Once</td>
+    <td class="green">No</td>
+    <td class="green">No</td>
+    <td>Lower (coordination)</td>
+    <td class="red">Higher</td>
+    <td class="red">Highest</td>
+  </tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Key Insight:</strong> At-most-once trades correctness for speed. At-least-once is the default for most systems but requires idempotent consumers. Exactly-once shifts the deduplication burden to the infrastructure layer so application code can be simpler.
+</div>
+
+<h2>How Kafka Achieves Exactly-Once</h2>
+<p>Kafka's EOS is built on two cooperating mechanisms: <strong>idempotent producers</strong> and <strong>transactions</strong>. Together they provide end-to-end exactly-once processing in Kafka Streams.</p>
+
+<h3>1. Idempotent Producer</h3>
+<p>Even a correctly-behaved producer can retry a send if the broker ack is lost (network timeout). Without protection, this produces duplicates on the broker. The idempotent producer prevents this.</p>
+
+<div class="diagram">
+  Producer (PID=42, SeqNum=0) ──msg──► Broker (Partition 0)
+       ACK lost (timeout)
+  Producer (PID=42, SeqNum=0) ──msg──► Broker (Partition 0)
+                                          │
+                                          ├─ SeqNum 0 already seen for PID 42
+                                          └─ Silently deduplicate, return ACK
+</div>
+
+<ul>
+  <li><strong>Producer ID (PID):</strong> A unique identifier assigned by the broker to each producer instance (epoch-based, refreshed on fencing).</li>
+  <li><strong>Sequence Number:</strong> Monotonically increasing per &lt;PID, Partition&gt; pair.</li>
+  <li><strong>Broker-side dedup buffer:</strong> Retains the last N sequence numbers per PID per partition. Duplicate sequence numbers are silently dropped.</li>
+  <li>Enable with <code>enable.idempotence=true</code> (also sets <code>acks=all</code>, <code>max.in.flight.requests.per.connection &lt;= 5</code>).</li>
+</ul>
+
+<div class="callout">
+  <strong>Scope:</strong> Idempotent producer guarantees no duplicates <em>per partition</em> for a single producer session. It does not handle cross-partition atomicity or consumer-side read-committed semantics on its own.
+</div>
+
+<h3>2. Transactions (Atomic Writes Across Partitions)</h3>
+<p>Many use cases require writing to multiple partitions atomically -- for example, a stream processor consuming from one topic and producing to two output topics. Without transactions, a crash mid-write leaves inconsistent state (some partitions updated, others not).</p>
+
+<div class="diagram">
+  Producer begins Transaction (T1)
+       │
+       ├─ Write msg to orders-topic (P0)      [status: UNCOMMITTED]
+       ├─ Write msg to inventory-topic (P2)   [status: UNCOMMITTED]
+       ├─ Write msg to notification-topic (P1) [status: UNCOMMITTED]
+       │
+       ├─ Consumer offsets committed to __consumer_offsets (as part of T1)
+       │
+       └─ Producer commits Transaction T1
+            │
+            └─ All messages + offsets become visible to read-committed consumers
+
+  On failure:
+       Producer aborts Transaction T1
+            └─ All UNCOMMITTED messages are discarded
+</div>
+
+<p>Key concepts:</p>
+<ul>
+  <li><strong>Transaction Coordinator:</strong> A broker-appointed coordinator manages the two-phase commit protocol for each transaction.</li>
+  <li><strong>Transaction Log (__transaction_state):</strong> An internal topic storing transaction lifecycle states (Ongoing, PrepareCommit, PrepareAbort, CompleteCommit, CompleteAbort).</li>
+  <li><strong>Transactional ID:</strong> Application-level identifier (e.g., "payment-processor-1") that survives producer restarts. Enables <strong>fencing</strong> -- if a zombie producer with the same TID tries to write, it is rejected.</li>
+  <li><strong>isolation.level=read_committed:</strong> Consumers only read messages from committed transactions (plus non-transactional messages for backward compatibility).</li>
+</ul>
+
+<h3>3. Exactly-Once in Kafka Streams</h3>
+<p>Kafka Streams combines idempotent producer + transactions + consumer offset committing into a single atomic unit:</p>
+
+<div class="diagram">
+  Kafka Streams (instance-1, TID="stream-app-1")
+       │
+       ├─ consume(topic-A) ──► process() ──► produce(topic-B)
+       │                                          │
+       ├─ consume(topic-A) ──► process() ──► produce(topic-C)
+       │                                          │
+       └─ commit offsets for topic-A + produce markers for topic-B,C
+                    (all within ONE transaction)
+</div>
+
+<ul>
+  <li>The stream processor's consumer offsets are committed <em>within the same transaction</em> as the produced output records.</li>
+  <li>If the process crashes, uncommitted outputs are rolled back, and the consumer restarts from the last committed offset -- guaranteeing exactly-once processing.</li>
+  <li>Enable with <code>processing.guarantee=exactly_once_v2</code> (Kafka 3.0+).</li>
+</ul>
+
+<h2>When Exactly-Once Matters (and When It Does Not)</h2>
+
+<table>
+  <tr>
+    <th>Scenario</th>
+    <th>Recommended Guarantee</th>
+    <th>Rationale</th>
+  </tr>
+  <tr>
+    <td>Financial ledger / double-entry bookkeeping</td>
+    <td>Exactly-Once</td>
+    <td>Duplicate transactions have real monetary cost</td>
+  </tr>
+  <tr>
+    <td>Event sourcing / CQRS projections</td>
+    <td>Exactly-Once (or at-least-once + idempotent consumer)</td>
+    <td>Duplicates cause projection state drift</td>
+  </tr>
+  <tr>
+    <td>Log aggregation / metrics</td>
+    <td>At-Least-Once</td>
+    <td>Mild over-counting is tolerable</td>
+  </tr>
+  <tr>
+    <td>Real-time notifications (email, push)</td>
+    <td>At-Most-Once or at-least-once with dedup</td>
+    <td>Sending twice is annoying but not catastrophic</td>
+  </tr>
+  <tr>
+    <td>IoT sensor data ingestion</td>
+    <td>At-Most-Once</td>
+    <td>Volume is high, occasional data loss is acceptable</td>
+  </tr>
+</table>
+
+<h2>Trade-Offs and Costs</h2>
+<div class="callout yellow">
+  <strong>Performance cost:</strong> Exactly-once in Kafka imposes roughly 15-30% throughput reduction compared to at-least-once due to transaction coordinator overhead, two-phase commit protocol, and additional round-trips. For latency-sensitive paths at massive scale, at-least-once with idempotent consumers may be more practical.
+</div>
+
+<ul>
+  <li><strong>Throughput:</strong> Transaction boundaries add commit latency. Batch sizes should be tuned (e.g., <code>transaction.timeout.ms</code>, <code>transaction.max.timeout.ms</code>).</li>
+  <li><strong>Complexity:</strong> Requires understanding of producer epochs, zombie fencing, transaction coordinator failover, and <code>read_committed</code> consumer behavior.</li>
+  <li><strong>Operational:</strong> Transaction log topic must be healthy. Coordinator failures can stall new transactions until a new coordinator is elected.</li>
+</ul>
+
+<h2>Exactly-Once vs. Idempotent Consumer</h2>
+<div class="callout green">
+  <strong>Alternative approach:</strong> Many systems achieve "effectively exactly-once" by using at-least-once delivery plus an idempotent consumer that deduplicates using a natural or synthetic key (e.g., <code>INSERT ... ON CONFLICT DO NOTHING</code>). This avoids transaction coordination overhead but shifts complexity to the consumer and downstream storage.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What does "exactly-once" actually mean in Kafka, and how does it differ from the theoretical definition?</li>
+  <li>How does Kafka's idempotent producer prevent duplicate messages on retry?</li>
+  <li>Explain the two-phase commit protocol Kafka uses for transactions.</li>
+  <li>What is a zombie producer and how does the transactional ID + epoch prevent it?</li>
+  <li>When would you choose at-least-once with idempotent consumers over Kafka's exactly-once?</li>
+  <li>What happens to in-flight messages when a producer crashes mid-transaction?</li>
+  <li>How does <code>isolation.level=read_committed</code> affect consumer behavior and latency?</li>
+  <li>Design a payment processing pipeline -- when is exactly-once mandatory vs. over-engineered?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>In an interview, avoid:</strong>
+  <ul>
+    <li>Confusing idempotent producer with exactly-once processing -- they are necessary but not sufficient on their own.</li>
+    <li>Claiming true exactly-once over an unreliable network is possible without qualification. It is always about <em>effective</em> exactly-once via deduplication or transactional processing.</li>
+    <li>Going deep into Kafka's <code>__transaction_state</code> topic internal layout unless asked. Focus on the conceptual protocol.</li>
+    <li>Ignoring the performance cost. Interviewers want to see you understand the trade-off.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary Sources</div>
+  <ul>
+    <li>Kafka Documentation -- <a href="https://kafka.apache.org/documentation/#semantics">Exactly-Once Semantics</a></li>
+    <li>KIP-98: <a href="https://cwiki.apache.org/confluence/display/KAFKA/KIP-98+-+Exactly+Once+Delivery+and+Transactional+Messaging">Exactly Once Delivery and Transactional Messaging</a></li>
+    <li>KIP-360: <a href="https://cwiki.apache.org/confluence/display/KAFKA/KIP-360+-+Improve+ EOS+ protocol+ to+ reduce+ zookeeper+ fencing">Improve EOS Protocol to Reduce Zookeeper Fencing</a></li>
+    <li>Jay Kreps, "The Log" (2013) -- <a href="https://engineering.linkedin.com/kafka/kafka-the-log-what-every-software-engineer-should-know-about-distributed-systems">engineering.linkedin.com</a></li>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em>, Chapter 11 (Exactly-once semantics)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="at-least-once.html">&larr; 8.3.2 At Least Once</a>
+  <a href="retry.html">8.4.1 Retry &rarr;</a>
+</div>
+
+</body>
+</html>

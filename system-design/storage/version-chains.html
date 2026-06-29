@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.7.1 Version Chains</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">3 Storage</a> / <a href="index.html">3.7 MVCC</a> / 3.7.1
+</div>
+
+<h1>Version Chains</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand how MVCC maintains multiple versions of each row as a linked chain, how transaction IDs annotate those versions, and how readers traverse the chain to find the correct visible version without blocking writers.</p>
+
+<h2>Definition</h2>
+<p>A <strong>version chain</strong> is the core data structure in MVCC systems. Instead of overwriting a row in place when it is updated, the database creates a new version of that row and links it to the previous version via a pointer. Each version is annotated with the transaction ID of the transaction that created it and, optionally, the transaction ID that deleted or superseded it. This chain allows concurrent readers and writers to operate on different versions of the same row without mutual blocking.</p>
+
+<div class="callout">
+  <strong>Key insight:</strong> In-place updates would require readers to lock rows, blocking concurrent writers. Version chains eliminate this by making every write produce a new version, so readers always see a consistent (though possibly stale) snapshot of the data.
+</div>
+
+<h2>Version Chain Anatomy</h2>
+<p>In PostgreSQL, each row version (called a <strong>tuple</strong>) stores two critical transaction ID fields:</p>
+
+<table>
+  <tr>
+    <th>Field</th>
+    <th>Meaning</th>
+  </tr>
+  <tr>
+    <td><code>xmin</code></td>
+    <td>Transaction ID of the transaction that <strong>created</strong> (inserted) this tuple version.</td>
+  </tr>
+  <tr>
+    <td><code>xmax</code></td>
+    <td>Transaction ID of the transaction that <strong>deleted or expired</strong> this tuple version. Zero means the version is still live.</td>
+  </tr>
+  <tr>
+    <td><code>ctid</code></td>
+    <td>Physical pointer (block number + offset) to the <strong>next newer version</strong> of the same row in the heap.</td>
+  </tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Not just PostgreSQL:</strong> MySQL InnoDB stores version chain links in the undo log rather than inline on the heap page. The principle is the same&mdash;each version points to its predecessor&mdash;but the storage mechanism differs. Oracle uses a similar undo-segment-based approach.
+</div>
+
+<h2>Version Chain Evolution</h2>
+
+<div class="diagram">
+  Step 1: INSERT by T1 (xmin=100)
+  ┌──────────────────────────────┐
+  │ Tuple A  │ name="Alice"       │
+  │          │ xmin=100  xmax=0   │  ← live version
+  │          │ ctid=NULL          │  ← chain end (newest)
+  └──────────────────────────────┘
+
+  Step 2: UPDATE by T2 (xmin=200)
+  ┌──────────────────────────────┐
+  │ Tuple A  │ name="Alice"       │
+  │          │ xmin=100  xmax=200 │  ← expired by T2
+  │          │ ctid ──────────────────→  newer version
+  └──────────────────────────────┘
+  ┌──────────────────────────────┐
+  │ Tuple B  │ name="Bob"        │
+  │          │ xmin=200  xmax=0   │  ← live version
+  │          │ ctid=NULL          │  ← chain end (newest)
+  └──────────────────────────────┘
+
+  Step 3: UPDATE by T3 (xmin=300)
+  ┌──────────────────────────────┐
+  │ Tuple A  │ name="Alice"       │
+  │          │ xmin=100  xmax=200 │
+  │          │ ctid ─────────────────────→  Tuple B
+  └──────────────────────────────┘
+  ┌──────────────────────────────┐
+  │ Tuple B  │ name="Bob"        │
+  │          │ xmin=200  xmax=300 │
+  │          │ ctid ─────────────────────→  Tuple C
+  └──────────────────────────────┘
+  ┌──────────────────────────────┐
+  │ Tuple C  │ name="Charlie"    │
+  │          │ xmin=300  xmax=0   │  ← current live version
+  │          │ ctid=NULL          │
+  └──────────────────────────────┘
+
+  Full chain: A (xmin=100) ──→ B (xmin=200) ──→ C (xmin=300, live)
+</div>
+
+<h2>How Readers Traverse the Chain</h2>
+<p>When a query needs to find the visible version of a row, it starts at the <strong>newest</strong> version (found via the index) and walks backward through the chain:</p>
+
+<ol>
+  <li>Start at the most recent tuple pointed to by the index entry.</li>
+  <li>Check if this version is <strong>visible</strong> to the current transaction (using snapshot-based visibility rules).</li>
+  <li>If visible, return it. If not, follow the <code>ctid</code> pointer to the previous version.</li>
+  <li>Repeat until a visible version is found or the chain is exhausted.</li>
+</ol>
+
+<div class="callout green">
+  <strong>Readers never block writers:</strong> A long-running SELECT follows old tuple versions in the chain while concurrent UPDATEs keep appending new versions at the head. The reader is completely unaware of the newer versions.
+</div>
+
+<h2>Undo Log as Version Storage</h2>
+<p>In systems like MySQL InnoDB and Oracle, old tuple versions are stored in the <strong>undo log</strong> rather than remaining on the heap page. The undo log is a dedicated, append-only storage area:</p>
+
+<ul>
+  <li><strong>Insert undo records:</strong> Stored when a row is first inserted; needed only for rollback, not for MVCC reads.</li>
+  <li><strong>Update undo records:</strong> Store the <em>before-image</em> of modified rows; these form the version chain that MVCC readers traverse.</li>
+</ul>
+
+<table>
+  <tr>
+    <th>Approach</th>
+    <th>Example</th>
+    <th>Version Location</th>
+    <th>Chain Traversal</th>
+  </tr>
+  <tr>
+    <td>Heap-based</td>
+    <td>PostgreSQL</td>
+    <td>All versions live on heap pages</td>
+    <td>Follow <code>ctid</code> pointers on the page</td>
+  </tr>
+  <tr>
+    <td>Undo-based</td>
+    <td>MySQL InnoDB, Oracle</td>
+    <td>Only latest version on page; old versions in undo log</td>
+    <td>Follow undo log pointers (roll_ptr)</td>
+  </tr>
+</table>
+
+<div class="callout">
+  <strong>Trade-off:</strong> Heap-based versioning keeps all versions together (simpler traversal) but bloats the table. Undo-based versioning keeps the table lean but requires an additional IO to the undo log for historical reads. Undo segments are also subject to retention policies and can be recycled.
+</div>
+
+<h2>Transaction ID Wraparound</h2>
+<p>PostgreSQL uses a 32-bit transaction ID that wraps around after ~4 billion transactions. To avoid ambiguity, the system divides the ID space into "past," "now," and "future" epochs. When the oldest version in any chain approaches the wraparound point, <strong>VACUUM FREEZE</strong> must rewrite tuples to set their <code>xmin</code> to a special frozen value. Failure to freeze leads to data loss&mdash;the system will shut down to protect itself.</p>
+
+<div class="callout red">
+  <strong>Operational risk:</strong> Transaction ID wraparound is a silent killer. Long-running transactions prevent VACUUM from advancing the freeze horizon. Monitor <code>pg_stat_activity</code> for long-lived transactions and set <code>autovacuum_freeze_max_age</code> conservatively.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>How does MVCC allow readers to not block writers? Walk through the version chain mechanism.</li>
+  <li>What are <code>xmin</code> and <code>xmax</code>? How do they encode the lifecycle of a tuple?</li>
+  <li>How does a SELECT find the correct version of a row when multiple concurrent updates have occurred?</li>
+  <li>What is the difference between PostgreSQL's heap-based versioning and MySQL InnoDB's undo-log-based versioning?</li>
+  <li>What happens if a version chain gets very long? How does this affect read performance?</li>
+  <li>What is transaction ID wraparound and how does <code>VACUUM FREEZE</code> prevent data corruption?</li>
+  <li>Design a version chain data structure. What fields does each node need? How do you link them?</li>
+</ul>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>For interviews, skip:</strong>
+  <ul>
+    <li>The exact on-disk format of PostgreSQL heap tuple headers (Infomask bits, combination CID, etc.)</li>
+    <li>Undo log segment internals in InnoDB (purge thread details, undo tablespace layout)</li>
+    <li>Oracle's ORA-01555 snapshot too old internals beyond the conceptual level</li>
+    <li>Multi-version concurrency control in non-relational systems (Cassandra's tombstone-based approach is a different concept)</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Reading Sources</div>
+  <ul>
+    <li>PostgreSQL Documentation &mdash; "MVCC in PostgreSQL" and "The Visibility Map"</li>
+    <li><em>Designing Data-Intensive Applications</em>, Martin Kleppmann &mdash; Chapter 7: Transactions (section on snapshot isolation and MVCC implementation)</li>
+    <li><em>The Internals of PostgreSQL</em>, InterDB.jp &mdash; Chapter 5: Concurrency Control (version chain mechanics)</li>
+    <li>MySQL 8.0 Reference Manual &mdash; "InnoDB Multi-Versioning" and "Undo Logs"</li>
+    <li><em>Database Internals</em>, Alex Petrov &mdash; Chapter 8: B-Tree-Based Storage (MVCC and version chains)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="lost-update.html">&larr; 3.6.4 Lost Update</a>
+  <a href="snapshots.html">Next: 3.7.2 Snapshots &rarr;</a>
+</div>
+
+</body>
+</html>

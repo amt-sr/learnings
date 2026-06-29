@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.9.7 Tombstones</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#3">3 Storage</a> / <a href="../index.html#3.9">3.9 Storage Engines</a> / 3.9.7
+</div>
+
+<h1>Tombstones</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>Why immutable SSTables cannot support in-place deletes</li>
+  <li>How tombstones (delete markers) solve this problem</li>
+  <li>The lifecycle of a tombstone: creation, propagation, and eventual garbage collection</li>
+  <li>The "zombie data" problem and its impact on read performance</li>
+</ul>
+
+<h2>Definition</h2>
+<p>A <strong>tombstone is a special delete marker written to an SSTable to indicate that a key has been deleted</strong>. Since SSTables in an LSM tree are immutable (they cannot be modified in-place), actual deletion is impossible. Instead, a tombstone is appended as a new record. During reads, the tombstone masks any older versions of the key. During <a href="compaction.html">compaction</a>, tombstones eventually allow the physical removal of both the tombstone and the deleted data from disk.</p>
+
+<div class="diagram">  Tombstone lifecycle in an LSM tree
+
+  TIME →→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→
+
+  1. INSERT: PUT("user:42", "Alice")
+     WAL → Memtable → SSTable_001:  [user:42 = "Alice"]
+
+  2. DELETE: DELETE("user:42")
+     WAL → Memtable → SSTable_002:  [user:42 = TOMBSTONE]
+
+  3. READ: GET("user:42")
+     Check SSTable_002 (newest): user:42 = TOMBSTONE → return "not found"
+     (SSTable_001 still has "Alice", but SSTable_002's tombstone takes precedence)
+
+  4. COMPACTION: Merge SSTable_001 + SSTable_002
+     user:42: newest is TOMBSTONE
+     → If within gc_grace_seconds: keep tombstone
+     → If past gc_grace_seconds: discard both data and tombstone
+     → SSTable_003: [empty for user:42] → disk space freed</div>
+
+<h2>Why Tombstones Exist</h2>
+<p>The fundamental reason is <strong>immutability of SSTables</strong>:</p>
+
+<table>
+  <tr><th>Approach</th><th>Why It Doesn't Work</th></tr>
+  <tr><td><strong>In-place delete</strong></td><td class="red">SSTables are immutable — no in-place modifications allowed</td></tr>
+  <tr><td><strong>Remove the SSTable</strong></td><td class="red">One SSTable contains thousands of keys; deleting the whole file loses all other data</td></tr>
+  <tr><td><strong class="green">Append a tombstone</strong></td><td class="green">Write a delete marker as a new entry. Newest tombstone wins over old data. Cleaned up later by compaction.</td></tr>
+</table>
+
+<h2>How Tombstones Work During Reads</h2>
+<p>LSM tree reads check from newest to oldest data source. The first version found wins:</p>
+<pre>  GET("user:42")
+
+  Check memtable:              not found
+  Check SSTable L0 (newest):   user:42 = TOMBSTONE → STOP, return "not found"
+                                (older SSTables with user:42 = "Alice" are never read)
+
+  Why stop at tombstone? Because the tombstone is newer than any older version.
+  The key is definitively deleted — no need to check older levels.</pre>
+
+<h2>Types of Tombstones</h2>
+<table>
+  <tr><th>Type</th><th>Scope</th><th>Used By</th></tr>
+  <tr><td><strong>Row tombstone</strong></td><td>Deletes a single key (one row)</td><td>RocksDB, Cassandra, HBase</td></tr>
+  <tr><td><strong>Range tombstone</strong></td><td>Deletes a range of keys [start, end)</td><td>RocksDB, MyRocks</td></tr>
+  <tr><td><strong>Column tombstone</strong></td><td>Deletes a specific column within a row</td><td>Cassandra, HBase</td></tr>
+  <tr><td><strong>Partition tombstone</strong></td><td>Deletes an entire partition (wide row)</td><td>Cassandra</td></tr>
+</table>
+
+<h2>The Zombie Data Problem</h2>
+<div class="callout red">
+  <strong>Deleted data is not physically removed until compaction runs.</strong> Between the delete and the next compaction, the old data still exists on disk. This has several consequences:
+</div>
+
+<div class="diagram">  The zombie data problem:
+
+  SSTable_001 (100 MB):  [a=1, b=2, c=3, d=4, e=5, ... thousands more]
+  SSTable_002 (50 KB):    [c=TOMBSTONE]
+
+  Problem 1: Space waste
+    "c=3" still occupies space in SSTable_001 (zombie data)
+    Won't be freed until compaction merges 001 and 002
+
+  Problem 2: Read performance
+    Bloom filter for SSTable_001 returns YES for key "c"
+    → read SSTable_001 to find c=3
+    → then read SSTable_002 to find c=TOMBSTONE
+    → extra disk I/O for zombie data
+
+  Problem 3: Accumulation
+    Heavy delete workloads → many tombstones → many zombie SSTables
+    → compaction can't keep up → disk fills up
+    → reads slow down significantly</div>
+
+<h2>Garbage Collection (GC) Grace Period</h2>
+<p>Tombstones are not removed immediately during compaction. They must persist for a configurable grace period to ensure that replicas that were temporarily unavailable have a chance to receive the tombstone.</p>
+
+<pre>  Cassandra example:
+
+  gc_grace_seconds: 864000  (default: 10 days)
+
+  Timeline:
+    Day 0:   DELETE key → tombstone written
+    Day 1:   Compaction runs → tombstone is only 1 day old → KEPT
+    Day 5:   Node goes down, misses the tombstone
+    Day 6:   Node comes back up, repair runs → receives tombstone from other replicas
+    Day 11:  Compaction runs → tombstone is 11 days old (past gc_grace) → REMOVED
+             Both zombie data and tombstone are finally purged
+
+  If gc_grace_seconds were too short (e.g., 60 seconds):
+    Day 0:   DELETE key → tombstone
+    Day 0:   Compaction → removes tombstone immediately
+    Day 1:   Repair → node never learns about the delete → zombie data reappears!
+
+  Rule: gc_grace_seconds must exceed your maximum repair interval.</pre>
+
+<h2>Tombstone-Related Failures</h2>
+<table>
+  <tr><th>Failure</th><th>Cause</th><th>Symptom</th></tr>
+  <tr><td><strong>Tombstone heap exhaustion</strong></td><td>Too many tombstones during read repair</td><td class="red">OutOfMemoryError, node crash</td></tr>
+  <tr><td><strong>Read timeout</strong></td><td>Too many tombstones in a partition → single partition read touches many SSTables</td><td class="red">Read latency spikes, timeouts</td></tr>
+  <tr><td><strong>Disk full</strong></td><td>Compaction can't keep up with delete workload</td><td class="red">Disk usage grows despite deletes</td></tr>
+  <tr><td><strong>Zombie resurrection</strong></td><td>gc_grace too short + failed repair</td><td class="red">Deleted data reappears</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Interview tip:</strong> If asked about a Cassandra cluster where disk is filling up despite deletes, the answer is tombstone accumulation. The fix: run compaction, tune gc_grace_seconds, and ensure regular repairs.
+</div>
+
+<h2>Best Practices</h2>
+<ul>
+  <li><strong>Never delete data you don't need to.</strong> Use TTL instead of explicit deletes when possible.</li>
+  <li><strong>Run regular repairs.</strong> Ensures all replicas receive tombstones before gc_grace expires.</li>
+  <li><strong>Monitor tombstone counts.</strong> Cassandra: <code>nodetool tablestats</code> shows tombstone ratio per table.</li>
+  <li><strong>Tune gc_grace_seconds.</strong> Must be larger than maximum expected repair interval.</li>
+  <li><strong>Avoid batch deletes of large partitions.</strong> A single partition with 100K tombstones will cause read timeouts.</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"How does deletion work in an LSM tree?"</strong><br>Since SSTables are immutable, you can't delete in-place. Instead, a tombstone (delete marker) is appended. During reads, the tombstone is the newest version and masks any older data. During compaction, old data and the tombstone are physically removed from merged SSTables.</li>
+  <li><strong>"What is the zombie data problem?"</strong><br>Deleted data physically remains on disk in older SSTables until compaction merges those SSTables with the tombstone. This wastes space and degrades read performance (bloom filters still say YES for zombie keys). In extreme cases, heavy deletes without compaction can fill the disk.</li>
+  <li><strong>"Why does Cassandra have a gc_grace_seconds setting?"</strong><br>In distributed systems, replicas may be temporarily down during a delete. The tombstone must persist long enough for all replicas to receive it via repair. If tombstones are removed before all replicas get them, deleted data can "resurrect" on the lagging replica. gc_grace_seconds (default 10 days) sets how long tombstones survive before compaction removes them.</li>
+  <li><strong>"How would you troubleshoot a cluster where reads are slow after a mass delete?"</strong><br>Mass deletes create many tombstones. Reads must traverse SSTables containing both zombie data and tombstones, causing high read latency. Solution: trigger major compaction, ensure repairs run, check tombstone counts with <code>nodetool tablestats</code>, and consider using TTL instead of explicit deletes for future workloads.</li>
+</ul>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Designing Data-Intensive Applications" — Chapter 3</strong> (Kleppmann)</li>
+    <li><strong>Cassandra documentation: Tombstones</strong> — datastax.com</li>
+    <li><strong>"Understanding Tombstones in Cassandra"</strong> — DataStax whitepaper</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="compaction.html">&larr; compaction.html</a>
+  <a href="relational-database.html">Next: relational-database.html &rarr;</a>
+</div>
+
+</body>
+</html>

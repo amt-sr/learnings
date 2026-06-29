@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.4.1 Star Replication - System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">4 Replication</a> / 4.4 Replication Topologies / 4.4.1
+</div>
+
+<h1>Star Replication</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the simplest replication topology where all followers connect directly to the leader, recognize its operational simplicity, and identify the scaling bottlenecks that make it unsuitable for large follower counts.</p>
+
+<h2>Definition</h2>
+<p><strong>Star replication</strong> is a topology in which every replica (follower) establishes a direct connection to the primary (leader). The leader is responsible for shipping replication data to each follower independently. This is the default replication topology in most databases including MySQL, PostgreSQL, and Kafka.</p>
+
+<div class="callout">
+  <strong>Key idea:</strong> The leader acts as the central hub of a star. All replication traffic flows through it. Every follower is one hop away from the leader.
+</div>
+
+<h2>Topology Diagram</h2>
+
+<div class="diagram">
+                ┌──────────┐
+                │ Follower 3│
+                └────┬─────┘
+                     │
+                ┌────┴─────┐
+         ┌──────┤ LEADER   ├──────┐
+         │      └────┬─────┘      │
+         │           │            │
+  ┌──────┴─────┐     │     ┌─────┴──────┐
+  │ Follower 1 │     │     │ Follower 2 │
+  └────────────┘     │     └────────────┘
+                     │
+                ┌────┴─────┐
+                │ Follower 4│
+                └──────────┘
+
+  Every follower connects directly to the leader.
+  The leader manages N independent replication streams.
+</div>
+
+<h2>How It Works</h2>
+
+<h3>Write Path</h3>
+<ol>
+  <li>Client sends write to the leader.</li>
+  <li>Leader writes to its local storage (write-ahead log, binlog, etc.).</li>
+  <li>Leader pushes the change to <strong>each follower independently</strong> over separate connections.</li>
+  <li>Followers apply the change to their local storage.</li>
+  <li>Leader acknowledges the write to the client (timing depends on sync mode).</li>
+</ol>
+
+<h3>Read Path</h3>
+<ol>
+  <li>Read requests can be served by the leader (always consistent).</li>
+  <li>Read requests can also be served by followers (eventually consistent, possibly stale).</li>
+</ol>
+
+<h2>Advantages</h2>
+
+<ul>
+  <li><strong>Operational simplicity:</strong> Easy to understand, configure, and monitor. One replication source, N consumers.</li>
+  <li><strong>Fast failover detection:</strong> Each follower independently monitors the leader. If the leader fails, any follower can be promoted.</li>
+  <li><strong>Independent follower lag:</strong> A slow follower does not block or slow down other followers. Each replication stream is independent.</li>
+  <li><strong>Easy to add/remove followers:</strong> Adding a new follower is just a matter of connecting it to the leader and starting replication from a known position.</li>
+  <li><strong>Built-in support:</strong> This is the default mode for MySQL, PostgreSQL, and most relational databases.</li>
+</ul>
+
+<h2>Disadvantages</h2>
+
+<ul>
+  <li><strong>Leader network bottleneck:</strong> The leader must maintain N separate connections and send replication data N times. With 50+ followers, the leader's network bandwidth becomes the bottleneck.</li>
+  <li><strong>Leader CPU overhead:</strong> Serializing and sending replication data to each follower consumes CPU on the leader.</li>
+  <li><strong>Connection management overhead:</strong> Each follower requires an open TCP connection, memory for send buffers, and per-connection state tracking.</li>
+  <li><strong>Not suitable for geo-distributed setups:</strong> Shipping data N times across WAN links is expensive. Cascading or chain topologies are better for cross-region replication.</li>
+</ul>
+
+<h2>When to Use</h2>
+
+<table>
+  <tr>
+    <th>Scenario</th>
+    <th>Suitability</th>
+  </tr>
+  <tr>
+    <td>Small number of followers (3-10)</td>
+    <td class="green">Ideal</td>
+  </tr>
+  <tr>
+    <td>All replicas in the same data center</td>
+    <td class="green">Ideal</td>
+  </tr>
+  <tr>
+    <td>Single-region deployment</td>
+    <td class="green">Good</td>
+  </tr>
+  <tr>
+    <td>Need independent per-follower failover</td>
+    <td class="green">Good</td>
+  </tr>
+  <tr>
+    <td>Large number of followers (50+)</td>
+    <td class="red">Poor - use cascading</td>
+  </tr>
+  <tr>
+    <td>Cross-region / geo-distributed</td>
+    <td class="red">Poor - use chain/cascading</td>
+  </tr>
+  <tr>
+    <td>Bandwidth-constrained leader</td>
+    <td class="red">Poor - use chain/cascading</td>
+  </tr>
+</table>
+
+<h2>Scaling Star Replication</h2>
+
+<p>When the leader becomes a bottleneck, there are practical mitigation strategies:</p>
+
+<ul>
+  <li><strong>Compressed replication:</strong> Enable compression on the replication stream (e.g., MySQL <code>slave_compressed_protocol</code>). Reduces network bandwidth at the cost of CPU.</li>
+  <li><strong>Binlog filtering:</strong> Only replicate the databases or tables that each follower needs (MySQL <code>replicate-do-db</code>, <code>replicate-ignore-db</code>).</li>
+  <li><strong>Parallel replication threads:</strong> Followers can apply changes in parallel to catch up faster.</li>
+  <li><strong>Upgrade to cascading:</strong> When follower count exceeds ~10-15, move to a cascading topology to offload the leader.</li>
+</ul>
+
+<div class="callout yellow">
+  <strong>Interview Tip:</strong> When asked "how would you replicate to 100 read replicas?", the correct answer is NOT star topology. Propose cascading or use a dedicated replication relay layer. Star is the starting point, not the ending point.
+</div>
+
+<h2>Comparison with Other Topologies</h2>
+
+<table>
+  <tr>
+    <th>Topology</th>
+    <th>Leader Load</th>
+    <th>Complexity</th>
+    <th>Fault Isolation</th>
+    <th>Best For</th>
+  </tr>
+  <tr>
+    <td><strong>Star</strong></td>
+    <td class="red">High (N streams)</td>
+    <td class="green">Low</td>
+    <td class="green">High</td>
+    <td>Few followers, same DC</td>
+  </tr>
+  <tr>
+    <td>Chain</td>
+    <td class="green">Low (1 stream)</td>
+    <td class="red">Medium</td>
+    <td class="red">Low (single chain)</td>
+    <td>Geo-distributed</td>
+  </tr>
+  <tr>
+    <td>Circular</td>
+    <td class="green">Low</td>
+    <td class="red">Medium</td>
+    <td class="red">Low (cycle risk)</td>
+    <td>Multi-master, ring</td>
+  </tr>
+  <tr>
+    <td>Cascading</td>
+    <td class="green">Medium</td>
+    <td class="red">Medium</td>
+    <td class="green">High</td>
+    <td>Many followers, cross-region</td>
+  </tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+
+<ul>
+  <li>"How does MySQL default replication work?" Answer: Star topology, leader ships binlog events to each follower over a separate connection.</li>
+  <li>"What happens when you add 50 followers to a leader?" Answer: The leader's network and CPU become the bottleneck. Move to cascading replication where intermediate followers relay to leaf followers.</li>
+  <li>"Can one slow follower affect others in star replication?" Answer: No. Each replication stream is independent. A slow follower only affects its own lag, not others.</li>
+  <li>"How would you design replication for a global read-heavy service?" Answer: Use star within a region, cascading across regions. Leaders ship to regional relay followers, which fan out to local read replicas.</li>
+</ul>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Avoid going deep into:</strong>
+  <ul>
+    <li>Specific MySQL <code>CHANGE MASTER TO</code> syntax or PostgreSQL connection strings. The interviewer wants architecture, not CLI commands.</li>
+    <li>SSL/TLS configuration for replication connections. Unless the question is specifically about security.</li>
+    <li>Replication filter syntax details. The concept of filtering is important; the exact syntax is not.</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Reading Sources</div>
+  <ul>
+    <li><strong>Designing Data-Intensive Applications (Kleppmann)</strong> - Chapter 5 on replication, leader-based replication section.</li>
+    <li><strong>MySQL 8.0 Reference Manual</strong> - "Replication Implementation" section covering replication topology.</li>
+    <li><strong>High Performance MySQL (4th Ed.)</strong> - Chapter 7 on replication topologies and scaling followers.</li>
+    <li><strong>PostgreSQL Documentation</strong> - "Streaming Replication" for the PostgreSQL equivalent of star topology.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="semi-synchronous.html">&larr; 4.3.3 Semi Synchronous</a>
+  <a href="chain-replication.html">4.4.2 Chain Replication &rarr;</a>
+</div>
+
+</body>
+</html>

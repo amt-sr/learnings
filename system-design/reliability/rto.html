@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RTO — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">System Design</a> / <a href="./index.html">Reliability</a> / 10.4.4 RTO</div>
+
+<h1>Recovery Time Objective (RTO)</h1>
+<div class="meta">
+  <span>Difficulty ⭐⭐⭐</span>
+  <span>Interview Frequency ★★★★</span>
+</div>
+
+<div class="callout">
+  <strong>Goal:</strong> Understand RTO as a business-driven metric for acceptable downtime, how it drives failover architecture and automation decisions, and the four standard DR strategies (backup/cold/warm/hot standby).
+</div>
+
+<h2>Definition</h2>
+<p><strong>Recovery Time Objective (RTO)</strong> is the maximum acceptable duration of service downtime after a failure event. It defines how quickly a system must be restored to an operational state. If RTO = 30 minutes, the system must be fully functional within 30 minutes of a disaster. RTO includes the entire recovery process: detection, provisioning, restoring data, replaying logs, verification, and traffic cutover.</p>
+
+<div class="callout yellow">
+  <strong>RTO answers the question:</strong> "How long can we afford to be down?" — Not "How much data can we lose?" (that is RPO). RTO is about time to restore service.
+</div>
+
+<h2>RTO Visualized</h2>
+
+<div class="diagram">
+  Time →
+  ┃                                              ┃
+  ┃  [━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━] ┃
+  ┃  ↑ Failure Event                              ↑ Service Restored
+  ┃  │                                            │
+  ┃  │◄──────── Downtime Window ─────────────────►│
+  ┃  │     (This must be ≤ RTO)                    │
+  ┃  │                                            │
+  ┃  ┃  During this time, the service is          ┃
+  ┃  ┃  unavailable to users                      ┃
+  ┃                                            ┃
+
+  Recovery phases within RTO:
+  ┃  Detection   Provision   Restore    Replay   Verify   Cutover
+  ┃  (30s)       (5min)      (10min)    (5min)   (5min)   (5min)
+  ┃  ├───────────┼───────────┼───────────┼────────┼────────┤
+  ┃  │            Total RTO = ~30 minutes             │
+</div>
+
+<h2>RTO by Service Type</h2>
+
+<table>
+  <tr><th>Service</th><th>Typical RTO</th><th>Rationale</th></tr>
+  <tr><td><strong>Payment Processing</strong></td><td class="green">&lt; 1 minute</td><td>Direct revenue loss per minute; customer trust impact</td></tr>
+  <tr><td><strong>Core API / Auth</strong></td><td>&lt; 5 minutes</td><td>Blocks all dependent services; cascading impact</td></tr>
+  <tr><td><strong>E-commerce Frontend</strong></td><td>&lt; 15 minutes</td><td>Revenue loss but not catastrophic</td></tr>
+  <tr><td><strong>Email / Communication</strong></td><td>&lt; 1 hour</td><td>Business operations disrupted</td></tr>
+  <tr><td><strong>Internal Tools / Dashboards</strong></td><td>&lt; 4 hours</td><td>Engineers can work around it</td></tr>
+  <tr><td><strong>Analytics / Reporting</strong></td><td>&lt; 24 hours</td><td>Not user-facing; historical analysis not time-critical</td></tr>
+  <tr><td><strong>Development Environments</strong></td><td>&lt; 48 hours</td><td>Developers can use local or alternative environments</td></tr>
+</table>
+
+<h2>The Four DR Strategies</h2>
+<p>RTO drives the choice of disaster recovery strategy. The four standard tiers, from longest to shortest RTO:</p>
+
+<h3>1. Backup and Restore (RTO: hours to days)</h3>
+<div class="diagram">
+  Strategy: Periodic backups to off-site storage
+  When disaster strikes:
+    1. Procure new infrastructure (hours)
+    2. Restore from last backup (hours)
+    3. Rebuild application stack (hours)
+
+  Cost:          ★☆☆☆☆ (Lowest)
+  RTO:           hours to days
+  RPO:           hours (last backup)
+  Automation:    Low (mostly manual)
+
+  Best for: Development environments, non-critical analytics
+</div>
+
+<h3>2. Cold Standby (RTO: 1-4 hours)</h3>
+<div class="diagram">
+  Strategy: Infrastructure provisioned but not running
+  When disaster strikes:
+    1. Start pre-provisioned instances (10-30 min)
+    2. Restore data from backup (30-120 min)
+    3. Deploy application, configure (30-60 min)
+
+  Cost:          ★★☆☆☆ (Low)
+  RTO:           1-4 hours
+  RPO:           hours (last backup)
+  Automation:    Medium (IaC for provisioning)
+
+  Best for: Internal tools, non-revenue-critical services
+</div>
+
+<h3>3. Warm Standby (RTO: minutes to 1 hour)</h3>
+<div class="diagram">
+  Strategy: Infrastructure running with minimal capacity,
+            data replicated asynchronously
+  When disaster strikes:
+    1. Scale up warm standby (5-10 min)
+    2. Catch up replication lag (minutes)
+    3. Verify and cutover traffic (5-10 min)
+
+  Cost:          ★★★☆☆ (Medium)
+  RTO:           10-60 minutes
+  RPO:           seconds to minutes (async replication lag)
+  Automation:    High (auto-scaling, DNS failover)
+
+  Best for: Most production services (typical choice for FAANG)
+</div>
+
+<h3>4. Hot Standby / Active-Active (RTO: seconds to minutes)</h3>
+<div class="diagram">
+  Strategy: Full capacity running in multiple regions,
+            data replicated synchronously or semi-sync
+  When disaster strikes:
+    1. Health check detects failure (seconds)
+    2. DNS / load balancer redirects (seconds)
+    3. Second region already serving at full capacity
+
+  Cost:          ★★★★★ (Highest — 2x+ infrastructure)
+  RTO:           seconds to ~1 minute
+  RPO:           0 to seconds (sync replication)
+  Automation:    Full (automated failover, no human intervention)
+
+  Best for: Payment, auth, and mission-critical revenue services
+</div>
+
+<h2>Comparison of DR Strategies</h2>
+
+<table>
+  <tr><th>Strategy</th><th>RTO</th><th>RPO</th><th>Cost</th><th>Automation</th><th>Complexity</th></tr>
+  <tr><td>Backup &amp; Restore</td><td class="red">Hours-days</td><td class="red">Hours</td><td class="green">$</td><td class="red">Low</td><td class="green">Low</td></tr>
+  <tr><td>Cold Standby</td><td class="red">1-4 hours</td><td class="red">Hours</td><td class="green">$$</td><td>Medium</td><td>Medium</td></tr>
+  <tr><td>Warm Standby</td><td>10-60 min</td><td>Sec-min</td><td>$$$</td><td class="green">High</td><td>High</td></tr>
+  <tr><td>Hot Standby</td><td class="green">Sec-min</td><td class="green">0-sec</td><td class="red">$$$$$</td><td class="green">Full</td><td class="red">Very High</td></tr>
+</table>
+
+<h2>Cost of Downtime Calculation</h2>
+<p>RTO should be derived from the cost of downtime, not chosen arbitrarily:</p>
+
+<pre>
+// Downtime cost framework:
+//
+// downtime_cost = (revenue_per_hour) × (fraction_affected) +
+//                 (brand_damage_per_hour) +
+//                 (compliance_penalty_risk)
+//
+// Example: E-commerce site
+// - Revenue: $100,000/hour
+// - During outage, 80% of revenue lost: $80,000/hour
+// - Brand damage: ~$20,000/hour (estimated)
+// - Total: $100,000/hour
+//
+// Hot standby cost: $50,000/month ($600,000/year)
+// If 1 hour outage costs $100,000:
+// → Hot standby pays for itself if it prevents 6 outages/year
+// → Reasonable for a service with monthly outages
+</pre>
+
+<h2>Failover Automation</h2>
+
+<div class="callout">
+  <strong>Key Insight:</strong> The difference between a 5-minute RTO and a 30-minute RTO is usually not infrastructure — it is automation. Manual failover involves: detecting the failure, making the decision, running runbooks, provisioning resources. Automated failover eliminates human latency.
+</div>
+
+<div class="diagram">
+  Automated Failover Pipeline:
+  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
+  │ Health   │───▶│ Decision │───▶│ Failover │───▶│ Verify & │
+  │ Monitor  │    │ Engine   │    │ Executor │    │ Cutover  │
+  │          │    │          │    │          │    │          │
+  │ Ping,    │    │ Auto or  │    │ Scale up │    │ Smoke    │
+  │ metrics, │    │ manual   │    │ standby, │    │ tests,   │
+  │ alerts   │    │ trigger  │    │ DNS swap │    │ traffic  │
+  │          │    │          │    │          │    │ redirect │
+  │ &lt; 30s    │    │ &lt; 10s    │    │ 2-5 min  │    │ &lt; 5 min  │
+  └──────────┘    └──────────┘    └──────────┘    └──────────┘
+                                                    │
+                                                    ▼
+                                             Total: &lt; 10 min
+</div>
+
+<h2>Multi-Region Active-Active (Hot Standby)</h2>
+<p>The gold standard for minimal RTO. Both regions serve traffic simultaneously:</p>
+
+<div class="diagram">
+  Region A (us-east)          Region B (eu-west)
+  ┌──────────────────┐       ┌──────────────────┐
+  │  Load Balancer   │       │  Load Balancer   │
+  │  ┌────┐ ┌────┐   │       │  ┌────┐ ┌────┐   │
+  │  │Svc1│ │Svc1│   │       │  │Svc1│ │Svc1│   │
+  │  └────┘ └────┘   │       │  └────┘ └────┘   │
+  │  ┌────┐ ┌────┐   │◄═══►│  ┌────┐ ┌────┐   │
+  │  │ DB │ │ DB │   │ sync │  │ DB │ │ DB │   │
+  │  └────┘ └────┘   │      │  └────┘ └────┘   │
+  └──────────────────┘       └──────────────────┘
+         │                           │
+         ▼                           ▼
+  Global DNS (Route 53 / Cloudflare)
+  - Health checks every 10s
+  - Auto-failover: remove unhealthy region from DNS
+  - RTO: ~30-60 seconds (DNS propagation)
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>"What is RTO?" — The maximum acceptable downtime after a failure. How fast you must recover service.</li>
+  <li>"What is the difference between RPO and RTO?" — RPO is data loss tolerance (backward in time). RTO is downtime tolerance (forward in time). They are independent requirements.</li>
+  <li>"What are the four DR strategies?" — Backup/restore (hours), cold standby (1-4 hours), warm standby (10-60 min), hot standby/active-active (seconds). Trade off cost vs RTO.</li>
+  <li>"How would you design for an RTO of 5 minutes?" — Warm standby with automated failover: health monitoring triggers auto-scaling of standby instances, DNS failover, and smoke tests. Data replicated asynchronously with minimal lag.</li>
+  <li>"What is the difference between warm and hot standby?" — Warm: instances running but not at full capacity, need to scale up. Hot: full capacity running in multiple regions, failover is instant (DNS swap only).</li>
+  <li>"How do you calculate downtime cost?" — Revenue per hour × fraction affected + brand damage + compliance risk. Compare to DR infrastructure cost to justify the investment.</li>
+  <li>"What drives the decision between warm and hot standby?" — RTO requirements and cost tolerance. Hot standby costs 2-5x more but achieves seconds-level RTO. Warm standby is sufficient for most services (10-30 min RTO).</li>
+</ul>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Depth:</strong> Specific DNS provider configuration (Route 53 health checks, Cloudflare failover routing). <br>
+  <strong>Depth:</strong> Business continuity planning (BCP) processes, DR committee structures. <br>
+  <strong>Depth:</strong> Insurance and financial risk modeling for downtime.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">AWS — Disaster Recovery: RTO and RPO</div>
+  <p>AWS Well-Architected framework guidance on DR strategies mapped to RTO/RPO requirements with cost analysis.</p>
+</div>
+<div class="source">
+  <div class="source-label">Google SRE Book — Chapter 13: Data Pipeline Reliability</div>
+  <p>How Google approaches RTO for large-scale services, including automated failover and multi-region strategies.</p>
+</div>
+<div class="source">
+  <div class="source-label">Designing Data-Intensive Applications — Martin Kleppmann</div>
+  <p>Chapter on replication and partitioning — how replication strategies affect both RTO and RPO for distributed systems.</p>
+</div>
+
+<div class="nav">
+  <a href="rpo.html">&larr; RPO</a>
+  <a href="../observability/logging.html">Logging &rarr;</a>
+</div>
+</body>
+</html>

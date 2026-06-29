@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.2.2 Hash Sharding</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="../index.html">6 Partitioning</a> / <a href="index.html">6.2 Sharding</a> / 6.2.2</p>
+
+<h1>Hash Sharding</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the most widely used sharding strategy in distributed databases — using a hash function to distribute keys uniformly across shards. Learn why it solves the hot range problem, what breaks when you change the number of shards, and how consistent hashing addresses the resharding challenge.</p>
+
+<h2>Definition</h2>
+<p>Hash sharding applies a hash function to the shard key and uses the result modulo the number of shards to determine placement. The formula is simple: <strong>shard_id = hash(key) % N</strong>. This ensures even distribution of keys regardless of the key's natural distribution, eliminating hot spots.</p>
+
+<div class="diagram">
+  Shard routing:  shard_id = hash(key) % N
+
+  hash("alice") = 184723  → 184723 % 4 = 3  → Shard 3
+  hash("bob")   = 92041   → 92041 % 4  = 1  → Shard 1
+  hash("carol") = 305218  → 305218 % 4 = 2  → Shard 2
+  hash("dave")  = 154632  → 154632 % 4 = 0  → Shard 0
+  hash("eve")   = 72189   → 72189 % 4  = 1  → Shard 1
+  hash("frank") = 482017  → 482017 % 4 = 1  → Shard 1
+  hash("grace") = 219563  → 219563 % 4 = 3  → Shard 3
+
+  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐
+  │ Shard 0  │  │ Shard 1  │  │ Shard 2  │  │ Shard 3  │
+  │ dave     │  │ bob      │  │ carol    │  │ alice    │
+  │          │  │ eve      │  │          │  │ grace    │
+  │          │  │ frank    │  │          │  │          │
+  └──────────┘  └──────────┘  └──────────┘  └──────────┘
+  Server A       Server B       Server C       Server D
+</div>
+
+<h2>Uniform Distribution</h2>
+<p>A good hash function (MD5, SHA-256, MurmurHash) maps keys to a large output space with near-uniform distribution. The modulo operation then distributes keys evenly across N shards. With a good hash function and sufficient cardinality in the key space, each shard will have approximately <code>total_records / N</code> records.</p>
+
+<div class="callout green">
+  <strong>Key advantage over range sharding:</strong> Hash sharding eliminates hot ranges. Even if 80% of users have last names starting with "S", hash(user_id) % N distributes them uniformly. No single shard becomes a hotspot due to data skew.
+</div>
+
+<h2>The Resharding Problem</h2>
+<p>When you change N (add or remove a shard), the modulo changes and <strong>almost every key maps to a different shard</strong>. Going from N=4 to N=5 means hash(key) % 5 produces different results than hash(key) % 4 for nearly all keys.</p>
+
+<div class="diagram">
+  Before (N=4):                          After (N=5):
+
+  hash("alice") % 4 = 3 → Shard 3       hash("alice") % 5 = 0 → Shard 0   ← MOVED
+  hash("bob")   % 4 = 1 → Shard 1       hash("bob")   % 5 = 3 → Shard 3   ← MOVED
+  hash("carol") % 4 = 2 → Shard 2       hash("carol") % 5 = 4 → Shard 4   ← MOVED
+  hash("dave")  % 4 = 0 → Shard 0       hash("dave")  % 5 = 2 → Shard 2   ← MOVED
+
+  Adding 1 shard causes ~75% of all keys to relocate.
+  For N → N+1, approximately N/(N+1) keys must move.
+</div>
+
+<div class="callout red">
+  <strong>The resharding nightmare:</strong> In production, moving 75%+ of your data between shards means massive network I/O, downtime or degraded performance, and risk of data loss if the process fails. This is why simple hash modulo sharding is rarely used directly in systems that need to scale dynamically.
+</div>
+
+<h2>Relationship to Consistent Hashing</h2>
+<p>Consistent hashing solves the resharding problem. Instead of <code>hash(key) % N</code>, both keys and shards are hashed onto a ring (0 to 2^32 or 2^160). Each key is assigned to the nearest shard in the clockwise direction on the ring. When a shard is added or removed, only <code>1/N</code> of keys need to move (the keys in the affected arc of the ring).</p>
+
+<div class="diagram">
+  Consistent Hash Ring:
+
+            0
+           / \
+          /   \
+    S1 ●/     \● S3
+        |       |
+        |       |
+    S2 ●\     /● S4
+          \   /
+           \ /
+           256
+
+  Key "alice" hashes to 130 → clockwise to S3
+  Key "bob"   hashes to 200 → clockwise to S4
+  Key "carol" hashes to 050 → clockwise to S1
+
+  Add S5 at position 100:
+    Only keys in range [64, 100] move from S1 to S5
+    → Only ~25% of S1's data moves, NOT 75% of all data
+</div>
+
+<table>
+  <tr>
+    <th>Property</th>
+    <th>Hash Modulo</th>
+    <th>Consistent Hashing</th>
+  </tr>
+  <tr>
+    <td>Distribution</td>
+    <td class="green">Uniform (with good hash)</td>
+    <td class="green">Near-uniform (with virtual nodes)</td>
+  </tr>
+  <tr>
+    <td>Keys moved on shard add</td>
+    <td class="red">~N/(N+1) of all keys</td>
+    <td class="green">~1/N of keys</td>
+  </tr>
+  <tr>
+    <td>Keys moved on shard remove</td>
+    <td class="red">~N/(N-1) of all keys</td>
+    <td class="green">~1/N of keys</td>
+  </tr>
+  <tr>
+    <td>Complexity</td>
+    <td class="green">Trivial to implement</td>
+    <td>Requires ring + virtual nodes</td>
+  </tr>
+  <tr>
+    <td>Range queries</td>
+    <td class="red">Destroyed (hash scrambles order)</td>
+    <td class="red">Destroyed (hash scrambles order)</td>
+  </tr>
+  <tr>
+    <td>Used by</td>
+    <td>Simple/custom systems</td>
+    <td>DynamoDB, Cassandra, Riak, memcached</td>
+  </tr>
+</table>
+
+<h2>Hash Sharding in Practice</h2>
+<p>Most production systems use a variation of hash sharding:</p>
+<ul>
+  <li><strong>DynamoDB:</strong> Hash + range composite keys. Partition key hashed, sort key provides ordering within a partition.</li>
+  <li><strong>Cassandra:</strong> Murmur3 hash onto a token ring (consistent hashing). Virtual nodes (vnodes) improve uniformity.</li>
+  <li><strong> MongoDB:</strong> Hashed shard keys using MD5. Supports hashed indexes for even distribution.</li>
+  <li><strong>Redis Cluster:</strong> CRC16 hash slot mapping. 16,384 hash slots distributed across nodes.</li>
+</ul>
+
+<div class="callout yellow">
+  <strong>Interview tip:</strong> When asked "how would you shard X?", default to hash sharding unless the workload has heavy range queries. Then discuss the tradeoff: hash gives even distribution but kills range queries; range preserves query locality but risks hot shards. The strongest answer proposes a hybrid: hash on the primary dimension for distribution, with secondary indexes or a separate range-partitioned store for range queries.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>Explain hash sharding. Why is it the most common sharding strategy?</li>
+  <li>What happens when you add a shard to a hash-sharded system? How do you solve this?</li>
+  <li>What is consistent hashing and how does it solve the resharding problem?</li>
+  <li>How does DynamoDB use hash sharding? Explain partition keys and sort keys.</li>
+  <li>Design a URL shortener — how would you shard the storage layer?</li>
+  <li>Hash sharding destroys range queries — how would you handle a workload that needs both uniform distribution and range scans?</li>
+  <li>Explain virtual nodes in consistent hashing. Why are they needed?</li>
+</ul>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Do not implement a hash function from scratch or debate hash function properties</strong> (avalanche effect, collision resistance) unless the interviewer specifically asks. In interviews, assume a good hash function exists and focus on the <em>system-level</em> implications of hash sharding: distribution, resharding, and the tradeoff with range queries. Skip deep dives into specific hash function implementations (MurmurHash internals, etc.).
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source>
+  <div class="source-label">Recommended Reading</div>
+  <ul>
+    <li><a href="https://martin.kleppmann.com/book/">"Designing Data-Intensive Applications" — Martin Kleppmann, Ch. 6 (Partitioning)</a></li>
+    <li><a href="https://www.allthingsdistributed.com/2007/10/amazons_dynamo.html">"Amazon Dynamo: Design" — DeCandia et al. (consistent hashing at scale)</a></li>
+    <li><a href="https://www.aws.amazon.com/builders-library/moving-to-a-multi-tenant-architecture/">AWS Builders Library: "Moving to a Multi-Tenant Architecture"</a></li>
+    <li><a href="https://docs.datastax.com/en/cassandra/docs/3.0/cassandra/architecture/archArchStructure.html">Cassandra Documentation: Architecture and Token Ring</a></li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="range-sharding.html">&larr; 6.2.1 Range Sharding</a>
+  <a href="directory-sharding.html">6.2.3 Directory Sharding &rarr;</a>
+</div>
+
+</body>
+</html>

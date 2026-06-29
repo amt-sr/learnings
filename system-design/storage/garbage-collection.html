@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.7.4 Garbage Collection</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">3 Storage</a> / <a href="index.html">3.7 MVCC</a> / 3.7.4
+</div>
+
+<h1>Garbage Collection</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand why MVCC garbage collection is necessary, how PostgreSQL's VACUUM determines which row versions are reclaimable, the mechanics of autovacuum, the concept of dead tuple accumulation and table bloat, and the impact on query and write performance.</p>
+
+<h2>Definition</h2>
+<p><strong>MVCC garbage collection</strong> is the process of reclaiming storage occupied by old row versions that are no longer visible to any active transaction. In PostgreSQL, this process is called <strong>VACUUM</strong>. Because MVCC never overwrites rows in place, every UPDATE and DELETE leaves behind a <em>dead tuple</em>&mdash;an old version that may still be needed by some concurrent transaction. Once no transaction can possibly need a given version, vacuum removes it and marks the space as reusable for future inserts.</p>
+
+<div class="callout">
+  <strong>Key insight:</strong> MVCC trades write amplification for read concurrency. The cost of never overwriting in place is accumulated garbage. Without effective garbage collection, every database table grows without bound regardless of the logical data size.
+</div>
+
+<h2>Why Old Versions Need Cleanup</h2>
+<p>Every UPDATE in PostgreSQL is semantically a DELETE + INSERT:</p>
+
+<ul>
+  <li>The old tuple version gets <code>xmax</code> set to the updating transaction's ID.</li>
+  <li>A new tuple version is created with the new data and a fresh <code>xmin</code>.</li>
+  <li>The old version remains on the page as a <strong>dead tuple</strong>.</li>
+</ul>
+
+<p>Over time, tables accumulate dead tuples proportional to their write rate. Without vacuum, these dead tuples:</p>
+
+<ul>
+  <li>Consume disk space (table bloat).</li>
+  <li>Slow down sequential scans (reading past dead tuples).</li>
+  <li>Waste buffer pool space (caching dead tuples instead of live data).</li>
+  <li>Prevent reuse of space for HOT (Heap-Only Tuple) updates.</li>
+  <li>Delay transaction ID wraparound prevention.</li>
+</ul>
+
+<h2>How Vacuum Determines Reclaimable Versions</h2>
+<p>VACUUM uses the <strong>visibility horizon</strong>&mdash;the minimum of all active snapshot <code>xmin</code> values across the cluster. Any tuple version whose <code>xmax</code> (deleting transaction) is older than this horizon is guaranteed invisible to all current and future transactions:</p>
+
+<div class="diagram">
+  Active snapshots:
+    T_oldest:   xmin = 150  (long-running analytics query)
+    T_current:  xmin = 300
+    T_recent:   xmin = 310
+
+  Visibility horizon = min(150, 300, 310) = 150
+
+  Dead tuples (safe to vacuum):
+    Tuple A: xmax = 120  (< 150, no active snapshot can see it) → RECLAIMABLE
+    Tuple B: xmax = 140  (< 150)                                  → RECLAIMABLE
+    Tuple C: xmax = 160  (>= 150, T_oldest might still need it)  → NOT YET SAFE
+
+  The long-running T_oldest is BLOCKING vacuum of Tuple C.
+
+  Once T_oldest completes:
+    New horizon = min(300, 310) = 300
+    Tuple C: xmax = 160  (< 300) → now RECLAIMABLE
+</div>
+
+<div class="callout yellow">
+  <strong>Critical dependency:</strong> Vacuum's effectiveness is entirely determined by the oldest active snapshot. A single long-running transaction prevents vacuum from reclaiming <em>any</em> dead tuples across the entire cluster, even on tables that transaction never touched.
+</div>
+
+<h2>Autovacuum</h2>
+<p>PostgreSQL runs <strong>autovacuum</strong>&mdash;a background daemon process that periodically scans tables and triggers VACUUM (and optionally ANALYZE) when thresholds are exceeded:</p>
+
+<table>
+  <tr>
+    <th>Parameter</th>
+    <th>Default</th>
+    <th>Behavior</th>
+  </tr>
+  <tr>
+    <td><code>autovacuum_vacuum_threshold</code></td>
+    <td>50</td>
+    <td>Minimum number of dead tuples before considering vacuum</td>
+  </tr>
+  <tr>
+    <td><code>autovacuum_vacuum_scale_factor</code></td>
+    <td>0.2 (20%)</td>
+    <td>Fraction of table rows that triggers vacuum</td>
+  </tr>
+  <tr>
+    <td><code>autovacuum_vacuum_cost_delay</code></td>
+    <td>2ms</td>
+    <td>Sleep between cost-limited vacuum operations (throttling)</td>
+  </tr>
+  <tr>
+    <td><code>autovacuum_max_workers</code></td>
+    <td>3</td>
+    <td>Maximum parallel autovacuum processes</td>
+  </tr>
+</table>
+
+<p>Vacuum is triggered for a table when:</p>
+<pre>
+dead_tuples > autovacuum_vacuum_threshold
+           + (autovacuum_vacuum_scale_factor * live_tuples)
+</pre>
+
+<div class="callout green">
+  <strong>Tuning for high-write workloads:</strong> For tables with millions of rows, the default 20% scale factor means vacuum won't run until 200K+ dead tuples accumulate. In write-heavy OLTP systems, reduce <code>autovacuum_vacuum_scale_factor</code> to 0.05 (5%) or 0.01 (1%) and lower <code>autovacuum_vacuum_cost_delay</code> to 1ms or less for more aggressive cleanup.
+</div>
+
+<h2>Dead Tuple Accumulation and Bloat</h2>
+
+<div class="diagram">
+  Table growth over time (1M row table, 10% daily churn):
+
+  Day 0:   1.0M live +   0 dead = 1.0M total (compact)
+  Day 1:   1.0M live + 100K dead = 1.1M total  (vacuum reclaims → back to 1.0M)
+  Day 2:   1.0M live + 100K dead = 1.1M total  (vacuum reclaims → back to 1.0M)
+
+  WITHOUT vacuum:
+  Day 1:   1.0M live + 100K dead = 1.1M total
+  Day 2:   1.0M live + 200K dead = 1.2M total
+  Day 10:  1.0M live + 1.0M dead = 2.0M total (100% bloat!)
+  Day 30:  1.0M live + 3.0M dead = 4.0M total (300% bloat!)
+
+  Indexes also bloat:
+  - Each dead tuple has index entries pointing to it
+  - Regular VACUUM marks index entries as dead but doesn't remove them
+  - VACUUM FULL or REINDEX is needed to actually compact indexes
+</div>
+
+<h2>Impact on Performance</h2>
+
+<table>
+  <tr>
+    <th>Impact Area</th>
+    <th>Mechanism</th>
+    <th>Severity</th>
+  </tr>
+  <tr>
+    <td>Sequential scan speed</td>
+    <td>Must skip over dead tuples on every page</td>
+    <td class="red">High (linear degradation with bloat)</td>
+  </tr>
+  <tr>
+    <td>Buffer pool efficiency</td>
+    <td>Dead tuples consume cache space, evicting live data</td>
+    <td class="red">High (cascading effect on all queries)</td>
+  </tr>
+  <tr>
+    <td>Index scan performance</td>
+    <td>Index entries point to dead tuples (extra heap fetches)</td>
+    <td class="red">High (random IO waste)</td>
+  </tr>
+  <tr>
+    <td>Write amplification</td>
+    <td>Larger pages means more WAL for page modifications</td>
+    <td>Medium</td>
+  </tr>
+  <tr>
+    <td>Transaction ID wraparound</td>
+    <td>Unvacuumed tables block <code>pg_xact</code> recycling</td>
+    <td class="red">Critical (can force emergency shutdown)</td>
+  </tr>
+</table>
+
+<h2>VACUUM vs. VACUUM FULL</h2>
+
+<table>
+  <tr>
+    <th>Operation</th>
+    <th>Locking</th>
+    <th>Space Reclamation</th>
+    <th>Use Case</th>
+  </tr>
+  <tr>
+    <td><code>VACUUM</code></td>
+    <td>Shared (allows reads and writes)</td>
+    <td>Marks space reusable within the table; does NOT return space to OS</td>
+    <td>Regular maintenance (autovacuum)</td>
+  </tr>
+  <tr>
+    <td><code>VACUUM FULL</code></td>
+    <td>Exclusive (blocks all access)</td>
+    <td>Rewrites the table, compacts pages, returns space to OS</td>
+    <td>Emergency bloat removal (offline maintenance)</td>
+  </tr>
+  <tr>
+    <td><code>pg_repack</code></td>
+    <td>None (triggers-based, online)</td>
+    <td>Creates new table, swaps, drops old</td>
+    <td>Online bloat removal without downtime</td>
+  </tr>
+</table>
+
+<div class="callout red">
+  <strong>Production warning:</strong> Never run <code>VACUUM FULL</code> on a production table without planning. It takes an ACCESS EXCLUSIVE lock for the duration of the rewrite. For large tables, this can mean hours of downtime. Use <code>pg_repack</code> or <code>pg_squeeze</code> for online alternatives.
+</div>
+
+<h2>Monitoring Vacuum Health</h2>
+<p>Key metrics to watch in production systems:</p>
+
+<ul>
+  <li><code>pg_stat_user_tables.dead_tuples</code> &mdash; count of unreclaimed dead tuples per table</li>
+  <li><code>pg_stat_user_tables.last_vacuum</code> &mdash; timestamp of last vacuum</li>
+  <li><code>pg_stat_user_tables.last_autovacuum</code> &mdash; timestamp of last autovacuum</li>
+  <li><code>pg_stat_user_tables.n_dead_tup / n_live_tup</code> &mdash; bloat ratio</li>
+  <li><code>pg_stat_activity</code> &mdash; long-running transactions blocking vacuum</li>
+  <li><code>pg_stat_database.age(xid)</code> &mdash; transaction ID age (wraparound proximity)</li>
+</ul>
+
+<div class="callout">
+  <strong>Interview tip:</strong> Be ready to discuss how you would diagnose vacuum issues in production. Mention <code>pg_stat_user_tables</code>, explain the bloat ratio metric, and describe how you would identify the blocking transaction using <code>pg_stat_activity</code>.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>Why does MVCC need garbage collection? What happens without it?</li>
+  <li>How does VACUUM determine which tuple versions are safe to reclaim?</li>
+  <li>What is autovacuum and how does it decide when to run?</li>
+  <li>How does a single long-running transaction affect vacuum across the entire database?</li>
+  <li>What is table bloat and how does it impact query performance?</li>
+  <li>What is the difference between VACUUM and VACUUM FULL? When would you use each?</li>
+  <li>How would you tune autovacuum for a high-write OLTP workload?</li>
+  <li>How does MySQL InnoDB's purge process differ from PostgreSQL's VACUUM?</li>
+  <li>Design a monitoring system to detect and alert on vacuum starvation.</li>
+</ul>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>For interviews, skip:</strong>
+  <ul>
+    <li>PostgreSQL vacuum cost accounting internals (<code>vacuum_cost_limit</code>, <code>vacuum_cost_page_hit</code>, balance algorithm)</li>
+    <li>Visibility map page format and <code>VM_ALL_FROZEN</code> bit mechanics</li>
+    <li>HOT (Heap-Only Tuple) chain internals and page-level pruning algorithms</li>
+    <li>Lazy VACUUM vs. Full VACUUM internal FSM (Free Space Map) traversal details</li>
+    <li>MySQL InnoDB purge thread architecture and undo log segment truncation internals</li>
+    <li>Oracle's SMON (System Monitor) coalescing and space transaction internals</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Reading Sources</div>
+  <ul>
+    <li>PostgreSQL Documentation &mdash; "Routine Vacuuming" and "The Autovacuum Daemon"</li>
+    <li><em>The Internals of PostgreSQL</em>, InterDB.jp &mdash; Chapter 6: Concurrency Control (vacuum processing)</li>
+    <li><em>Designing Data-Intensive Applications</em>, Martin Kleppmann &mdash; Chapter 7: Transactions (MVCC and garbage collection implications)</li>
+    <li><em>Database Internals</em>, Alex Petrov &mdash; Chapter 8: B-Tree-Based Storage (compaction and cleanup)</li>
+    <li>Craig Kerstiens, "Monitoring Your PostgreSQL Dead Tuples" (blog post on practical vacuum monitoring)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="visibility-rules.html">&larr; 3.7.3 Visibility Rules</a>
+  <a href="primary-index.html">Next: 3.8.1 Primary Index &rarr;</a>
+</div>
+
+</body>
+</html>

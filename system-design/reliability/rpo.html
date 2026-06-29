@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RPO — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">System Design</a> / <a href="./index.html">Reliability</a> / 10.4.3 RPO</div>
+
+<h1>Recovery Point Objective (RPO)</h1>
+<div class="meta">
+  <span>Difficulty ⭐⭐⭐</span>
+  <span>Interview Frequency ★★★★</span>
+</div>
+
+<div class="callout">
+  <strong>Goal:</strong> Understand RPO as a business-driven metric for acceptable data loss, how it drives backup frequency and replication strategy, and the relationship between RPO and RTO.
+</div>
+
+<h2>Definition</h2>
+<p><strong>Recovery Point Objective (RPO)</strong> is the maximum acceptable amount of data loss, measured in time. It defines how far back in time you must be able to restore data after a failure. If RPO = 1 hour, the system must be able to restore data from no more than 1 hour before the failure. Any data written in the last hour may be permanently lost.</p>
+
+<div class="callout yellow">
+  <strong>RPO answers the question:</strong> "How much data can we afford to lose?" — Not "How fast can we recover?" (that is RTO). RPO is about data freshness at the point of recovery.
+</div>
+
+<h2>RPO Visualized</h2>
+
+<div class="diagram">
+  Time →
+  ┃                                              ┃
+  ┃  [━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━] ┃
+  ┃  ↑ Last good backup                           ↑ Failure event
+  ┃  │                                            │
+  ┃  │◄──────── Data Loss Window ────────────────►│
+  ┃  │     (This is RPO)                          │
+  ┃  │                                            │
+  ┃  ┃  Data written after backup but before       ┃
+  ┃  ┃  failure is LOST (unless replicated)       ┃
+  ┃                                            ┃
+
+  Example: If backup was at 02:00 and failure at 05:30
+  and RPO = 1 hour, then:
+  - Maximum acceptable loss = 1 hour of data
+  - Actual loss = 3.5 hours → VIOLATION
+  - Need more frequent backups or continuous replication
+</div>
+
+<h2>RPO by Service Type</h2>
+
+<table>
+  <tr><th>Service</th><th>Typical RPO</th><th>Rationale</th></tr>
+  <tr><td><strong>Payment / Financial Ledger</strong></td><td class="green">Zero (RPO = 0)</td><td>Every transaction is money; losing even one transaction is unacceptable</td></tr>
+  <tr><td><strong>Order Management</strong></td><td>&lt; 1 minute</td><td>Lost orders = lost revenue + customer complaints</td></tr>
+  <tr><td><strong>User Authentication</strong></td><td>&lt; 5 minutes</td><td>New registrations/password changes must not be lost</td></tr>
+  <tr><td><strong>Social Media Feed</strong></td><td>&lt; 15 minutes</td><td>Recent posts/comments can be recreated; not critical</td></tr>
+  <tr><td><strong>Analytics / Telemetry</strong></td><td>&lt; 1 hour</td><td>Aggregate data is less sensitive to small gaps</td></tr>
+  <tr><td><strong>Logs / Metrics</strong></td><td>&lt; 24 hours</td><td>Logs are for debugging; small gaps are tolerable</td></tr>
+  <tr><td><strong>ML Training Data</strong></td><td>&lt; 24 hours</td><td>Training data accumulates; missing a few hours is fine</td></tr>
+</table>
+
+<h2>How RPO Drives Architecture Decisions</h2>
+
+<div class="diagram">
+  RPO Requirement → Architecture Strategy
+
+  RPO = 0 (zero data loss)
+  │  → Synchronous multi-region replication
+  │  → Distributed consensus (Raft/Paxos)
+  │  → Cost: Highest (2x write latency at minimum)
+  │
+  RPO < 1 minute
+  │  → Semi-synchronous replication
+  │  → WAL shipping with very short delay
+  │  → Cost: High
+  │
+  RPO < 15 minutes
+  │  → Async replication with streaming
+  │  → Continuous backup (e.g., DynamoDB PITR)
+  │  → Cost: Moderate
+  │
+  RPO < 1 hour
+  │  → Frequent incremental backups (every 15-30 min)
+  │  → Async replication
+  │  → Cost: Low
+  │
+  RPO < 24 hours
+     → Daily full backup
+     → Async replication
+     → Cost: Lowest
+</div>
+
+<h3>Replication and RPO</h3>
+<p>The replication lag directly determines RPO:</p>
+
+<pre>
+// If primary → replica replication lag = 500ms
+// RPO = 500ms (data on replica is 500ms behind primary)
+// If primary fails, replica is 500ms behind
+
+// If replication lag = 30 seconds
+// RPO = 30 seconds
+
+// For RPO = 0:
+// Must use synchronous replication
+// Write succeeds only when ALL replicas acknowledge
+// This doubles write latency (minimum)
+</pre>
+
+<table>
+  <tr><th>Replication Mode</th><th>Typical RPO</th><th>Write Latency Impact</th><th>Availability Impact</th></tr>
+  <tr><td><strong>Synchronous</strong></td><td class="green">0</td><td class="red">2-3x higher</td><td>Lower (any replica down blocks writes)</td></tr>
+  <tr><td><strong>Semi-sync</strong></td><td>&lt; 1 second</td><td>Moderate</td><td>Moderate</td></tr>
+  <tr><td><strong>Async</strong></td><td>Seconds to minutes</td><td class="green">Minimal</td><td class="green">High</td></tr>
+  <tr><td><strong>No replication</strong></td><td>Last backup</td><td class="green">None</td><td class="green">High (but data at risk)</td></tr>
+</table>
+
+<h2>RPO vs RTO</h2>
+
+<div class="callout">
+  <strong>They measure different things:</strong> RPO = how much data you can lose (backward in time). RTO = how fast you can recover (forward in time). Both are business requirements that drive different architecture decisions.
+</div>
+
+<table>
+  <tr><th>Aspect</th><th>RPO</th><th>RTO</th></tr>
+  <tr><td><strong>Measures</strong></td><td>Data loss tolerance</td><td>Service downtime tolerance</td></tr>
+  <tr><td><strong>Direction</strong></td><td>Backward (how far back?)</td><td>Forward (how long to recover?)</td></tr>
+  <tr><td><strong>Driven by</strong></td><td>Data criticality</td><td>Business continuity needs</td></tr>
+  <tr><td><strong>Architectural lever</strong></td><td>Backup frequency, replication</td><td>Failover automation, restore speed</td></tr>
+  <tr><td><strong>Example</strong></td><td>"Can lose 5 min of orders"</td><td>"Must be back online in 30 min"</td></tr>
+</table>
+
+<h2>Calculating Cost of Data Loss</h2>
+<p>RPO should be determined by the cost of losing data, not arbitrary:</p>
+
+<pre>
+// Cost calculation framework:
+//
+// Data loss cost = (number of affected records) × (cost per record)
+//
+// Example: Payment service
+// - 1000 transactions per minute
+// - Average transaction value: $50
+// - RPO = 5 minutes → potential loss: 5000 × $50 = $250,000
+//
+// Cost of achieving RPO < 5 min (sync replication):
+// - $50,000/year in infrastructure
+//
+// Trade-off: $50K/year infrastructure vs $250K potential loss per incident
+// → Sync replication is justified
+
+// Example: Analytics pipeline
+// - 1M events per minute
+// - Each event: ~100 bytes (essentially free)
+// - RPO = 1 hour → 60M events lost (recreatable from raw logs)
+// → Async replication is sufficient
+</pre>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>"What is RPO?" — The maximum acceptable amount of data loss, measured in time. RPO = 5 minutes means you can lose up to 5 minutes of data.</li>
+  <li>"How does RPO differ from RTO?" — RPO is about data loss (backward). RTO is about downtime (forward). They drive different architecture decisions.</li>
+  <li>"How would you achieve RPO = 0?" — Synchronous multi-region replication where a write only succeeds after all replicas acknowledge. This adds write latency but guarantees no data loss.</li>
+  <li>"How does replication lag affect RPO?" — Replication lag IS the RPO for replica-based recovery. If lag is 5 seconds, RPO is 5 seconds when failing over to the replica.</li>
+  <li>"How would you determine the right RPO for a service?" — Business impact analysis: what is the cost per lost record? Multiply by expected loss window. Compare with infrastructure cost to achieve a lower RPO.</li>
+  <li>"What RPO would you set for a payment processing system?" — RPO = 0. Every financial transaction must be durable before acknowledging to the customer. Use synchronous replication or a distributed consensus log.</li>
+</ul>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Depth:</strong> Specific database replication lag monitoring tools and queries. <br>
+  <strong>Depth:</strong> Regulatory compliance requirements for RPO (GDPR, SOX, HIPAA) — too domain-specific. <br>
+  <strong>Depth:</strong> RAID/storage-level RPO considerations (array rebuild times).
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">AWS — Disaster Recovery: RPO and RTO</div>
+  <p>AWS Well-Architected framework guidance on defining RPO/RTO and choosing appropriate DR strategies.</p>
+</div>
+<div class="source">
+  <div class="source-label">Google SRE Book — Chapter 13: Data Pipeline Reliability</div>
+  <p>How Google approaches RPO for services like Bigtable, Spanner, and Megastore with different replication strategies.</p>
+</div>
+<div class="source">
+  <div class="source-label">Designing Data-Intensive Applications — Martin Kleppmann</div>
+  <p>Chapter on replication: synchronous vs asynchronous, the CAP theorem tradeoffs between consistency (RPO), availability, and latency.</p>
+</div>
+
+<div class="nav">
+  <a href="restore.html">&larr; Restore</a>
+  <a href="rto.html">RTO &rarr;</a>
+</div>
+</body>
+</html>

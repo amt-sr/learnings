@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>15.1 URL Shortener — System Design</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../">Handbook</a> / <a href="../">System Design</a> / 15. Design Problems / 15.1 URL Shortener</p>
+
+<h1>URL Shortener</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Design a service that takes a long URL and returns a short, unique alias. When a user visits the short URL, they are redirected to the original long URL. The system must handle high read throughput for redirections and support analytics on click data.</p>
+
+<h2>Functional Requirements</h2>
+<ul>
+  <li>Shorten a given long URL to a compact alias (e.g., <code>https://sho.rt/abc123</code>)</li>
+  <li>Redirect the short URL to the original long URL via HTTP 301/302</li>
+  <li>Support optional custom aliases (e.g., <code>mybrand</code>)</li>
+  <li>Provide click analytics: timestamp, IP, referrer, browser, location</li>
+  <li>Support link expiration and deactivation</li>
+  <li>Provide API access for programmatic shortening</li>
+</ul>
+
+<h2>Non-Functional Requirements</h2>
+<ul>
+  <li><strong>High availability:</strong> redirection must be highly available (99.99%+ uptime)</li>
+  <li><strong>Low latency:</strong> redirect latency &lt; 50ms for reads</li>
+  <li><strong>Scalability:</strong> handle 100M+ URLs stored, 10B+ clicks/month</li>
+  <li><strong>Predictable URLs:</strong> short URLs should be unguessable to prevent enumeration</li>
+  <li><strong>Durability:</strong> no data loss for stored mappings</li>
+</ul>
+
+<h3>Capacity Estimates</h3>
+<table>
+  <tr><th>Metric</th><th>Estimate</th><th>Notes</th></tr>
+  <tr><td>New URLs/day</td><td>10M</td><td>Write-heavy at creation time</td></tr>
+  <tr><td>Clicks/day</td><td>1B</td><td>Read-heavy for redirection</td></tr>
+  <tr><td>Storage (1 year)</td><td>~30 TB</td><td>URL data + analytics events</td></tr>
+  <tr><td>Read:Write ratio</td><td>100:1</td><td>Strong read skew</td></tr>
+  <tr><td>Peak QPS (reads)</td><td>~50K</td><td>10B / (30 days * 86400s) * 3x peak</td></tr>
+  <tr><td>Peak QPS (writes)</td><td>~350</td><td>10M / 86400s * 3x peak</td></tr>
+</table>
+
+<h2>API Design</h2>
+<pre>
+POST   /api/v1/shorten
+Body:  { "long_url": "https://example.com/very/long/path", "custom_alias": "mylink", "ttl_seconds": 86400 }
+Resp:  { "short_url": "https://sho.rt/aB3x9Z", "created_at": "2026-06-28T10:00:00Z", "expires_at": "..." }
+
+GET    /{short_code}
+Resp:  HTTP 302 Found  Location: https://example.com/very/long/path
+
+GET    /api/v1/links/{short_code}/stats
+Resp:  { "clicks": 1500, "countries": [...], "browsers": [...], "daily": [...] }
+
+DELETE /api/v1/links/{short_code}
+Resp:  HTTP 204 No Content
+</pre>
+
+<h2>High-Level Design</h2>
+<div class="diagram">
+                    ┌─────────────┐
+    Client ────────►│ API Gateway │
+                    └──────┬──────┘
+                           │
+              ┌────────────┴────────────┐
+              │                         │
+     POST /shorten              GET /{code}
+              │                         │
+     ┌────────▼────────┐     ┌─────────▼─────────┐
+     │  Write Service  │     │   Read Service      │
+     │  (Generate ID)  │     │   (Lookup + Redirect)│
+     └────────┬────────┘     └─────────┬──────────┘
+              │                        │
+              ▼                        ▼
+     ┌────────────────┐     ┌─────────────────┐
+     │   Database     │     │   Cache (Redis)  │◄─── Cache miss ──► DB
+     │  (PostgreSQL)  │     │  Hot short URLs  │
+     │  + Analytics   │     │  ~99% hit rate   │
+     └────────────────┘     └─────────────────┘
+              │
+              ▼
+     ┌────────────────┐
+     │  Kafka Queue   │
+     │  (Analytics)   │
+     └───────┬────────┘
+             ▼
+     ┌────────────────┐
+     │ Analytics Store │
+     │  (ClickHouse)   │
+     └────────────────┘
+</div>
+
+<h2>Deep Dive: Short Code Generation</h2>
+<h3>Approach 1: Counter + Base62 Encoding</h3>
+<p>Use a distributed counter (Snowflake-like or database sequence) to generate a unique 64-bit integer, then encode it in base62 (0-9, a-z, A-Z). A 7-character base62 string supports 62^7 = 3.5 trillion combinations.</p>
+
+<div class="callout">
+  <strong>Base62 encoding function:</strong><br>
+  Given counter ID = <code>125,000,000</code>: repeatedly divide by 62 and map remainders to charset <code>0-9a-zA-Z</code>. Result: <code>8M0k</code> (padded to desired length).
+</div>
+
+<h3>Approach 2: Hash + Base62 (MD5/SHA-256)</h3>
+<p>Hash the long URL, take first N bytes, encode in base62. Risk of collisions — must check DB and retry with a different prefix if collision occurs.</p>
+
+<table>
+  <tr><th>Approach</th><th>Pros</th><th>Cons</th></tr>
+  <tr><td>Counter + Base62</td><td class="green">Guaranteed unique, simple</td><td>Predictable (sequential), counter coordination needed</td></tr>
+  <tr><td>Hash + Base62</td><td class="green">No shared counter needed</td><td class="red">Collision risk, collision handling complexity</td></tr>
+  <tr><td>Pre-generated random IDs</td><td class="green">Unguessable, no runtime generation</td><td>Must pre-generate and store pool, coordination</td></tr>
+</table>
+
+<div class="callout green">
+  <strong>Recommended:</strong> Pre-generate unique IDs using a KGS (Key Generation Service) that batches random IDs from a distributed ID generator (Snowflake/UUID v7) and stores them in a database. Workers fetch batches from the KGS to avoid hot ID generation at scale.
+</div>
+
+<h2>Deep Dive: Redirection Flow</h2>
+<ol>
+  <li>Client requests <code>GET /{short_code}</code></li>
+  <li>Read service checks Redis cache for short_code → long_url mapping</li>
+  <li><strong>Cache hit:</strong> return HTTP 302 with Location header immediately</li>
+  <li><strong>Cache miss:</strong> query PostgreSQL, populate cache, return 302</li>
+  <li>Fire-and-forget analytics event to Kafka (click metadata)</li>
+</ol>
+
+<div class="callout yellow">
+  <strong>301 vs 302:</strong> Use 301 for permanent redirects (browser caches the redirect, reducing server load, but analytics lose clicks). Use 302 for temporary redirects (every click hits the server, better analytics). For a production shortener with analytics requirements, use <strong>302</strong>.
+</div>
+
+<h2>Data Model</h2>
+<table>
+  <tr><th>Table</th><th>Column</th><th>Type</th><th>Notes</th></tr>
+  <tr><td rowspan="6">urls</td><td>short_code</td><td>VARCHAR(10)</td><td>PRIMARY KEY, indexed</td></tr>
+  <tr><td>long_url</td><td>TEXT</td><td>Original URL</td></tr>
+  <tr><td>user_id</td><td>BIGINT</td><td>Creator</td></tr>
+  <tr><td>created_at</td><td>TIMESTAMP</td><td></td></tr>
+  <tr><td>expires_at</td><td>TIMESTAMP</td><td>NULL = never expires</td></tr>
+  <tr><td>is_active</td><td>BOOLEAN</td><td>Soft delete support</td></tr>
+</table>
+
+<pre>
+-- Primary lookup query
+SELECT long_url FROM urls WHERE short_code = $1 AND (expires_at IS NULL OR expires_at > NOW()) AND is_active = TRUE;
+
+-- Index for fast lookup
+CREATE UNIQUE INDEX idx_urls_short_code ON urls(short_code);
+CREATE INDEX idx_urls_user_id ON urls(user_id);
+</pre>
+
+<h2>Scalability Considerations</h2>
+<ul>
+  <li><strong>Cache layer:</strong> Redis cluster with ~99% cache hit rate for reads. Cache hot URLs aggressively. Use LRU eviction. TTL of 24h for cache entries.</li>
+  <li><strong>Database sharding:</strong> Shard by short_code hash across PostgreSQL instances when single node cannot handle the write load. 100M URLs with metadata is ~50-100GB — fits on a single large instance initially.</li>
+  <li><strong>Analytics pipeline:</strong> Decouple click analytics from the redirect path. Write to Kafka, consume with stream processors into ClickHouse for fast OLAP queries. Do not block redirects on analytics writes.</li>
+  <li><strong>Rate limiting:</strong> Per-user rate limits on URL creation to prevent abuse. Token bucket algorithm via Redis.</li>
+  <li><strong>Security:</strong> Validate long URLs to prevent redirects to malicious sites. Block known phishing/malware domains. URL scanning service for enterprise plans.</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>How would you prevent enumeration of short codes? <em>A: Use random pre-generated IDs with sufficient entropy (7 chars base62 = 62^7 space). Add rate limiting on lookups.</em></li>
+  <li>How do you handle collisions with hash-based approaches? <em>A: Double-write: check DB before insert. On collision, append random suffix or retry with different hash prefix.</em></li>
+  <li>What happens when the cache goes down? <em>A: Reads fall through to DB. Deploy Redis in primary-replica or cluster mode for HA. Circuit breaker prevents cascade failures.</em></li>
+  <li>How would you support custom aliases? <em>A: Add uniqueness check on alias column. Reserve namespace prefixes for premium users. Rate limit custom alias creation.</em></li>
+  <li>How do you scale the write path? <em>A: Batch inserts, use write-through cache, consider Cassandra for unlimited horizontal scaling at the cost of consistency.</em></li>
+  <li>How would you detect and block malicious URLs? <em>A: URL reputation service, Google Safe Browsing API integration, content-type checking on redirect, CAPTCHA for suspicious patterns.</em></li>
+  <li>Why not use a NoSQL database? <em>A: You could — Cassandra or DynamoDB would work well. The relational model is simpler for the metadata and single-key lookups. The choice depends on team expertise and operational requirements.</em></li>
+</ul>
+
+<div class="callout red">
+  <strong>What to Skip:</strong>
+  <ul>
+    <li>Don't over-engineer the analytics pipeline initially — mention it as a separate concern</li>
+    <li>Don't spend time on URL parsing or validation edge cases unless asked</li>
+    <li>Don't design user authentication from scratch — assume an existing auth service</li>
+    <li>Don't get stuck on base conversion math — explain the concept and move on</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><em>System Design Interview Vol 2</em> — Alex Xu, Ch. 1: Design URL Shortener</li>
+    <li><em>Designing Data-Intensive Applications</em> — Martin Kleppmann (encoding fundamentals)</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Articles</div>
+  <ul>
+    <li>ByteByteGo: "Design a URL Shortener" (bytebytego.com)</li>
+    <li>Instagram Engineering Blog: "What Powers Instagram" (sharding strategy)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="../security/api-keys.html">&larr; Previous: API Keys</a>
+  <a href="pastebin.html">Next: Pastebin &rarr;</a>
+</div>
+
+</body>
+</html>

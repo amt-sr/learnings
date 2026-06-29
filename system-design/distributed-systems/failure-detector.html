@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.6.4 Failure Detector - System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">5 Distributed Systems</a> / <a href="index.html">5.6 Consensus</a> / 5.6.4
+</div>
+
+<h1>5.6.4 Failure Detector</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<div class="callout green">
+  <strong>Goal:</strong> Understand the taxonomy of failure detectors (perfect, strong eventual, weak eventual), how the phi accrual detector works in practice, and the fundamental tradeoff between false positives and false negatives. Know which systems use which detector and why.
+</div>
+
+<h2>Definition</h2>
+
+<p>A <strong>failure detector</strong> is a mechanism by which a node in a distributed system monitors other nodes and determines whether they have failed. Failure detectors provide the input that drives higher-level protocols like leader election, membership management, and replication failover.</p>
+
+<h2>The Fundamental Problem</h2>
+
+<p>In an asynchronous distributed system, there is no reliable way to distinguish between a node that has crashed and a node that is merely slow. Any timeout-based failure detector must choose between two types of errors:</p>
+
+<ul>
+  <li><strong>False positive:</strong> Declaring a healthy node as failed. This is <em>dangerous</em> -- it can trigger unnecessary leader elections, data rebalancing, or traffic rerouting.</li>
+  <li><strong>False negative:</strong> Failing to detect a truly crashed node. This is <em>costly</em> -- it means the system continues routing traffic to a dead node or waiting for a response that will never come.</li>
+</ul>
+
+<div class="callout yellow">
+  <strong>Core tradeoff:</strong> You can never eliminate both errors simultaneously. Making the timeout shorter detects crashes faster but increases false positives. Making the timeout longer reduces false positives but increases detection latency. The right balance depends on the system's requirements and failure mode costs.
+</div>
+
+<h2>Failure Detector Taxonomy</h2>
+
+<p>Chandra and Toueg (1996) formalized two key properties of failure detectors:</p>
+
+<table>
+  <tr>
+    <th>Property</th>
+    <th>Definition</th>
+  </tr>
+  <tr>
+    <td><strong>Completeness</strong></td>
+    <td>Every crashed process is eventually suspected by some non-faulty process</td>
+  </tr>
+  <tr>
+    <td><strong>Accuracy</strong></td>
+    <td>Non-faulty processes are never (or eventually never) suspected</td>
+  </tr>
+</table>
+
+<h3>Types of Failure Detectors</h3>
+
+<table>
+  <tr>
+    <th>Type</th>
+    <th>Completeness</th>
+    <th>Accuracy</th>
+    <th>Feasibility</th>
+  </tr>
+  <tr>
+    <td><strong>Perfect</strong></td>
+    <td>Strong (every crash detected)</td>
+    <td>Strong (never suspects alive)</td>
+    <td class="red">Impossible in async systems</td>
+  </tr>
+  <tr>
+    <td><strong>Strongly eventual (&Omega;)</strong></td>
+    <td>Strong (every crash detected)</td>
+    <td>Weak (eventually stops suspecting alive)</td>
+    <td class="green">Achievable</td>
+  </tr>
+  <tr>
+    <td><strong>Weakly eventual (&diamond;)</strong></td>
+    <td>Weak (some process detects)</td>
+    <td>Weak (eventually stops suspecting alive)</td>
+    <td class="green">Achievable</td>
+  </tr>
+</table>
+
+<p><strong>Key result:</strong> The Omega failure detector (strong eventual) is the weakest detector that can solve consensus. Raft, Paxos, and Zab all implement something equivalent to Omega.</p>
+
+<h2>Phi Accrual Failure Detector</h2>
+
+<p>The phi accrual detector (Hayashibara et al., 2004) replaces binary alive/dead decisions with a continuous suspicion level. Used in <strong>Cassandra</strong>, <strong>Akka</strong>, and <strong>Amazon Swarm</strong>.</p>
+
+<h3>Mechanism</h3>
+
+<div class="diagram">
+  Phi Accrual Detector Internals
+  ──────────────────────────────
+
+  1. Sliding window of heartbeat inter-arrival times:
+     [52ms, 48ms, 55ms, 50ms, 53ms, 47ms, 51ms, 49ms, 54ms, 50ms]
+
+  2. Compute statistics:
+     mean = 50.9ms
+     stddev = 2.6ms
+     (Assumed normal distribution)
+
+  3. Calculate phi for current delay:
+     phi(delay) = -log10( P(arrival > delay) )
+
+     delay = 50ms  → phi ≈ 0.4  (perfectly normal)
+     delay = 60ms  → phi ≈ 3.8  (mildly suspicious)
+     delay = 70ms  → phi ≈ 7.2  (very suspicious)
+     delay = 80ms  → phi ≈ 11.0 (almost certainly dead)
+     delay = 100ms → phi ≈ 17.0 (definitely dead)
+
+  4. Threshold comparison:
+     if phi > PHI_THRESHOLD (typically 8):
+         suspect(node)
+
+  Key advantage: Adapts to changing network conditions automatically
+  - Network gets slower → mean/stddev increase → phi decreases for same delay
+  - Network gets faster → mean/stddev decrease → phi increases for same delay
+</div>
+
+<h3>Benefits Over Simple Timeout</h3>
+
+<table>
+  <tr>
+    <th>Aspect</th>
+    <th>Simple Timeout</th>
+    <th>Phi Accrual</th>
+  </tr>
+  <tr>
+    <td>False positive rate</td>
+    <td class="red">High during network degradation</td>
+    <td class="green">Adapts to network conditions</td>
+  </tr>
+  <tr>
+    <td>Configuration</td>
+    <td class="red">Requires manual tuning</td>
+    <td class="green">Self-adapting</td>
+  </tr>
+  <tr>
+    <td>Output</td>
+    <td>Binary (alive/dead)</td>
+    <td>Continuous suspicion level</td>
+  </tr>
+  <tr>
+    <td>Implementation complexity</td>
+    <td class="green">Simple</td>
+    <td class="red">Moderate</td>
+  </tr>
+</table>
+
+<h2>Suspicion Levels</h2>
+
+<p>Some systems (like SWIM) implement a multi-level suspicion model rather than binary detection:</p>
+
+<ol>
+  <li><strong>Alive:</strong> Node is responding to heartbeats normally.</li>
+  <li><strong>Suspect:</strong> Node has missed some heartbeats but not yet declared failed. Other nodes may be consulted for corroboration.</li>
+  <li><strong>Dead (confirmed):</strong> Node has been confirmed failed by multiple nodes and is removed from membership.</li>
+</ol>
+
+<div class="diagram">
+  Suspicion State Machine (SWIM-style)
+  ───────────────────────────────────
+
+                  heartbeat received
+  ┌─────────┐    ──────────────────    ┌─────────┐
+  │  ALIVE  │ &larr;─────────────────── │ SUSPECT │
+  └────┬────┘                          └────┬────┘
+       │ timeout (missed heartbeats)         │ timeout (prolonged)
+       │                                    │ or confirmed by others
+       │                                    │
+       │                            ┌──────▼──────┐
+       └───────────────────────────→│    DEAD     │
+            failure confirmed       └─────────────┘
+</div>
+
+<h2>False Positives vs. False Negatives in Practice</h2>
+
+<div class="callout">
+  <strong>Interview framework for answering "how would you handle this?":</strong>
+  <ul>
+    <li><strong>Scenario: Load balancer health checks.</strong> False positives = healthy backends removed from pool = reduced capacity. False negatives = dead backends receiving traffic = errors. Tolerance for false negatives is low -- use aggressive timeouts with quick re-adds.</li>
+    <li><strong>Scenario: Leader election.</strong> False positives = unnecessary election = write unavailability. False negatives = zombie leader = split brain. Tolerance for false positives is low -- use conservative timeouts with phi accrual.</li>
+    <li><strong>Scenario: Membership management.</strong> False positives = premature node removal = data rebalancing thrash. False negatives = stale routing = slow requests. Use suspicion levels to reduce thrashing.</li>
+  </ul>
+</div>
+
+<h2>Systems Using Failure Detectors</h2>
+
+<table>
+  <tr>
+    <th>System</th>
+    <th>Failure Detector</th>
+    <th>Notes</th>
+  </tr>
+  <tr>
+    <td>Raft / etcd</td>
+    <td>Simple timeout (election timeout)</td>
+    <td>Binary: leader or not. Tuned via randomization.</td>
+  </tr>
+  <tr>
+    <td>Cassandra</td>
+    <td>Phi accrual</td>
+    <td>Adaptive. Configurable phi threshold (default 8).</td>
+  </tr>
+  <tr>
+    <td>ZooKeeper</td>
+    <td>Simple timeout (session timeout)</td>
+    <td>Ephemeral nodes disappear on session expiry.</td>
+  </tr>
+  <tr>
+    <td>Akka Cluster</td>
+    <td>Phi accrual</td>
+    <td>Adaptive. Separate detector per monitored node.</td>
+  </tr>
+  <tr>
+    <td>SWIM / HashiCorp Memberlist</td>
+    <td>Multi-level suspicion</td>
+    <td>Alive → Suspect → Dead. Confirmed via indirect probing.</td>
+  </tr>
+  <tr>
+    <td>Consul</td>
+    <td>Simple timeout + suspicion</td>
+    <td>Health checks with configurable intervals and timeouts.</td>
+  </tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+
+<ul>
+  <li>What is a failure detector and why do distributed systems need one?</li>
+  <li>Explain the difference between false positives and false negatives.</li>
+  <li>What is a phi accrual failure detector and how does it work?</li>
+  <li>Why is a perfect failure detector impossible in asynchronous systems?</li>
+  <li>How does Cassandra's failure detector adapt to changing network conditions?</li>
+  <li>When would you choose a simple timeout over a phi accrual detector?</li>
+  <li>What happens if a failure detector produces too many false positives?</li>
+  <li>How does the failure detector interact with leader election?</li>
+</ul>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Do NOT memorize Chandra-Toueg's failure detector hierarchy</strong> beyond Perfect/Omega/Diamond. Skip Byzantine failure detectors (which detect arbitrary/malicious failures) -- crash-only models are the interview standard. Do not implement a phi accrual detector from scratch; understand the concept and its adaptive behavior. Skip the detailed statistical formulas for phi calculation.
+</div>
+
+<div class="source">
+  <div class="source-label">Reading Sources</div>
+  <ul>
+    <li>Unreliable Failure Detectors for Reliable Distributed Systems (Chandra &amp; Toueg, 1996)</li>
+    <li>The Phi Accrual Failure Detector (Hayashibara et al., 2004)</li>
+    <li>SWIM: Scalable Weakly-consistent Infection-style Process Group Membership Protocol (Das et al., 2002)</li>
+    <li>Designing Data-Intensive Applications (Kleppmann) -- Chapter 5, failure detection discussion</li>
+    <li>Cassandra documentation on Phi Accrual Failure Detector</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="heartbeats.html">&larr; 5.6.3 Heartbeats</a>
+  <a href="gossip-protocol.html">5.6.5 Gossip Protocol &rarr;</a>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.3.3 Sequential Consistency</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">5 Distributed Systems</a> / <a href="../index.html">5.3 Consistency Models</a> / 5.3.3
+</div>
+
+<h1>5.3.3 Sequential Consistency</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand <strong>sequential consistency</strong> as a consistency model where all operations appear in some total order, but without the real-time ordering requirement of linearizability. Know how it differs from linearizability and when it appears in practice.</p>
+
+<h2>Definition</h2>
+<p><strong>Sequential consistency</strong> guarantees that the result of any execution is the same as if the operations of all processors were executed in some sequential order, and the operations of each individual processor appear in the order specified by its program. In other words, there exists some total ordering of all operations that respects per-client program order.</p>
+
+<div class="callout">
+  <strong>Key Distinction from Linearizability:</strong> Sequential consistency does NOT require the total order to respect real-time ordering. Two operations from different clients can appear in any order as long as each client's own operations remain in order. Linearizability additionally requires that if operation A completes before operation B starts, A must appear before B in the total order.
+</div>
+
+<h2>Sequential vs. Linearizability: The Difference</h2>
+
+<div class="diagram">
+  Real-time timeline:
+
+  Client A: ──write(X=1)───────────────────────────────────→
+  Client B: ───────────────────────write(X=2)──read(X)──────→
+
+  Linearizable result: read(X) must return 2
+    → A's write completes before B's write starts
+    → So in the total order: write(X=1) before write(X=2)
+    → Read must see X=2 (latest)
+
+  Sequential (but NOT linearizable) result: read(X) could return 1
+    → Per-client order preserved: A's write before B's write (OK)
+    → But the total order could be: write(X=2), write(X=1), read(X)
+    → This respects A's order and B's order, but NOT real-time
+    → read(X) returns 1 — sequentially consistent but NOT linearizable
+
+  ┌───────────────────────────────────────────────────────────┐
+  │ Linearizability  = Sequential + Real-time ordering        │
+  │                                                           │
+  │ All linearizable executions are sequentially consistent   │
+  │ NOT all sequentially consistent executions are linearizable│
+  └───────────────────────────────────────────────────────────┘
+</div>
+
+<h2>Formal Properties</h2>
+<ul>
+  <li><strong>Total order exists:</strong> All operations can be arranged in a single sequential order</li>
+  <li><strong>Per-client order respected:</strong> Each client's operations appear in the order that client issued them</li>
+  <li><strong>No real-time requirement:</strong> The total order does NOT need to respect wall-clock time</li>
+  <li><strong>Weaker than linearizability:</strong> More behaviors are acceptable, allowing more optimizations</li>
+</ul>
+
+<h2>Where Sequential Consistency Appears</h2>
+
+<table>
+  <tr>
+    <th>System / Context</th>
+    <th>Usage</th>
+  </tr>
+  <tr>
+    <td>Shared memory multiprocessors</td>
+    <td>Original use case (Lamport, 1979) — CPU memory models</td>
+  </tr>
+  <tr>
+    <td>ZooKeeper (non-linearizable reads)</td>
+    <td>When clients read from followers instead of the leader, they get sequential but not linearizable reads</td>
+  </tr>
+  <tr>
+    <td>Cassandra with QUORUM</td>
+    <td>Provides ordering but may not respect strict real-time bounds across datacenters</td>
+  </tr>
+  <tr>
+    <td>Version control (Git)</td>
+    <td>Commits appear in some total order per branch, but timestamps may be reordered</td>
+  </tr>
+</table>
+
+<h2>Practical Implications</h2>
+
+<div class="callout yellow">
+  <strong>Interview Tip:</strong> Sequential consistency rarely comes up by name in system design interviews. It is most useful as a concept to contrast with linearizability. If asked "what consistency model does ZooKeeper provide when reading from followers?", the answer is sequential consistency (not linearizable). This demonstrates deep understanding.
+</div>
+
+<h3>Why It Matters</h3>
+<p>Sequential consistency is important because:</p>
+<ul>
+  <li>It is the <strong>weakest model</strong> where all nodes agree on a total order of operations</li>
+  <li>It allows <strong>reordering optimizations</strong> that linearizability does not (e.g., buffering writes, speculative execution)</li>
+  <li>Many real systems that claim "strong consistency" actually provide only sequential consistency</li>
+  <li>It is the basis for understanding many weaker models (causal, eventual)</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>"What is sequential consistency?"</li>
+  <li>"How does sequential consistency differ from linearizability?"</li>
+  <li>"Give an example of a scenario that is sequentially consistent but not linearizable."</li>
+  <li>"When does sequential consistency appear in real systems?"</li>
+  <li>"Why is sequential consistency weaker than linearizability?"</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid in interviews:</strong>
+  <ul>
+    <li>Lamport's original formal definition and proof (Lamport, 1979)</li>
+    <li>Memory model details for multi-core CPUs (x86-TSO, ARM weak ordering)</li>
+    <li>Optimizations enabled by sequential consistency (speculative execution, store buffers)</li>
+    <li>Formal verification of sequential consistency (TLA+, model checking)</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary Sources</div>
+  <ul>
+    <li>Lamport, L. "How to Make a Multiprocessor Computer That Correctly Executes Multiprocess Programs" (IEEE Trans. Computers, 1979)</li>
+    <li>Kleppmann, M. <strong>Designing Data-Intensive Applications</strong>, Chapter 9</li>
+    <li>Attiya, H. &amp; Welch, J. <strong>Distributed Computing: Fundamentals, Simulations, and Advanced Topics</strong>, Chapter 6</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Supplementary</div>
+  <ul>
+    <li>Herlihy, M. &amp; Wing, J. "Linearizability: A Correctness Condition for Concurrent Objects" (ACM TOPLAS, 1990)</li>
+    <li>Fette, I. &amp; Melnikov, A. "The WebSocket Protocol" (RFC 6455) — sequential ordering in stream protocols</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="eventual-consistency.html">&larr; 5.3.2 Eventual Consistency</a>
+  <a href="linearizability.html">5.3.4 Linearizability &rarr;</a>
+</div>
+
+</body>
+</html>

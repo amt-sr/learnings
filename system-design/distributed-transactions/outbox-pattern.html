@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>9.2.1 Outbox Pattern</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb"><a href="../">System Design</a> / <a href="./">Section 9: Distributed Transactions</a> / 9.2.1 Outbox Pattern</div>
+
+<h1>Outbox Pattern</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the Transactional Outbox pattern as the solution to the dual-write problem when you need to atomically update a database and publish a message. This is one of the most practically important patterns in distributed systems.</p>
+
+<h2>Definition</h2>
+<p>The Transactional Outbox pattern solves the <strong>dual-write problem</strong>: when a service needs to update its database and send a message (to a message broker or another service) as a single atomic operation. Since databases and message brokers cannot participate in the same distributed transaction (without 2PC), the outbox pattern writes the message to a special <strong>outbox table</strong> within the same database transaction as the business data. A separate process (polling relay or CDC) then publishes the outbox messages to the message broker.</p>
+
+<div class="callout">
+  <strong>Key Insight:</strong> The outbox pattern converts a distributed transaction problem into a single-database transaction followed by an async relay. It trades latency for reliability: the message is published with a small delay, but the system guarantees that if the database write succeeded, the message will eventually be published.
+</div>
+
+<h2>The Dual-Write Problem</h2>
+
+<div class="diagram">
+  <strong>The Problem: Two Resources, One Transaction</strong>
+
+  Service: "Create order and publish OrderCreated event"
+
+  Option 1: Write DB first, then publish message
+    [Write Order to DB] -> [Publish to MQ]
+                        |
+                     [FAIL] -> DB updated, but no message published
+                              -> Inconsistent state!
+
+  Option 2: Publish message first, then write DB
+    [Publish to MQ] -> [Write Order to DB]
+                        |
+                     [FAIL] -> Message published, but no DB record
+                              -> Ghost message, inconsistent state!
+
+  Option 3: Use 2PC (XA transaction)
+    [BEGIN XA] -> [Write DB] -> [Publish MQ] -> [COMMIT]
+    Works, but: blocking, slow, couples services
+</div>
+
+<h2>Outbox Pattern Solution</h2>
+
+<div class="diagram">
+  <strong>Transactional Outbox: Write to Outbox Table in Same DB Transaction</strong>
+
+  Step 1: Atomic Write (Single DB Transaction)
+  ┌─────────────────────────────────────────────────┐
+  │  BEGIN TRANSACTION                               │
+  │    INSERT INTO orders (id, status, ...) VALUES   │
+  │    INSERT INTO outbox (id, topic, payload,       │
+  │                        created_at, processed)     │
+  │  COMMIT                                          │
+  └─────────────────────────────────────────────────┘
+       |
+       v
+  Step 2: Message Relay (Async, separate process)
+  ┌─────────────────────────────────────────────────┐
+  │  Outbox Table               Message Broker       │
+  │  ┌──────────────┐          ┌──────────────┐     │
+  │  │ id: 1        │   poll   │              │     │
+  │  │ topic: orders│--------->│  Kafka/SQS   │     │
+  │  │ payload: {...}│         │              │     │
+  │  │ processed: F │          └──────────────┘     │
+  │  └──────────────┘                                │
+  │  ┌──────────────┐                                │
+  │  │ id: 2        │  --> Mark processed: T         │
+  │  │ processed: T │      after successful publish   │
+  │  └──────────────┘                                │
+  └─────────────────────────────────────────────────┘
+</div>
+
+<h2>Outbox Table Schema</h2>
+
+<pre>
+CREATE TABLE outbox (
+    id            UUID PRIMARY KEY,
+    aggregate_type VARCHAR(255) NOT NULL,
+    aggregate_id  VARCHAR(255) NOT NULL,
+    event_type    VARCHAR(255) NOT NULL,
+    payload       JSONB NOT NULL,
+    created_at    TIMESTAMP NOT NULL DEFAULT NOW(),
+    processed_at  TIMESTAMP NULL,        -- NULL = not yet published
+    version       BIGINT NOT NULL         -- for idempotent processing
+);
+
+CREATE INDEX idx_outbox_unprocessed ON outbox (processed_at)
+    WHERE processed_at IS NULL;          -- efficient polling
+</pre>
+
+<h2>Message Relay Strategies</h2>
+
+<h3>Strategy 1: Polling Relay</h3>
+<p>A background worker polls the outbox table for unprocessed rows and publishes them.</p>
+<ul>
+  <li><strong>Pros:</strong> Simple to implement, works with any database</li>
+  <li><strong>Cons:</strong> Polling latency (usually 100ms-1s), load on database from frequent queries</li>
+  <li><strong>Optimization:</strong> Use <code>processed_at IS NULL</code> with an index, batch polling, or listen/notify</li>
+</ul>
+
+<h3>Strategy 2: Change Data Capture (CDC)</h3>
+<p>A CDC tool (Debezium, Maxwell) reads the database's transaction log (WAL/Binlog) and publishes outbox events.</p>
+<ul>
+  <li><strong>Pros:</strong> Near real-time, no polling load on database, more efficient</li>
+  <li><strong>Cons:</strong> Additional infrastructure (Debezium, Kafka Connect), operational complexity</li>
+  <li><strong>How:</strong> Debezium captures inserts to the outbox table from the WAL, transforms them, and publishes to Kafka</li>
+</ul>
+
+<table>
+  <tr><th>Strategy</th><th>Latency</th><th>Complexity</th><th>DB Load</th><th>Best For</th></tr>
+  <tr><td>Polling</td><td>100ms-1s</td><td class="green">Low</td><td class="red">Higher</td><td>Simple systems, proof of concept</td></tr>
+  <tr><td>CDC (Debezium)</td><td class="green">~10ms</td><td class="red">High</td><td class="green">Low</td><td>Production, high-throughput systems</td></tr>
+</table>
+
+<div class="diagram">
+  <strong>CDC-Based Outbox (Debezium + Kafka)</strong>
+
+  [Application]
+       |
+       |  1. DB Transaction: INSERT order + INSERT outbox
+       v
+  [Database (PostgreSQL)]
+       |
+       |  2. Debezium reads WAL, captures outbox INSERT
+       v
+  [Debezium Connector]
+       |
+       |  3. Transforms outbox row -> Kafka message
+       v
+  [Kafka: orders topic]
+       |
+       |  4. Consumer services read from Kafka
+       v
+  [Downstream Services]
+</div>
+
+<h2>Guarantees Provided</h2>
+
+<ul>
+  <li><strong>At-least-once delivery:</strong> If the relay fails before marking processed, it retries. The message may be delivered multiple times.</li>
+  <li><strong>No lost messages:</strong> As long as the DB transaction committed, the message will eventually be published.</li>
+  <li><strong>Event ordering:</strong> If using CDC with WAL position, ordering is preserved for a single aggregate.</li>
+</ul>
+
+<div class="callout yellow">
+  <strong>Important:</strong> The outbox guarantees at-least-once delivery. Consumers must be idempotent (use the Inbox Pattern from Section 9.2.2) to handle duplicate messages correctly.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What is the dual-write problem? Why can't you just write to DB and publish to Kafka in sequence?</li>
+  <li>How does the outbox pattern solve the dual-write problem?</li>
+  <li>What is the outbox table schema? What columns does it need?</li>
+  <li>Compare polling relay vs CDC for the outbox pattern. When would you choose each?</li>
+  <li>What delivery guarantee does the outbox provide? What must consumers handle?</li>
+  <li>How does the outbox pattern relate to the Saga pattern?</li>
+  <li>What happens if the message relay crashes? Are messages lost?</li>
+  <li>How do you clean up old outbox messages? What retention policy would you use?</li>
+  <li>Design an order service that needs to publish events reliably.</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>For L5/L6/Staff interviews, skip:</strong>
+  <ul>
+    <li>Debezium connector configuration specifics (YAML configs, Avro serialization)</li>
+    <li>Database-specific WAL internals (MySQL binlog formats, PostgreSQL WAL details)</li>
+    <li>Outbox table partitioning strategies unless asked</li>
+    <li>Alternative approaches like _transactional outbox with Kafka Streams exactly-once</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><em>Microservices Patterns</em> (Chris Richardson) -- Chapter 6: Transactional Outbox Pattern</li>
+    <li><em>Designing Data-Intensive Applications</em> (Martin Kleppmann) -- Chapter 11: Change Data Capture</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Online</div>
+  <ul>
+    <li><a href="https://microservices.io/patterns/data/transactional-outbox.html">Chris Richardson: Transactional Outbox Pattern</a></li>
+    <li><a href="https://debezium.io/">Debezium -- Open source CDC platform</a></li>
+    <li><a href="https://www.confluent.io/blog/outbox-pattern-with-kafka-connect/">Confluent: Outbox Pattern with Kafka Connect</a></li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="saga.html">&larr; 9.1.3 Saga Pattern</a>
+  <a href="inbox-pattern.html">9.2.2 Inbox Pattern &rarr;</a>
+</div>
+
+</body>
+</html>

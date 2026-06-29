@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.1.2 Solid State Drives (SSD)</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#3">3 Storage</a> / <a href="../index.html#3.1">3.1 Physical Storage</a> / 3.1.2
+</div>
+
+<h1>Solid State Drives (SSD)</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>How NAND flash memory stores data — no moving parts</li>
+  <li>Why random reads are fast but writes have unique costs</li>
+  <li>Write amplification, garbage collection, and the TRIM command</li>
+  <li>TBW (Terabytes Written) and SSD endurance</li>
+  <li>How SSD characteristics affect database design decisions</li>
+</ul>
+
+<h2>Definition</h2>
+<p>A Solid State Drive (SSD) stores data in <strong>NAND flash memory cells, using electronic addressing instead of mechanical seeking</strong>. With no moving parts, SSDs deliver orders-of-magnitude better random I/O performance than <a href="hdd.html">HDDs</a>, but they introduce unique write characteristics that database engines must account for.</p>
+
+<h2>NAND Flash Architecture</h2>
+<div class="diagram">  SSD Internal Hierarchy:
+
+  Die (chip)
+   └── Plane
+        └── Block (erasure unit, 256–512 KB)
+             └── Page (read/write unit, 4–16 KB)
+                  └── Cell (stores 1–4 bits, SLC/MLC/TLC/QLC)
+
+  ┌──────────────────────────────────────────┐
+  │              SSD Controller               │
+  │  ┌─────────┐  ┌─────────┐  ┌──────────┐ │
+  │  │  FTL    │  │  Wear    │  │ Garbage  │ │
+  │  │ (Flash  │  │ Leveling │  │Collector │ │
+  │  │ Translate│ │          │  │          │ │
+  │  │ Layer)  │  │          │  │          │ │
+  │  └────┬────┘  └─────────┘  └──────────┘ │
+  │       │                                   │
+  │  ┌────▼────────────────────────────────┐ │
+  │  │         NAND Flash Array            │ │
+  │  │  Die 0    Die 1    Die 2    Die 3   │ │
+  │  └─────────────────────────────────────┘ │
+  └──────────────────────────────────────────┘
+
+  Key: Pages are read/written. Blocks are erased.
+  You cannot erase a single page — only entire blocks.</div>
+
+<h2>Read/Write/Erase Semantics</h2>
+<table>
+  <tr><th>Operation</th><th>Granularity</th><th>Speed</th><th>Notes</th></tr>
+  <tr><td><strong>Read</strong></td><td>Page (4–16 KB)</td><td class="green">~25–100 &mu;s</td><td>Fast, no seek, parallel across dies</td></tr>
+  <tr><td><strong>Write (Program)</strong></td><td>Page (4–16 KB)</td><td>~200–500 &mu;s</td><td>Must write to an erased (empty) page</td></tr>
+  <tr><td><strong>Erase</strong></td><td>Block (256–512 KB)</td><td class="red">~1–3 ms</td><td>Slow, and you can only erase entire blocks</td></tr>
+</table>
+
+<div class="callout">
+  <strong>The fundamental asymmetry:</strong> You can read and write individual pages, but you can only erase entire blocks. This mismatch is the root cause of write amplification and the reason SSDs have complex internal controllers.
+</div>
+
+<h2>Write Amplification</h2>
+<p>When updating existing data, the SSD cannot overwrite in place (NAND cells must be erased before reprogramming). The controller must:</p>
+<ol>
+  <li>Read the entire block containing the old page</li>
+  <li>Erase the block</li>
+  <li>Write the old pages back with the updated page</li>
+</ol>
+<p>This means a single 4KB logical write can cause an entire 256KB block to be rewritten — a <strong>64x amplification</strong> in the worst case.</p>
+
+<div class="diagram">  Write Amplification Example:
+
+  Logical write: Update Page 3 in Block A
+
+  Block A (before):         Block B (after):
+  [P0][P1][P2][P3][P4]      [P0][P1][P2][P3'][P4]
+                         ↑                          ↑
+                   All pages copied       P3 updated
+                   to new block,          (physical write = 1 page)
+                   old block erased       but total flash writes = 5 pages
+
+  Write Amplification Factor = Physical writes / Logical writes
+  Ideal: 1.0x  │  Typical: 1.5–3.0x  │  Worst case: 10x+</div>
+
+<h2>NAND Cell Types</h2>
+<table>
+  <tr><th>Type</th><th>Bits/Cell</th><th>Endurance (P/E cycles)</th><th>Speed</th><th>Cost</th></tr>
+  <tr><td><strong>SLC</strong></td><td>1</td><td class="green">~100,000</td><td class="green">Fastest</td><td class="red">Most expensive</td></tr>
+  <tr><td><strong>MLC</strong></td><td>2</td><td>~3,000–10,000</td><td>Fast</td><td>Expensive</td></tr>
+  <tr><td><strong>TLC</strong></td><td>3</td><td>~1,000–3,000</td><td>Moderate</td><td>Affordable</td></tr>
+  <tr><td><strong>QLC</strong></td><td>4</td><td class="red">~100–1,000</td><td class="red">Slowest</td><td class="green">Cheapest</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Interview insight:</strong> QLC SSDs have worse random write performance than HDDs for sustained workloads. When an interviewer asks "are SSDs always faster than HDDs?", the answer is nuanced — QLC SSDs can be slower for sustained random writes due to garbage collection overhead and limited SLC caching.
+</div>
+
+<h2>TBW (Terabytes Written) and Endurance</h2>
+<p>Every NAND cell has a finite number of Program/Erase (P/E) cycles. TBW represents the total amount of data that can be written to the SSD before the manufacturer's endurance warranty expires.</p>
+<table>
+  <tr><th>Drive Class</th><th>TBW (1TB drive)</th><th>Typical Workload</th></tr>
+  <tr><td>Consumer TLC</td><td>300–600 TB</td><td>Desktop, light server</td></tr>
+  <tr><td>Enterprise TLC</td><td>1,000–3,000 TB</td><td>Database, analytics</td></tr>
+  <tr><td>Enterprise MLC</td><td>5,000–10,000 TB</td><td>Write-heavy OLTP</td></tr>
+</table>
+
+<h3>Factors That Affect Endurance</h3>
+<ul>
+  <li><strong>Write amplification factor</strong> — higher WAF means more flash writes per logical write</li>
+  <li><strong>Wear leveling</strong> — the FTL distributes writes across all blocks to prevent early failure</li>
+  <li><strong>Over-provisioning</strong> — extra capacity reserved for garbage collection (enterprise drives have 28% OP vs 7% consumer)</li>
+  <li><strong>Temperature</strong> — higher temperatures accelerate NAND degradation</li>
+</ul>
+
+<h2>TRIM and Garbage Collection</h2>
+<ul>
+  <li><strong>TRIM</strong> — OS tells the SSD which logical blocks are no longer in use, allowing the SSD's garbage collector to proactively erase those blocks</li>
+  <li><strong>Garbage Collection</strong> — background process that consolidates blocks containing valid and invalid pages, freeing whole blocks for new writes</li>
+  <li>Without TRIM, the SSD does not know which pages are stale, leading to performance degradation over time</li>
+</ul>
+
+<h2>Impact on Database Design</h2>
+<table>
+  <tr><th>DB Concern</th><th>SSD Consideration</th></tr>
+  <tr><td><a href="write-ahead-log.html">WAL</a> writes</td><td>Sequential writes still benefit — but SSD handles random well too</td></tr>
+  <tr><td><a href="buffer-pool.html">Buffer pool</a> sizing</td><td>Less critical for random reads (SSD random read is fast), but still avoids SSD write amplification by caching dirty pages</td></tr>
+  <tr><td><a href="pages.html">Page size</a> choice</td><td>Larger pages (16KB) reduce SSD write amplification; smaller pages (4KB) waste less space for point lookups</td></tr>
+  <tr><td>Direct I/O (O_DIRECT)</td><td>Bypasses OS <a href="page-cache.html">page cache</a> to avoid double caching and reduce writes to SSD</td></tr>
+  <tr><td>fsync frequency</td><td>Each fsync forces a flush — SSDs handle frequent fsync better than HDDs, but still costly</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"Why are SSDs faster than HDDs for random reads?"</strong><br>No mechanical seeking or rotational latency. The SSD controller addresses flash pages electronically in microseconds. Multiple dies can be read in parallel. An SSD can achieve 10,000–1,000,000 random read IOPS vs 100–200 for HDDs. See: <a href="hdd.html">HDD</a></li>
+  <li><strong>"What is write amplification on an SSD?"</strong><br>Because NAND flash cannot overwrite in place, updating a page requires reading the entire block, erasing it, and rewriting all valid pages plus the updated one. The ratio of physical writes to logical writes is the Write Amplification Factor. A WAF of 3x means every 1 GB of logical writes causes 3 GB of physical writes to flash.</li>
+  <li><strong>"How does SSD wear leveling work?"</strong><br>The Flash Translation Layer (FTL) maintains a mapping from logical block addresses (LBAs) to physical flash pages. When writing, it selects the physical page with the lowest erase count (dynamic wear leveling) or ensures all blocks are erased roughly equally (static wear leveling). This prevents any single block from wearing out prematurely.</li>
+  <li><strong>"Should you use SSDs or HDDs for a database?"</strong><br>SSDs for OLTP (random read/write dominated) and any latency-sensitive workload. HDDs for cold storage, backups, and analytical workloads dominated by sequential scans. Many production systems use a hybrid: SSDs for hot data, HDDs for warm/cold data. See: <a href="buffer-pool.html">Buffer Pool</a></li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>NAND charge trap vs floating gate physics</li>
+    <li>SATA vs NVMe protocol timing specifics</li>
+    <li>Specific SSD controller chip architectures (Samsung, Intel, etc.)</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Database Internals" by Alex Petrov</strong> — Chapter 2 (B-Tree and Disk-Based Storage)</li>
+    <li><strong>"Designing Data-Intensive Applications" by Martin Kleppmann</strong> — Chapter 3 (Storage and Retrieval)</li>
+    <li><strong>"NAND Flash Memory in 100 Pages" by Ken Shibata</strong></li>
+    <li><strong>Facebook RocksDB Wiki: SSD Optimization</strong> — rocksdb.org</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="hdd.html">&larr; 3.1.1 HDD</a>
+  <a href="ram.html">Next: 3.1.3 RAM &rarr;</a>
+</div>
+
+</body>
+</html>

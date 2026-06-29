@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.4.5 Durability</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="index.html">System Design</a> / <a href="index.html">3 Storage</a> / <a href="index.html">3.4 Transactions</a> / 3.4.5
+</div>
+
+<h1>3.4.5 Durability</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<ul>
+  <li>Define durability as the guarantee that committed data survives crashes, power failures, and hardware errors</li>
+  <li>Explain the mechanisms that provide durability: WAL, fsync, and replication</li>
+  <li>Understand battery-backed write cache and its role in enterprise storage</li>
+  <li>Analyze the durability vs. performance trade-off, including the cost of fsync()</li>
+  <li>Explain group commit and how it amortizes the cost of durable writes</li>
+</ul>
+
+<h2>Definition</h2>
+<p><strong>Durability</strong> guarantees that once a transaction has been committed, its effects will persist even in the face of system failures -- including process crashes, power outages, kernel panics, and hardware failures. The commit acknowledgment sent to the client is a promise: this data is permanent and will be recoverable after any failure.</p>
+
+<div class="callout">
+  <strong>The durability contract:</strong> When the database says "committed," the client must be able to trust that the data will survive. Breaking this contract -- acknowledging a commit that is later lost -- is one of the most severe failures a database can have. It is the reason why fsync costs are accepted as the price of trustworthiness.
+</div>
+
+<h2>Durability Mechanisms</h2>
+
+<div class="diagram">
+  DURABILITY LAYERS (defense in depth)
+  ────────────────────────────────────
+
+  Layer 1: Write-Ahead Log (WAL)
+  ┌─────────────────────────────────────────────────────────────┐
+  │  All changes logged BEFORE being applied to data pages       │
+  │  Log records contain before/after images for recovery         │
+  │  Committed records fsync'd to stable storage on commit        │
+  └─────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+  Layer 2: Force to Stable Storage (fsync)
+  ┌─────────────────────────────────────────────────────────────┐
+  │  fsync() ensures data is written past OS page cache          │
+  │  to disk platters / SSD persistent media                     │
+  │  Bypasses volatile memory: survives process AND power failure│
+  └─────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+  Layer 3: Replication
+  ┌─────────────────────────────────────────────────────────────┐
+  │  Synchronous replication: commit waits until replica ACKs     │
+  │  Survives total node failure (disk corruption, machine death) │
+  │  Quorum writes: data survives failure of N/2 - 1 nodes      │
+  └─────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+  Layer 4: Backups / Snapshots
+  ┌─────────────────────────────────────────────────────────────┐
+  │  Point-in-time recovery for disaster scenarios              │
+  │  Survives data corruption, accidental deletion, region failure│
+  └─────────────────────────────────────────────────────────────┘
+</div>
+
+<h3>Write-Ahead Log (WAL)</h3>
+<p>The WAL is the primary durability mechanism. Before any data page is modified, the corresponding log record is written to the WAL. On commit, the WAL is flushed to stable storage (fsync) before the client receives the commit acknowledgment. If the system crashes after commit, the WAL contains all the information needed to redo any changes that were not yet flushed to data pages.</p>
+
+<div class="callout green">
+  <strong>Key property:</strong> The WAL is append-only, sequential I/O. Sequential writes are 5-10x faster than random writes on both HDDs and SSDs. By writing sequentially to the WAL and lazily flushing data pages, the database converts random writes into sequential writes, dramatically improving commit performance.
+</div>
+
+<h3>fsync() -- Forcing Data to Stable Storage</h3>
+<p>The operating system maintains a page cache in RAM for performance. When a process writes data, it goes to the page cache first. The OS periodically flushes dirty pages to disk in the background. This means that a simple <code>write()</code> call does NOT guarantee durability -- a power failure can lose data still in the page cache.</p>
+
+<p><code>fsync()</code> is the system call that forces dirty pages for a specific file descriptor to be written to the physical storage media. It blocks until the device reports the write is complete. This is the actual durability guarantee at the hardware level.</p>
+
+<table>
+  <tr><th>Write Mode</th><th>Durability</th><th>Latency</th><th>Use Case</th></tr>
+  <tr><td><code>write()</code> only (no fsync)</td><td class="red">None -- data in page cache, lost on crash</td><td>~microseconds</td><td>Temporary data, logs for fire-and-forget</td></tr>
+  <tr><td><code>fsync()</code> on every commit</td><td class="green">Full -- data on physical media</td><td>~1-15ms (HDD), ~0.1-2ms (SSD)</td><td>Transaction commits, critical data</td></tr>
+  <tr><td><code>fdatasync()</code></td><td class="green">Full (metadata not forced unless needed)</td><td>Slightly faster than fsync</td><td>Optimized alternative to fsync</td></tr>
+  <tr><td><code>O_DIRECT</code> / <code>O_SYNC</code></td><td class="green">Full (bypasses page cache entirely)</td><td>Similar to fsync</td><td>Databases with their own buffer management</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>The fsync() cost:</strong> On HDDs, fsync involves a physical disk seek (~10ms). This is why single-threaded database commit throughput is capped at ~100 TPS on spinning disks (1 commit per fsync). On SSDs, fsync is faster (~0.1-2ms), allowing ~500-1000 TPS per thread. This is the fundamental reason databases use group commit.
+</div>
+
+<h2>Battery-Backed Write Cache (BBWC)</h2>
+<p>Enterprise storage arrays and RAID controllers often include a <strong>Battery-Backed Write Cache (BBWC)</strong> or <strong>NVRAM cache</strong>. This is a small amount of battery-backed or flash-backed RAM on the storage controller that absorbs writes and acknowledges them immediately.</p>
+
+<div class="diagram">
+  WITHOUT BBWC:                     WITH BBWC:
+  ───────────────                    ──────────────
+  DB → OS page cache → disk          DB → OS page cache → BBWC → ACK
+       │                            (battery-backed)
+       │                                  │
+       ▼                                  ▼ (flushed to disk lazily)
+  fsync() waits for disk              Fast ACK
+  commit latency: ~1-15ms             commit latency: ~0.1-0.5ms
+</div>
+
+<p>The BBWC acts as a trusted intermediary: the database calls fsync, the controller ACKs immediately (data is in battery-backed RAM), and the controller flushes to disk asynchronously. If power fails, the battery keeps the cache alive long enough to flush to disk.</p>
+
+<table>
+  <tr><th>Technology</th><th>Write Latency</th><th>Survives</th><th>Used By</th></tr>
+  <tr><td>Direct disk fsync</td><td>1-15ms</td><td>Crash + power failure</td><td>Standard servers</td></tr>
+  <tr><td>BBWC (battery-backed RAM)</td><td>0.1-0.5ms</td><td>Crash + power failure</td><td>Enterprise RAID controllers</td></tr>
+  <tr><td>NVRAM (flash-backed)</td><td>~0.01ms</td><td>Crash + power failure</td><td>Modern NVMe devices</td></tr>
+  <tr><td>OS page cache only</td><td>~0.001ms</td><td class="red">Crash only (not power failure)</td><td>Non-durable mode</td></tr>
+</table>
+
+<h2>Durability vs. Performance Trade-off</h2>
+
+<div class="diagram">
+  Durability Spectrum
+  ───────────────────
+
+  MAXIMUM DURABILITY                                  MAXIMUM PERFORMANCE
+  ◄─────────────────────────────────────────────────────────────────────►
+
+  fsync every        fsync every        group commit      no fsync
+  statement           transaction                         (in-memory)
+
+  ~100 TPS            ~1,000 TPS         ~10,000+ TPS      ~100,000+ TPS
+  per thread          per thread         per thread        per thread
+
+  Survives:           Survives:          Survives:         Survives:
+  anything             anything           anything          crash only
+  (disk + power +     (disk + power +   (disk + power +   (page cache
+   hardware)           hardware)         hardware)         contents)
+</div>
+
+<h3>Different Databases, Different Choices</h3>
+
+<table>
+  <tr><th>Database</th><th>Durability Setting</th><th>Behavior</th><th>Trade-off</th></tr>
+  <tr><td>PostgreSQL</td><td><code>fsync = on</code> (default)</td><td>fsync WAL on every commit</td><td>Full durability, ~1ms commit latency on SSD</td></tr>
+  <tr><td>PostgreSQL</td><td><code>fsync = off</code></td><td>OS manages flushing</td><td class="red">Potential data loss on power failure</td></tr>
+  <tr><td>MySQL InnoDB</td><td><code>innodb_flush_log_at_trx_commit = 1</code></td><td>fsync WAL on every commit</td><td>Full durability</td></tr>
+  <tr><td>MySQL InnoDB</td><td><code>innodb_flush_log_at_trx_commit = 2</code></td><td>Write to OS cache, fsync every second</td><td class="red">Up to 1 second of data loss</td></tr>
+  <tr><td>MySQL InnoDB</td><td><code>innodb_flush_log_at_trx_commit = 0</code></td><td>Write to log buffer every second</td><td class="red">Up to 1 second of data loss + crash loss</td></tr>
+  <tr><td>Redis</td><td>appendonly no</td><td>Purely in-memory</td><td class="red">All data lost on restart</td></tr>
+  <tr><td>Redis</td><td>appendonly yes + always</td><td>fsync AOF on every write</td><td>Durable but slow for write-heavy workloads</td></tr>
+  <tr><td>MongoDB</td><td><code>j:true, w:1</code></td><td>Journal fsync on every write</td><td>Durable single-node writes</td></tr>
+  <tr><td>MongoDB</td><td><code>w:majority</code></td><td>Commit replicated to majority</td><td>Durable across replica set</td></tr>
+</table>
+
+<div class="callout red">
+  <strong>Production incident pattern:</strong> Many companies have lost data by running MySQL with <code>innodb_flush_log_at_trx_commit = 2</code> to improve benchmark numbers, then suffering power failures that lose the last second of committed transactions. At FAANG scale, this can mean millions of lost records. Always understand what you are trading away.
+</div>
+
+<h2>Group Commit</h2>
+<p><strong>Group commit</strong> amortizes the cost of fsync across multiple transactions. Instead of calling fsync after every single commit, the database collects multiple transactions' log records and flushes them all with a single fsync call.</p>
+
+<div class="diagram">
+  WITHOUT GROUP COMMIT:               WITH GROUP COMMIT:
+  ─────────────────────               ──────────────────
+
+  TXN A commit ──► fsync ──► ACK     TXN A commit ──┐
+  (1-15ms wait)                      TXN B commit ──┼──► fsync ──► ACK all
+                                     TXN C commit ──┘   (1-15ms wait,
+  TXN B commit ──► fsync ──► ACK                          shared by 3)
+  (1-15ms wait)
+
+  TXN C commit ──► fsync ──► ACK     Throughput: ~3x higher
+  (1-15ms wait)                      Per-TXN latency: similar
+
+  Total: 3 fsyncs, 3 commits
+  Throughput: limited by fsync
+</div>
+
+<p>Group commit is effective because the WAL is append-only. The database can batch multiple commit records into a single sequential write + fsync. This is the primary reason why modern databases can achieve tens of thousands of TPS even with full durability on SSDs.</p>
+
+<ul>
+  <li><strong>PostgreSQL</strong> uses group commit via its <code>commit_delay</code> and <code>commit_siblings</code> parameters, though the default is no delay (immediate fsync).</li>
+  <li><strong>MySQL InnoDB</strong> groups commits automatically when using <code>innodb_flush_log_at_trx_commit = 1</code>.</li>
+  <li><strong>RocksDB</strong> uses group commit extensively with its write batch API.</li>
+</ul>
+
+<div class="callout green">
+  <strong>Interview tip:</strong> When asked how to improve write throughput while maintaining durability, group commit should be your first answer. It is the most practical optimization because it provides identical durability guarantees with significantly higher throughput. The trade-off is slightly higher per-transaction latency (waiting for the group to fill), which is usually negligible.
+</div>
+
+<h2>Replication as Durability</h2>
+<p>Replication provides a second layer of durability beyond a single node's WAL + fsync:</p>
+
+<table>
+  <tr><th>Replication Mode</th><th>Durability Guarantee</th><th>Latency Cost</th></tr>
+  <tr><td>Synchronous (quorum write)</td><td>Data on N/2+1 nodes before ACK</td><td>2x+ network RTT</td></tr>
+  <tr><td>Semi-synchronous</td><td>Data on leader + at least 1 replica ACK</td><td>1x network RTT</td></tr>
+  <tr><td>Asynchronous</td><td>Data on leader only at commit time</td><td>None</td></tr>
+</table>
+
+<p>In cloud-native systems, replication is often the primary durability mechanism. The rationale: a single node's disk can fail (hardware corruption), but data replicated across 3 nodes in different availability zones is effectively durable. Systems like CockroachDB, Spanner, and Cassandra rely heavily on replication for durability.</p>
+
+<div class="callout yellow">
+  <strong>Nuance:</strong> Synchronous replication does not eliminate the need for WAL + fsync on each individual node. Each node must still guarantee local durability to protect against its own crashes. Replication protects against node-level failures; WAL protects against crash-level failures. Both are needed for comprehensive durability.
+</div>
+
+<h2>Durability Failure Modes</h2>
+
+<table>
+  <tr><th>Failure</th><th>Cause</th><th>Mitigation</th></tr>
+  <tr><td class="red">fsync lies</td><td>Some RAID controllers lie about fsync completion</td><td>Use battery-backed cache, test with <code>DRBD</code>, verify controller behavior</td></tr>
+  <tr><td class="red">Data corruption</td><td>Silent bit rot, firmware bugs</td><td>Checksums (InnoDB pages, ZFS), scrubbing, replication</td></tr>
+  <tr><td class="red">Disk failure</td><td>Head crash, SSD wear-out</td><td>RAID, replication, backups</td></tr>
+  <tr><td class="red">Whole node failure</td><td>Machine death, datacenter fire</td><td>Cross-AZ replication, automated failover</td></tr>
+  <tr><td class="red">Operator error</td><td><code>DROP TABLE</code>, accidental deletion</td><td>Point-in-time recovery, delayed replicas</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Defense in depth:</strong> At FAANG scale, durability is never a single mechanism. It is a layered strategy: WAL on the primary, synchronous replication to replicas, nightly full backups, continuous WAL archiving, and delayed replicas for human-error recovery. Each layer protects against a different failure mode.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What does durability mean? How does the database ensure a committed transaction survives a crash?</li>
+  <li>Explain the role of fsync() in durability. Why not just use write()?</li>
+  <li>What is group commit? How does it improve throughput while maintaining durability?</li>
+  <li>Describe the durability vs. performance trade-off. When would you relax durability?</li>
+  <li>How does a battery-backed write cache improve commit performance?</li>
+  <li>What happens to durability when you run MySQL with innodb_flush_log_at_trx_commit = 2?</li>
+  <li>How does replication contribute to durability? Is it a replacement for WAL?</li>
+  <li>What is the "fsync lies" problem? How do you detect it?</li>
+  <li>Design a system that must achieve 100,000 durable writes per second on a single node. What trade-offs do you make?</li>
+  <li>What durability guarantees does your current production database provide? How would you verify?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>In an interview setting, skip:</strong>
+  <ul>
+    <li>Detailed OS page cache internals (dirty page writeback threads, pdflush, etc.)</li>
+    <li>Specific hardware RAID controller configurations and vendor-specific BBWC implementations</li>
+    <li>Filesystem journaling internals (JFS, XFS internals) -- focus on the database-level mechanisms</li>
+    <li>Detailed benchmarks of fsync latency on specific hardware -- discuss the concept and orders of magnitude</li>
+    <li>Backup and restore procedures -- this is operations, not system design</li>
+  </ul>
+</div>
+
+<h2>Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ul>
+    <li>"Designing Data-Intensive Applications" (Martin Kleppmann) -- Chapter on durability, bit rot, and replication</li>
+    <li>"Database System Concepts" (Silberschatz, Korth, Sudarshan) -- Chapters on recovery system (WAL, stable storage)</li>
+    <li>PostgreSQL Documentation: WAL Configuration, fsync reliability notes</li>
+    <li>MySQL InnoDB Documentation: innodb_flush_log_at_trx_commit trade-offs</li>
+    <li>Stonebraker, M. (1981) "Operating System Support for Database Management" -- Classic paper on why databases bypass OS file caching</li>
+    <li>Gray, J. &amp; Reuter, A. "Transaction Processing" -- Chapter on stable storage and media failure management</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="isolation.html">&larr; 3.4.4 Isolation</a>
+  <a href="read-uncommitted.html">Next: 3.5.1 Read Uncommitted &rarr;</a>
+</div>
+
+</body>
+</html>

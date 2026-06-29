@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>13.4 — Materialized View</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">Architectural Patterns</a> / 13.4 Materialized View</div>
+<h1>Materialized View</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand materialized views as pre-computed query results that avoid expensive joins and aggregations at read time. Learn refresh strategies (on-write, periodic, on-demand), denormalization patterns, and when materialized views are the right optimization.</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>Materialized view</strong> is a database object that stores the result of a complex query as a pre-computed table. Unlike a regular view (which is a saved query that runs on every access), a materialized view physically stores the computed data, making reads fast at the cost of maintaining the data through refresh operations.
+</div>
+
+<p>Materialized views trade write overhead for read performance. Instead of joining 5 tables with aggregations on every read, the result is pre-computed and stored. When the source data changes, the view is refreshed to reflect the updates.</p>
+
+<h2>Architecture</h2>
+<div class="diagram">
+  WITHOUT materialized view (expensive reads):
+
+  Query: "Show top 10 products by revenue this month"
+  ┌──────────┐   JOIN   ┌──────────┐   JOIN   ┌──────────┐
+  │ Products  │────────▶│ Orders    │────────▶│ OrderItems│
+  └──────────┘         └──────────┘         └──────────┘
+       │                    │
+       │     3-table JOIN + GROUP BY + ORDER BY + LIMIT 10
+       │     Execution: 500ms - 2s
+       ▼
+  ┌──────────────────────────────────────────────┐
+  │  Result: top 10 products with revenue         │
+  └──────────────────────────────────────────────┘
+
+
+  WITH materialized view (fast reads):
+
+  Write path (on order creation):
+  ┌──────────┐         ┌────────────────────────────────┐
+  │ New Order │────────▶│ Update materialized view       │
+  └──────────┘         │ (increment revenue for product) │
+                       └────────────────────────────────┘
+
+  Read path:
+  ┌──────────────────────────────────────────────┐
+  │  materialized_view: top_products_revenue     │
+  │  (pre-computed, indexed)                     │
+  │  SELECT * FROM top_products LIMIT 10          │
+  │  Execution: 1-5ms                             │
+  └──────────────────────────────────────────────┘
+</div>
+
+<h2>Refresh Strategies</h2>
+<table>
+  <tr><th>Strategy</th><th>When Refresh Happens</th><th>Latency</th><th>Write Cost</th><th>Use Case</th></tr>
+  <tr><td><strong>On-write (immediate)</strong></td><td>View updated as part of the write transaction</td><td class="green">Zero staleness</td><td class="red">High (write is slower)</td><td>Financial dashboards, real-time counters</td></tr>
+  <tr><td><strong>Periodic (scheduled)</strong></td><td>View refreshed every N seconds/minutes</td><td>Stale up to N</td><td class="green">Low (batched)</td><td>Analytics dashboards, leaderboards</td></tr>
+  <tr><td><strong>On-demand (lazy)</strong></td><td>View refreshed only when read</td><td class="red">First read is slow</td><td class="green">Low (compute on read)</td><td>Rarely read complex queries</td></tr>
+  <tr><td><strong>Event-driven</strong></td><td>View updated when source data change event fires</td><td>Near-real-time</td><td>Medium</td><td>Event-sourced systems, CQRS read models</td></tr>
+</table>
+
+<h2>Database-Level Materialized Views</h2>
+<pre>
+-- PostgreSQL materialized view
+CREATE MATERIALIZED VIEW monthly_revenue AS
+SELECT
+  p.id AS product_id,
+  p.name,
+  SUM(oi.quantity * oi.price) AS revenue,
+  COUNT(DISTINCT o.id) AS order_count
+FROM products p
+JOIN order_items oi ON oi.product_id = p.id
+JOIN orders o ON o.id = oi.order_id
+WHERE o.created_at >= date_trunc('month', now())
+GROUP BY p.id, p.name;
+
+-- Refresh periodically (e.g., every 5 minutes via cron)
+REFRESH MATERIALIZED VIEW monthly_revenue;
+
+-- Or concurrently (does not block reads)
+REFRESH MATERIALIZED VIEW CONCURRENTLY monthly_revenue;
+</pre>
+
+<h2>Application-Level Materialized Views</h2>
+<p>In distributed systems, materialized views are often maintained at the application level rather than using database features.</p>
+
+<div class="diagram">
+  Application-level materialized view:
+
+  Write Path:
+  ┌─────────┐
+  │Service A │───writes──▶ Source DB (normalized)
+  └─────────┘
+                     │
+                     │ change event (CDC / polling)
+                     ▼
+              ┌──────────────┐
+              │ Sync Worker   │
+              │ (reads changes│
+              │  updates view)│
+              └──────┬───────┘
+                     │ writes
+                     ▼
+              ┌──────────────┐
+              │ Read Store    │
+              │ (denormalized │
+              │  pre-computed)│
+              │ Elasticsearch│
+              │ Redis / Mongo │
+              └──────────────┘
+
+  Read Path:
+  ┌─────────┐    reads      ┌──────────────┐
+  │Service B │─────────────▶│ Read Store     │  ← Fast query
+  └─────────┘               │ (1-5ms)        │
+                             └──────────────┘
+</div>
+
+<h2>When to Use Materialized Views</h2>
+<ul>
+  <li><strong>Expensive reads:</strong> Queries that join many tables, compute aggregations, or scan large datasets.</li>
+  <li><strong>Read-heavy workloads:</strong> 100:1 read:write ratio. Amortize write cost across many reads.</li>
+  <li><strong>Dashboard/analytics data:</strong> Leaderboards, counters, summary statistics that update infrequently.</li>
+  <li><strong>Search optimization:</strong> Pre-compute search indexes from normalized source data.</li>
+</ul>
+
+<div class="callout green">
+  <strong>Interview tip:</strong> "For a Twitter-style feed, I would use a materialized view. When a user posts a tweet, I write the tweet to the tweets table AND fan-out to a pre-computed home timeline for their followers. This makes the feed query O(1) — just read the pre-computed timeline — instead of querying all followed users and sorting by time."
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What is a materialized view and how is it different from a regular view?</li>
+  <li>Compare the different refresh strategies.</li>
+  <li>How would you design a materialized view for a news feed?</li>
+  <li>What is the trade-off between read and write performance?</li>
+  <li>How do you handle consistency between source data and materialized views?</li>
+  <li>When would you use an application-level vs database-level materialized view?</li>
+  <li>How does a materialized view relate to CQRS?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid diving into:</strong> Database-specific syntax (Oracle, SQL Server materialized view options), view index internals, or CDC tool configuration. Focus on the pattern: pre-computed results, refresh strategies, and the read/write trade-off.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><strong>Designing Data-Intensive Applications</strong> (Kleppmann) — Chapter on materialized views and streams</li>
+    <li><strong>Database Internals</strong> (Petrov) — How databases implement materialized views</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Documentation</div>
+  <ul>
+    <li><strong>PostgreSQL Materialized Views</strong> — postgresql.org/docs/current/sql-creatematerializedview.html</li>
+    <li><strong>"Materialized View Pattern"</strong> — Microsoft Azure Architecture Center</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="event-sourcing.html">&larr; Previous: Event Sourcing</a>
+  <a href="fan-out.html">Next: Fan-Out on Write &rarr;</a>
+</div>
+</body>
+</html>

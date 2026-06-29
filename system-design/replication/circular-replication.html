@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.4.3 Circular Replication - System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">4 Replication</a> / 4.4 Replication Topologies / 4.4.3
+</div>
+
+<h1>Circular Replication</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the ring-based replication topology where each node replicates to the next in a circle, recognize the absence of a single bottleneck, and identify the critical risks of replication cycles and duplicate updates.</p>
+
+<h2>Definition</h2>
+<p><strong>Circular replication</strong> (also called ring replication) arranges replicas in a closed loop. Each node acts both as a replication source and a replication target. Node A replicates to B, B replicates to C, C replicates back to A. Unlike chain replication, there is no distinct head or tail -- every node is equal in the ring.</p>
+
+<div class="callout">
+  <strong>Key idea:</strong> Circular replication is fundamentally a <strong>multi-master</strong> topology. Every node can accept writes, and changes propagate around the ring. This eliminates the single-leader bottleneck but introduces conflict resolution challenges.
+</div>
+
+<h2>Topology Diagram</h2>
+
+<div class="diagram">
+           ┌─────────────────────────────────┐
+           │                                 │
+           ▼                                 │
+    ┌──────────┐    writes     ┌──────────┐   │
+    │  Node A  │────────────►│  Node B  │   │
+    └──────────┘              └──────────┘   │
+           ▲                       │         │
+           │                       ▼         │
+    ┌──────────┐              ┌──────────┐   │
+    │  Node C  │◄────────────│  Node D  │   │
+    └──────────┘              └──────────┘   │
+           │                                 │
+           └─────────────────────────────────┘
+
+  A → B → C → D → A  (ring / circle)
+
+  Every node is both a master (accepts writes)
+  and a replica (receives from upstream).
+
+  No single leader. No single bottleneck.
+  But: risk of infinite replication loops.
+</div>
+
+<h2>How It Works</h2>
+
+<h3>Write Propagation</h3>
+<ol>
+  <li>A client writes to Node A.</li>
+  <li>Node A applies the write locally and adds it to its replication log.</li>
+  <li>Node A ships the change to Node B (its downstream neighbor).</li>
+  <li>Node B applies the change, marks it as originating from A, and ships to Node C.</li>
+  <li>Node C ships to Node D, and Node D ships back to Node A.</li>
+  <li>When Node A receives its own change back, it must <strong>detect and discard</strong> it to prevent infinite looping.</li>
+</ol>
+
+<h3>Conflict Detection</h3>
+<p>Since any node can accept writes concurrently, conflicts arise when two nodes modify the same data:</p>
+<ul>
+  <li><strong>Last-write-wins (LWW):</strong> Timestamp-based resolution. Simple but can lose data.</li>
+  <li><strong>Server ID filtering:</strong> Each write is tagged with the originating server's ID. Nodes skip writes that originated from themselves when they come back around the ring.</li>
+  <li><strong>Application-level conflict resolution:</strong> The application defines merge semantics (e.g., CRDTs, version vectors).</li>
+</ul>
+
+<div class="callout red">
+  <strong>Critical danger:</strong> Without proper origin tracking, writes loop forever around the ring. Each pass creates a new copy, multiplying data exponentially. This is the primary reason circular replication is rarely used in production.
+</div>
+
+<h2>Advantages</h2>
+
+<ul>
+  <li><strong>No single leader bottleneck:</strong> Every node can accept writes and serve reads. Write throughput scales with the number of nodes.</li>
+  <li><strong>No single point of failure:</strong> Unlike chain replication, the ring has no head or tail. Any node can fail and the ring can be re-wired.</li>
+  <li><strong>Low per-node outbound bandwidth:</strong> Each node ships data to only one downstream neighbor (like chain).</li>
+  <li><strong>Natural load distribution:</strong> Writes from different clients can go to different nodes, distributing write load.</li>
+</ul>
+
+<h2>Disadvantages</h2>
+
+<ul>
+  <li><strong>Replication cycles:</strong> The closed loop means changes travel the full ring. Without careful origin tracking, writes loop infinitely.</li>
+  <li><strong>Conflict resolution complexity:</strong> Multi-master means concurrent writes to the same data are possible. Conflict resolution adds application-level complexity.</li>
+  <li><strong>Eventual consistency only:</strong> A write on Node A takes time to propagate through the ring. Other nodes may serve stale reads until the change arrives.</li>
+  <li><strong>Split-brain risk:</strong> If the ring breaks at any point, nodes on each side cannot communicate and may diverge.</li>
+  <li><strong>Difficult debugging:</strong> Tracing the origin of a change around the ring is complex. Lag compounds at each hop.</li>
+  <li><strong>Not widely supported:</strong> MySQL supports circular replication configuration, but most modern systems prefer leader-follower with failover instead.</li>
+</ul>
+
+<h2>Preventing Infinite Loops</h2>
+
+<p>The fundamental challenge of circular replication is preventing writes from cycling forever:</p>
+
+<table>
+  <tr>
+    <th>Method</th>
+    <th>Mechanism</th>
+    <th>Limitation</th>
+  </tr>
+  <tr>
+    <td><strong>Server ID filtering</strong></td>
+    <td>Each event tagged with originating server_id. Nodes skip events from themselves.</td>
+    <td>Requires <code>log_slave_updates</code> and careful server_id configuration.</td>
+  </tr>
+  <tr>
+    <td><strong>GTID (Global Transaction ID)</strong></td>
+    <td>Each transaction gets a unique ID (server_uuid:sequence). Nodes track which GTIDs they have already applied.</td>
+    <td>Supported in MySQL 5.6+. Requires all nodes to use GTID mode.</td>
+  </tr>
+  <tr>
+    <td><strong>Replicate-ignore-server</strong></td>
+    <td>Configure each node to ignore replication events from its own server ID.</td>
+    <td>Fragile; misconfiguration causes immediate infinite loops.</td>
+  </tr>
+</table>
+
+<h2>Use Cases</h2>
+
+<h3>Where Circular Replication Makes Sense</h3>
+<ul>
+  <li><strong>Multi-datacenter active-active:</strong> Each data center needs to accept writes locally. A ring topology can connect DCs where each DC is a node in the ring.</li>
+  <li><strong>Write-anywhere requirements:</strong> Applications that cannot route all writes through a single leader.</li>
+  <li><strong>Merge replication:</strong> Branch office scenarios where each office has a local database and changes need to sync in all directions.</li>
+</ul>
+
+<h3>Where to Avoid It</h3>
+<ul>
+  <li>Most OLTP workloads -- leader-follower with failover is simpler and more reliable.</li>
+  <li>Systems requiring strong consistency -- circular is eventually consistent by nature.</li>
+  <li>Environments without mature conflict resolution -- data corruption risk is high.</li>
+</ul>
+
+<div class="callout yellow">
+  <strong>Interview Tip:</strong> If asked about circular replication, immediately highlight the loop prevention problem. A strong answer discusses server ID filtering, GTID-based deduplication, and why most production systems avoid circular replication in favor of leader-follower with automated failover.
+</div>
+
+<h2>Common Interview Questions</h2>
+
+<ul>
+  <li>"What is circular replication?" Answer: A ring topology where each node replicates to the next, forming a closed loop. Every node is both a master and a replica. Changes propagate around the ring and must be filtered to prevent infinite loops.</li>
+  <li>"How do you prevent infinite replication loops in circular replication?" Answer: Use server ID filtering (each node ignores events from its own ID) or GTIDs (globally unique transaction IDs that nodes track to avoid re-applying). MySQL supports <code>replicate-same-server-id=0</code> and GTID-based filtering.</li>
+  <li>"What is the main risk of circular replication?" Answer: Data corruption from unhandled replication cycles, and conflict resolution complexity from multi-master writes to the same data.</li>
+  <li>"When would you choose circular over star replication?" Answer: When you need multi-master write capability across data centers and can handle eventual consistency with proper conflict resolution. Most of the time, leader-follower with failover is preferred.</li>
+</ul>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Avoid going deep into:</strong>
+  <ul>
+    <li>MySQL <code>replicate-same-server-id</code> or <code>log-slave-updates</code> syntax. Understand the concept; skip the configuration details.</li>
+    <li>GTID internals (UUID generation, sequence numbering format). Know that GTID provides unique transaction identification; skip the binary format details.</li>
+    <li>Specific CRDT implementations for conflict resolution. Mention CRDTs as an option but do not implement one.</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Reading Sources</div>
+  <ul>
+    <li><strong>MySQL 8.0 Reference Manual</strong> - "Replication Topologies" section, specifically circular/active-active replication.</li>
+    <li><strong>High Performance MySQL (4th Ed.)</strong> - Chapter 7, section on active-active and circular replication.</li>
+    <li><strong>Designing Data-Intensive Applications (Kleppmann)</strong> - Chapter 5, multi-leader replication section.</li>
+    <li><strong>MySQL GTID Replication</strong> - MySQL documentation on Global Transaction Identifiers for loop prevention.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="chain-replication.html">&larr; 4.4.2 Chain Replication</a>
+  <a href="cascading-replication.html">4.4.4 Cascading Replication &rarr;</a>
+</div>
+
+</body>
+</html>

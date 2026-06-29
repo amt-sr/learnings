@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.6.1 Edge Servers</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#2">2 Networking</a> / <a href="../index.html#2.6">2.6 CDN</a> / 2.6.1
+</div>
+
+<h1>Edge Servers</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What edge servers are and how CDN architecture works</li>
+  <li>How content is served from the geographically nearest edge location</li>
+  <li>Why edge servers dramatically reduce latency (200ms to 10ms)</li>
+  <li>TLS termination at the edge and its benefits</li>
+  <li>Major CDN providers and their edge network footprints</li>
+</ul>
+
+<h2>Definition</h2>
+<p>An <strong>edge server is a server placed at the logical extreme (edge) of a network, geographically close to end users</strong>. In a CDN (Content Delivery Network), thousands of edge servers are distributed across global Points of Presence (PoPs) to serve cached content with minimal round-trip latency.</p>
+
+<p>Instead of every user's request traveling across continents to a single origin data center, the request is intercepted by the nearest edge server, which serves the response locally. This is the foundational concept behind every CDN.</p>
+
+<h2>CDN Architecture</h2>
+<div class="diagram">  User (Tokyo) ───── 200ms ───── Origin (Virginia, US)
+         │
+         └── 10ms ──► Edge Server (Tokyo PoP)
+                        │
+                        ├── Cache HIT  → serve locally (< 10ms)
+                        └── Cache MISS → fetch from origin, cache, respond
+
+  Key components:
+  ┌──────────────┐    ┌──────────────────┐    ┌────────────────┐
+  │   Client     │───►│  CDN Edge PoP    │───►│    Origin      │
+  │  (browser)   │    │  ┌────────────┐  │    │  (data center) │
+  └──────────────┘    │  │ Edge Server│  │    │                │
+                      │  │ - Static   │  │    │  - App servers │
+                      │  │ - TLS term │  │    │  - Database    │
+                      │  │ - Cache    │  │    │  - Storage     │
+                      │  └────────────┘  │    └────────────────┘
+                      └──────────────────┘
+
+  Global PoP distribution (example):
+  US-East   │ US-West   │ EU-West   │ EU-Central │ Asia-Pacific
+  Virginia  │ Oregon    │ London    │ Frankfurt  │ Tokyo
+  New York  │ San Jose  │ Paris     │ Amsterdam  │ Singapore
+  Chicago   │ Los Angeles│ Dublin   │ Zurich     │ Sydney
+  Miami     │ Seattle   │ Madrid    │ Warsaw     │ Mumbai
+  Dallas    │ Denver    │ Stockholm │ Moscow     │ Seoul</div>
+
+<h2>Latency Reduction</h2>
+<p>Edge servers solve the fundamental physics problem of the speed of light. A request from Tokyo to Virginia travels roughly 13,000 km one-way over fiber, introducing unavoidable propagation delay.</p>
+
+<table>
+  <tr><th>Scenario</th><th>Distance</th><th>One-way latency</th><th>RTT</th></tr>
+  <tr><td>User to <strong>same-city edge</strong></td><td class="green">~50 km</td><td class="green">~0.5 ms</td><td class="green">~5-10 ms</td></tr>
+  <tr><td>User to <strong>same-region edge</strong></td><td>~500 km</td><td>~5 ms</td><td>~20-40 ms</td></tr>
+  <tr><td>User to <strong>cross-region origin</strong></td><td class="red">~5,000-13,000 km</td><td class="red">~50-100 ms</td><td class="red">~100-200 ms</td></tr>
+</table>
+
+<div class="callout green">
+  <strong>Key insight:</strong> An edge server in the same city as the user reduces latency from ~200ms (cross-region round trip) to ~10ms (local). That is a 20x improvement. For a page loading 50+ assets, this compounds into seconds of saved load time.
+</div>
+
+<h3>Latency Breakdown</h3>
+<pre>Total latency = DNS + TCP handshake + TLS handshake + TTFB + Content transfer
+
+Without CDN (Tokyo → Virginia):
+  DNS lookup           ~30 ms
+  TCP handshake        ~100 ms
+  TLS handshake        ~100 ms
+  Time to first byte   ~50 ms
+  Content transfer     ~80 ms  (image, 500 KB)
+                       ─────────
+  Total                ~360 ms per asset
+
+With CDN (Tokyo → Tokyo edge):
+  DNS lookup           ~1 ms
+  TCP handshake        ~5 ms
+  TLS handshake        ~5 ms
+  Time to first byte   ~1 ms  (cache hit)
+  Content transfer     ~2 ms
+                       ─────────
+  Total                ~14 ms per asset
+
+For a page with 30 assets: 10.8s → 0.4s</pre>
+
+<h2>TLS Termination at the Edge</h2>
+<p>TLS termination means the edge server <strong>decrypts incoming HTTPS traffic and handles the TLS handshake on behalf of the origin</strong>. The connection from edge to origin can use either re-encrypted TLS or plain HTTP over a private backbone.</p>
+
+<div class="diagram">  Client ──TLS──► Edge Server ──HTTP/2──► Origin
+                     │
+                     ├── TLS termination here
+                     ├── Client sees edge's certificate
+                     ├── Edge ↔ Origin over private backbone (encrypted or not)
+                     └── Origin never deals with client TLS handshakes
+
+  Benefits:
+  ┌─────────────────────────────────────────────────────┐
+  │ 1. Offload TLS computation from origin             │
+  │    - TLS handshake = 2 RTTs + CPU-heavy crypto     │
+  │    - Edge handles this; origin serves content       │
+  │                                                     │
+  │ 2. Faster TLS negotiation                          │
+  │    - Edge is closer → fewer RTTs for handshake     │
+  │    - TLS 1.3 + edge = 1 RTT (0-RTT with resumption)│
+  │                                                     │
+  │ 3. Automatic certificate management                │
+  │    - CDNs auto-renew Let's Encrypt or custom certs │
+  │    - Origin doesn't need cert infrastructure       │
+  │                                                     │
+  │ 4. Origin can use simpler deployment               │
+  │    - No need to manage TLS libraries on app server │
+  │    - Focus on application logic                    │
+  └─────────────────────────────────────────────────────┘</div>
+
+<div class="callout yellow">
+  <strong>Interview detail:</strong> When an interviewer asks "how does TLS termination work in a CDN?", explain that the edge holds the public certificate, decrypts the request, optionally re-encrypts for the origin-to-edge hop (often with a different cert or mutual TLS), then forwards the decrypted request to origin. The key benefit is that expensive asymmetric crypto (RSA/ECDSA) happens at the edge, not at your application servers.
+</div>
+
+<h2>Major CDN Providers</h2>
+<table>
+  <tr><th>Provider</th><th>Edge PoPs</th><th>Countries</th><th>Key Strength</th></tr>
+  <tr><td><strong>Cloudflare</strong></td><td>~330+</td><td>100+</td><td>Developer-friendly, security features, free tier</td></tr>
+  <tr><td><strong>Akamai</strong></td><td>~1,200+</td><td>135+</td><td>Largest network, enterprise, high reliability</td></tr>
+  <tr><td><strong>Amazon CloudFront</strong></td><td>~600+</td><td>50+</td><td>Deep AWS integration, global reach</td></tr>
+  <tr><td><strong>Fastly</strong></td><td>~80+</td><td>30+</td><td>Real-time purge, instant config, edge compute</td></tr>
+  <tr><td><strong>Google Cloud CDN</strong></td><td>~150+</td><td>45+</td><td>Google backbone integration, GCP native</td></tr>
+</table>
+
+<h3>How CDNs Route Users to Nearest Edge</h3>
+<pre>Method 1: DNS-based routing (most common)
+  1. Client queries DNS for cdn.example.com
+  2. CDN's authoritative DNS uses Anycast
+  3. BGP Anycast advertises same IP from multiple PoPs
+  4. BGP routing naturally directs to nearest PoP
+     (based on AS path length, latency, cost)
+
+Method 2: HTTP redirect (less common, adds latency)
+  1. Client hits cdn.example.com (single entry point)
+  2. CDN returns 302 → cdn-tokyo.example.com/asset.jpg
+  3. Client follows redirect to nearest edge
+
+Method 3: AnyCast (what Cloudflare, Akamai use)
+  All PoPs advertise the same IP prefix via BGP
+  Internet routers automatically route to the topologically nearest PoP
+  No DNS tricks or redirects needed
+  Failover is automatic (if a PoP goes down, BGP re-routes)</pre>
+
+<h2>What Edge Servers Cache</h2>
+<table>
+  <tr><th>Content Type</th><th>Example</th><th>Cacheable?</th><th>Typical TTL</th></tr>
+  <tr><td>Static assets</td><td>JS, CSS, images, fonts</td><td class="green">Yes</td><td>1 year (content-hashed URLs)</td></tr>
+  <tr><td>Media</td><td>Videos, audio files</td><td class="green">Yes</td><td>24 hours - 1 year</td></tr>
+  <tr><td>API responses</td><td>GET /products</td><td class="yellow">Sometimes</td><td>1 - 60 seconds</td></tr>
+  <tr><td>User-specific pages</td><td>/dashboard</td><td class="red">No</td><td>Must not cache</td></tr>
+  <tr><td>Authenticated content</td><td>/api/user/profile</td><td class="red">No</td><td>Must not cache</td></tr>
+</table>
+
+<h2>Edge Server Responsibilities</h2>
+<p>An edge server does far more than just serve static files. In modern CDNs, edge servers handle:</p>
+<ul>
+  <li><strong>TLS termination</strong> &mdash; decrypt HTTPS, manage certificates</li>
+  <li><strong>Static content caching</strong> &mdash; serve cached JS/CSS/images</li>
+  <li><strong>Dynamic content caching</strong> &mdash; cache API responses with short TTLs</li>
+  <li><strong>Request routing</strong> &mdash; forward uncached requests to origin</li>
+  <li><strong>Load balancing</strong> &mdash; distribute traffic across multiple origins</li>
+  <li><strong>DDoS mitigation</strong> &mdash; absorb and filter malicious traffic</li>
+  <li><strong>Web Application Firewall (WAF)</strong> &mdash; block SQL injection, XSS at the edge</li>
+  <li><strong>Edge compute (Workers/Functions)</strong> &mdash; run code at the edge (redirects, A/B testing, auth checks)</li>
+  <li><strong>Image optimization</strong> &mdash; resize, compress, convert format on-the-fly</li>
+  <li><strong>Rate limiting</strong> &mdash; throttle abusive clients before they hit origin</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"How does a CDN reduce latency?"</strong><br>CDN deploys edge servers in PoPs worldwide. DNS/Anycast routes the user to the nearest edge. If the content is cached (<a href="cache-hit.html">cache hit</a>), the edge serves it directly (5-10ms). If not (<a href="cache-miss.html">cache miss</a>), the edge fetches from origin, caches it, and serves it. TLS termination at the edge also removes 2 RTTs of handshake latency from the origin path.</li>
+  <li><strong>"What is TLS termination and why do it at the edge?"</strong><br>TLS termination means decrypting HTTPS at the edge server rather than the origin. Benefits: offloads CPU-intensive crypto from app servers, reduces TLS handshake latency (edge is closer), and simplifies certificate management. The edge-to-origin hop can be re-encrypted or use the CDN's private backbone.</li>
+  <li><strong>"How does Anycast routing work in a CDN?"</strong><br>All CDN PoPs advertise the same IP prefix via BGP. The internet's routing protocols (BGP) naturally direct each user's traffic to the topologically nearest PoP based on AS-path length and metrics. This provides automatic failover too &mdash; if a PoP goes down, BGP converges and routes traffic to the next nearest.</li>
+  <li><strong>"Design a CDN from scratch. What components do you need?"</strong><br>Global PoPs with edge servers, Anycast IP routing, a cache layer (local storage at each PoP), an origin fetch mechanism, DNS-based routing for user direction, a control plane for cache invalidation and configuration, TLS termination, monitoring and metrics (hit rate, latency per PoP), and a purge API for <a href="cache-invalidation.html">cache invalidation</a>.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>Specific CDN pricing plans &mdash; irrelevant for system design</li>
+    <li>CDN provider-specific dashboard details</li>
+    <li>Deep BGP protocol internals &mdash; know what Anycast is, not how BGP computes paths</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"CDN Architecture" &mdash; Cloudflare Learning Center</strong> &mdash; cloudflare.com/learning/cdn/what-is-a-cdn</li>
+    <li><strong>"How CDNs Work" &mdash; Akamai Developer</strong> &mdash; developer.akamai.com</li>
+    <li><strong>"Edge Computing vs CDN" &mdash; Martin Fowler Blog</strong> &mdash; martinfowler.com</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="dns-caching.html">&larr; dns-caching.html</a>
+  <a href="cache-hit.html">Next: cache-hit.html &rarr;</a>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.4.4 Vector Clock</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb"><a href="#">System Design</a> / <a href="#">5 Distributed Systems</a> / <a href="#">5.4 Time</a> / 5.4.4</div>
+<h1>Vector Clock</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Master vector clocks -- the gold standard for capturing causal relationships in distributed systems. Understand how they detect concurrency (which Lamport clocks cannot), their use in production databases, and their scalability trade-offs.</p>
+
+<h2>Definition</h2>
+<p>A <strong>vector clock</strong> is an array of N logical clocks, one per process in the system. Each process maintains its own vector clock and updates it on local events and message exchanges. Vector clocks provide an <strong>exact characterization of causality</strong>: they can determine whether two events are causally ordered or concurrent.</p>
+
+<div class="callout">
+  <strong>Key insight:</strong> Vector clocks solve the fundamental limitation of <a href="lamport-clock.html">Lamport clocks</a>. With a Lamport clock, C(A) &lt; C(B) does NOT imply A → B. With vector clocks, V(A) &lt; V(B) DOES imply A → B. This bidirectional property makes vector clocks the definitive tool for causal analysis.
+</div>
+
+<h2>Algorithm Rules</h2>
+<p>Each process P<sub>i</sub> maintains a vector VC[i] of length N (N = total number of processes).</p>
+
+<ol>
+  <li><strong>VC1 -- Local event:</strong> Increment own component:<br>
+    <code>VC[i][i] = VC[i][i] + 1</code></li>
+  <li><strong>VC2 -- Send:</strong> Before sending a message, increment own component and attach the full vector:<br>
+    <code>VC[i][i] = VC[i][i] + 1</code>; send(message, VC[i])</li>
+  <li><strong>VC3 -- Receive:</strong> On receiving a message with vector <code>VC_msg</code>, perform element-wise max then increment own component:<br>
+    <code>VC[i][j] = max(VC[i][j], VC_msg[j])</code> for all j; then <code>VC[i][i] = VC[i][i] + 1</code></li>
+</ol>
+
+<h2>Comparing Vector Clocks</h2>
+<p>The comparison operation on vector clocks determines causality:</p>
+
+<table>
+  <tr><th>Condition</th><th>Meaning</th></tr>
+  <tr><td>V(A) &lt; V(B): all components of A are <= B, and at least one is strictly less</td><td>A <strong>happened before</strong> B (A → B)</td></tr>
+  <tr><td>V(A) &gt; V(B): all components of A are >= B, and at least one is strictly greater</td><td>B <strong>happened before</strong> A (B → A)</td></tr>
+  <tr><td>V(A) || V(B): some components of A are greater, some are less</td><td>A and B are <strong>concurrent</strong> (A || B)</td></tr>
+  <tr><td>V(A) == V(B): all components equal</td><td>Same event (only possible for the same logical event)</td></tr>
+</table>
+
+<div class="callout green">
+  <strong>Correctness guarantee:</strong> V(A) &lt; V(B) if and only if A → B. This is a <strong>biconditional</strong> -- both directions hold. This is strictly stronger than Lamport clocks (which only guarantee one direction).
+</div>
+
+<h2>Example: Three Processes with Concurrency Detection</h2>
+<div class="diagram">    P0              P1              P2
+     |               |               |
+  a:[1,0,0]           |               |
+     |            b:[0,1,0]          |
+     |               |               |
+  c:[2,0,0]  ------->|               |
+     |            d:[2,2,0]          |
+     |               |               |
+     |          e:[2,3,0]  ------->  |
+     |               |          f:[2,3,1]
+     |               |               |
+     |            g:[2,4,0]          |
+     |               |          h:[2,4,0]
+     |          <-----|               |
+     |               |               |
+     |               |          i:[0,0,1]
+     |               |               |
+     |          j:[2,5,0]  ------->  |
+     |               |          k:[2,5,1]
+
+
+Causal relationships (V &lt; means happened-before):
+  a < c < d < e < g < j    (causal chain P0→P1)
+  d < e < f < k             (causal chain P1→P2)
+  c < d < g < h             (causal chain P0→P1→P2)
+
+Concurrent events (V || means concurrent):
+  b || a       → [0,1,0] || [1,0,0] (incomparable)
+  b || i       → [0,1,0] || [0,0,1] (incomparable)
+  i || a       → [0,0,1] || [1,0,0] (incomparable)
+  h || j       → [2,4,0] || [2,5,0] BUT h < j (P2 received from P1 first)
+
+Note how event 'i' on P2 is completely independent from events on P0/P1.
+Vector clocks correctly identify i as concurrent with all of them.</div>
+
+<h2>Detecting Conflicts in Dynamo-Style Systems</h2>
+<p>Amazon Dynamo and Apache Cassandra use <strong>version vectors</strong> (a practical form of vector clocks) for <strong>conflict detection</strong>:</p>
+
+<div class="diagram">Client A writes key "cart" with value "X"
+  → Server stores: cart = "X", version = [server1: 1, server2: 0, server3: 0]
+
+Client B writes key "cart" with value "Y" (concurrently, didn't see X)
+  → Server stores: cart = "Y", version = [server1: 0, server2: 1, server3: 0]
+
+On reconciliation:
+  [1,0,0] vs [0,1,0] → INCOMPARABLE → CONCURRENT → CONFLICT
+
+Both versions are kept as siblings:
+  cart = {"X" [1,0,0], "Y" [0,1,0]}
+
+Client reads and resolves (application-level merge):
+  cart = "X+Y", version = [1,1,0]</div>
+
+<div class="callout yellow">
+  <strong>Dynamo's optimization:</strong> Instead of using process IDs directly, Dynamo uses (node, counter) pairs -- a technique called "dotted version vectors." This allows dynamic membership (nodes joining/leaving) without requiring a fixed-size vector.
+</div>
+
+<h2>Scalability Concerns</h2>
+
+<table>
+  <tr><th>Factor</th><th>Impact</th></tr>
+  <tr><td>Space per process</td><td>O(N) -- grows linearly with number of processes</td></tr>
+  <tr><td>Message size</td><td>O(N) -- every message carries the full vector</td></tr>
+  <tr><td>Comparison cost</td><td>O(N) -- element-wise comparison</td></tr>
+  <tr><td>Dynamic membership</td><td>Problematic -- adding/removing processes changes vector size</td></tr>
+  <tr><td>Typical practical limit</td><td>~100-200 processes before overhead becomes prohibitive</td></tr>
+</table>
+
+<div class="callout red">
+  <strong>Scalability bottleneck:</strong> In systems with thousands of nodes, full vector clocks become impractical. Solutions include:
+  <ul>
+    <li><strong>Version vectors with server IDs</strong> -- only track replica nodes, not all processes</li>
+    <li><strong>Dotted version vectors</strong> -- compress using (node, counter) pairs</li>
+    <li><strong>Scalable vector clocks</strong> -- only grow vectors on new causal paths (bounded growth)</li>
+    <li><strong>Hybrid Logical Clocks</strong> -- trade some causality tracking for O(1) space (see <a href="hybrid-logical-clock.html">5.4.5 HLC</a>)</li>
+  </ul>
+</div>
+
+<h2>Vector Clock vs Lamport Clock Summary</h2>
+<table>
+  <tr><th>Property</th><th>Lamport Clock</th><th>Vector Clock</th></tr>
+  <tr><td>A→B ⟹ C(A) &lt; C(B)</td><td class="green">Yes</td><td class="green">Yes</td></tr>
+  <tr><td>C(A) &lt; C(B) ⟹ A→B</td><td class="red">No</td><td class="green">Yes</td></tr>
+  <tr><td>Detect concurrent events</td><td class="red">No</td><td class="green">Yes</td></tr>
+  <tr><td>Space per process</td><td class="green">O(1)</td><td>O(N)</td></tr>
+  <tr><td>Message overhead</td><td class="green">O(1)</td><td>O(N)</td></tr>
+  <tr><td>Interview importance</td><td>★★★★☆</td><td>★★★★★</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li><strong>"What is a vector clock and how is it different from a Lamport clock?"</strong> -- Vector clock is an array of N logical clocks (one per process). Unlike Lamport clocks, it can detect concurrent events: if V(A) and V(B) are incomparable (some components larger, some smaller), the events are concurrent.</li>
+  <li><strong>"How do you compare two vector clocks?"</strong> -- Element-wise comparison. V(A) &lt; V(B) if every element of A is <= the corresponding element of B, and at least one is strictly less. If some elements are larger and some smaller, the events are concurrent.</li>
+  <li><strong>"How does Dynamo use vector clocks?"</strong> -- Each object version has a version vector. When a coordinator receives writes, it merges version vectors. If two versions have incomparable vectors, they are concurrent conflicts. The client must resolve on read.</li>
+  <li><strong>"What are the scalability problems with vector clocks?"</strong> -- O(N) space and message overhead, where N is the number of processes. For large systems, this becomes prohibitive. Discuss approaches like dotted version vectors, version vectors with server IDs, or scalable vector clocks.</li>
+  <li><strong>"Design a system to detect conflicting writes across replicas."</strong> -- Use version vectors: each write carries a vector clock. On read, compare vectors. If concurrent, return all conflicting versions to the client for resolution. This is exactly how Dynamo/Cassandra work.</li>
+  <li><strong>"Can vector clocks handle dynamic node membership?"</strong> -- Not directly with simple vectors. Explain (node, counter) pairs / dotted version vectors as the solution.</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Depth to avoid in interviews:</strong>
+  <ul>
+    <li>Formal lattice-theoretic foundations of vector clocks (unless you're interviewing for a research role)</li>
+    <li>Implementations of scalable vector clocks (the algorithm is complex and rarely asked)</li>
+    <li>Tree-crystal mechanism for compression</li>
+    <li>Merged vector clocks and their optimizations</li>
+    <li>The relationship between vector clocks and STRONG eventual consistency</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary References</div>
+  <ul>
+    <li>Dynamo: Amazon's Highly Available Key-value Store -- DeCandia et al. (2007)</li>
+    <li>Version Vectors are Not Vector Clocks -- N. T. A. X 2018 (Weidlich et al.)</li>
+    <li>Distributed Systems: Principles and Paradigms -- Tanenbaum & Van Steen, Section 5.3</li>
+    <li>The Trouble with Timestamps -- Martin Kleppmann (2016), covers version vectors vs vector clocks</li>
+    <li>Scalable Vector Clocks -- Almeida et al. (2018)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="lamport-clock.html">&larr; 5.4.3 Lamport Clock</a>
+  <a href="hybrid-logical-clock.html">5.4.5 Hybrid Logical Clock &rarr;</a>
+</div>
+
+</body>
+</html>

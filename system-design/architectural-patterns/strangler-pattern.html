@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>13.9 — Strangler Pattern</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">Architectural Patterns</a> / 13.9 Strangler Pattern</div>
+<h1>Strangler Pattern</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the strangler fig pattern as a strategy for incrementally migrating from a monolith to microservices without a big-bang rewrite, reducing risk and enabling continuous delivery during migration.</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>Strangler fig pattern</strong> is a migration strategy where new functionality is built as new services, and the old monolith is gradually "strangled" by redirecting traffic from its endpoints to the new services piece by piece. Named after strangler fig trees that gradually envelop and replace their host tree.
+</div>
+
+<p>The pattern avoids the risk of a big-bang rewrite. Instead of rebuilding everything at once, you incrementally extract pieces of the monolith into standalone services, routing traffic to the new services while keeping the monolith running for the remaining functionality.</p>
+
+<h2>Migration Flow</h2>
+<div class="diagram">
+  PHASE 1: Monolith handles everything
+
+  ┌──────────────────┐
+  │   Monolith        │
+  │ /users            │
+  │ /orders           │
+  │ /payments         │
+  │ /shipping         │
+  │ /notifications    │
+  └──────────────────┘
+
+  PHASE 2: Extract user service, route /users to new service
+
+  ┌──────────────┐
+  │ API Gateway  │──/users───▶ User Service (NEW)
+  └──────┬───────┘
+         │
+         └──/orders, /payments, /shipping, /notifications──▶ Monolith
+                                                      (remaining)
+
+  PHASE 3: Extract more services
+
+  ┌──────────────┐
+  │ API Gateway  │──/users───────▶ User Service
+  │              │──/orders──────▶ Order Service (NEW)
+  │              │──/payments────▶ Payment Service (NEW)
+  └──────┬───────┘
+         │
+         └──/shipping, /notifications──▶ Monolith (remaining)
+
+  PHASE 4: Everything extracted, monolith retired
+
+  ┌──────────────┐
+  │ API Gateway  │──/users──────────▶ User Service
+  │              │──/orders─────────▶ Order Service
+  │              │──/payments───────▶ Payment Service
+  │              │──/shipping───────▶ Shipping Service
+  │              │──/notifications──▶ Notification Service
+  └──────────────┘
+</div>
+
+<h2>Key Mechanism: Routing Layer</h2>
+<p>The routing layer (API Gateway, reverse proxy, or feature flags) determines which requests go to the new service and which go to the old monolith. This can be path-based, feature-flagged, or percentage-based.</p>
+
+<div class="diagram">
+  Routing strategies:
+
+  1. Path-based routing:
+     /api/v2/users/*  → User Service (new)
+     /api/v1/users/*  → Monolith (old, still handling some edge cases)
+
+  2. Feature flag:
+     if (feature_enabled("new_user_service", user.id)):
+         route to User Service
+     else:
+         route to Monolith
+
+  3. Percentage-based (canary):
+     10% of traffic → User Service (new)
+     90% of traffic → Monolith (old)
+</div>
+
+<h2>Migration Steps</h2>
+<table>
+  <tr><th>Step</th><th>Action</th><th>Risk</th></tr>
+  <tr><td><strong>1. Identify boundary</strong></td><td>Find a well-defined module/feature to extract</td><td>Low (planning only)</td></tr>
+  <tr><td><strong>2. Create new service</strong></td><td>Build the extracted functionality as a standalone service</td><td>Low (parallel development)</td></tr>
+  <tr><td><strong>3. Duplicate writes</strong></td><td>Write to both monolith and new service; read from monolith</td><td>Medium (dual writes)</td></tr>
+  <tr><td><strong>4. Switch reads</strong></td><td>Read from new service; fall back to monolith on error</td><td>Medium (production traffic)</td></tr>
+  <tr><td><strong>5. Switch writes</strong></td><td>Write to new service only; monolith becomes read-only for this module</td><td class="red">High (full cutover)</td></tr>
+  <tr><td><strong>6. Remove old code</strong></td><td>Delete the extracted module from the monolith</td><td>Low (cleanup)</td></tr>
+</table>
+
+<h2>Challenges</h2>
+<ul>
+  <li><strong>Shared database:</strong> The hardest part. The new service needs to share data with the monolith until the database is also split. Strategies: shared database initially, then split.</li>
+  <li><strong>Transactional boundaries:</strong> Operations that span multiple modules in the monolith (in a single transaction) become distributed transactions when extracted.</li>
+  <li><strong>Data migration:</strong> Moving data from monolith schema to new service schema requires careful migration with zero downtime.</li>
+  <li><strong>Testing in production:</strong> Use canary releases and feature flags to validate new services with real traffic before full cutover.</li>
+</ul>
+
+<div class="callout green">
+  <strong>Interview tip:</strong> When asked "how would you migrate a monolith to microservices?", the strangler pattern is the answer. "I would use the strangler fig pattern: incrementally extract modules into services, routing traffic via an API gateway. Start with the lowest-risk, most independent module. Use the parallel-write → switch-read → switch-write → remove-old-code sequence for each extraction."
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What is the strangler fig pattern?</li>
+  <li>How would you migrate a monolith to microservices?</li>
+  <li>How do you handle the shared database during migration?</li>
+  <li>What is the role of the API Gateway in the strangler pattern?</li>
+  <li>How do you minimize risk during the migration?</li>
+  <li>What is the order of module extraction?</li>
+  <li>How do you handle transactions that span the old and new system?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid diving into:</strong> Specific data migration tooling (AWS SCT, Flyway), database schema migration strategies, or organization change management. Focus on the incremental migration strategy and the routing mechanism.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><strong>Monolith to Microservices</strong> (Sam Newman) — Complete guide to migration strategies</li>
+    <li><strong>Building Microservices</strong> (Sam Newman, 2nd ed) — Strangler pattern overview</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Articles</div>
+  <ul>
+    <li><strong>"Strangler Application"</strong> — Martin Fowler — martinfowler.com/bliki/StranglerApplication.html</li>
+    <li><strong>"Kill It With Fire"</strong> — Mariana Danukyanj — Monolith migration strategies</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="backend-for-frontend.html">&larr; Previous: Backend for Frontend</a>
+  <a href="../security/authentication.html">Next: Authentication &rarr;</a>
+</div>
+</body>
+</html>

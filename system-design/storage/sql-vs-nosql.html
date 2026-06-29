@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.11 SQL vs NoSQL</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#3">3 Storage</a> / <a href="../index.html#3.11">3.11 SQL vs NoSQL</a> / 3.11
+</div>
+
+<h1>SQL vs NoSQL</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>Comprehensive comparison of SQL (relational) and NoSQL databases</li>
+  <li>The NoSQL landscape: key-value, document, wide-column, graph</li>
+  <li>When to choose SQL vs NoSQL (the most common interview question)</li>
+  <li>Why the answer is almost always "both" (polyglot persistence)</li>
+</ul>
+
+<h2>Overview</h2>
+<p>SQL databases (<a href="relational-database.html">relational databases</a>) organize data into tables with fixed schemas and use SQL for querying. NoSQL is an umbrella term for non-relational databases, including <a href="key-value-store.html">key-value</a>, <a href="document-database.html">document</a>, <a href="wide-column-database.html">wide-column</a>, and <a href="graph-database.html">graph</a> databases. The choice depends on your data model, access patterns, scalability requirements, and consistency needs.</p>
+
+<h2>Comprehensive Comparison</h2>
+<table>
+  <tr><th>Dimension</th><th>SQL</th><th>NoSQL</th></tr>
+  <tr><td><strong>Data model</strong></td><td>Tables, rows, columns, relationships</td><td>Varies: KV pairs, documents, column families, graph</td></tr>
+  <tr><td><strong>Schema</strong></td><td class="red">Rigid (predefined, ALTER TABLE to change)</td><td class="green">Flexible (dynamic, per-document/row)</td></tr>
+  <tr><td><strong>Query language</strong></td><td class="green">SQL — standardized, extremely expressive</td><td class="yellow">Proprietary per database (MongoDB query, CQL, Cypher)</td></tr>
+  <tr><td><strong>ACID transactions</strong></td><td class="green">Full ACID (mature, battle-tested)</td><td class="yellow">Varies: single-entity ACID in most, multi-entity in MongoDB 4.0+</td></tr>
+  <tr><td><strong>Joins</strong></td><td class="green">Native, powerful SQL JOINs</td><td class="red">Limited or unavailable (denormalize instead)</td></tr>
+  <tr><td><strong>Secondary indexes</strong></td><td class="green">Comprehensive indexing</td><td class="yellow">Available in MongoDB, limited in Cassandra, none in pure KV</td></tr>
+  <tr><td><strong>Scaling</strong></td><td class="red">Vertical scaling, read replicas. Sharding is complex.</td><td class="green">Horizontal scaling by design. Add nodes linearly.</td></tr>
+  <tr><td><strong>Consistency</strong></td><td class="green">Strong consistency (by default)</td><td class="yellow">Tunable: eventual to strong depending on config</td></tr>
+  <tr><td><strong>Write throughput</strong></td><td class="yellow">Moderate (B+ tree, random I/O)</td><td class="green">High (LSM tree, sequential I/O for Cassandra)</td></tr>
+  <tr><td><strong>Development speed</strong></td><td class="red">Slower (schema design, migrations)</td><td class="green">Faster (flexible schema, iterate quickly)</td></tr>
+  <tr><td><strong>Maturity</strong></td><td class="green">40+ years, massive ecosystem</td><td class="yellow">15-20 years, growing but less battle-tested</td></tr>
+  <tr><td><strong>Talent pool</strong></td><td class="green">Huge — every developer knows SQL</td><td class="yellow">Smaller — specialized knowledge needed</td></tr>
+</table>
+
+<h2>The NoSQL Database Landscape</h2>
+<table>
+  <tr><th>Type</th><th>Strengths</th><th>Examples</th><th>Use Cases</th></tr>
+  <tr><td><strong><a href="key-value-store.html">Key-Value</a></strong></td><td>Simplest API, sub-ms latency, easy scaling</td><td>Redis, DynamoDB, Memcached</td><td>Caching, sessions, config, rate limiting</td></tr>
+  <tr><td><strong><a href="document-database.html">Document</a></strong></td><td>Flexible schema, nested data, rich queries</td><td>MongoDB, Couchbase</td><td>Content management, user profiles, catalogs</td></tr>
+  <tr><td><strong><a href="wide-column-database.html">Wide-Column</a></strong></td><td>Massive write throughput, linear scaling</td><td>Cassandra, ScyllaDB, HBase</td><td>Time-series, IoT, messaging, logs</td></tr>
+  <tr><td><strong><a href="graph-database.html">Graph</a></strong></td><td>Efficient multi-hop relationship traversal</td><td>Neo4j, Amazon Neptune</td><td>Social networks, fraud detection, recommendations</td></tr>
+  <tr><td><strong><a href="time-series-database.html">Time-Series</a></strong></td><td>Optimized for timestamped data, downsampling</td><td>Prometheus, InfluxDB, TimescaleDB</td><td>Monitoring, IoT telemetry, metrics</td></tr>
+</table>
+
+<h2>When to Choose SQL</h2>
+<div class="callout green">
+  <strong>Choose SQL when:</strong> Data has complex relationships (many-to-many), you need ACID guarantees (financial data, orders), your queries are complex (multi-table JOINs, aggregations), your team knows SQL well, and your data fits on a single node or a few read replicas.
+</div>
+
+<ul>
+  <li><strong>Financial systems</strong> — banking, payments, accounting (ACID is non-negotiable)</li>
+  <li><strong>E-commerce orders</strong> — orders, products, inventory (complex relationships, ACID)</li>
+  <li><strong>ERP / CRM</strong> — structured business data with many relationships</li>
+  <li><strong>Analytics / reporting</strong> — complex ad-hoc SQL queries, aggregations, JOINs</li>
+  <li><strong>SaaS backends</strong> — when data model is well-understood and stable</li>
+</ul>
+
+<h2>When to Choose NoSQL</h2>
+<div class="callout">
+  <strong>Choose NoSQL when:</strong> You need horizontal scaling beyond a single node, write throughput is very high, the schema is evolving rapidly, data is naturally suited to a specific NoSQL model (documents, time-series, graphs), or you need tunable consistency for availability.
+</div>
+
+<ul>
+  <li><strong>Real-time analytics</strong> — clickstream, event tracking (Cassandra, high write volume)</li>
+  <li><strong>Content platforms</strong> — articles, user profiles with variable attributes (MongoDB)</li>
+  <li><strong>IoT / sensor data</strong> — millions of data points per second (InfluxDB, Cassandra)</li>
+  <li><strong>Caching layer</strong> — session storage, query caching (Redis, Memcached)</li>
+  <li><strong>Social graphs</strong> — friend relationships, recommendations (Neo4j)</li>
+  <li><strong>Rapid prototyping</strong> — schema not yet defined, iterating quickly (MongoDB)</li>
+</ul>
+
+<h2>The Real Answer: Polyglot Persistence</h2>
+<div class="callout yellow">
+  <strong>In production systems, you almost always use BOTH SQL and NoSQL.</strong> Most large systems use a polyglot persistence approach: SQL for transactional/core data, NoSQL for specialized workloads.
+</div>
+
+<div class="diagram">  Typical production architecture (polyglot persistence):
+
+  ┌────────────────────────────────────────────────────────────┐
+  │                      Application Layer                      │
+  └───────┬──────────┬──────────┬──────────┬──────────┬────────┘
+          │          │          │          │          │
+          ▼          ▼          ▼          ▼          ▼
+  ┌──────────────┐ ┌─────────┐ ┌────────┐ ┌────────┐ ┌───────┐
+  │  PostgreSQL  │ │  Redis   │ │MongoDB │ │Cass.   │ │InfluxDB│
+  │  (SQL)       │ │ (KV)     │ │(Doc)   │ │(Wide)  │ │(TSDB) │
+  │              │ │          │ │        │ │        │ │       │
+  │  Users       │ │ Sessions │ │ Content│ │ Events │ │Metrics│
+  │  Orders      │ │ Cache    │ │ Profiles│ │ Logs   │ │ Alerts│
+  │  Products    │ │ Rate lim.│ │ Catalog│ │ Chat   │ │ Mon.  │
+  │  Payments    │ │ Config   │ │ Reviews│ │ IoT    │ │       │
+  └──────────────┘ └─────────┘ └────────┘ └────────┘ └───────┘
+
+  Data flows to different stores based on access patterns:
+  - Financial data → PostgreSQL (ACID)
+  - Session state  → Redis (fast get/set, TTL)
+  - User profiles  → MongoDB (flexible schema, nested preferences)
+  - Activity feed  → Cassandra (massive write throughput)
+  - Server metrics → InfluxDB (time-series, downsampling)</div>
+
+<h2>Decision Framework</h2>
+<table>
+  <tr><th>Question</th><th>If YES → SQL</th><th>If NO → NoSQL</th></tr>
+  <tr><td>Is data relational with complex joins?</td><td class="green">SQL</td><td>NoSQL</td></tr>
+  <tr><td>Do you need strong ACID guarantees?</td><td class="green">SQL</td><td>NoSQL (eventual consistency OK)</td></tr>
+  <tr><td>Will queries be complex, ad-hoc, analytical?</td><td class="green">SQL</td><td>NoSQL (simple, known patterns)</td></tr>
+  <tr><td>Is schema stable and well-defined?</td><td class="green">SQL</td><td>NoSQL (schema evolving)</td></tr>
+  <tr><td>Must data fit on a single node?</td><td class="green">SQL (up to a few TB)</td><td>NoSQL (petabytes, linear scale)</td></tr>
+  <tr><td>Is write throughput > 100K/sec?</td><td>SQL (struggles)</td><td class="green">NoSQL (Cassandra)</td></tr>
+  <tr><td>Are you building a cache/session store?</td><td>SQL (overkill)</td><td class="green">NoSQL (Redis)</td></tr>
+  <tr><td>Are you building a monitoring/metrics system?</td><td>SQL (wrong tool)</td><td class="green">NoSQL (Prometheus, InfluxDB)</td></tr>
+</table>
+
+<h2>Common Mistakes</h2>
+<div class="callout red">
+  <strong>Mistake 1: "NoSQL means no SQL" — NoSQL means "Not Only SQL", not "never use SQL". Most NoSQL databases have query languages inspired by SQL.</strong>
+</div>
+
+<div class="callout red">
+  <strong>Mistake 2: Choosing NoSQL to "avoid schema design" — NoSQL still requires data modeling. In fact, Cassandra data modeling is arguably harder than relational because you must model queries, not entities.</strong>
+</div>
+
+<div class="callout red">
+  <strong>Mistake 3: "NoSQL doesn't have consistency" — Many NoSQL databases offer strong consistency. MongoDB supports multi-document ACID transactions. DynamoDB offers strong read consistency. The tradeoff is tunable, not binary.</strong>
+</div>
+
+<div class="callout red">
+  <strong>Mistake 4: Using NoSQL for everything — avoid the hammer-and-nail trap. Use the right tool for the job. SQL for transactional core, NoSQL for specialized workloads.</strong>
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"SQL vs NoSQL — when would you choose each?"</strong><br>SQL for relational data with complex relationships, ACID transactions, complex ad-hoc queries, and when the team knows SQL. NoSQL for horizontal scaling, high write throughput, flexible schemas, and when the access pattern maps to a specific NoSQL model (KV cache, document store, time-series, etc.). In practice, most systems use both — SQL for core transactional data, NoSQL for caching, search, time-series, or other specialized workloads.</li>
+  <li><strong>"What is NoSQL?"</strong><br>NoSQL ("Not Only SQL") is an umbrella term for non-relational databases that trade some relational features (ACID, joins, SQL) for benefits like horizontal scalability, flexible schemas, and high write throughput. Includes key-value stores (Redis), document databases (MongoDB), wide-column stores (Cassandra), and graph databases (Neo4j).</li>
+  <li><strong>"Design Twitter/X — which database would you use?"</strong><br>Polyglot: PostgreSQL for user accounts and relationships (ACID), Redis for timeline caching (home feed), Cassandra for tweets and activity events (massive write throughput, time-ordered), Elasticsearch for search. Each workload uses the best-fit database.</li>
+  <li><strong>"Can NoSQL databases handle transactions?"</strong><br>It depends. Single-entity (single document, single key) operations are atomic in most NoSQL databases. MongoDB 4.0+ supports multi-document ACID transactions. Cassandra offers lightweight transactions (Paxos-based) for per-partition operations. But cross-partition, cross-database distributed transactions are still limited compared to SQL databases.</li>
+  <li><strong>"What is the CAP theorem and how does it relate to SQL vs NoSQL?"</strong><br>CAP: a distributed system can guarantee at most 2 of 3: Consistency, Availability, Partition tolerance. SQL databases typically choose consistency (CP). Many NoSQL databases choose availability (AP) with eventual consistency (Cassandra, DynamoDB). But this is a simplification — modern systems often offer tunable consistency levels. See: system design references on CAP theorem.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>NewSQL databases (CockroachDB, Spanner) unless asked specifically</li>
+    <li>Multi-model databases (ArangoDB, OrientDB) — niche</li>
+    <li>Base vs BASE semantics details (beyond eventual vs strong)</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Designing Data-Intensive Applications" — Chapters 2-3</strong> (Kleppmann) — Data models and storage engines</li>
+    <li><strong>"Seven Databases in Seven Weeks"</strong> — Redis, MongoDB, etc.</li>
+    <li><strong>Martin Fowler's "NoSQL Distilled"</strong></li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="time-series-database.html">&larr; time-series-database.html</a>
+  <a href="../replication/why-replication.html">Next: ../replication/why-replication.html &rarr;</a>
+</div>
+
+</body>
+</html>

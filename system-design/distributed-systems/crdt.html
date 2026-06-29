@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.5.2 CRDT</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb"><a href="#">System Design</a> / <a href="#">5 Distributed Systems</a> / <a href="#">5.5 Conflict Resolution</a> / 5.5.2</div>
+<h1>CRDT</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand Conflict-Free Replicated Data Types (CRDTs) -- data structures that are mathematically guaranteed to converge across replicas without coordination. Know the major CRDT types, their trade-offs, and real-world usage.</p>
+
+<h2>Definition</h2>
+<p>A <strong>CRDT</strong> (Conflict-Free Replicated Data Type) is a data structure designed for distributed systems where replicas can update independently and <strong>always converge</strong> to the same state when they synchronize, without requiring coordination or consensus. Convergence is guaranteed by mathematical properties of the merge function.</p>
+
+<div class="callout">
+  <strong>Key insight:</strong> CRDTs solve the fundamental problem of <a href="last-write-wins.html">LWW</a> -- data loss. Instead of discarding writes, CRDTs <strong>merge all writes</strong> using a mathematically defined merge function. The merge is commutative (order doesn't matter), associative (grouping doesn't matter), and idempotent (applying the same update twice has no effect). These three properties guarantee convergence regardless of message ordering, delivery timing, or duplication.
+</div>
+
+<h2>Mathematical Foundation</h2>
+<p>A CRDT's merge function must satisfy three properties for any states S1, S2, S3:</p>
+
+<table>
+  <tr><th>Property</th><th>Definition</th><th>Why it matters</th></tr>
+  <tr><td><strong>Commutative</strong></td><td>merge(S1, S2) = merge(S2, S1)</td><td>Messages can arrive in any order</td></tr>
+  <tr><td><strong>Associative</strong></td><td>merge(merge(S1,S2), S3) = merge(S1, merge(S2,S3))</td><td>Messages can be grouped arbitrarily</td></tr>
+  <tr><td><strong>Idempotent</strong></td><td>merge(S, S) = S</td><td>Duplicate messages are harmless</td></tr>
+</table>
+
+<div class="callout green">
+  <strong>Together, these three properties form a <em>semilattice</em> (specifically, a join-semilattice). The merge function computes the <em>least upper bound</em> of two states. No matter what order updates arrive in, replicas converge to the same final state. This is STRONG eventual consistency.</strong>
+</div>
+
+<h2>Types of CRDTs</h2>
+<p>CRDTs come in two flavors:</p>
+<ul>
+  <li><strong>State-based (CvRDT)</strong> -- Each replica maintains a state and periodically sends its full state to others. Merging = computing the join of two states.</li>
+  <li><strong>Operation-based (CmRDT)</strong> -- Each replica broadcasts operations (e.g., "add element X"). Operations are applied to the local state in a deterministic way.</li>
+</ul>
+
+<table>
+  <tr><th>Aspect</th><th>State-based (CvRDT)</th><th>Op-based (CmRDT)</th></tr>
+  <tr><td>Communication</td><td>Send full state</td><td>Send operations only</td></tr>
+  <tr><td>Bandwidth</td><td class="red">Higher (full state)</td><td class="green">Lower (incremental ops)</td></tr>
+  <tr><td>Message delivery</td><td>No ordering required</td><td>Causal broadcast required</td></tr>
+  <tr><td>Duplication</td><td>Harmless (idempotent)</td><td>Must be deduplicated</td></tr>
+</table>
+
+<h2>Common CRDT Data Types</h2>
+
+<h3>G-Counter (Grow-only Counter)</h3>
+<p>Each process maintains its own counter. The global count is the sum of all process counters.</p>
+
+<div class="diagram">  Process P0: [P0=5, P1=0, P2=0]  →  contributed 5
+  Process P1: [P0=0, P1=3, P2=0]  →  contributed 3
+  Process P2: [P0=0, P1=0, P2=7]  →  contributed 7
+
+Global count = sum of all values = 5 + 3 + 7 = 15
+
+Merge = element-wise max:
+  merge([5,0,0], [0,3,0]) = [5,3,0]
+
+Properties:
+  + Can only increment, never decrement
+  + Always converges (element-wise max is commutative, associative, idempotent)
+  + Each process can only increment its OWN slot → no coordination needed</div>
+
+<h3>PN-Counter (Positive-Negative Counter)</h3>
+<p>Two G-Counters: one for increments (P) and one for decrements (N). The value = sum(P) - sum(N).</p>
+
+<div class="diagram">  Increments: [P0=5, P1=3, P2=0]  → sum(P) = 8
+  Decrements: [N0=0, N1=2, P2=1]  → sum(N) = 3
+
+Value = sum(P) - sum(N) = 8 - 3 = 5
+
+  Allows both increment and decrement
+  No coordination needed (each process only modifies its own slots)
+  Merge = element-wise max on both P and N vectors independently</div>
+
+<h3>G-Set (Grow-only Set)</h3>
+<p>A set that only allows adding elements. An element, once added, can never be removed.</p>
+<pre>Merge = union of both sets
+  Set A = {1, 2, 3}
+  Set B = {3, 4, 5}
+  Merge(A, B) = {1, 2, 3, 4, 5}
+
+Limitation: No delete operation. Items are never removed.</pre>
+
+<h3>OR-Set (Observed-Remove Set)</h3>
+<p>Supports both add and remove. Each element is tagged with a unique tag at add-time. Remove only removes tags that the replica has seen (observed).</p>
+
+<div class="diagram">  Initial state: {} (empty set of tag-element pairs)
+
+  Add "alice" on P1 → {(uuid1, "alice")}
+  Add "alice" on P2 → {(uuid1, "alice"), (uuid2, "alice")}
+
+  Remove "alice" on P1 → P1 removes uuid1 (which it observed)
+  Remaining: {(uuid2, "alice")}  → "alice" is still present!
+
+  Add "bob" on P1 → {(uuid2, "alice"), (uuid3, "bob")}
+
+  Merge: union of all sets by tags, keep if any tag survives
+
+  Important: remove only removes tags the remover has OBSERVED.
+  If P2 adds "alice" concurrently (uuid2) and P1 removes "alice"
+  having only seen uuid1, then uuid2 survives the remove.
+  This is "add-wins" semantics for concurrent add/remove.</div>
+
+<div class="callout yellow">
+  <strong>OR-Set semantics:</strong> Concurrent add and remove of the same element results in <strong>add-wins</strong> (the element survives). This is a deliberate design choice -- it prevents the "lost update" problem where a concurrent add is silently discarded by a concurrent remove.
+</div>
+
+<h3>LWW-Element-Set</h3>
+<p>A set where each element has an associated timestamp. Add and remove are both writes with timestamps; the one with the later timestamp wins.</p>
+
+<pre>Each element has: {value, timestamp, is_add: bool}
+  If timestamps differ: keep the one with the LATER timestamp
+  If timestamps are equal: remove wins (bias toward deletion)</pre>
+
+<h2>CRDT Comparison</h2>
+<table>
+  <tr><th>CRDT Type</th><th>Operations</th><th>Use Case</th><th>Trade-off</th></tr>
+  <tr><td>G-Counter</td><td>Increment only</td><td>Page views, event counts</td><td>Cannot decrement</td></tr>
+  <tr><td>PN-Counter</td><td>Increment + Decrement</td><td>Like/unlike counts, balances</td><td>O(N) space per counter</td></tr>
+  <tr><td>G-Set</td><td>Add only</td><td>Append-only logs, unique visitors</td><td>Cannot delete</td></tr>
+  <tr><td>OR-Set</td><td>Add + Remove</td><td>Shared collections, group membership</td><td>Add-wins on concurrent add/remove</td></tr>
+  <tr><td>LWW-Element-Set</td><td>Add + Remove with timestamps</td><td>Configuration, feature flags</td><td>Requires synchronized clocks</td></tr>
+  <tr><td>LWW-Register</td><td>Write with timestamp</td><td>Single-value registers (similar to <a href="last-write-wins.html">LWW</a>)</td><td>Data loss on concurrent writes</td></tr>
+  <tr><td>Multi-Value Register (MV-Register)</td><td>Write with version vector</td><td>Values where concurrent writes should be preserved</td><td>Client must resolve conflicts</td></tr>
+</table>
+
+<h2>CRDTs in Production Systems</h2>
+<table>
+  <tr><th>System</th><th>CRDT Usage</th><th>Details</th></tr>
+  <tr><td>Riak</td><td>Flags, counters, sets, maps, registers</td><td>Full CRDT support as a first-class data type</td></tr>
+  <tr><td>Redis (Redis-CRDTS)</td><td>G-Counter, OR-Set, etc.</td><td>Active-active replication module</td></tr>
+  <tr><td>Amazon DynamoDB</td><td>Counters (implicit G-Counter/ PN-Counter)</td><td>Atomic counters under the hood</td></tr>
+  <tr><td>AWS ElastiCache</td><td>Counters (similar)</td><td>Distributed counter support</td></tr>
+  <tr><td>Figma</td><td>Custom CRDTs for real-time collaboration</td><td>Operational transform vs CRDT hybrid</td></tr>
+  <tr><td>Apple Notes</td><td>CRDT-based sync</td><td>Reported in academic publications</td></tr>
+</table>
+
+<h2>Trade-offs of CRDTs</h2>
+
+<div class="callout red">
+  <strong>Costs of CRDTs:</strong>
+  <ul>
+    <li><strong>Space overhead:</strong> Most CRDTs require O(N) space where N is the number of replicas or number of operations. Tombstones accumulate and must be garbage collected.</li>
+    <li><strong>Bandwidth:</strong> State-based CRDTs send full state on sync; operation-based CRDTs require causal broadcast.</li>
+    <li><strong>Not all data types can be CRDTs:</strong> Complex application logic (e.g., "if balance > 0, withdraw") cannot be modeled as a simple CRDT merge.</li>
+    <li><strong>Eventual consistency:</strong> CRDTs guarantee eventual consistency, not strong consistency. During a partition, replicas may temporarily diverge.</li>
+    <li><strong>Garbage collection:</strong> Tombstones and deleted elements accumulate over time, requiring periodic GC.</li>
+  </ul>
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li><strong>"What is a CRDT?"</strong> -- A data structure that guarantees convergence across replicas without coordination. The merge function is commutative, associative, and idempotent (forms a semilattice), which ensures all replicas reach the same state regardless of message ordering.</li>
+  <li><strong>"How is a CRDT different from LWW?"</strong> -- LWW discards one of two conflicting writes. CRDTs merge both writes. No data is lost. CRDTs are mathematically guaranteed to converge; LWW's behavior depends on clock accuracy.</li>
+  <li><strong>"What are the two types of CRDTs?"</strong> -- State-based (CvRDT): send full state, merge via join. Operation-based (CmRDT): send operations, apply in causal order. State-based is simpler; operation-based is more bandwidth-efficient.</li>
+  <li><strong>"Explain a G-Counter."</strong> -- Each process maintains a vector of N counters (one per process). Only the owner increments its own slot. Global count = sum of all slots. Merge = element-wise max. Can only increment, never decrement.</li>
+  <li><strong>"How does an OR-Set handle concurrent add and remove?"</strong> -- Add-wins. Each add generates a unique tag. Remove only removes tags the remover has observed. If a concurrent add creates a new tag, that tag survives the remove. This prevents lost updates.</li>
+  <li><strong>"When would you NOT use a CRDT?"</strong> -- When you need strong consistency (banking), when the data type is too complex for a merge function (conditional logic), when the space overhead is prohibitive (many replicas), or when latency requirements demand synchronous coordination.</li>
+  <li><strong>"Compare CRDTs with Operational Transform."</strong> -- Both solve the multi-user editing problem. CRDTs are decentralized (no server authority needed) and mathematically converge. OT requires a central server for transformation. See <a href="operational-transform.html">5.5.3 OT</a> for details.</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Depth to avoid in interviews:</strong>
+  <ul>
+    <li>Formal lattice theory and join-semilattice proofs</li>
+    <li>Delta-state CRDT optimizations (sending only deltas instead of full state)</li>
+    <li>Specific garbage collection algorithms for CRDT tombstones</li>
+    <li>RGA (Replicated Growable Array) and other sequence CRDT internals</li>
+    <li>CRDT-N (nested CRDT) composition rules</li>
+    <li>The relationship between CRDTs and CALM theorem</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary References</div>
+  <ul>
+    <li>A Comprehensive Study of Convergent and Commutative Replicated Data Types -- Marc Shapiro et al. (2011) -- the CRDT survey paper</li>
+    <li>Conflict-Free Replicated Data Types -- Marc Shapiro et al., Stewardship of Confluence 2011</li>
+    <li>CRDTs: The Hard Parts -- Martin Kleppmann talk / blog post</li>
+    <li>A Brief Tour of CRDTs -- James Long, blog post with interactive examples</li>
+    <li>Riak CRDTs documentation -- Basho Technologies</li>
+    <li>Making Data Crdt -- HAT (Hybrid Architecture for Transactions) project papers</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="last-write-wins.html">&larr; 5.5.1 LWW</a>
+  <a href="operational-transform.html">5.5.3 Operational Transform &rarr;</a>
+</div>
+
+</body>
+</html>

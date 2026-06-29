@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.3.6 Session Consistency</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">5 Distributed Systems</a> / <a href="../index.html">5.3 Consistency Models</a> / 5.3.6
+</div>
+
+<h1>5.3.6 Session Consistency</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand <strong>session consistency</strong> as a pragmatic consistency model that provides guarantees within a client session, how it is implemented with sticky sessions, and why it is a practical choice for web applications.</p>
+
+<h2>Definition</h2>
+<p><strong>Session consistency</strong> (also called <strong>session guarantee</strong> or <strong>client-centric consistency</strong>) provides consistency guarantees only within the context of a <strong>session</strong> — a logical connection between a client and the system. Different sessions may see different views of the data, but a single session never observes inconsistencies.</p>
+
+<div class="callout">
+  <strong>Key Concept:</strong> A "session" is an abstraction that groups a sequence of operations from a single client. In web applications, a session typically corresponds to a user's login session (authenticated interactions). Session consistency says: "Within your session, things look consistent. Across sessions, they may not."
+</div>
+
+<h2>How Session Consistency Works</h2>
+
+<div class="diagram">
+  Web Application with Session Consistency:
+
+  Client A (Session A)             Client B (Session B)
+       │                                │
+       ▼                                ▼
+  ┌──────────┐                    ┌──────────┐
+  │ LB / GW   │                    │ LB / GW   │
+  └────┬─────┘                    └────┬─────┘
+       │ session_id=A                    │ session_id=B
+       │ (sticky)                        │ (sticky)
+       ▼                                 ▼
+  ┌──────────┐                    ┌──────────┐
+  │ Replica 1│                    │ Replica 2│
+  │ (always) │                    │ (always) │
+  └──────────┘                    └──────────┘
+
+  Session A: All reads/writes go to Replica 1
+  → Reads always see writes from the same session
+  → Reads always see the same state (no going backward)
+
+  Session B: All reads/writes go to Replica 2
+  → Same guarantee within Session B
+
+  BUT:
+  Replica 1 may have stale data compared to Replica 2
+  Client A and Client B may see different views of the same data
+  → This is OK under session consistency!
+</div>
+
+<h2>Session Guarantees (Terry et al.)</h2>
+
+<p>Session consistency is actually a family of four related guarantees:</p>
+
+<table>
+  <tr>
+    <th>Guarantee</th>
+    <th>Description</th>
+    <th>Protects Against</th>
+  </tr>
+  <tr>
+    <td><strong>Read Your Writes</strong></td>
+    <td>After writing, you read your own write</td>
+    <td>Not seeing your own updates</td>
+  </tr>
+  <tr>
+    <td><strong>Monotonic Reads</strong></td>
+    <td>Never read older data within a session</td>
+    <td>Time appearing to go backward</td>
+  </tr>
+  <tr>
+    <td><strong>Monotonic Writes</strong></td>
+    <td>Writes are applied in order within a session</td>
+    <td>Write reordering</td>
+  </tr>
+  <tr>
+    <td><strong>Writes Follow Reads</strong></td>
+    <td>Writes go to at least as up-to-date a replica as the last read</td>
+    <td>Writing stale data</td>
+  </tr>
+</table>
+
+<p>Session consistency typically implies <strong>all four</strong> of these guarantees within a session. This is why it is stronger than any individual guarantee but weaker than causal consistency (which applies across sessions).</p>
+
+<h2>Implementation: Sticky Sessions</h2>
+
+<div class="diagram">
+  Sticky Session (Session Affinity):
+
+  Client connects with session_id
+  Load balancer hashes session_id → always routes to same replica
+
+  Option 1: Source IP affinity
+    hash(client_ip) % N → replica
+    Problem: IP may change (mobile), shared IPs (NAT)
+
+  Option 2: Cookie-based affinity
+    LB sets cookie on first request
+    Subsequent requests carry cookie → routes to same replica
+    Most common in web applications
+
+  Option 3: Consistent hashing with session key
+    hash(session_id) → ring position → replica
+    Supports resharding (minimal session migration)
+
+  Trade-offs:
+  ┌──────────────────────────────────────────────────┐
+  │ Sticky Sessions                                   │
+  │ + Simple to implement                             │
+  │ + No coordination overhead                        │
+  │ + Low latency (local reads)                       │
+  │ - Unbalanced load (hot sessions)                  │
+  │ - Replica failure = session disruption            │
+  │ - No cross-session consistency guarantees         │
+  └──────────────────────────────────────────────────┘
+</div>
+
+<h2>Real-World Examples</h2>
+
+<table>
+  <tr>
+    <th>System</th>
+    <th>Session Consistency Mechanism</th>
+  </tr>
+  <tr>
+    <td>MongoDB (causal consistency)</td>
+    <td>Causal sessions: read-after-write within a session using operationTime tracking</td>
+  </tr>
+  <tr>
+    <td>AWS ElastiCache</td>
+    <td>Sticky sessions with Redis — session affinity for web app state</td>
+  </tr>
+  <tr>
+    <td>Nginx / HAProxy</td>
+    <td>Cookie-based or IP-based sticky session routing</td>
+  </tr>
+  <tr>
+    <td>AWS DynamoDB</td>
+    <td>Session consistency not directly supported, but can emulate with read-after-write pattern</td>
+  </tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Interview Tip:</strong> When asked "how do you handle consistency for a web application?", session consistency via sticky sessions is often the pragmatic answer. It is cheap to implement, provides a good user experience (you always see your own writes), and is how most web applications actually work. Just be sure to mention the downsides (replica failure, unbalanced load).
+</div>
+
+<h2>Session vs. Causal Consistency</h2>
+
+<table>
+  <tr>
+    <th>Property</th>
+    <th>Session Consistency</th>
+    <th>Causal Consistency</th>
+  </tr>
+  <tr>
+    <td>Scope</td>
+    <td>Within a single session/client</td>
+    <td>Across all clients (globally)</td>
+  </tr>
+  <tr>
+    <td>Ordering guarantee</td>
+    <td>Per-session only</td>
+    <td>All causally related operations</td>
+  </tr>
+  <tr>
+    <td>Implementation</td>
+    <td>Sticky sessions (simple)</td>
+    <td>Vector clocks (complex)</td>
+  </tr>
+  <tr>
+    <td>Cost</td>
+    <td class="green">Low</td>
+    <td>Medium (metadata overhead)</td>
+  </tr>
+  <tr>
+    <td>Cross-session anomaly</td>
+    <td class="red">Possible (sessions see different data)</td>
+    <td class="green">Not possible (causal order preserved globally)</td>
+  </tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>"What is session consistency and how does it differ from causal consistency?"</li>
+  <li>"How do you implement session consistency in a web application?"</li>
+  <li>"What are the downsides of sticky sessions?"</li>
+  <li>"How does MongoDB implement causal session consistency?"</li>
+  <li>"When would you choose session consistency over causal consistency?"</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid in interviews:</strong>
+  <ul>
+    <li>Load balancer configuration syntax (nginx upstream blocks, etc.)</li>
+    <li>Session storage backends (Redis vs. Memcached for session store)</li>
+    <li>Cookie security (HttpOnly, Secure flags) — that is a web security topic</li>
+    <li>Session fixation / hijacking attack details</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary Sources</div>
+  <ul>
+    <li>Terry, D. et al. "Session Guarantees for Weakly Consistent Replicated Data" (PDIS, 1994)</li>
+    <li>Kleppmann, M. <strong>Designing Data-Intensive Applications</strong>, Chapter 5</li>
+    <li>MongoDB Documentation: "Causal Consistency" and "Sessions"</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Supplementary</div>
+  <ul>
+    <li>Vogels, W. "Eventually Consistent" (ACM Queue, 2009)</li>
+    <li>Terry, D. "Replicated Data Consistency Explained Through Baseball" (Microsoft Research, 2013)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="causal-consistency.html">&larr; 5.3.5 Causal</a>
+  <a href="read-your-writes.html">5.3.7 Read Your Writes &rarr;</a>
+</div>
+
+</body>
+</html>

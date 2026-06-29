@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.1.4 UDP</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#2">2 Networking</a> / <a href="../index.html#2.1">2.1 Network Basics</a> / 2.1.4
+</div>
+
+<h1>UDP</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What UDP is and why it exists alongside TCP</li>
+  <li>When to choose UDP over <a href="tcp.html">TCP</a></li>
+  <li>UDP's role in DNS, gaming, streaming, and QUIC</li>
+  <li>How reliable protocols build on top of UDP</li>
+</ul>
+
+<h2>Definition</h2>
+<p>UDP (User Datagram Protocol) is a <strong>connectionless, best-effort transport protocol</strong>. It sends packets (datagrams) without establishing a connection, guaranteeing delivery, or preserving order.</p>
+
+<div class="callout yellow">
+  <strong>Analogy:</strong> UDP is like shouting across a room. You say something and hope it's heard. You don't wait for acknowledgment, and you don't retry if someone missed it. It's fast but unreliable.
+</div>
+
+<h2>TCP vs UDP</h2>
+<table>
+  <tr><th></th><th><a href="tcp.html">TCP</a></th><th>UDP</th></tr>
+  <tr><td>Connection</td><td>Connection-oriented (3-way handshake)</td><td class="green">Connectionless</td></tr>
+  <tr><td>Reliability</td><td class="green">Guaranteed delivery</td><td class="red">Best effort (may lose packets)</td></tr>
+  <tr><td>Ordering</td><td class="green">Ordered</td><td class="red">No ordering</td></tr>
+  <tr><td>Header size</td><td>20 bytes (minimum)</td><td class="green">8 bytes</td></tr>
+  <tr><td>Throughput</td><td>Bounded by congestion control</td><td class="green">No congestion control limit</td></tr>
+  <tr><td>Setup cost</td><td class="red">1 RTT (handshake)</td><td class="green">None</td></tr>
+  <tr><td>Latency</td><td class="red">Higher (handshake + retransmission)</td><td class="green">Lower</td></tr>
+</table>
+
+<h2>UDP Header</h2>
+<pre>  0      7 8     15 16    23 24    31
+  ┌────────┬────────┬────────┬────────┐
+  │ Source  │ Dest   │ Length  │ Check  │
+  │ Port   │ Port   │        │ sum    │
+  └────────┴────────┴────────┴────────┘
+  Only 8 bytes. No sequence numbers, no ACKs, no windows.</pre>
+
+<h2>When to Use UDP</h2>
+<table>
+  <tr><th>Use Case</th><th>Why UDP</th><th>Example</th></tr>
+  <tr><td>DNS queries</td><td>Fast, single request-response. Retransmit at application level.</td><td><a href="dns-resolution.html">DNS</a> (port 53)</td></tr>
+  <tr><td>Live streaming</td><td>Late packets are useless. Better to drop than delay.</td><td>Video calls, Zoom</td></tr>
+  <tr><td>Online gaming</td><td>Low latency critical. Occasional lost packet OK.</td><td>FPS games, real-time multiplayer</td></tr>
+  <tr><td>VoIP</td><td>1ms delay audible. Retransmission causes worse quality.</td><td>Skype, Discord voice</td></tr>
+  <tr><td>IoT / sensor data</td><td>Small packets, high frequency. Occasional loss OK.</td><td>Telemetry, metrics</td></tr>
+  <tr><td>Log aggregation</td><td>Bulk fire-and-forget. Lost log = acceptable.</td><td>Syslog, StatsD</td></tr>
+  <tr><td>QUIC (HTTP/3)</td><td>UDP as transport, reliability built on top</td><td><a href="http3.html">HTTP/3</a></td></tr>
+</table>
+
+<div class="callout green">
+  <strong>Key insight:</strong> UDP is not "worse" than TCP — it's a different tool for different requirements. When you need speed and can tolerate loss, UDP is the right choice. Many reliable protocols (QUIC, WebRTC, RTP) build their own reliability on top of UDP to avoid TCP's limitations (head-of-line blocking, congestion control overhead).
+</div>
+
+<h2>Why QUIC Uses UDP Instead of TCP</h2>
+<div class="diagram">  TCP's problems for modern use cases:
+  ┌─────────────────────────────────────────────────┐
+  │ 1. Head-of-line blocking: one lost packet blocks │
+  │    ALL subsequent streams (even unrelated ones)  │
+  │ 2. Handshake overhead: 1 RTT for TCP + 1-2 RTT │
+  │    for TLS = 2-3 RTTs before any data           │
+  │ 3. Middlebox interference: NATs and firewalls   │
+  │    modify TCP behavior in unpredictable ways     │
+  └─────────────────────────────────────────────────┘
+
+  QUIC (built on UDP):
+  - 0-RTT connection setup (with cached session)
+  - No head-of-line blocking across streams
+  - User-space congestion control (faster to evolve)
+  - Connection migration (seamless network switch)</div>
+
+<h2>Building Reliability on UDP</h2>
+<p>Many protocols add reliability on top of UDP when they need both speed and guarantees.</p>
+<pre>QUIC:     Reliability + ordering + congestion control on UDP
+          (used by HTTP/3, WebTransport)
+
+WebRTC:   RTP/RTCP on UDP for real-time video/audio
+          DTLS for encryption
+
+RTP:      Real-time Transport Protocol (ordering + timing info)
+
+Reliable UDP libraries:
+  - ENet (gaming)
+  - UDT (bulk data transfer)
+  - QUIC libraries (quiche, ngtcp2)</pre>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"When would you choose UDP over TCP?"</strong><br>When latency matters more than reliability: live streaming, gaming, VoIP, DNS queries. Also when you want to build your own reliability (QUIC) or when occasional data loss is acceptable (metrics, logs).</li>
+  <li><strong>"Does UDP guarantee delivery?"</strong><br>No. Packets can be lost, reordered, or duplicated. The application must handle this if needed. Many reliable protocols (QUIC, RTP) implement their own delivery guarantees on top of UDP.</li>
+  <li><strong>"Why does HTTP/3 use UDP?"</strong><br>To avoid TCP's head-of-line blocking across streams, reduce handshake overhead (0-RTT), enable connection migration, and implement congestion control in user-space for faster iteration.</li>
+  <li><strong>"Why does DNS use UDP?"</strong><br>DNS queries are small (fits in one packet), single request-response, and speed matters. If the response is lost, the client re-queries. Large responses (>512 bytes) fall back to TCP.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>UDP checksum calculation details</li>
+    <li>UDP-Lite protocol</li>
+    <li>DTLS handshake internals</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>Computer Networking: A Top-Down Approach (Kurose &amp; Ross)</strong> — Chapter 3 (Transport Layer)</li>
+    <li><strong>"QUIC: A UDP-Based Multiplexed and Secure Transport"</strong> — RFC 9000</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="tcp.html">&larr; 2.1.3 TCP</a>
+  <a href="tls.html">Next: 2.1.5 TLS &rarr;</a>
+</div>
+
+</body>
+</html>

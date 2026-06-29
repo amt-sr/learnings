@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>15.10 Payment Gateway — System Design</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../">Handbook</a> / <a href="../">System Design</a> / 15. Design Problems / 15.10 Payment Gateway</p>
+
+<h1>Payment Gateway</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Design a payment gateway that processes financial transactions between merchants and payment processors (banks, card networks). The system must guarantee ACID properties, handle idempotency, manage retries with exactly-once semantics, and support reconciliation with external financial systems.</p>
+
+<h2>Functional Requirements</h2>
+<ul>
+  <li>Process payment requests: charge, refund, authorize, capture</li>
+  <li>Support multiple payment methods: credit card, debit card, bank transfer, digital wallet</li>
+  <li>Guarantee idempotency — duplicate requests must not result in duplicate charges</li>
+  <li>Handle retries for transient failures with exactly-once processing</li>
+  <li>Provide transaction status: pending, completed, failed, refunded</li>
+  <li>Support daily reconciliation with external payment processors</li>
+  <li>Webhook notifications for async transaction status updates</li>
+</ul>
+
+<h2>Non-Functional Requirements</h2>
+<ul>
+  <li><strong>ACID compliance:</strong> no double charges, no lost transactions, no inconsistent states</li>
+  <li><strong>High availability:</strong> 99.99% uptime (revenue-critical system)</li>
+  <li><strong>Low latency:</strong> synchronous charge &lt; 3s, but prioritize correctness over speed</li>
+  <li><strong>Auditability:</strong> complete audit trail for every state change</li>
+  <li><strong>Compliance:</strong> PCI-DSS Level 1, SOC 2 Type II, data encryption at rest and in transit</li>
+</ul>
+
+<h3>Capacity Estimates</h3>
+<table>
+  <tr><th>Metric</th><th>Estimate</th><th>Notes</th></tr>
+  <tr><td>Transactions/day</td><td>10M</td><td>Peak shopping season could be 5x</td></tr>
+  <tr><td>Peak TPS</td><td>2K</td><td>10M / 86400 * 3x burst * 2x peak-hour</td></tr>
+  <tr><td>Average transaction value</td><td>$50</td><td></td></tr>
+  <tr><td>Daily volume</td><td>$500M</td><td>Requires strong reconciliation</td></tr>
+  <tr><td>Storage (1 year)</td><td>~5 TB</td><td>Transaction records + audit log</td></tr>
+  <tr><td>Refund rate</td><td>2%</td><td>200K refunds/day</td></tr>
+</table>
+
+<h2>API Design</h2>
+<pre>
+POST   /api/v1/payments/charge
+Headers: Idempotency-Key: "idem_abc123"
+Body:  { "merchant_id": "M123", "amount": 5000, "currency": "USD",
+         "payment_method": { "type": "card", "token": "tok_xyz" },
+         "metadata": { "order_id": "ORD456" } }
+Resp:  { "transaction_id": "txn_abc123", "status": "completed",
+         "amount": 5000, "created_at": "..." }
+
+POST   /api/v1/payments/{transaction_id}/refund
+Headers: Idempotency-Key: "idem_def456"
+Body:  { "amount": 5000, "reason": "customer_request" }
+Resp:  { "refund_id": "ref_def456", "status": "completed" }
+
+GET    /api/v1/payments/{transaction_id}
+Resp:  { "transaction_id": "txn_abc123", "status": "completed",
+         "amount": 5000, "refunds": [...], "history": [...] }
+
+POST   /api/v1/webhooks/configure
+Body:  { "url": "https://merchant.com/webhook", "events": ["charge.completed", "refund.completed"] }
+</pre>
+
+<h2>High-Level Design</h2>
+<div class="diagram">
+  Merchant           Payment Gateway                Payment Processor
+  (Your App)         (This System)                  (Stripe, Bank, etc.)
+
+       │                   │                              │
+       │ POST /charge       │                              │
+       │ (Idempotency-Key)  │                              │
+       │───────────────────►│                              │
+       │                   │  1. Validate + check idempotency
+       │                   │  2. Create transaction record  │
+       │                   │  3. State: INITIATED           │
+       │                   │                              │
+       │                   │  4. Reserve funds              │
+       │                   │─────────────────────────────►│
+       │                   │  5. Processor response          │
+       │                   │◄─────────────────────────────│
+       │                   │  6. Update: COMPLETED/FAILED    │
+       │                   │  7. Commit or rollback (DB txn) │
+       │                   │                              │
+       │  Response         │                              │
+       │◄──────────────────│                              │
+       │                   │                              │
+       │                   │  8. Async: webhook to merchant  │
+       │◄──────────────────────────────────────────────────│
+</div>
+
+<h2>Deep Dive: Idempotency</h2>
+<p>The single most important property of a payment system. A duplicate request (network retry, user double-click) must never result in a duplicate charge.</p>
+
+<pre>
+# Idempotency table
+CREATE TABLE idempotency_keys (
+    idempotency_key VARCHAR(128) PRIMARY KEY,
+    merchant_id     BIGINT          NOT NULL,
+    request_params  JSONB           NOT NULL,    -- Original request fingerprint
+    transaction_id  VARCHAR(64)     NOT NULL,    -- Resulting transaction
+    response_body   JSONB           NOT NULL,    -- Cached response
+    status          VARCHAR(32)     NOT NULL,    -- processed, expired
+    created_at      TIMESTAMP       NOT NULL,
+    expires_at      TIMESTAMP       NOT NULL     -- Auto-cleanup after 24h
+    -- Index for cleanup job
+);
+CREATE INDEX idx_idempotency_expiry ON idempotency_keys(expires_at);
+
+# On every request:
+# 1. Check idempotency_key table
+#    - EXISTS + status='processed' → return cached response immediately
+#    - EXISTS + status='processing' → return 409 Conflict (in-flight)
+#    - NOT EXISTS → proceed with payment
+# 2. INSERT idempotency_key with status='processing' (atomic)
+# 3. Process payment
+# 4. UPDATE idempotency_key with transaction_id + response + status='processed'
+</pre>
+
+<div class="callout green">
+  <strong>Key design decision:</strong> Use the client-provided idempotency key (in the header) as the deduplication mechanism. This shifts the responsibility to the client to generate a unique key per operation, which is simpler than server-side fingerprinting and works across retries caused by network failures (where the server never saw the first request).
+</div>
+
+<h2>Deep Dive: Transaction State Machine</h2>
+<div class="diagram">
+                          ┌──────────────┐
+                          │  INITIATED   │
+                          └──────┬───────┘
+                                 │
+                    ┌────────────┴────────────┐
+                    │                         │
+              ┌─────▼──────┐           ┌──────▼─────┐
+              │  PROCESSING │           │   FAILED    │
+              └─────┬──────┘           │  (init      │
+                    │                  │   failure)  │
+              ┌─────┴──────┐           └─────────────┘
+              │             │
+     ┌────────▼──┐   ┌─────▼────────┐
+     │ COMPLETED │   │   FAILED     │
+     │ (charged) │   │ (processor   │
+     └─────┬─────┘   │  rejected)   │
+           │         └──────────────┘
+           │
+     ┌─────┴──────┐
+     │  REFUNDED  │
+     │ (partial   │
+     │  or full)  │
+     └───────────┘
+</div>
+
+<div class="callout red">
+  <strong>Critical invariant:</strong> A transaction can only transition to specific states. Use a state machine with enforced transitions in the database (CHECK constraints or application-level guards). No transaction can go from COMPLETED back to PROCESSING. Every state transition is recorded in an immutable audit log.
+</div>
+
+<h2>Deep Dive: ACID Guarantees</h2>
+<p>Every payment operation must be atomic:</p>
+<ol>
+  <li><strong>Begin database transaction</strong></li>
+  <li>INSERT transaction record with status = INITIATED</li>
+  <li>INSERT idempotency key record</li>
+  <li><strong>Commit</strong> — at this point, the intent is durably recorded</li>
+  <li>Call payment processor API (external call)</li>
+  <li><strong>Begin new database transaction</strong></li>
+  <li>UPDATE transaction status to COMPLETED or FAILED based on processor response</li>
+  <li><strong>Commit</strong></li>
+</ol>
+
+<div class="callout yellow">
+  <strong>Two-phase commit pattern:</strong> The external processor call cannot be in a single database transaction. Instead, use a "prepare" phase (step 1-4) that records intent, then a "commit" phase (step 6-8) that records the result. If the system crashes between phases, a reconciliation job detects and resolves the inconsistency ( INITIATED records that never transitioned to COMPLETED/FAILED).
+</div>
+
+<h2>Deep Dive: Reconciliation</h2>
+<p>Detect and resolve discrepancies between internal records and external processor records.</p>
+<ul>
+  <li><strong>Daily reconciliation:</strong> Download daily settlement files from the processor. Compare against internal transaction records. Flag discrepancies: amounts mismatch, missing transactions, phantom transactions.</li>
+  <li><strong>Real-time monitoring:</strong> Track transaction age in PROCESSING state. Alert if a transaction has been processing for more than 5 minutes. Auto-retry or manual resolution based on configurable rules.</li>
+  <li><strong>Settlement matching:</strong> Processor deposits funds in batches. Match settlements to internal transaction records to ensure the correct amount was received.</li>
+</ul>
+
+<div class="callout">
+  <strong>Reconciliation as a safety net:</strong> Even with perfect code, network failures, bugs, and edge cases will cause inconsistencies. Reconciliation is the last line of defense. Design it from day one, not as an afterthought. Automated reconciliation catches 99% of issues; manual review handles the rest.
+</div>
+
+<h2>Deep Dive: Retry with Exactly-Once</h2>
+<pre>
+# Retry queue design
+# Use a dedicated "retry" table instead of a message queue for payment operations
+# (database-backed = ACID guarantees, no message loss)
+
+CREATE TABLE retry_queue (
+    retry_id        BIGSERIAL PRIMARY KEY,
+    transaction_id  VARCHAR(64) NOT NULL,
+    operation       VARCHAR(32) NOT NULL,  -- charge, refund, capture
+    attempt_count   INT          NOT NULL DEFAULT 0,
+    max_attempts    INT          NOT NULL DEFAULT 5,
+    next_retry_at   TIMESTAMP    NOT NULL,
+    params          JSONB        NOT NULL,
+    created_at      TIMESTAMP    NOT NULL
+);
+
+# Retry worker:
+# 1. SELECT * FROM retry_queue WHERE next_retry_at <= NOW() LIMIT 100
+# 2. For each: execute the operation
+#    - Success: DELETE from retry_queue
+#    - Retryable failure: UPDATE attempt_count++, next_retry_at = NOW() + backoff
+#    - Non-retryable failure: DELETE from retry_queue, mark transaction as FAILED
+# 3. Use idempotency key on every retry to ensure exactly-once
+</pre>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>How do you handle a scenario where the processor charges the card but your system crashes before recording the result? <em>A: The idempotency key ensures that on retry, we detect a potential duplicate. But since we don't have a record, we need to: (1) try a refund/reversal if the amount is known, (2) check the processor's API for the transaction status, (3) create a manual review ticket if unclear. This is why reconciliation exists.</em></li>
+  <li>What is the difference between authorize and capture? <em>A: Authorize places a hold on funds (validity: 5-7 days). Capture charges the held funds. This two-step process allows merchants to verify order details before finalizing the charge. If not captured within the validity window, the hold expires automatically.</em></li>
+  <li>How do you handle multi-currency transactions? <em>A: Store amounts in the merchant's base currency. Convert using a real-time FX rate at authorization time. Lock the rate for 24 hours to prevent discrepancies between authorize and capture. Use a separate FX rate service with daily rate updates.</em></li>
+  <li>How do you handle partial refunds? <em>A: Track multiple refund records per transaction. Each refund reduces the refundable balance. Enforce: sum of refunds &lt;= original charge amount. Use a separate refunds table linked to the transaction.</em></li>
+  <li>What security measures do you implement? <em>A: PCI-DSS compliance (tokenize card data, never store CVV), TLS 1.3 for all communication, field-level encryption for PII, HMAC signatures on webhooks, IP allowlisting for processor callbacks, fraud detection scoring before processing.</em></li>
+</ul>
+
+<div class="callout red">
+  <strong>What to Skip:</strong>
+  <ul>
+    <li>Don't design the full merchant onboarding flow</li>
+    <li>Don't design fraud detection in detail — mention it as a pre-processing step</li>
+    <li>Don't implement PCI-DSS compliance procedures — mention requirements and move on</li>
+    <li>Don't design the processor integration (Stripe API details) — treat it as a black box</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><em>Designing Data-Intensive Applications</em> — Martin Kleppmann (transactions, ACID, exactly-once)</li>
+    <li><em>System Design Interview Vol 2</em> — Alex Xu, Ch. 14: Design Payment System</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Articles</div>
+  <ul>
+    <li>Stripe documentation: "Idempotent Requests" (stripe.com/docs/api/idempotent_requests)</li>
+    <li>Stripe Engineering: "How Stripe Handles Billions in Transactions" (stripe.com/blog/engineering)</li>
+    <li>Adyen Engineering: "Building a Payment Platform" (adyen.com/engineering)</li>
+    <li> "Exactly-once semantics in distributed systems" — various (Google, Confluent)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="search-autocomplete.html">&larr; Previous: Search Autocomplete</a>
+  <a href="logging-system.html">Next: Logging System &rarr;</a>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.7.6 Sticky Sessions</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#2">2 Networking</a> / <a href="../index.html#2.7">2.7 Load Balancing</a> / 2.7.6
+</div>
+
+<h1>Sticky Sessions</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What sticky sessions (session affinity) are and how they work</li>
+  <li>Why they are generally an anti-pattern for stateless architectures</li>
+  <li>Implementation: cookie-based affinity, IP hash</li>
+  <li>Problems with scaling, failures, and load distribution</li>
+</ul>
+
+<h2>Definition</h2>
+<p><strong>Sticky sessions</strong> (also called <strong>session affinity</strong>) ensure that a client's requests are always routed to the same backend server. The load balancer remembers which server handled a client's first request and sends all subsequent requests from that client to the same server.</p>
+
+<div class="diagram">  Without Sticky Sessions (normal):
+  Request 1  ──▶  Server A
+  Request 2  ──▶  Server B      ← Different server (session lost!)
+  Request 3  ──▶  Server C      ← Different server (session lost!)
+
+  With Sticky Sessions:
+  Request 1  ──▶  Server A  (set cookie: SERVER=A)
+  Request 2  ──▶  Server A  (cookie: SERVER=A → route to A)
+  Request 3  ──▶  Server A  (cookie: SERVER=A → route to A)
+
+  The LB "sticks" the client to Server A for all subsequent requests.</div>
+
+<h2>Why Sticky Sessions Exist</h2>
+<p>Historically, applications stored session state in local server memory. When a user logged in on Server A, their session data existed only on Server A. If the next request went to Server B, Server B had no session data and the user appeared logged out.</p>
+
+<pre># Legacy (session in local memory):
+Server A memory:
+  session_id=abc123 → { user: "alice", cart: [...] }
+
+# If request goes to Server B:
+Server B memory:
+  session_id=abc123 → NOT FOUND  → Redirect to login ❌
+
+# This is why sticky sessions were invented:
+# Force all requests with session_id=abc123 to Server A.</pre>
+
+<h2>Implementation Methods</h2>
+
+<h3>Cookie-Based Affinity</h3>
+<p>The load balancer sets a cookie on the first response (e.g., <code>AWSALB</code>, <code>SERVERID</code>). On subsequent requests, the client sends this cookie back, and the LB uses it to route to the same server.</p>
+<pre># AWS ALB sticky session configuration:
+# Stickiness enabled with duration-based cookie
+# Cookie name: AWSALB
+# Expiration: 1 hour (can be up to 7 days)
+
+# Nginx sticky session:
+upstream backend {
+    ip_hash;  # or use sticky module
+    server 10.0.1.10:8080;
+    server 10.0.1.11:8080;
+    server 10.0.1.12:8080;
+}
+
+# HAProxy:
+# cookie SERVERID insert indirect nocache
+# backend api
+#     cookie SERVERID
+#     server api1 10.0.1.10:8080 cookie api1
+#     server api2 10.0.1.11:8080 cookie api2</pre>
+
+<h3>IP Hash Affinity</h3>
+<p>The LB hashes the client's IP address and maps it to a specific server. This doesn't require cookies but breaks when clients are behind NAT (many clients share one IP) or change IPs (mobile networks).</p>
+
+<table>
+  <tr><th>Method</th><th>Pros</th><th>Cons</th></tr>
+  <tr><td><strong>Cookie-based</strong></td><td class="green">Works with NAT, accurate per-client</td><td>Requires cookies, can't work with non-browser clients</td></tr>
+  <tr><td><strong>IP Hash</strong></td><td class="green">No cookies needed, simple</td><td class="red">Breaks with NAT, mobile IP changes, unbalanced distribution</td></tr>
+</table>
+
+<h2>Why Sticky Sessions Are an Anti-Pattern</h2>
+<p>In modern stateless architectures, sticky sessions introduce significant problems:</p>
+
+<h3>Uneven Load Distribution</h3>
+<div class="diagram">  Problem: Some servers get more traffic than others
+
+  Without stickiness (even distribution):
+  Server A:  ████████  (33%)
+  Server B:  ████████  (33%)
+  Server C:  ████████  (33%)
+
+  With stickiness (uneven distribution):
+  Server A:  ████████████████████  (60%)  ← High-traffic users
+  Server B:  ████████              (25%)
+  Server C:  ████                  (15%)  ← Idle
+</div>
+
+<h3>Server Failure Problems</h3>
+<p>When a server goes down, all clients "stuck" to it lose their session. The LB must redistribute them, which causes session loss anyway — defeating the purpose of stickiness.</p>
+
+<h3>Scaling Issues</h3>
+<p>Adding or removing servers invalidates existing sticky mappings. The load balancer must redistribute clients, and any in-memory sessions on removed servers are lost.</p>
+
+<h3>Deployments Become Harder</h3>
+<p>Rolling updates become risky. When you deploy a new version to Server A, all stuck clients experience a disruption. You can't gracefully migrate sessions between servers.</p>
+
+<div class="callout red">
+  <strong>The right approach:</strong> Design your application to be <strong>stateless</strong>. Store session data in an external store (Redis, Memcached, DynamoDB) instead of local server memory. This eliminates the need for sticky sessions entirely and enables true horizontal scaling.
+</div>
+
+<h2>Stateless Architecture (The Solution)</h2>
+<div class="diagram">  Stateful (bad — requires sticky sessions):
+  ┌────────┐    ┌──────────────────────┐
+  │ Client │───▶│ Server A (local mem) │  ← session data lives here
+  │        │───▶│ Server B (local mem) │  ← no session for this client
+  │        │───▶│ Server C (local mem) │  ← no session for this client
+  └────────┘    └──────────────────────┘
+
+  Stateless (good — no sticky sessions needed):
+  ┌────────┐    ┌──────────┐    ┌─────────────┐
+  │ Client │───▶│ Any Srv  │───▶│   Redis     │  ← session data
+  │        │───▶│ Any Srv  │───▶│   (shared)  │
+  │        │───▶│ Any Srv  │───▶│             │
+  └────────┘    └──────────┘    └─────────────┘
+
+  Session data is stored in Redis, not in server memory.
+  Any server can handle any request because it reads
+  session data from the shared store.</div>
+
+<pre># Stateless session example:
+# Login: server writes session to Redis
+redis.set("session:abc123", json.dumps({
+    "user_id": 42,
+    "username": "alice",
+    "roles": ["admin"]
+}), ex=3600)
+
+# Any subsequent request to any server:
+# Server reads session from Redis
+session = redis.get("session:abc123")
+# Works on Server A, B, or C — no sticky session needed</pre>
+
+<h2>When Sticky Sessions Are Acceptable</h2>
+<p>There are a few scenarios where sticky sessions are reasonable:</p>
+<ul>
+  <li><strong>WebSocket connections</strong> — Long-lived connections benefit from affinity to avoid re-establishing state</li>
+  <li><strong>File upload progress</strong> — Large uploads that can't be easily resumed</li>
+  <li><strong>Legacy applications</strong> — When refactoring to stateless is not feasible</li>
+  <li><strong>Temporary migration</strong> — During the transition from stateful to stateless architecture</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What are sticky sessions and why are they problematic?"</strong><br>Sticky sessions (session affinity) route all requests from a client to the same backend server. They are problematic because they cause uneven load distribution, fail badly when a server goes down (all stuck clients lose sessions), make scaling harder, and complicate deployments. The better approach is to make the application stateless by storing session data in Redis or a database.</li>
+  <li><strong>"How do you avoid needing sticky sessions?"</strong><br>Store all session state in an external data store (Redis, Memcached, DynamoDB) instead of local server memory. Each request reads session data from the shared store. Any server can handle any request, enabling proper load distribution and seamless scaling.</li>
+  <li><strong>"When might you still use sticky sessions?"</strong><br>WebSocket connections (long-lived, stateful), large file uploads, legacy apps that can't be refactored, or as a temporary measure during migration to a stateless architecture.</li>
+  <li><strong>"How do sticky sessions affect load distribution algorithms?"</strong><br>They override them. Even if you're using <a href="least-connections.html">least connections</a> or <a href="weighted-round-robin.html">weighted round robin</a>, sticky sessions will route returning clients to their "stuck" server regardless of current load. This can lead to hot spots where one server is overwhelmed while others are idle.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>Cookie encoding/encryption details</li>
+    <li>Specific LB vendor cookie implementations</li>
+    <li>Sticky session configuration for obscure LB vendors</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Designing Data-Intensive Applications"</strong> — Martin Kleppmann (Session management chapter)</li>
+    <li><strong>AWS ALB Sticky Sessions</strong> — docs.aws.amazon.com/elasticloadbalancing/latest/application/sticky-sessions</li>
+    <li><strong>Nginx Upstream Module</strong> — nginx.org/en/docs/http/ngx_http_upstream_module</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="health-checks.html">&larr; 2.7.5 Health Checks</a>
+  <a href="round-robin.html">Next: 2.7.7 Round Robin &rarr;</a>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.4.4 Cascading Replication - System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">4 Replication</a> / 4.4 Replication Topologies / 4.4.4
+</div>
+
+<h1>Cascading Replication</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand cascading replication as a hybrid topology that combines the leader bandwidth savings of chain replication with the fan-out flexibility of star replication. Recognize when cascading is the optimal choice for large replica sets and cross-region deployments.</p>
+
+<h2>Definition</h2>
+<p><strong>Cascading replication</strong> is a tree-based topology where the leader replicates to a small set of <strong>relay followers</strong> (also called intermediate replicas), which in turn replicate to <strong>leaf followers</strong>. This creates a two-tier (or multi-tier) hierarchy that reduces the leader's outbound replication load while still allowing many replicas overall.</p>
+
+<div class="callout">
+  <strong>Key idea:</strong> Cascading is the practical solution to the "100 replicas" problem. The leader ships to a handful of relay followers, and each relay fans out to many leaf followers. The leader's bandwidth scales with the number of relays, not the total replica count.
+</div>
+
+<h2>Topology Diagram</h2>
+
+<div class="diagram">
+                         ┌──────────────┐
+                    ┌───►│ Leaf Follower│
+                    │    └──────────────┘
+               ┌────┴─────┐
+        ┌──────┤ RELAY 1  ├──────┐
+        │      └──────────┘      │
+        │         │              ▼
+        │    ┌────┴─────┐  ┌──────────────┐
+        │    │ RELAY 2  │  │ Leaf Follower│
+  ┌─────┴────┤ (relay)  ├──►└──────────────┘
+  │ LEADER   └────┬─────┘
+  └──────────┘    │         ┌──────────────┐
+                  ├────────►│ Leaf Follower│
+                  │         └──────────────┘
+             ┌────┴─────┐
+        ┌───►│ RELAY 3  ├──►  ...
+        │    └──────────┘
+  ┌─────┴────┐
+  │ Leaf Follower│
+  └──────────┘
+
+  Tier 1: Leader → Relay followers  (few connections)
+  Tier 2: Relay → Leaf followers    (fan-out per relay)
+
+  The leader's outbound connections = number of relays (not total replicas).
+</div>
+
+<h2>How It Works</h2>
+
+<h3>Write Propagation</h3>
+<ol>
+  <li>Client writes to the leader.</li>
+  <li>Leader applies the write and ships the change to its relay followers (typically 2-5).</li>
+  <li>Each relay follower applies the change locally and forwards it to its leaf followers.</li>
+  <li>Leaf followers apply the change and serve read traffic.</li>
+</ol>
+
+<h3>Key Requirement</h3>
+<p>Relay followers must have <strong>binary logging enabled</strong> and be configured to log replicated events (MySQL: <code>log_slave_updates = ON</code>). Without this, the relay cannot forward events to its leaf followers because its own binlog would be empty.</p>
+
+<div class="callout">
+  <strong>Relay vs Leaf:</strong>
+  <ul>
+    <li><strong>Relay followers</strong> accept replication from the leader and forward to leaves. They typically do not serve read traffic to avoid interference with replication forwarding.</li>
+    <li><strong>Leaf followers</strong> accept replication from relays. They serve read traffic but do not forward to further replicas (unless deeper tiers are used).</li>
+  </ul>
+</div>
+
+<h2>Advantages</h2>
+
+<ul>
+  <li><strong>Reduced leader load:</strong> The leader maintains only a few outbound connections (one per relay). This is the primary benefit over star topology.</li>
+  <li><strong>Scales to many replicas:</strong> Total replica count = relays * leaves per relay. With 5 relays and 10 leaves each, you support 50 replicas with only 5 leader connections.</li>
+  <li><strong>Leaf followers can serve reads:</strong> Unlike chain replication (where only the tail serves consistent reads), all leaf followers can serve read traffic in parallel.</li>
+  <li><strong>Regional grouping:</strong> Relays can be placed in different regions, each serving a local cluster of leaf followers. Cross-region traffic is minimized.</li>
+  <li><strong>Fault isolation:</strong> If a relay fails, only its leaf followers are affected. Other relay/leaf branches continue operating independently.</li>
+  <li><strong>Flexible depth:</strong> Can be extended to 3+ tiers for very large deployments.</li>
+</ul>
+
+<h2>Disadvantages</h2>
+
+<ul>
+  <li><strong>Increased lag for leaf followers:</strong> Leaf followers experience relay lag + leaf lag. A leaf is at least one hop further from the leader than a star follower.</li>
+  <li><strong>Operational complexity:</strong> More components to monitor, configure, and recover. Relay failures require understanding which leaves are affected.</li>
+  <li><strong>Relay as a bottleneck:</strong> A relay with many leaf followers can become a bottleneck. The problem shifts from the leader to the relay.</li>
+  <li><strong>Monitoring complexity:</strong> Lag must be tracked at each tier. A leaf might show "caught up to relay" but the relay itself could be far behind the leader.</li>
+  <li><strong>Failover complexity:</strong> Promoting a leaf to relay, or a relay to leader, requires reconfiguring the replication hierarchy.</li>
+</ul>
+
+<h2>Complete Topology Comparison</h2>
+
+<table>
+  <tr>
+    <th>Topology</th>
+    <th>Leader Connections</th>
+    <th>Write Latency</th>
+    <th>Read From Any Follower</th>
+    <th>Fault Isolation</th>
+    <th>Best Use Case</th>
+  </tr>
+  <tr>
+    <td><strong>Star</strong></td>
+    <td class="red">N</td>
+    <td class="green">Low</td>
+    <td class="green">Yes (eventual)</td>
+    <td class="green">High</td>
+    <td>3-10 replicas, same DC</td>
+  </tr>
+  <tr>
+    <td><strong>Chain</strong></td>
+    <td class="green">1</td>
+    <td class="red">High (sequential)</td>
+    <td class="red">Tail only</td>
+    <td class="red">Low (fragile)</td>
+    <td>Academic, geo backbone</td>
+  </tr>
+  <tr>
+    <td><strong>Circular</strong></td>
+    <td class="green">1</td>
+    <td class="red">Medium (ring)</td>
+    <td class="green">Yes (eventual)</td>
+    <td class="red">Low (loop risk)</td>
+    <td>Multi-master active-active</td>
+  </tr>
+  <tr>
+    <td><strong>Cascading</strong></td>
+    <td class="green">R (relays)</td>
+    <td>Medium</td>
+    <td class="green">Yes (eventual)</td>
+    <td class="green">Medium</td>
+    <td>Many replicas, cross-region</td>
+  </tr>
+</table>
+
+<h2>Designing a Cascading Topology</h2>
+
+<h3>Choosing Relay Count</h3>
+<ul>
+  <li><strong>Same DC:</strong> 2-3 relays is typically sufficient for 20-30 total replicas.</li>
+  <li><strong>Cross-region:</strong> One relay per region is the natural design. The relay lives in the target region to avoid cross-DC latency for leaves.</li>
+  <li><strong>Rule of thumb:</strong> Each relay should serve 5-15 leaf followers. Beyond that, add another tier or another relay.</li>
+</ul>
+
+<h3>Placement Strategy</h3>
+
+<div class="diagram">
+  ┌─── US-East ────────────────────────────────────────────┐
+  │                                                         │
+  │  ┌──────────┐       ┌──────────┐                       │
+  │  │ LEADER   │       │ Leaf US1 │◄─── relay fans out    │
+  │  └────┬─────┘       └──────────┘                       │
+  │       │              ┌──────────┐                       │
+  │       ├─────────────►│ Leaf US2 │                       │
+  │       │              └──────────┘                       │
+  └───────┼─────────────────────────────────────────────────┘
+          │  (single WAN link)
+  ┌───────┼─────────────────────────────────────────────────┐
+  │       │         ┌─── EU-West ──────────────────────┐   │
+  │       ▼         │                                  │   │
+  │  ┌──────────┐   │  ┌──────────┐  ┌──────────┐      │   │
+  │  │ RELAY EU │───┤  │ Leaf EU1 │  │ Leaf EU2 │      │   │
+  │  └──────────┘   │  └──────────┘  └──────────┘      │   │
+  │                └──────────────────────────────────┘   │
+  └────────────────────────────────────────────────────────┘
+
+  One cross-region link (Leader → Relay EU) serves all EU replicas.
+</div>
+
+<h2>Lag Monitoring</h2>
+
+<p>Monitoring cascading replication requires tracking lag at each tier:</p>
+<ol>
+  <li><strong>Leader → Relay lag:</strong> Seconds behind the leader. This is the WAN component in cross-region setups.</li>
+  <li><strong>Relay → Leaf lag:</strong> Seconds behind the relay. This is the intra-DC component.</li>
+  <li><strong>Leaf's effective lag:</strong> Relay lag + Leaf lag. This is the actual staleness seen by read queries.</li>
+</ol>
+
+<div class="callout yellow">
+  <strong>Interview Tip:</strong> A strong answer for "design a globally distributed read-replica architecture" combines star within a region with cascading across regions. The leader fans out to one relay per region, and each relay fans out to local read replicas. This minimizes WAN traffic and provides local reads.
+</div>
+
+<h2>Common Interview Questions</h2>
+
+<ul>
+  <li>"How would you replicate to 200 read replicas?" Answer: Use cascading replication. The leader ships to ~10 relay followers (one per data center or AZ), and each relay fans out to ~20 leaf followers. Total leader connections: 10 instead of 200.</li>
+  <li>"What is the downside of cascading replication?" Answer: Leaf followers have higher lag (relay lag + leaf lag), operational complexity increases, and relay failures affect all leaves in that branch.</li>
+  <li>"How does cascading differ from chain replication?" Answer: Chain is linear (each node has one downstream). Cascading is tree-structured (relays fan out to multiple leaves). Cascading preserves the ability to read from any leaf follower.</li>
+  <li>"How would you monitor lag in a cascading setup?" Answer: Track lag at each tier separately. Leader → Relay lag for cross-region health, Relay → Leaf lag for intra-region health. Alert on both independently.</li>
+</ul>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Avoid going deep into:</strong>
+  <ul>
+    <li>MySQL <code>log_slave_updates</code> and <code>CHANGE MASTER TO</code> syntax for relay configuration. Know that relays must log replicated events; skip the exact commands.</li>
+    <li>Multi-tier cascading (3+ levels). Two-tier cascading covers the concept. Deeper tiers are rare in practice.</li>
+    <li>Specific monitoring tool configurations (Prometheus exporters, Grafana dashboards). Discuss the metrics conceptually.</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Reading Sources</div>
+  <ul>
+    <li><strong>Designing Data-Intensive Applications (Kleppmann)</strong> - Chapter 5, section on leader-based replication and topologies.</li>
+    <li><strong>High Performance MySQL (4th Ed.)</strong> - Chapter 7, detailed section on cascading replication architecture.</li>
+    <li><strong>MySQL 8.0 Reference Manual</strong> - "Replication and Binary Logging" for cascading setup and <code>log_slave_updates</code>.</li>
+    <li><strong>Real-World MySQL Replication Topologies</strong> - Percona blog posts on production cascading deployments.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="circular-replication.html">&larr; 4.4.3 Circular Replication</a>
+  <a href="binlog.html">4.5.1 Binlog &rarr;</a>
+</div>
+
+</body>
+</html>

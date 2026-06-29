@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.7.3 Visibility Rules</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">3 Storage</a> / <a href="index.html">3.7 MVCC</a> / 3.7.3
+</div>
+
+<h1>Visibility Rules</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the exact rules MVCC uses to determine which version of a row is visible to a given transaction, how the snapshot filters version chains, and how different isolation levels modify these visibility rules.</p>
+
+<h2>Definition</h2>
+<p><strong>Visibility rules</strong> are the predicate logic that MVCC applies when walking a version chain to decide whether a specific tuple version should be returned to the querying transaction. For each tuple version, the rules examine the tuple's <code>xmin</code> (creator) and <code>xmax</code> (deleter) against the transaction's snapshot to determine visibility. These rules are what make snapshot isolation work correctly.</p>
+
+<div class="callout">
+  <strong>Key insight:</strong> Visibility rules are the bridge between version chains and snapshots. The version chain provides the candidate versions; the snapshot defines which transaction IDs are considered committed; the visibility rules combine both to select the single correct version.
+</div>
+
+<h2>The Visibility Check Algorithm</h2>
+<p>For each tuple version encountered while traversing the chain, PostgreSQL applies the following checks in order:</p>
+
+<div class="diagram">
+  Function HeapTupleSatisfiesMVCC(tuple, snapshot):
+
+    ┌─ Check 1: Is the inserter visible?
+    │   if tuple.xmin >= snapshot.xmax:
+    │       → INSERT happened after our snapshot → INVISIBLE
+    │   if tuple.xmin is in snapshot.xip[]:
+    │       → INSERT was in-progress at snapshot time → INVISIBLE
+    │   if tuple.xmin < snapshot.xmin and not frozen:
+    │       → Must check CLOG (commit log) for committed/aborted
+    │   if xmin is aborted:
+    │       → Creator rolled back → INVISIBLE
+    │   → Creator is committed ✓
+    │
+    ├─ Check 2: Is the deleter invisible?
+    │   if tuple.xmax == 0:
+    │       → No delete marker → this version is still LIVE → VISIBLE ✓
+    │   if tuple.xmax >= snapshot.xmax:
+    │       → DELETE happened after our snapshot → VISIBLE ✓
+    │       (delete hasn't happened yet from our perspective)
+    │   if tuple.xmax is in snapshot.xip[]:
+    │       → DELETE was in-progress at snapshot time → VISIBLE ✓
+    │       (we can't see uncommitted deletes)
+    │   if tuple.xmax is committed:
+    │       → DELETE is visible to us → INVISIBLE
+    │   → DELETE was rolled back → VISIBLE ✓
+    │
+    └─ Result: VISIBLE or INVISIBLE for this tuple version
+
+  The reader walks the chain from newest to oldest.
+  The FIRST visible version found is returned.
+  If no version is visible, the row does not exist from this snapshot.
+</div>
+
+<h2>Step-by-Step Walkthrough</h2>
+
+<div class="diagram">
+  Version chain:  V3 (xmin=300, xmax=0) → V2 (xmin=200, xmax=300) → V1 (xmin=100, xmax=200)
+
+  Snapshot: xmin=150, xmax=350, xip[]=[280, 320]
+
+  Checking V3 (newest):
+    xmin=300:  150 ≤ 300 < 350, 300 is NOT in xip[], check CLOG → committed ✓
+    xmax=0:    no deleter → LIVE → VISIBLE ✓
+    → Return V3
+
+  ─────────────────────────────────────────────────────────────
+
+  Scenario: T1 (xmin=100) committed, T2 (xmin=200) aborted, T3 (xmin=300) committed
+
+  Version chain:  V3 (xmin=300, xmax=0) → V2 (xmin=200, xmax=300) → V1 (xmin=100, xmax=200)
+
+  Snapshot: xmin=150, xmax=350, xip[]=[]
+
+  Checking V3:
+    xmin=300: committed ✓, xmax=0 → VISIBLE ✓
+    → Return V3
+
+  ─────────────────────────────────────────────────────────────
+
+  Scenario: Snapshot taken BEFORE T3 committed (T3 in xip)
+
+  Snapshot: xmin=150, xmax=350, xip[]=[300]
+
+  Checking V3:
+    xmin=300: in xip[] → INVISIBLE ✗
+  Checking V2:
+    xmin=200: not in xip[], check CLOG → aborted ✗ → INVISIBLE ✗
+  Checking V1:
+    xmin=100: 100 < xmin(150), check CLOG → committed ✓
+    xmax=200: 150 ≤ 200 < 350, not in xip[], check CLOG → aborted → VISIBLE ✓
+    → Return V1 (the pre-T2, pre-T3 version!)
+</div>
+
+<h2>Isolation Level Variations</h2>
+<p>The core visibility rules above describe PostgreSQL's behavior under <strong>Read Committed</strong> and <strong>Repeatable Read</strong>. The difference lies in <em>when</em> the snapshot is taken, not in the rules themselves:</p>
+
+<table>
+  <tr>
+    <th>Isolation Level</th>
+    <th>Snapshot Timing</th>
+    <th>Effect on Visibility</th>
+  </tr>
+  <tr>
+    <td><strong>Read Committed</strong></td>
+    <td>New snapshot at the start of each SQL statement</td>
+    <td>A row updated by a concurrent transaction between statements will be visible in the next statement (reader sees latest committed)</td>
+  </tr>
+  <tr>
+    <td><strong>Repeatable Read</strong></td>
+    <td>Single snapshot at the first statement of the transaction</td>
+    <td>The reader never sees changes from concurrent transactions, even those committed mid-transaction</td>
+  </tr>
+  <tr>
+    <td><strong>Serializable</strong></td>
+    <td>Single snapshot (same as RR)</td>
+    <td>Same visibility as RR, but additional SIREAD locks detect serialization anomalies (throws serialization_failure on conflict)</td>
+  </tr>
+</table>
+
+<div class="callout yellow">
+  <strong>PostgreSQL's Repeatable Read is actually Snapshot Isolation:</strong> Strictly speaking, PostgreSQL's REPEATABLE READ prevents dirty reads, non-repeatable reads, and phantom reads, but it allows write skew (a serialization anomaly). True ANSI SQL REPEATABLE READ would prevent write skew. PostgreSQL reserves the name SERIALIZABLE for the stronger guarantee that requires predicate locking.
+</div>
+
+<h2>The Commit Log (CLOG)</h2>
+<p>The visibility rules frequently need to check whether a transaction committed or aborted. Rather than scanning the WAL or transaction table, PostgreSQL maintains the <strong>CLOG</strong> (commit log)&mdash;a small, fixed-size structure with two bits per transaction:</p>
+
+<table>
+  <tr>
+    <th>CLOG Status</th>
+    <th>Meaning</th>
+  </tr>
+  <tr>
+    <td>00</td>
+    <td>In-progress</td>
+  </tr>
+  <tr>
+    <td>01</td>
+    <td>Committed</td>
+  </tr>
+  <tr>
+    <td>10</td>
+    <td>Aborted</td>
+  </tr>
+  <tr>
+    <td>11</td>
+    <td>Sub-committed (internal two-phase commit state)</td>
+  </tr>
+</table>
+
+<div class="callout">
+  <strong>Performance implication:</strong> The CLOG is memory-mapped and frequently cached. Visibility checks for transactions within the active window typically hit memory. For very old transactions (before the active window), the system checks <code>pg_xact</code> (the on-disk CLOG). This is why long-running transactions degrade performance&mdash;they expand the window of CLOG pages that must remain accessible.
+</div>
+
+<h2>Self-Referencing Visibility</h2>
+<p>A special case arises when the querying transaction <em>itself</em> created or modified a row. If transaction T1 (ID=200) updates a row and then reads it within the same transaction, the visibility rules must account for the fact that T1's own modifications are visible to T1 even though T1 hasn't committed yet:</p>
+
+<ul>
+  <li>If <code>tuple.xmin == current_txid</code>, the tuple is visible (self-inserted).</li>
+  <li>If <code>tuple.xmax == current_txid</code>, the tuple is invisible (self-deleted or self-updated).</li>
+  <li>These checks happen <em>before</em> the snapshot-based checks.</li>
+</ul>
+
+<div class="callout green">
+  <strong>Why this matters:</strong> Without self-referencing visibility, a transaction could not read its own writes. A <code>UPDATE ... WHERE</code> that modifies 100 rows must be able to see its own previous modifications within the same statement.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>Walk through the visibility check algorithm for a specific tuple version given a snapshot.</li>
+  <li>How does MVCC determine which version of a row is visible when three transactions have modified the same row?</li>
+  <li>What is the CLOG and why is it necessary for visibility checks?</li>
+  <li>How do the visibility rules differ between Read Committed and Repeatable Read?</li>
+  <li>What happens when a transaction reads a row it modified itself? Explain self-referencing visibility.</li>
+  <li>Why does PostgreSQL's Repeatable Read not prevent write skew? How does Serializable address this?</li>
+  <li>Design a visibility check function. What are the inputs and outputs? Walk through edge cases.</li>
+</ul>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>For interviews, skip:</strong>
+  <ul>
+    <li>PostgreSQL's <code>HeapTupleSatisfies*</code> C function implementation details and optimization paths</li>
+    <li>CLOG page layout, SLRU (Simple LRU) cache internals, and <code>pg_xact</code> file rotation</li>
+    <li>Subtransaction visibility (sub-xid tracking, <code>SubTransGetTopmostTransaction</code>)</li>
+    <li>PostgreSQL's hint bits (tuple-level caching of commit status) at the memory-barrier level</li>
+    <li>MySQL InnoDB's <code>ReadView::changes_visible()</code> internal implementation</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Reading Sources</div>
+  <ul>
+    <li>PostgreSQL Documentation &mdash; "MVCC in PostgreSQL" and "Concurrency Control"</li>
+    <li><em>The Internals of PostgreSQL</em>, InterDB.jp &mdash; Chapter 5: Concurrency Control (visibility check flow)</li>
+    <li><em>Designing Data-Intensive Applications</em>, Martin Kleppmann &mdash; Chapter 7: Transactions (isolation levels and anomalies)</li>
+    <li>PostgreSQL Source Code &mdash; <code>src/backend/access/heap/heapam_visibility.c</code> (the actual visibility functions)</li>
+    <li><em>Database Internals</em>, Alex Petrov &mdash; Chapter 8: B-Tree-Based Storage (multi-version visibility)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="snapshots.html">&larr; 3.7.2 Snapshots</a>
+  <a href="garbage-collection.html">Next: 3.7.4 Garbage Collection &rarr;</a>
+</div>
+
+</body>
+</html>

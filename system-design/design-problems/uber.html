@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>15.16 Uber — System Design</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../">Handbook</a> / <a href="../">System Design</a> / 15. Design Problems / 15.16 Uber</p>
+
+<h1>Uber</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Design a ride-sharing system similar to Uber that matches passengers with nearby drivers, handles real-time GPS tracking, calculates dynamic surge pricing, and manages trip lifecycle from request to payment. The system must handle geospatial queries at scale with sub-second latency.</p>
+
+<h2>Functional Requirements</h2>
+<ul>
+  <li>Passenger requests a ride with pickup and drop-off locations</li>
+  <li>System finds and matches the nearest available drivers</li>
+  <li>Real-time GPS tracking of drivers and trip progress</li>
+  <li>Dynamic pricing (surge) based on supply/demand</li>
+  <li>Trip lifecycle: request → match → pickup → en-route → drop-off → payment</li>
+  <li>Driver earnings and passenger billing</li>
+  <li>Rating and feedback for both drivers and passengers</li>
+</ul>
+
+<h2>Non-Functional Requirements</h2>
+<ul>
+  <li><strong>Low latency:</strong> driver matching &lt; 3s, GPS updates &lt; 1s</li>
+  <li><strong>High availability:</strong> 99.99% (riders stranded is a critical failure)</li>
+  <li><strong>Scalability:</strong> handle millions of concurrent trips and GPS updates</li>
+  <li><strong>Accuracy:</strong> driver location updates with &lt; 50m accuracy</li>
+  <li><strong>Reliability:</strong> no trip data loss, accurate billing</li>
+</ul>
+
+<h3>Capacity Estimates</h3>
+<table>
+  <tr><th>Metric</th><th>Estimate</th><th>Notes</th></tr>
+  <tr><td>Daily trips</td><td>25M</td><td>Global (Uber-scale)</td></tr>
+  <tr><td>Peak trips/sec</td><td>1K</td><td>25M / 86400 * 3x peak hour</td></tr>
+  <tr><td>Active drivers</td><td>5M</td><td>Concurrently online</td></tr>
+  <tr><td>GPS updates/sec</td><td>500K</td><td>5M drivers * 1 update / 10 sec</td></tr>
+  <tr><td>Location lookups/sec</td><td>100K</td><td>Passenger searches + matching</td></tr>
+  <tr><td>Storage (trips, 1 year)</td><td>~50 TB</td><td>25M * 365 * ~5KB per trip</td></tr>
+  <tr><td>GPS data (1 year)</td><td>~100 PB</td><td>500K * 86400 * 365 * ~50 bytes (raw, before sampling)</td></tr>
+</table>
+
+<h2>API Design</h2>
+<pre>
+# Driver: update location
+POST   /api/v1/drivers/{driver_id}/location
+Body:  { "lat": 37.7749, "lng": -122.4194, "bearing": 180, "speed": 35 }
+Resp:  204 No Content
+
+# Passenger: request ride
+POST   /api/v1/rides/request
+Body:  { "pickup": { "lat": 37.7749, "lng": -122.4194 },
+         "dropoff": { "lat": 37.7849, "lng": -122.4094 },
+         "ride_type": "uberx" }
+Resp:  { "ride_id": "ride_abc", "driver": { "name": "...", "car": "...",
+         "eta_minutes": 5, "surge_multiplier": 1.5 } }
+
+# Passenger: get ride status
+GET    /api/v1/rides/{ride_id}/status
+Resp:  { "ride_id": "ride_abc", "status": "en_route_to_pickup",
+         "driver_location": { "lat": 37.7755, "lng": -122.4180 },
+         "eta_minutes": 3 }
+
+# Driver: accept ride
+POST   /api/v1/rides/{ride_id}/accept
+Body:  { "driver_id": "drv_123" }
+
+# Driver: update ride status
+POST   /api/v1/rides/{ride_id}/status
+Body:  { "status": "picked_up", "timestamp": "2026-06-28T10:05:00Z" }
+</pre>
+
+<h2>High-Level Design</h2>
+<div class="diagram">
+  Passenger App          System                    Driver App
+       │                   │                            │
+       │ Request ride      │                            │
+       │──────────────────►│                            │
+       │                   │  1. Geocode pickup/dropoff │
+       │                   │  2. Calculate surge pricing│
+       │                   │  3. Search nearby drivers  │
+       │                   │     (geospatial index)     │
+       │                   │  4. Dispatch ride offer     │
+       │                   │────────────────────────────►│
+       │                   │                            │  Accept ride
+       │                   │◄────────────────────────────│
+       │  Match confirmed  │                            │
+       │◄──────────────────│                            │
+       │                   │                            │
+       │  GPS updates ◄─────────────────────────────────►│
+       │  (WebSocket for   │   Location Service         │
+       │   real-time)      │   (Redis Geo or custom)    │
+       │                   │                            │
+       │                   │  5. Trip lifecycle mgmt     │
+       │                   │  6. Calculate fare          │
+       │                   │  7. Process payment        │
+       │                   │                            │
+       │  Trip complete    │                            │
+       │◄──────────────────│                            │
+</div>
+
+<h2>Deep Dive: Geospatial Index</h2>
+<p>The core challenge: efficiently find the nearest available drivers to a given pickup location.</p>
+
+<h3>Option 1: Geohash</h3>
+<p>Encode latitude/longitude into a short string. Nearby locations share prefix. Partition the world into grid cells.</p>
+
+<div class="diagram">
+  Geohash precision levels:
+
+  Precision 1: ~5,000 km × 5,000 km   (continent)
+  Precision 2: ~1,250 km × 625 km     (country)
+  Precision 4: ~39 km × 19.5 km       (city)
+  Precision 5: ~4.9 km × 4.9 km      (district)
+  Precision 6: ~1.2 km × 600 m        (neighborhood)
+  Precision 7: ~150 m × 150 m         (street block)
+  Precision 8: ~37 m × 19 m            (building)
+
+  Pickup at (37.7749, -122.4194):
+    Geohash = "9q8yy" (precision 5: ~5km area)
+
+  Search: find all drivers in "9q8yy" + adjacent cells (8 neighbors)
+  → 9 cells × ~50 drivers/cell = ~450 candidate drivers
+  Sort by actual Haversine distance → top 5
+</div>
+
+<h3>Option 2: Quadtree</h3>
+<p>Recursively subdivide 2D space into 4 quadrants. Each leaf node holds a bounded number of points. Search by traversing from root to the relevant quadrants.</p>
+
+<div class="diagram">
+  Quadtree for San Francisco:
+
+  Level 0:  [  Entire SF Bay Area  ]
+              ┌────────┬────────┐
+  Level 1:  │ NW SF  │ NE SF  │
+             ├────────┼────────┤
+             │ SW SF  │ SE SF  │
+             └────────┴────────┘
+
+  Subdivide dense areas further:
+  Level 2:  [Downtown] splits into 4 sub-quadrants
+  Level 3:  [Financial District] splits again
+
+  Each leaf: max 50 drivers
+  → Search: traverse to leaf containing pickup point
+  → If leaf is sparse, expand to neighboring leaves
+</div>
+
+<div class="callout green">
+  <strong>Recommended: Redis GEO (sorted sets with geohash).</strong> Redis provides built-in geospatial commands: <code>GEOADD</code> to index driver locations, <code>GEORADIUS</code> / <code>GEORADIUSBYMEMBER</code> to find nearby drivers within a radius, and <code>GEOSEARCH</code> for more flexible queries. This handles millions of driver locations with sub-millisecond latency.
+</div>
+
+<pre>
+# Redis geospatial commands for driver location
+
+# Driver updates location (every 3-5 seconds)
+GEOADD drivers:available 37.7749 -122.4194 "driver:12345"
+EXPIRE drivers:available:driver:12345 15  # TTL for stale locations
+
+# Find 10 nearest available drivers to pickup location
+GEORADIUS drivers:available 37.7749 -122.4194 3000 m COUNT 10 ASC
+# Returns: ["driver:12345", "driver:67890", ...] sorted by distance
+
+# When driver goes offline or gets matched
+ZREM drivers:available "driver:12345"
+</pre>
+
+<h2>Deep Dive: Driver Matching Algorithm</h2>
+<ol>
+  <li><strong>Search:</strong> Query the geospatial index for available drivers within a radius (e.g., 3km) of the pickup location.</li>
+  <li><strong>Score:</strong> Rank candidates by a composite score: distance (40%), rating (20%), acceptance rate (20%), time since last trip (10%), surge zone bonus (10%).</li>
+  <li><strong>Dispatch:</strong> Send ride offers to top 5 candidates simultaneously (batched dispatch). First driver to accept gets the ride.</li>
+  <li><strong>Timeout:</strong> If no driver accepts within 15 seconds, expand search radius and re-dispatch.</li>
+  <li><strong>Fallback:</strong> After 3 rounds, show "No drivers available" with surge pricing indication.</li>
+</ol>
+
+<div class="callout yellow">
+  <strong>Batch dispatch vs sequential:</strong> Sending offers to multiple drivers simultaneously reduces matching time but increases system load (driver receives multiple offers, may accept one and reject others). Sequential dispatch (one at a time) is fairer but slower. Hybrid: batch 3-5, sequential beyond that.
+</div>
+
+<h2>Deep Dive: Real-Time Location Tracking</h2>
+<p>Drivers update their GPS location every 3-5 seconds. Passengers see real-time driver movement.</p>
+
+<ul>
+  <li><strong>Ingestion:</strong> Drivers POST location updates via HTTP (more reliable than WebSocket for high-frequency updates).</li>
+  <li><strong>Storage:</strong> Redis GEO for the current state (latest location only). GPS history for active trips stored in a time-series store or Kafka (for replay, ETA calculation, and dispute resolution).</li>
+  <li><strong>Propagation:</strong> When a driver in an active trip updates location, the trip service publishes to a Kafka topic. A WebSocket server subscribed to the topic pushes the update to the passenger.</li>
+  <li><strong>Deduplication:</strong> Skip location updates if the driver hasn't moved significantly (&lt; 10m) to reduce load.</li>
+</ul>
+
+<div class="callout">
+  <strong>Location accuracy challenges:</strong> GPS can be inaccurate in urban canyons, tunnels, and underground. Use sensor fusion (GPS + accelerometer + gyroscope) on the client to improve accuracy. Detect "jumps" (sudden large position changes) and filter them out server-side.
+</div>
+
+<h2>Deep Dive: Surge Pricing</h2>
+<p>Dynamic pricing based on real-time supply/demand imbalance.</p>
+
+<pre>
+surge_multiplier = f(demand, supply, time, weather, events)
+
+Algorithm:
+  1. Divide the city into surge zones (geohash precision 6, ~1km areas)
+  2. For each zone:
+     - demand = ride requests in last 10 minutes
+     - supply = available drivers in the zone
+     - ratio = demand / max(supply, 1)
+  3. surge_multiplier = min(max(1.0, ratio * base_factor), 3.5)
+
+  Smoothing:
+  - Apply time-based smoothing to prevent rapid fluctuation
+  - Never decrease surge by more than 20% per 5-minute interval
+  - Allow immediate increase to respond to sudden demand spikes
+</pre>
+
+<div class="callout red">
+  <strong>Fairness concern:</strong> Surge pricing can lead to discrimination if not implemented carefully. Apply the same surge multiplier to all passengers in the same zone. Do not personalize pricing. Ensure surge zones are small enough for local precision but large enough to avoid gaming.
+</div>
+
+<h2>Deep Dive: Trip State Machine</h2>
+<div class="diagram">
+  REQUESTED ──► MATCHED ──► EN_ROUTE_TO_PICKUP ──► PICKED_UP ──►
+       │              │              │                  │
+    (timeout)    (driver cancel) (driver cancel)    (cancel)
+       │              │              │                  │
+       ▼              ▼              ▼                  ▼
+    CANCELLED    CANCELLED      CANCELLED          (continue)
+                                                              │
+  ◄─────────────────────────────────────────────────── DROPPED_OFF
+                                                              │
+                                                              ▼
+                                                         COMPLETED
+                                                              │
+                                                              ▼
+                                                          RATED
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>How do you handle the case where a driver accepts a ride but doesn't move? <em>A: Monitor driver movement after acceptance. If the driver doesn't start moving toward the pickup within 2 minutes, mark them as unresponsive, cancel the match, and re-dispatch to another driver. Penalize the driver's acceptance rate metric.</em></li>
+  <li>What happens when Redis (location store) fails? <em>A: Deploy Redis in cluster mode (primary + replicas). If the entire cluster fails, fall back to database queries (PostgreSQL with PostGIS) — slower but functional. Buffer location updates locally on drivers and batch-upload on recovery.</em></li>
+  <li>How do you handle ETA calculations? <em>A: Use a road network graph with real-time traffic data. Distance + average speed for the route. Use a routing engine (OSRM, Google Maps API) for turn-by-turn estimates. Cache route segments for common pickup-dropoff pairs.</em></li>
+  <li>How do you handle long-polling vs WebSocket for passenger tracking? <em>A: WebSocket for active trips (real-time driver location). Long-polling for pre-trip (available drivers in area). Fallback to polling (every 3 seconds) if WebSocket disconnects.</em></li>
+  <li>How would you support shared rides (UberPool)? <em>A: Additional matching constraints: route compatibility, pickup order optimization, detour time limit (max 5 min extra). Use a routing engine to compute the merged route. Dynamic pricing considers the route sharing discount.</em></li>
+</ul>
+
+<div class="callout red">
+  <strong>What to Skip:</strong>
+  <ul>
+    <li>Don't design the payment system in detail — it's covered in a separate problem</li>
+    <li>Don't design driver onboarding, background checks, or vehicle inspection</li>
+    <li>Don't implement the actual routing/mapping algorithms — assume a service</li>
+    <li>Don't design the rating algorithm in detail unless asked</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Articles</div>
+  <ul>
+    <li>Uber Engineering: "Uber's Marketplace Engineering" (eng.uber.com)</li>
+    <li>Uber Engineering: "Geospatial Indexing at Uber" (eng.uber.com)</li>
+    <li>Uber Engineering: "How Uber Serves Maps" (eng.uber.com)</li>
+    <li>ByteByteGo: "Design Uber" (bytebytego.com)</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><em>System Design Interview Vol 1</em> — Alex Xu, Ch. 8: Design Uber Backend</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="google-docs.html">&larr; Previous: Google Docs</a>
+  <a href="youtube.html">Next: YouTube &rarr;</a>
+</div>
+
+</body>
+</html>

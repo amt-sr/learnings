@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.6.5 Divergence</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">4 Replication</a> / 4.6 Replication Problems / 4.6.5
+</div>
+
+<h1>Divergence</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand when and why replicas in a distributed system end up holding different data, how to detect divergence, and strategies for resolving it.</p>
+
+<h2>Definition</h2>
+<p><strong>Replication divergence</strong> occurs when two replicas that should hold the same data end up with different versions. Unlike replica lag (where the follower is simply behind but will eventually catch up), divergence implies the replicas have taken <em>different paths</em> and cannot converge without explicit conflict resolution.</p>
+
+<h2>Causes of Divergence</h2>
+
+<h3>1. Split Brain (Concurrent Leaders)</h3>
+<p>The most dangerous cause. After a network partition, if two nodes both act as leader, they independently accept writes for the same keys. When the partition heals, their states are irreconcilably different.</p>
+
+<h3>2. Multi-Leader Conflicts</h3>
+<p>In multi-leader or active-active setups, two leaders may receive writes to the same key concurrently. Without conflict resolution, each leader applies its own write and ignores the other's, causing permanent divergence.</p>
+
+<h3>3. Asynchronous Replication + Leader Failover</h3>
+<p>If a leader fails and a follower is promoted before receiving all writes, the old leader's unreplicated writes are lost. If the old leader comes back online (e.g., after a brief network glitch), it has data that the new leader does not. Reconciling this requires manual intervention.</p>
+
+<div class="diagram">
+  Timeline showing divergence from async failover:
+
+  t0  Leader: [w1, w2, w3, w4]     Follower: [w1, w2, w3]
+      (w4 not yet replicated)
+
+  t1  Leader CRASHES
+      Follower promoted to new Leader: [w1, w2, w3]
+      New writes: [w5, w6]           New Leader: [w1, w2, w3, w5, w6]
+
+  t2  Old Leader recovers: [w1, w2, w3, w4]
+      DIVERGENCE:
+        New Leader has: [w1, w2, w3, w5, w6]  (missing w4)
+        Old Leader has: [w1, w2, w3, w4]     (missing w5, w6)
+
+  t3  w4 must be manually reconciled. w5 and w6 may have overwritten
+      data that w4 also modified.
+</div>
+
+<h3>4. Write Skew</h3>
+<p>Two transactions that are individually consistent but globally inconsistent. For example, two users concurrently editing different fields of the same row, each reading stale versions of the other's field.</p>
+
+<h2>Detection</h2>
+
+<table>
+  <tr>
+    <th>Method</th>
+    <th>How It Works</th>
+    <th>When Used</th>
+  </tr>
+  <tr>
+    <td>Checksum comparison</td>
+    <td>Periodically compute checksums of data ranges across replicas. Mismatch indicates divergence.</td>
+    <td>Batch reconciliation, anti-entropy</td>
+  </tr>
+  <tr>
+    <td>Version vectors</td>
+    <td>Each replica maintains a vector of version numbers per writer. Compare vectors to detect missing updates.</td>
+    <td>Real-time, multi-leader systems</td>
+  </tr>
+  <tr>
+    <td>Logical timestamps + CRC</td>
+    <td>MySQL GTIDs, PostgreSQL LSNs &mdash; compare the set of applied transaction IDs across replicas.</td>
+    <td>Single-leader systems</td>
+  </tr>
+  <tr>
+    <td>Application-level audits</td>
+    <td>Compare replica data at the application layer (e.g., nightly reconciliation job).</td>
+    <td>Post-incident investigation</td>
+  </tr>
+</table>
+
+<h2>Resolution Strategies</h2>
+
+<h3>Last-Write-Wins (LWW)</h3>
+<p>Attach a timestamp to each write. When replicas diverge, keep the write with the latest timestamp. Simple but loses data: the earlier write is silently discarded.</p>
+
+<div class="callout yellow">
+  <strong>Clock skew problem:</strong> LWW relies on synchronized clocks. If clocks differ by even a few milliseconds, the "later" write may actually be the earlier one. Google Spanner uses TrueTime (GPS + atomic clocks) to address this, but most systems cannot.
+</div>
+
+<h3>Conflict-Free Replicated Data Types (CRDTs)</h3>
+<p>Data structures mathematically designed to merge automatically without conflicts. Different replicas can apply updates in any order, and the merge function always produces the same result.</p>
+
+<table>
+  <tr>
+    <th>CRDT Type</th>
+    <th>Behavior</th>
+    <th>Example Use Case</th>
+  </tr>
+  <tr>
+    <td>G-Counter (Grow-only Counter)</td>
+    <td>Each node has a local counter. Total = max of all nodes.</td>
+    <td>Like counts, page views</td>
+  </tr>
+  <tr>
+    <td>PN-Counter</td>
+    <td>Two G-Counters (one increment, one decrement). Net = increment - decrement.</td>
+    <td>Balances, inventory</td>
+  </tr>
+  <tr>
+    <td>G-Set (Grow-only Set)</td>
+    <td>Add-only. Union of all replicas.</td>
+    <td>Unique visitors, registered emails</td>
+  </tr>
+  <tr>
+    <td>OR-Set (Observed-Remove Set)</td>
+    <td>Supports add and remove. Uses unique tags per element.</td>
+    <td>Shopping cart, user groups</td>
+  </tr>
+  <tr>
+    <td>LWW-Register</td>
+    <td>Last-write-wins register with causal timestamps.</td>
+    <td>User profile fields</td>
+  </tr>
+</table>
+
+<div class="callout green">
+  <strong>Production use:</strong> Riak uses CRDTs for its conflict-free data types (flags, counters, sets, maps, registers). Apple uses CRDTs in CloudKit for Notes, Reminders, and shared documents across devices.
+</div>
+
+<h3>Application-Level Conflict Resolution</h3>
+<p>Present both versions to the application or user for manual resolution. Used when automatic merge is not possible or when data semantics are too complex.</p>
+<ul>
+  <li><strong>Custom merge function:</strong> Application provides a merge handler that combines divergent writes based on business logic (e.g., merge contact information by taking the most recently updated field).</li>
+  <li><strong>Manual resolution:</strong> Flag conflicting records for human review. Common in financial systems where automatic merge is unacceptable.</li>
+</ul>
+
+<h3>Anti-Entropy (Merkle Tree Comparison)</h3>
+<p>Replicas exchange Merkle trees (hash trees) of their data. Differences are pinpointed to specific leaf nodes, and only divergent keys are synchronized. Used by Cassandra and DynamoDB for background reconciliation.</p>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li><strong>"Two replicas have diverged. How do you detect and resolve this?"</strong> &mdash; Detection: checksum comparison, version vectors, or GTID comparison. Resolution: depends on data type. LWW for simple cases, CRDTs for counters/sets, application-level merge for complex data.</li>
+  <li><strong>"What is a CRDT and when would you use one?"</strong> &mdash; A data structure that guarantees convergence without coordination. Use for counters, sets, registers in multi-leader or offline-first systems. Mention OR-Set for shopping carts, PN-Counter for balances.</li>
+  <li><strong>"Why is last-write-wins problematic?"</strong> &mdash; Clock skew causes misordering. Data is silently lost. Not suitable for operations where every write matters (e.g., financial transactions, medical records).</li>
+  <li><strong>"How does Cassandra detect and repair divergence?"</strong> &mdash; Cassandra uses Merkle trees during anti-entropy repair (nodetool repair). Each node builds a hash tree of its data, exchanges with peers, and only syncs the divergent ranges.</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid CRDT mathematical proofs:</strong> Knowing the algebraic properties (commutativity, associativity, idempotence) is useful, but formal proofs are not needed for interviews.<br><br>
+  <strong>Avoid Operational Transformation:</strong> OT (used in Google Docs) is related to conflict resolution but is a different domain (collaborative editing). Only mention it if directly comparing CRDTs vs. OT.<br><br>
+  <strong>Avoid Byzantine fault tolerance:</strong> Divergence here assumes honest nodes. Byzantine behavior (malicious nodes forging data) is a separate research area.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary References</div>
+  <ul>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em> &mdash; Chapter 5: Replication (sections on replication lag, multi-leader conflicts) and Chapter 12: The Future of Data Systems (CRDTs)</li>
+    <li>Marc Shapiro et al., "Conflict-Free Replicated Data Types" &mdash; Inria Research Report (foundational CRDT paper)</li>
+    <li>Apache Cassandra Documentation: <a href="https://cassandra.apache.org/doc/latest/cassandra/operating/repair.html">Repair and Anti-Entropy</a></li>
+    <li> Riak Docs: <a href="https://docs.riak.com/">CRDTs and Conflict Resolution</a></li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="split-brain.html">&larr; 4.6.4 Split Brain</a>
+  <a href="network-partition.html">4.6.6 Network Partition &rarr;</a>
+</div>
+
+</body>
+</html>

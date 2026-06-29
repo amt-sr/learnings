@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.2.2 Multi-Leader Replication</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">4 Replication</a> / <a href="why-replication.html">4.2 Replication Models</a> / 4.2.2
+</div>
+
+<h1>4.2.2 Multi-Leader Replication</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand when and why you need multiple leaders, the fundamental problem of write conflicts in a multi-writer system, and the strategies for resolving them. This model is essential for multi-datacenter architectures and collaborative applications.</p>
+
+<h2>Definition</h2>
+
+<div class="callout">
+  <strong>Multi-leader replication</strong> (also called <strong>multi-master</strong> or <strong>active-active</strong>) allows more than one node to accept write operations. Each leader simultaneously acts as a leader for its local clients and as a follower for the other leaders. Changes made on one leader are asynchronously replicated to all other leaders.
+</div>
+
+<h2>How It Works</h2>
+
+<div class="diagram">
+  Multi-Leader: Multi-Datacenter Setup
+  ────────────────────────────────────
+
+  Data Center 1 (US-East)         Data Center 2 (Europe)
+  ┌────────────────────────┐      ┌────────────────────────┐
+  │  Users in US-East      │      │  Users in Europe       │
+  │  write to their LEADER │      │  write to their LEADER  │
+  │                        │      │                        │
+  │    ┌────────────────┐  │      │  ┌────────────────┐    │
+  │    │  LEADER 1      │◀─┼──────┼──│  LEADER 2      │    │
+  │    │  (accepts      │  │      │  │  (accepts      │    │
+  │    │   writes)      │──┼──────┼─▶│   writes)      │    │
+  │    └────────────────┘  │      │  └────────────────┘    │
+  │         │              │      │         │              │
+  │    ┌────▼────┐         │      │    ┌────▼────┐         │
+  │    │Follower │         │      │    │Follower │         │
+  │    │   1A    │         │      │    │   2A    │         │
+  │    └─────────┘         │      │    └─────────┘         │
+  └────────────────────────┘      └────────────────────────┘
+
+  Both leaders accept writes locally.
+  Each leader asynchronously replicates its changes to the other.
+  Writes are low-latency because they stay local to each DC.
+</div>
+
+<h3>Replication Flow</h3>
+
+<div class="diagram">
+  Timeline: Write Conflict Scenario
+  ────────────────────────────────
+
+  LEADER 1 (US-East)                LEADER 2 (Europe)
+       │                                  │
+  t=0  │  UPDATE users                   │
+       │  SET name = "Alice"             │
+       │  WHERE id = 42                   │
+       │                                  │
+  t=1  │  ◀─── CONFLICT DETECTED ───────▶│  UPDATE users
+       │                                  │  SET name = "Bob"
+       │                                  │  WHERE id = 42
+       │                                  │
+  t=2  │                                  │
+       │      Both writes arrived!        │
+       │      Same row, different values  │
+       │      CONFLICT!                   │
+       │                                  │
+  t=3  │  ◀─── RESOLVE CONFLICT ────────▶│
+       │      (last-write-wins,          │
+       │       custom merge, or CRDT)     │
+       │                                  │
+  t=4  │  Both leaders converge to        │
+       │  the same final state            │
+</div>
+
+<h2>Write Conflict Resolution Strategies</h2>
+
+<p>The defining challenge of multi-leader replication is conflict resolution. When two leaders modify the same piece of data concurrently, you need a deterministic way to decide the final state.</p>
+
+<h3>1. Last-Write-Wins (LWW)</h3>
+
+<div class="callout">
+  <strong>Last-Write-Wins</strong> assigns a timestamp to each write and discards the one with the older timestamp. The most common approach, but also the most dangerous because it silently drops data.
+</div>
+
+<p>Implementation options for timestamps:</p>
+<table>
+  <tr><th>Timestamp Source</th><th>Pros</th><th>Cons</th></tr>
+  <tr><td>Wall clock time (client or server)</td><td>Simple to implement</td><td class="red">Clock skew can cause incorrect ordering; NTP drift</td></tr>
+  <tr><td>Logical timestamps (Lamport clocks, version vectors)</td><td>No clock dependency</td><td>Cannot capture real-time ordering intent</td></tr>
+  <tr><td>Hybrid (logical + physical)</td><td>Best of both worlds</td><td>More complex implementation</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Warning:</strong> Last-write-wins can silently lose writes in a way that is very hard to detect. If a clock is skewed, a recent write might be discarded in favor of an older one. Use LWW only when data loss is acceptable (e.g., cached data, analytics events, user profile fields that get overwritten frequently).
+</div>
+
+<h3>2. Custom Conflict Resolution</h3>
+
+<p>Instead of discarding one write, merge them according to application-specific logic:</p>
+
+<ul>
+  <li><strong>Application-level merge:</strong> The application provides a merge function. For example, a shopping cart merge: if two users add different items to the same cart concurrently, the merge includes both items. If the same item is modified, keep the higher quantity.</li>
+  <li><strong>Conflict-free Replicated Data Types (CRDTs):</strong> Mathematical data structures designed to always merge without conflicts. Examples: G-Counter (grow-only counter), OR-Set (observed-remove set), LWW-Element-Set.</li>
+  <li><strong>Operational Transformation (OT):</strong> Used in collaborative editing (Google Docs style). Each operation is transformed against concurrent operations to produce a consistent result. Complex but well-studied.</li>
+</ul>
+
+<table>
+  <tr><th>Strategy</th><th>Data Loss Risk</th><th>Complexity</th><th>Best For</th></tr>
+  <tr><td>Last-Write-Wins</td><td class="red">High (silent drops)</td><td>Low</td><td>Analytics, caches, user profiles</td></tr>
+  <tr><td>Custom merge function</td><td class="green">Low (app-defined)</td><td>Medium</td><td>Shopping carts, preferences</td></tr>
+  <tr><td>CRDTs</td><td class="green">None (by construction)</td><td>High</td><td>Counters, sets, registers</td></tr>
+  <tr><td>Operational Transformation</td><td class="green">None</td><td class="red">Very High</td><td>Collaborative text editing</td></tr>
+</table>
+
+<h2>Use Cases</h2>
+
+<h3>1. Multi-Datacenter Deployments</h3>
+<p>This is the most common use case. Each data center has its own leader to avoid cross-DC latency on every write. Inter-DC replication is asynchronous.</p>
+
+<div class="callout green">
+  <strong>Interview Tip:</strong> When asked about multi-DC architecture, multi-leader is often the right answer. Compare it with the alternative: a single global leader (all writes go to one DC, causing high write latency for remote users). Multi-leader trades consistency for write latency.
+</div>
+
+<h3>2. Offline Clients and Mobile Devices</h3>
+<p>Mobile apps need to work offline. The device acts as a local leader, accepting writes while offline. When connectivity returns, changes sync back to the server (which acts as another leader). Conflict resolution merges the offline changes with any concurrent server-side changes.</p>
+
+<div class="diagram">
+  Offline-First with Multi-Leader:
+  ────────────────────────────
+
+  Phone (Offline)
+  ┌────────────────┐
+  │ Local Leader   │
+  │ ────────────── │
+  │ Write: Add     │
+  │ item "X" to    │
+  │ cart           │
+  │                │
+  │ Queued writes  │
+  └───────┬────────┘
+          │
+          │ (reconnects to network)
+          │
+          ▼
+  ┌────────────────┐
+  │ Server Leader  │
+  │ ────────────── │
+  │ May have other │
+  │ writes that    │
+  │ conflict       │
+  │                │
+  │ RESOLVE &      │
+  │ MERGE          │
+  └────────────────┘
+</div>
+
+<h3>3. Collaborative Editing</h3>
+<p>Applications like Google Docs, Figma, or Notion use multi-leader principles at the document level. Multiple users edit the same document simultaneously, and their changes must be merged. Google Docs uses Operational Transformation; Figma uses CRDTs.</p>
+
+<h2>Challenges</h2>
+
+<table>
+  <tr><th>Challenge</th><th>Description</th><th>Mitigation</th></tr>
+  <tr><td><strong>Write conflicts</strong></td><td>Concurrent writes to the same key create conflicts</td><td>Conflict resolution strategies (LWW, CRDTs, custom merge)</td></tr>
+  <tr><td><strong>Ordering</strong></td><td>No global total order without coordination; causal order may not match intended order</td><td>Version vectors, causal consistency, hybrid logical clocks</td></tr>
+  <tr><td><strong>Delete conflicts</strong></td><td>One leader deletes a row while another updates it ("tombstone" handling)</td><td>CRDTs with observed-remove semantics</td></tr>
+  <tr><td><strong>Auto-increment IDs</strong></td><td>Two leaders generating IDs can collide</td><td>UUIDs, odd/even allocation per leader, snowflake IDs</td></tr>
+  <tr><td><strong>Debugging</strong></td><td>Hard to trace the causal chain of writes across leaders</td><td>Structured logging with version vectors, distributed tracing</td></tr>
+  <tr><td><strong>Complexity</strong></td><td>Significantly more complex than single-leader</td><td>Start with single-leader; add multi-leader only when needed</td></tr>
+</table>
+
+<h2>Real-World Examples</h2>
+
+<table>
+  <tr><th>System</th><th>Multi-Leader Usage</th><th>Conflict Resolution</th></tr>
+  <tr><td><strong>Google Docs</strong></td><td>Each active client is a leader for its edits</td><td>Operational Transformation</td></tr>
+  <tr><td><strong>Figma</strong></td><td>Each collaborator is a leader</td><td>CRDTs (custom implementation)</td></tr>
+  <tr><td><strong>CouchDB</strong></td><td>Every node can accept writes</td><td>Revision-based merge (deterministic tree merge)</td></tr>
+  <tr><td><strong>MySQL Group Replication</strong></td><td>All nodes in the group can be primary</td><td>Certification-based conflict detection (first-committer wins)</td></tr>
+  <tr><td><strong>Galera Cluster (MariaDB)</strong></td><td>Multi-master synchronous replication</td><td>Certification-based (deterministic conflict detection)</td></tr>
+  <tr><td><strong>iCloud</strong></td><td>Devices sync with each other</td><td>Server-side merge with per-record versioning</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+
+<ol>
+  <li><strong>"When would you use multi-leader instead of single-leader replication?"</strong><br>
+  Answer: "Multi-leader is appropriate when: (1) You have multiple data centers and need low-latency writes in each DC without cross-DC round trips. (2) You have offline clients that need to accept writes locally. (3) You are building a collaborative application where multiple users edit the same data concurrently. The tradeoff is that multi-leader introduces write conflicts that single-leader avoids entirely, so the conflict resolution strategy must be carefully designed."</li>
+
+  <li><strong>"How do you handle write conflicts in a multi-leader system?"</strong><br>
+  Answer: "There are several strategies: (1) Last-Write-Wins -- simplest but silently drops data; acceptable for analytics or frequently-overwritten fields. (2) Custom application-level merge -- e.g., merging shopping carts by union rather than overwriting. (3) CRDTs -- mathematical data structures that guarantee conflict-free merges. (4) Operational Transformation -- used in collaborative editing. The choice depends on the data semantics and what 'correct' means for the application."</li>
+
+  <li><strong>"What is a CRDT? When would you use one?"</strong><br>
+  Answer: "CRDT stands for Conflict-free Replicated Data Type. It is a mathematical structure where all concurrent updates can be merged without conflicts by construction. Examples include G-Counters (grow-only counters), PN-Counters (increment and decrement), and OR-Sets (observed-remove sets). I would use CRDTs when: the data model is relatively simple (counters, sets, registers), I need strong eventual consistency guarantees, and I cannot tolerate silent data loss from last-write-wins."</li>
+</ol>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Do not go deep into:</strong>
+  <ul>
+    <li>CRDT mathematics and formal proofs -- know what CRDTs are and when to use them, not the algebraic foundations.</li>
+    <li>Operational Transformation algorithm internals (the Google Wave OT algorithm is fascinating but not interview-relevant).</li>
+    <li>Specific multi-leader database configuration (CouchDB replication configuration, Galera cluster setup).</li>
+    <li>Vector clock implementation details -- know the concept, not the code.</li>
+    <li>Sync vs. async multi-leader replication internals -- the conflict resolution strategies matter more.</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Reading Sources</div>
+  <ul>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em>, Chapter 5, Section "Multi-Leader Replication" -- covers multi-leader architecture, conflict handling, and topologies.</li>
+    <li>Marc Shapiro et al., <em>Conflict-Free Replicated Data Types</em> (2011) -- the foundational paper on CRDTs, available as a technical report. Focus on the high-level concepts, not the proofs.</li>
+    <li>Google, <em>Operational Transformation: Lessons Learned from Building Google Docs</em> -- practical insights on building real-time collaborative editing.</li>
+    <li>CouchDB Guide, Chapter "Conflict Management" -- for understanding revision-based conflict resolution in practice.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="leader-follower.html">&larr; 4.2.1 Leader-Follower</a>
+  <a href="leaderless.html">4.2.3 Leaderless &rarr;</a>
+</div>
+
+</body>
+</html>

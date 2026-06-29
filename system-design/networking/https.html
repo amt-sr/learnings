@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.1.6 HTTPS</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#2">2 Networking</a> / <a href="../index.html#2.1">2.1 Network Basics</a> / 2.1.6
+</div>
+
+<h1>HTTPS</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What HTTPS is and why it's non-negotiable in production</li>
+  <li>The layered stack: HTTP over TLS over TCP</li>
+  <li>Performance cost and why it's negligible with TLS 1.3</li>
+  <li>HTTP Strict Transport Security (HSTS)</li>
+  <li>How HTTPS fits into system architecture</li>
+</ul>
+
+<h2>Definition</h2>
+<p>HTTPS (HTTP Secure) is <strong>HTTP running over TLS</strong>. It encrypts all communication between client and server, preventing eavesdropping and tampering.</p>
+
+<div class="formula">
+  HTTPS = HTTP + TLS
+  <small>HTTP application layer → TLS encryption layer → TCP transport layer → IP network layer</small>
+</div>
+
+<div class="callout yellow">
+  <strong>In 2024, HTTPS is not optional:</strong> Google ranks HTTP sites lower in search. Browsers show "Not Secure" warnings. Mixed content (HTTP resources on HTTPS page) is blocked by default. All production APIs must use HTTPS.
+</div>
+
+<h2>The HTTPS Stack</h2>
+<div class="diagram">  Application Layer:    HTTP Request/Response
+  ─────────────────────────────────────────
+  Security Layer:       TLS (encryption + authentication)
+  ─────────────────────────────────────────
+  Transport Layer:      <a href="tcp.html">TCP</a> (reliable delivery)
+  ─────────────────────────────────────────
+  Network Layer:        IP (routing)
+  ─────────────────────────────────────────
+  Link Layer:           Ethernet/WiFi
+
+  What changes with HTTPS:
+  - HTTP headers are encrypted
+  - Request/response body is encrypted
+  - URL path and query params are encrypted (TLS 1.3)
+  - Server identity is verified via certificate
+  - Connection to port 443 instead of 80</div>
+
+<div class="callout">
+  <strong>Note:</strong> In TLS 1.3, the entire URL (including path and query string) is encrypted. In TLS 1.2, the SNI (Server Name Indication) was visible in plaintext — which leaks which domain you're visiting.
+</div>
+
+<h2>HTTP vs HTTPS</h2>
+<table>
+  <tr><th></th><th>HTTP</th><th>HTTPS</th></tr>
+  <tr><td>Port</td><td>80</td><td>443</td></tr>
+  <tr><td>Encryption</td><td class="red">None (plaintext)</td><td class="green">TLS encryption</td></tr>
+  <tr><td>Authentication</td><td class="red">None</td><td class="green">Server certificate</td></tr>
+  <tr><td>SEO</td><td class="red">Lower ranking</td><td class="green">Ranking boost</td></tr>
+  <tr><td>Browser warning</td><td class="red">"Not Secure"</td><td>Lock icon</td></tr>
+  <tr><td>Performance</td><td>Slightly faster</td><td>Negligible overhead with TLS 1.3</td></tr>
+</table>
+
+<h2>HTTPS Performance</h2>
+<pre>Overhead:
+  TCP handshake:       1 RTT
+  TLS 1.2 handshake:  2 RTTs (total: 3 RTTs before first byte)
+  TLS 1.3 handshake:  1 RTT  (total: 2 RTTs before first byte)
+  TLS 1.3 0-RTT:      0 RTTs (cached session, total: 1 RTT)
+
+  CPU overhead: ~1-2% with AES-NI hardware acceleration
+  Memory overhead: ~10-50KB per connection (negligible)
+
+  Conclusion: The performance argument against HTTPS is dead.
+  TLS 1.3 + session resumption = nearly identical to plain HTTP.</pre>
+
+<h2>HSTS (HTTP Strict Transport Security)</h2>
+<p>HSTS tells browsers to <strong>only use HTTPS</strong> for a domain, preventing downgrade attacks.</p>
+<pre>Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+
+max-age=31536000  →  1 year: browser only uses HTTPS
+includeSubDomains →  applies to all subdomains
+preload            →  added to HSTS preload list (shipped in browsers)
+
+Without HSTS: attacker can intercept first HTTP request and
+redirect to HTTP version (strip TLS). HSTS prevents this.</pre>
+
+<h2>HTTPS in System Design</h2>
+<table>
+  <tr><th>Layer</th><th>HTTPS Role</th></tr>
+  <tr><td><a href="edge-servers.html">CDN/Edge</a></td><td>Terminates TLS at edge, serves content over HTTPS</td></tr>
+  <tr><td><a href="reverse-proxy.html">Load Balancer</a></td><td>TLS termination point, manages certificates</td></tr>
+  <tr><td>Internal services</td><td>mTLS (mutual TLS) via service mesh for zero-trust</td></tr>
+  <tr><td><a href="grpc.html">gRPC</a></td><td>Uses TLS by default (HTTP/2 + TLS)</td></tr>
+  <tr><td><a href="http3.html">HTTP/3</a></td><td>TLS 1.3 mandatory (built into QUIC)</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What's the difference between HTTP and HTTPS?"</strong><br>HTTPS = HTTP + TLS. Everything HTTP does, plus encryption (confidentiality), server authentication (identity verification via certificates), and integrity (tamper detection). Uses port 443 instead of 80.</li>
+  <li><strong>"Is HTTPS slower than HTTP?"</strong><br>Marginally — TLS 1.3 adds 1 RTT for handshake (0 with session resumption). CPU overhead is ~1-2% with AES-NI. The performance difference is negligible for all practical purposes.</li>
+  <li><strong>"What's HSTS?"</strong><br>HTTP Strict Transport Security — a header telling the browser to only use HTTPS for this domain. Prevents SSL stripping attacks. max-age specifies how long to remember.</li>
+  <li><strong>"Where does TLS termination happen?"</strong><br>At the <a href="reverse-proxy.html">load balancer</a> or <a href="edge-servers.html">CDN</a>. Backend servers receive plain HTTP. For internal zero-trust, use mutual TLS (mTLS) via service mesh.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>TLS 1.0 and 1.1 (deprecated, insecure)</li>
+    <li>SSL (predecessor, completely broken)</li>
+    <li>Certificate pinning details</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>High Performance Browser Networking (Ilya Grigorik)</strong> — Chapter 4 (TLS)</li>
+    <li><strong>Computer Networking: A Top-Down Approach (Kurose &amp; Ross)</strong> — Chapter 8 (Security in Transport)</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="tls.html">&larr; 2.1.5 TLS</a>
+  <a href="http-request-lifecycle.html">Next: 2.2.1 HTTP Request Lifecycle &rarr;</a>
+</div>
+
+</body>
+</html>

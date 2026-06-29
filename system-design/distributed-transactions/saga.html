@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>9.1.3 Saga Pattern</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb"><a href="../">System Design</a> / <a href="./">Section 9: Distributed Transactions</a> / 9.1.3 Saga Pattern</div>
+
+<h1>Saga Pattern</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Master the Saga pattern as the go-to approach for managing distributed transactions in microservices architectures. Understand choreography vs orchestration, compensating transactions, and the tradeoffs compared to 2PC.</p>
+
+<h2>Definition</h2>
+<p>A Saga is a sequence of <strong>local transactions</strong> where each step publishes an event or sends a message that triggers the next step. If any step fails, the Saga executes <strong>compensating transactions</strong> (reverse operations) to undo the effects of all previously completed steps. Unlike 2PC, a Saga does not hold locks across participants and does not require atomicity -- it achieves <em>eventual consistency</em> through compensation.</p>
+
+<div class="callout">
+  <strong>Key Insight:</strong> The Saga pattern trades atomicity for availability and performance. Instead of one big atomic transaction, you have a series of smaller local transactions with a defined rollback plan. This is the dominant pattern for distributed transactions in microservices.
+</div>
+
+<h2>How a Saga Works</h2>
+
+<h3>Order Fulfillment Example</h3>
+
+<div class="diagram">
+  <strong>Saga: Order Fulfillment Flow</strong>
+
+  [Create Order]
+       |
+       v
+  [Reserve Inventory]  -- T1: INSERT reservation
+       |  success
+       v
+  [Charge Payment]      -- T2: debit customer account
+       |  success
+       v
+  [Ship Order]          -- T3: create shipment record
+       |  success
+       v
+  [Complete Order]      -- T4: update order status
+
+  --- If [Charge Payment] fails ---
+       |
+       v
+  [Refund Inventory]    -- C2: cancel reservation (compensate T1)
+</div>
+
+<h3>Compensating Transactions</h3>
+<p>Each forward step has a corresponding compensating (reverse) step:</p>
+
+<table>
+  <tr><th>Forward Transaction</th><th>Compensating Transaction</th></tr>
+  <tr><td>Create order</td><td>Cancel order</td></tr>
+  <tr><td>Reserve inventory</td><td>Release inventory reservation</td></tr>
+  <tr><td>Charge payment</td><td>Refund payment</td></tr>
+  <tr><td>Create shipment</td><td>Cancel shipment</td></tr>
+  <tr><td>Send confirmation email</td><td>Send cancellation email</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Design Consideration:</strong> Not all operations need compensation. Side effects like sending emails or logging metrics typically don't need reversal. Focus compensation on operations that affect state: inventory, payments, reservations, and allocations.
+</div>
+
+<h2>Coordination Styles</h2>
+
+<h3>Choreography (Decentralized)</h3>
+<p>Each service publishes events. Other services react to events and publish their own events. No central coordinator.</p>
+
+<div class="diagram">
+  <strong>Choreography: Event-Driven Saga</strong>
+
+  Order Service          Inventory Service        Payment Service
+       |                       |                       |
+       |-- OrderCreated ------->|                       |
+       |    (event)             |                       |
+       |                       |-- process reservation  |
+       |                       |                       |
+       |<-- InventoryReserved --|                       |
+       |    (event)             |                       |
+       |                       |                       |
+       |-------------------------------------------------|
+       |                        PaymentRequested ------->|
+       |                        (event)                  |
+       |                                                |-- charge card
+       |                       <--- PaymentCompleted ---|
+       |                        (event)                 |
+</div>
+
+<h3>Orchestration (Centralized)</h3>
+<p>A central orchestrator (saga manager) coordinates the flow, sending commands to each service and handling responses.</p>
+
+<div class="diagram">
+  <strong>Orchestration: Centralized Saga Manager</strong>
+
+                    Saga Orchestrator
+                         |
+         Order Service --|  1. createOrder()
+                         |  --> OrderCreated
+                         |
+                         |  2. reserveInventory(orderId)
+       Inventory Service |  --> InventoryReserved
+                         |
+                         |  3. chargePayment(orderId)
+         Payment Service |  --> PaymentCompleted (or failed)
+                         |
+                         |  4. shipOrder(orderId)
+        Shipping Service |  --> OrderShipped
+
+  <strong>On failure at step 3:</strong>
+                         |
+                         |  3a. releaseInventory(orderId)
+       Inventory Service |  --> InventoryReleased
+</div>
+
+<h2>Choreography vs Orchestration</h2>
+
+<table>
+  <tr><th>Property</th><th>Choreography</th><th>Orchestration</th></tr>
+  <tr><td>Control flow</td><td>Decentralized (events)</td><td>Centralized (commands)</td></tr>
+  <tr><td>Coupling</td><td class="green">Low (services don't know about each other)</td><td class="red">Higher (orchestrator knows all services)</td></tr>
+  <tr><td>Complexity</td><td>Grows with saga length (hard to trace)</td><td class="green">Contained in orchestrator</td></tr>
+  <tr><td>Testing</td><td>Harder (event-driven)</td><td class="green">Easier (single orchestrator logic)</td></tr>
+  <tr><td>Single point of failure</td><td class="green">No SPOF</td><td>Orchestrator is SPOF (mitigate with HA)</td></tr>
+  <tr><td>Best for</td><td>Simple sagas (2-4 steps)</td><td>Complex sagas (5+ steps, branching)</td></tr>
+  <tr><td>Cycle management</td><td>Hard to detect cycles</td><td class="green">Easy to manage</td></tr>
+  <tr><td>Monitoring</td><td>Requires distributed tracing</td><td class="green">Centralized in orchestrator</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Interview Answer:</strong> "For 2-4 step sagas with simple flows, I'd use choreography for its lower coupling. For complex business processes with 5+ steps, branching logic, or external integrations, I'd use orchestration for better manageability and observability."
+</div>
+
+<h2>Saga vs 2PC Comparison</h2>
+
+<table>
+  <tr><th>Property</th><th>Saga</th><th>2PC</th></tr>
+  <tr><td>Consistency model</td><td>Eventual consistency</td><td>Strong consistency (atomic)</td></tr>
+  <tr><td>Availability</td><td class="green">High (no locks held across services)</td><td class="red">Lower (locks held during commit)</td></tr>
+  <tr><td>Isolation</td><td>Weak (other txns see intermediate state)</td><td>Strong (locks prevent reads)</td></tr>
+  <tr><td>Blocking</td><td class="green">Non-blocking</td><td class="red">Can block on coordinator failure</td></tr>
+  <tr><td>Performance</td><td class="green">Better (no cross-service locks)</td><td class="red">Worse (lock contention)</td></tr>
+  <tr><td>Scalability</td><td class="green">High</td><td class="red">Limited by coordinator</td></tr>
+  <tr><td>Complexity</td><td>Compensation logic, idempotency</td><td>Recovery logging, deadlock potential</td></tr>
+  <tr><td>Duration</td><td>Long-running (minutes/hours)</td><td>Short-lived (milliseconds/seconds)</td></tr>
+</table>
+
+<h2>Challenges with Sagas</h2>
+
+<h3>1. Lack of Isolation (ABA Problem)</h3>
+<p>Between saga steps, other transactions can read and modify the same data. Example: Inventory is reserved in Step 1, but another order might snatch the last item before Step 2 (payment) completes.</p>
+<div class="callout yellow">
+  <strong>Mitigation:</strong> Use semantic locks (marking resources as "pending"), pessimistic locking for critical resources, or serializable isolation levels within individual services.
+</div>
+
+<h3>2. Compensating Transaction Failures</h3>
+<p>If a compensating transaction fails, you have a cascade problem. The saga may need manual intervention or a retry with exponential backoff.</p>
+
+<h3>3. Idempotency Requirement</h3>
+<p>Since messages can be delivered more than once, every saga step (both forward and compensating) must be <strong>idempotent</strong>. Use the inbox pattern (Section 9.2.2) to guarantee this.</p>
+
+<h3>4. Observability</h3>
+<p>Debugging a saga that spans 5 services and 10+ events requires distributed tracing, correlation IDs, and centralized logging. This is a significant operational concern.</p>
+
+<h2>When to Use Sagas</h2>
+<ul>
+  <li><strong>E-commerce order fulfillment:</strong> Order -> Inventory -> Payment -> Shipping</li>
+  <li><strong>Travel booking:</strong> Flight reservation -> Hotel booking -> Car rental -> Payment</li>
+  <li><strong>Account onboarding:</strong> Create account -> Provision resources -> Send welcome email -> Activate</li>
+  <li><strong>Money transfer (non-blocking):</strong> Debit source -> Credit destination, with compensation on failure</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>How does the Saga pattern differ from 2PC? What are the tradeoffs?</li>
+  <li>Explain choreography vs orchestration. When would you use each?</li>
+  <li>How do you handle the isolation problem in sagas? What is the ABA problem?</li>
+  <li>What happens when a compensating transaction fails? How do you handle cascading failures?</li>
+  <li>How do you ensure idempotency in saga steps?</li>
+  <li>Design an order fulfillment system using the Saga pattern. Walk through the happy path and a failure scenario.</li>
+  <li>How do you monitor and debug a long-running saga?</li>
+  <li>What are the consistency guarantees of a Saga? Can a user see intermediate states?</li>
+  <li>How does Saga work with the outbox pattern?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>For L5/L6/Staff interviews, skip:</strong>
+  <ul>
+    <li>Specific framework implementations (Axon Framework, Temporal internals unless asked)</li>
+    <li>Formal saga definition from the original 1987 paper (Hector Garcia-Molina)</li>
+    <li>Advanced pattern matching for saga state machines</li>
+    <li>Legacy SOA/ESB saga implementations</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><em>Microservices Patterns</em> (Chris Richardson) -- Chapter 6: Saga Pattern</li>
+    <li><em>Designing Data-Intensive Applications</em> (Martin Kleppmann) -- Chapter 7: Transactions (eventual consistency)</li>
+    <li><em>Building Microservices</em> (Sam Newman, 2nd Ed) -- Chapter on collaboration patterns</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Papers</div>
+  <ul>
+    <li>"Sagas" (Hector Garcia-Molina &amp; Kenneth Salem, 1987) -- Original paper</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Online</div>
+  <ul>
+    <li><a href="https://microservices.io/patterns/data/saga.html">Chris Richardson: Saga Pattern</a></li>
+    <li><a href="https://temporal.io/">Temporal.io -- Workflow engine for Saga orchestration</a></li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="three-phase-commit.html">&larr; 9.1.2 Three Phase Commit</a>
+  <a href="outbox-pattern.html">9.2.1 Outbox Pattern &rarr;</a>
+</div>
+
+</body>
+</html>

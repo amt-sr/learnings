@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.2.7 Consumer Group — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">8. Messaging</a> / 8.2.7 Consumer Group</p>
+
+<h1>8.2.7 Consumer Group</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+
+<p>Understand Kafka consumer groups as the mechanism for parallel consumption, partition assignment, scaling by adding consumers, and the rebalancing process when consumers join or leave.</p>
+
+<h2>Definition</h2>
+
+<p>A <strong>consumer group</strong> is a group of one or more consumers that jointly consume a set of Kafka topics. Each partition within a subscribed topic is assigned to exactly one consumer within the group. Consumer groups enable horizontal scaling — add more consumers to increase processing capacity, up to the number of partitions.</p>
+
+<div class="callout">
+  <strong>Core Rule:</strong> Within a consumer group, each partition is consumed by exactly one consumer. If you have more consumers than partitions, the excess consumers are idle. If you have fewer consumers than partitions, some consumers handle multiple partitions.
+</div>
+
+<h2>Partition Assignment</h2>
+
+<div class="diagram">
+  Topic: "order-events" (4 partitions)
+  Consumer Group: "order-processors" (3 consumers)
+
+  Partition 0 ──► Consumer 1
+  Partition 1 ──► Consumer 2
+  Partition 2 ──► Consumer 3
+  Partition 3 ──► Consumer 1   (consumer 1 gets 2 partitions)
+
+  ┌──────────┐    ┌──────────┐    ┌──────────┐
+  │Consumer 1│    │Consumer 2│    │Consumer 3│
+  │ P0, P3   │    │ P1       │    │ P2       │
+  └──────────┘    └──────────┘    └──────────┘
+
+  After scaling to 4 consumers (matching partition count):
+
+  Partition 0 ──► Consumer 1   (one partition each — perfectly balanced)
+  Partition 1 ──► Consumer 2
+  Partition 2 ──► Consumer 3
+  Partition 3 ──► Consumer 4
+
+  Adding a 5th consumer:
+  Partition 0 ──► Consumer 1
+  Partition 1 ──► Consumer 2
+  Partition 2 ──► Consumer 3
+  Partition 3 ──► Consumer 4
+  Consumer 5 ──► IDLE (no partitions assigned)
+</div>
+
+<h2>Rebalancing</h2>
+
+<p>When consumers join or leave a group (or when topics/partitions change), Kafka triggers a <strong>rebalance</strong> — a process of reassigning partitions among consumers in the group. During rebalancing:</p>
+
+<div class="diagram">
+  Before:                          Consumer 3 crashes
+  P0 ──► C1, P1 ──► C2, P2 ──► C3
+                                       │
+                                       ▼
+  Rebalance triggered:
+  ┌─────────────────────────────────────────────┐
+  │  1. Consumer 3 stops sending heartbeats      │
+  │  2. Group coordinator detects failure        │
+  │  3. All consumers stop processing (stop-the-  │
+  │     world for eager rebalance)               │
+  │  4. Partitions reassigned:                   │
+  │     P0 ──► C1, P1 ──► C2, P2 ──► C1         │
+  │  5. Consumers resume processing              │
+  └─────────────────────────────────────────────┘
+
+  After:
+  P0 ──► C1, P1 ──► C2, P2 ──► C1
+  (C1 now handles P0 and P2)
+</div>
+
+<h3>Eager vs. Cooperative Rebalancing</h3>
+
+<table>
+  <tr><th>Aspect</th><th>Eager (default legacy)</th><th>Cooperative (incremental)</th></tr>
+  <tr><td>Revocation</td><td class="red">All partitions revoked from all consumers</td><td class="green">Only moving partitions are revoked</td></tr>
+  <tr><td>Downtime</td><td class="red">Processing stops for all consumers during rebalance</td><td class="green">Only affected consumers pause briefly</td></tr>
+  <tr><td>Complexity</td><td>Simple</td><td>More complex but better for large groups</td></tr>
+  <tr><td>Use case</td><td>Small consumer groups</td><td>Large consumer groups, frequent joins/leaves</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Interview Tip:</strong> Rebalancing is a common pain point in Kafka deployments. Mention that frequent rebalances (due to misconfigured timeouts or unstable consumers) cause processing pauses and increased latency. Solutions: use cooperative sticky assignor, tune heartbeat and session timeouts, and stabilize consumer deployments.
+</div>
+
+<h2>Multiple Consumer Groups</h2>
+
+<p>Different consumer groups can independently read from the same topic. Each group maintains its own committed offsets. This enables multiple downstream services to process the same data independently at their own pace.</p>
+
+<div class="diagram">
+  Topic: "order-events" (3 partitions)
+
+  Consumer Group A ("payment-processors"):
+  P0 ──► A-1,  P1 ──► A-2,  P2 ──► A-3
+  Processes payments for all orders
+
+  Consumer Group B ("analytics"):
+  P0 ──► B-1,  P1 ──► B-1,  P2 ──► B-2
+  Counts and aggregates order metrics
+
+  Consumer Group C ("fraud-detection"):
+  P0 ──► C-1,  P1 ──► C-1,  P2 ──► C-1
+  Screens every order for fraud signals
+
+  Each group processes all 3 partitions independently
+  Each group has its own committed offsets
+</div>
+
+<h2>Scaling Strategy</h2>
+
+<div class="callout green">
+  <strong>Practical Approach:</strong>
+  <ol>
+    <li>Start with partition count based on target throughput and max expected consumers.</li>
+    <li>Add consumers to a group to scale out processing capacity.</li>
+    <li>If consumers are CPU-bound, one consumer per CPU core per partition is a good starting point.</li>
+    <li>Monitor consumer lag to determine when more consumers are needed.</li>
+    <li>Remember: adding consumers beyond the partition count does not help.</li>
+  </ol>
+</div>
+
+<h2>Common Rebalance Causes</h2>
+
+<table>
+  <tr><th>Cause</th><th>Mitigation</th></tr>
+  <tr><td>Consumer crash or network failure</td><td>Proper health checks, stable network</td></tr>
+  <tr><td>Processing takes too long (> max.poll.interval.ms)</td><td>Increase max.poll.interval.ms or use fewer max.poll.records</td></tr>
+  <tr><td>Consumer restart during deployment</td><td>Rolling deployments with cooperative rebalancing</td></tr>
+  <tr><td>New consumer joins the group</td><td>Expected — plan for brief rebalance pause</td></tr>
+  <tr><td>Topic partition count changes</td><td>Minimize — partition count should be planned ahead</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+
+<ol>
+  <li>"What is a Kafka consumer group and why is it important?"</li>
+  <li>"What happens when you add more consumers than partitions?"</li>
+  <li>"Explain the rebalancing process when a consumer crashes."</li>
+  <li>"How do multiple consumer groups reading from the same topic work?"</li>
+  <li>"What are common causes of excessive rebalancing?"</li>
+  <li>"How would you design a consumer group for high throughput processing?"</li>
+  <li>"What is the difference between eager and cooperative rebalancing?"</li>
+  <li>"How would you prevent rebalancing during deployments?"</li>
+  <li>"Design a system with Kafka where multiple services need to react to the same events."</li>
+  <li>"How do you handle consumer lag in a large consumer group?"</li>
+</ol>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Do not dive into:</strong>
+  <ul>
+    <li>Group coordinator protocol internals (JoinGroup, SyncGroup, Heartbeat request format and binary protocol).</li>
+    <li>Partition assignor algorithms beyond a brief comparison (Range, RoundRobin, Sticky, CooperativeSticky).</li>
+    <li>Static membership protocol details unless asked about advanced consumer group tuning.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Books &amp; Guides</div>
+  <ul>
+    <li><a href="https://kafka.apache.org/documentation/#consumergroups">Kafka Documentation — Consumer Groups</a> — Official consumer group concepts</li>
+    <li><a href="https://www.confluent.io/learn/kafka-consumer-groups/">Confluent — Kafka Consumer Groups</a> — Deep dive on groups and rebalancing</li>
+    <li><a href="https://www.oreilly.com/library/view/kafka-the-definitive/9781491936153/">Kafka: The Definitive Guide</a> — Ch. 4 (Consumer Groups)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="consumer.html">&larr; 8.2.6 Consumer</a>
+  <a href="replication.html">8.2.8 Replication &rarr;</a>
+</div>
+
+</body>
+</html>

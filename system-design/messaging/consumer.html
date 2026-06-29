@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.2.6 Consumer — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">8. Messaging</a> / 8.2.6 Consumer</p>
+
+<h1>8.2.6 Consumer</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+
+<p>Understand how Kafka consumers read messages, the pull vs. push delivery model, the role of consumer groups, and offset commit strategies.</p>
+
+<h2>Definition</h2>
+
+<p>A <strong>Kafka consumer</strong> is a client application that reads messages from one or more Kafka topics. Consumers subscribe to topics and pull messages from partitions. Each consumer tracks its position (offset) within each partition it reads from, enabling it to resume after failure.</p>
+
+<h2>Pull vs. Push Model</h2>
+
+<div class="diagram">
+  Push Model (RabbitMQ):
+  Broker ──push──► Consumer
+  Broker decides when and how fast to push messages.
+  Risk: Overwhelms slow consumer → consumer buffers overflow → messages dropped.
+
+  Pull Model (Kafka):
+  Consumer ──pull──► Broker
+  Consumer decides when to fetch and how many messages to pull.
+  Consumer pulls at its own pace → never overwhelmed.
+  Trade-off: If no data available, pull results in empty response (polling overhead).
+  Mitigation: Long polling — broker waits until data is available or timeout.
+</div>
+
+<table>
+  <tr><th>Aspect</th><th>Push (RabbitMQ)</th><th>Pull (Kafka)</th></tr>
+  <tr><td>Flow control</td><td class="red">Broker pushes — can overwhelm consumer</td><td class="green">Consumer pulls — self-paced</td></tr>
+  <tr><td>Idle consumers</td><td class="green">No overhead (broker waits)</td><td class="red">Polling overhead (empty pulls)</td></tr>
+  <tr><td>Backpressure</td><td>Consumer must signal (prefetch count)</td><td>Natural — consumer pulls only when ready</td></tr>
+  <tr><td>Throughput</td><td>Good for low-latency scenarios</td><td class="green">Excellent for high-throughput batching</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Interview Tip:</strong> "Why does Kafka use a pull model?" is a common question. The answer: it gives consumers control over their own processing rate, avoids overwhelming slow consumers, and enables efficient batching. Kafka mitigates the polling overhead with long polling and consumer group coordination.
+</div>
+
+<h2>Consumer Groups</h2>
+
+<p>Consumers are organized into <strong>consumer groups</strong>. Each consumer in a group is assigned one or more partitions. Within a group, each partition is consumed by exactly one consumer. This is the competing-consumer pattern — partitioned across consumers.</p>
+
+<div class="callout">
+  <strong>Key Rule:</strong> If a consumer group has more consumers than partitions, some consumers will be idle. The partition count is the upper bound on parallelism within a group. Consumer groups are covered in depth in the <a href="consumer-group.html">8.2.7 Consumer Group</a> section.
+</div>
+
+<h2>Offset Commit Strategies</h2>
+
+<h3>Automatic Commit</h3>
+<pre>
+enable.auto.commit = true  (default)
+auto.commit.interval.ms = 5000  (default: 5 seconds)
+</pre>
+<p>Offsets are committed periodically in the background. Simple but can cause message loss or duplicate processing on failure.</p>
+
+<h3>Manual Synchronous Commit</h3>
+<pre>
+enable.auto.commit = false
+// After processing:
+consumer.commitSync();
+</pre>
+<p>Explicitly commit after processing. Blocks until the broker acknowledges. Safest option but adds latency per commit.</p>
+
+<h3>Manual Asynchronous Commit</h3>
+<pre>
+enable.auto.commit = false
+// After processing:
+consumer.commitAsync(callback);
+</pre>
+<p>Fire-and-forget commit. Does not block. Risk: commit may fail and you will not know before the next poll.</p>
+
+<div class="callout green">
+  <strong>Best Practice:</strong> Use <code>commitAsync</code> for normal processing (low latency) and <code>commitSync</code> in a <code>finally</code> block or on close to guarantee the last batch is committed before shutdown.
+</div>
+
+<h2>Consumer Configuration</h2>
+
+<table>
+  <tr><th>Config</th><th>Default</th><th>Purpose</th></tr>
+  <tr><td><code>group.id</code></td><td>None (required)</td><td>Consumer group name</td></tr>
+  <tr><td><code>bootstrap.servers</code></td><td>None (required)</td><td>Kafka cluster connection string</td></tr>
+  <tr><td><code>fetch.min.bytes</code></td><td>1</td><td>Minimum data for a fetch response (reduces empty polls)</td></tr>
+  <tr><td><code>fetch.max.wait.ms</code></td><td>500</td><td>Max wait time if fetch.min.bytes not met (long polling)</td></tr>
+  <tr><td><code>max.poll.records</code></td><td>500</td><td>Max records returned per poll call</td></tr>
+  <tr><td><code>session.timeout.ms</code></td><td>45000</td><td>If no heartbeat within this time, consumer is considered dead</td></tr>
+  <tr><td><code>heartbeat.interval.ms</code></td><td>3000</td><td>Frequency of heartbeats to group coordinator</td></tr>
+  <tr><td><code>max.poll.interval.ms</code></td><td>300000</td><td>Max time between poll calls before consumer kicked out</td></tr>
+</table>
+
+<h2>Processing Loop</h2>
+
+<div class="diagram">
+  while (true) {
+    ConsumerRecords records = consumer.poll(Duration.ofMillis(1000));
+
+    for (ConsumerRecord record : records) {
+      process(record);          // 1. Deserialize and process the message
+      trackProgress(record);    // 2. Update local state
+    }
+
+    consumer.commitSync();      // 3. Commit offsets after batch
+                                //    (or commitAsync for lower latency)
+  }
+</div>
+
+<h2>Common Failure Modes</h2>
+
+<ul>
+  <li><strong>Consumer too slow:</strong> Processing takes longer than <code>max.poll.interval.ms</code> → consumer kicked out of group → rebalance triggered.</li>
+  <li><strong>Commit before processing:</strong> If processing fails after commit, messages are lost (at-most-once).</li>
+  <li><strong>Process before commit, crash before commit:</strong> Messages reprocessed on restart (at-least-once, duplicates possible).</li>
+  <li><strong>Poison message:</strong> A message that consistently causes consumer to crash → consumer stuck in crash-loop → falls out of group. Need DLQ pattern.</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+
+<ol>
+  <li>"Why does Kafka use a pull model instead of push?"</li>
+  <li>"Explain auto-commit vs. manual commit."</li>
+  <li>"What happens when a consumer crashes mid-processing?"</li>
+  <li>"How does a consumer know where to resume reading after a restart?"</li>
+  <li>"What is max.poll.interval.ms and why does it matter?"</li>
+  <li>"How would you implement a dead letter queue for a Kafka consumer?"</li>
+  <li>"What is the relationship between consumers, partitions, and consumer groups?"</li>
+  <li>"How do you prevent a slow consumer from being kicked out of its group?"</li>
+</ol>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Do not dive into:</strong>
+  <ul>
+    <li>Kafka consumer group coordinator protocol internals (JoinGroup, SyncGroup request details).</li>
+    <li>Consumer rebalance protocol versions (RangeAssignor, RoundRobinAssignor, StickyAssignor, CooperativeSticky) — mention them briefly but do not go deep unless asked.</li>
+    <li>Consumer network request internals (fetch request format, topic metadata request).</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Books &amp; Guides</div>
+  <ul>
+    <li><a href="https://kafka.apache.org/documentation/#consumerconfigs">Kafka Documentation — Consumer Configs</a> — Complete consumer configuration reference</li>
+    <li><a href="https://www.confluent.io/learn/kafka-consumer/">Confluent — Apache Kafka Consumer</a> — Consumer concepts and patterns</li>
+    <li><a href="https://kafka.apache.org/24/javadoc/org/apache/kafka/clients/consumer/KafkaConsumer.html">KafkaConsumer Javadoc</a> — API reference for the Java consumer</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="producer.html">&larr; 8.2.5 Producer</a>
+  <a href="consumer-group.html">8.2.7 Consumer Group &rarr;</a>
+</div>
+
+</body>
+</html>

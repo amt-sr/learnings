@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.3.2 At Least Once — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">8. Messaging</a> / 8.3.2 At Least Once</p>
+
+<h1>8.3.2 At Least Once</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+
+<p>Understand the at-least-once delivery guarantee — the most common Kafka default — where messages are never lost but may be delivered multiple times, and how to handle duplicates through idempotent consumers.</p>
+
+<h2>Definition</h2>
+
+<p><strong>At least once</strong> delivery means each message is delivered one or more times. A message is never lost, but it may appear multiple times due to retries on failure. The producer retries until it receives an acknowledgment, and the consumer reprocesses messages if it crashes before committing offsets. This is Kafka's <strong>default delivery guarantee</strong>.</p>
+
+<div class="callout">
+  <strong>Guarantee:</strong> No data loss, but potential duplicates. The system prioritizes ensuring every message is processed over preventing duplicate processing.
+</div>
+
+<h2>How Duplicates Occur</h2>
+
+<div class="diagram">
+  Producer-Side Duplicate (acks=1 or acks=all, retries enabled):
+
+  ┌─────────────────────────────────────────────────────────────┐
+  │                                                             │
+  │  1. Producer ──send(msg1)──────► Leader Broker              │
+  │                                    │                        │
+  │  2. Leader writes msg1 to log      │                        │
+  │     (msg1 is now persisted)         │                        │
+  │                                    │                        │
+  │  3. Leader ──ACK──────► ✗ Network failure (ACK lost)       │
+  │                                    │                        │
+  │  4. Producer: "No ACK received"    │                        │
+  │     → RETRY ──send(msg1)──► Leader Broker                  │
+  │                                    │                        │
+  │  5. Leader: "msg1 already at offset 0, but I'll accept   │
+  │     the retry" (without idempotent producer)               │
+  │     OR with idempotent: "dup detected, silently discard"    │
+  │                                                             │
+  │  Result without idempotence: msg1 appears TWICE in partition│
+  └─────────────────────────────────────────────────────────────┘
+
+  Consumer-Side Duplicate (commit after processing):
+
+  ┌─────────────────────────────────────────────────────────────┐
+  │  1. Consumer ──poll()──► receives msg1, msg2, msg3          │
+  │                                                             │
+  │  2. Consumer processes msg1 ✓                                │
+  │  3. Consumer processes msg2 ✓                                │
+  │  4. Consumer processes msg3 — CRASH!                        │
+  │                                                             │
+  │  5. Consumer restarts                                      │
+  │     Last committed offset = 0 (before msg1)                │
+  │                                                             │
+  │  6. Consumer re-reads: msg1, msg2, msg3                     │
+  │     → msg1 and msg2 are REPROCESSED (duplicates)            │
+  └─────────────────────────────────────────────────────────────┘
+</div>
+
+<h2>Kafka Default Configuration</h2>
+
+<p>Kafka's default settings provide at-least-once semantics:</p>
+
+<pre>
+# Producer defaults → at-least-once
+acks=1                          // Wait for leader acknowledgment
+retries=Integer.MAX_VALUE       // Retry forever on retriable errors
+enable.idempotence=false        // No deduplication on producer side
+
+# Consumer defaults → at-least-once
+enable.auto.commit=true         // Auto-commit offsets periodically
+// Risk: message processed but not yet committed → reprocessed on crash
+</div>
+
+<h2>Handling Duplicates: Idempotent Consumers</h2>
+
+<p>Since at-least-once allows duplicates, consumers must be designed to handle them gracefully. An <strong>idempotent consumer</strong> produces the same result regardless of how many times it processes the same message.</p>
+
+<h3>Common Idempotency Strategies</h3>
+
+<table>
+  <tr><th>Strategy</th><th>How It Works</th><th>Example</th></tr>
+  <tr><td><strong>Deduplication table</strong></td><td>Store processed message IDs; skip if already processed</td><td><code>INSERT INTO processed(msg_id) ... ON CONFLICT IGNORE</code></td></tr>
+  <tr><td><strong>Natural idempotency</strong></td><td>Operation is inherently idempotent</td><td><code>UPDATE users SET status='active' WHERE id=123</code></td></tr>
+  <tr><td><strong>Conditional write</strong></td><td>Only write if state matches expected precondition</td><td><code>UPDATE orders SET status='paid' WHERE id=X AND status='pending'</code></td></tr>
+  <tr><td><strong>Unique constraint</strong></td><td>Database unique constraint rejects duplicate inserts</td><td>Unique constraint on <code>(event_id)</code> column</td></tr>
+  <tr><td><strong>Optimistic locking</strong></td><td>Use version column; reject write if version mismatch</td><td><code>UPDATE ... WHERE version=N</code></td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Interview Tip:</strong> "How do you handle duplicates in at-least-once delivery?" is extremely common. The best answer uses a concrete example: "For an order payment system, I would use a conditional update — <code>UPDATE orders SET status='paid' WHERE id=? AND status='pending'</code>. If the row is already 'paid', the update affects 0 rows, and I know it was already processed."
+</div>
+
+<h2>Producer-Side vs. Consumer-Side Duplicates</h2>
+
+<table>
+  <tr><th>Source</th><th>Cause</th><th>Mitigation</th></tr>
+  <tr><td>Producer retries</td><td>ACK lost after broker wrote message</td><td>Idempotent producer (<code>enable.idempotence=true</code>)</td></tr>
+  <tr><td>Consumer crash</td><td>Processed but offset not committed</td><td>Idempotent consumer (deduplication table, conditional writes)</td></tr>
+  <tr><td>Consumer group rebalance</td><td>Rebalance during processing; offset not committed</td><td>Idempotent consumer + cooperative rebalancing</td></tr>
+  <tr><td>Broker failover</td><td>Leader failover after ack sent but before replication</td><td><code>acks=all</code> + <code>min.insync.replicas=2</code></td></tr>
+</table>
+
+<h2>End-to-End At Least Once</h2>
+
+<div class="diagram">
+  Producer ──(acks=all)──► Kafka Topic ──► Consumer Group
+       │                       │                  │
+       │ Retries on failure    │ Persists to       │ Processes
+       │ No data loss          │ disk              │ then commits
+       │                       │                  │
+       │                       │                  ▼
+       │                       │           Downstream DB
+       │                       │           (idempotent writes)
+       │                       │
+       ▼
+  Idempotent producer (optional but recommended)
+
+  Full pipeline:
+  ✓ Producer retries → message never lost
+  ✓ Kafka persists → message survives broker failure
+  ✓ Consumer re-reads on crash → message never skipped
+  ✓ Idempotent consumer → duplicates are harmless
+</div>
+
+<h2>When At Least Once Is the Right Choice</h2>
+
+<ul>
+  <li><strong>Most business-critical operations:</strong> Order processing, payment handling, inventory updates.</li>
+  <li><strong>Financial transactions:</strong> Every transaction must be recorded; duplicates are handled via idempotency.</li>
+  <li><strong>Database synchronization:</strong> Changes must be propagated; duplicate apply is safe with idempotent operations.</li>
+  <li><strong>Notification delivery:</strong> Every notification must be sent; receiving two emails is better than missing one.</li>
+</ul>
+
+<div class="callout green">
+  <strong>Industry Standard:</strong> At least once is the most widely used delivery guarantee in production Kafka deployments. It is the default for both producers and consumers. The cost (potential duplicates) is managed through idempotent consumers, which is a well-understood pattern.
+</div>
+
+<h2>Trade-offs</h2>
+
+<table>
+  <tr><th>Aspect</th><th>At Least Once</th></tr>
+  <tr><td>Data loss</td><td class="green">None — messages never lost</td></tr>
+  <tr><td>Duplicates</td><td class="red">Possible — must handle with idempotent consumers</td></tr>
+  <tr><td>Latency</td><td>Moderate — retries add latency on failures</td></tr>
+  <tr><td>Throughput</td><td>Good — retries are infrequent in normal operation</td></tr>
+  <tr><td>Consumer complexity</td><td class="red">Moderate — must implement idempotent processing</td></tr>
+  <tr><td>Ordering</td><td>Preserved per key per partition</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+
+<ol>
+  <li>"What is at-least-once delivery and how does Kafka implement it?"</li>
+  <li>"How do duplicates occur in an at-least-once system?"</li>
+  <li>"How would you design an idempotent consumer for payment processing?"</li>
+  <li>"Compare at-least-once with exactly-once — is exactly-once always better?"</li>
+  <li>"How does acks=all combined with at-least-once affect the system?"</li>
+  <li>"Design an order processing pipeline with at-least-once delivery guarantees."</li>
+  <li>"What happens when a consumer processes a message, crashes before committing, and restarts?"</li>
+  <li>"How would you detect and handle duplicate messages in a downstream database?"</li>
+  <li>"What is the relationship between at-least-once and consumer lag?"</li>
+  <li>"When would you choose at-least-once over exactly-once?"</li>
+</ol>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Do not dive into:</strong>
+  <ul>
+    <li>Kafka Exactly-Once Semantics (EOS) transaction coordinator internals — that belongs in the exactly-once section.</li>
+    <li>Producer retry backoff algorithm internals (exponential backoff jitter implementation).</li>
+    <li>Consumer group rebalance protocol details — focus on the duplicate scenario, not the protocol.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Books &amp; Guides</div>
+  <ul>
+    <li><a href="https://kafka.apache.org/documentation/#semantics">Kafka Documentation — Delivery Semantics</a> — Official semantics definitions</li>
+    <li><a href="https://www.confluent.io/learn/kafka-exactly-once/">Confluent — Exactly-Once Semantics in Apache Kafka</a> — Covers at-least-once as the foundation for EOS</li>
+    <li><a href="https://www.oreilly.com/library/view/kafka-the-definitive/9781491936153/">Kafka: The Definitive Guide</a> — Ch. 6 (Reliability), idempotent consumer patterns</li>
+    <li><a href="https://martinfowler.com/articles/patterns-of-distributed-systems/idempotent-receiver.html">Martin Fowler — Idempotent Receiver</a> — Pattern for handling duplicate messages</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="at-most-once.html">&larr; 8.3.1 At Most Once</a>
+  <a href="exactly-once.html">8.3.3 Exactly Once &rarr;</a>
+</div>
+
+</body>
+</html>

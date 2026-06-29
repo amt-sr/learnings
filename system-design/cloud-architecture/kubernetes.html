@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>12.2.4 — Kubernetes</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">Cloud Architecture</a> / 12.2.4 Kubernetes</div>
+<h1>Kubernetes (K8s)</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand Kubernetes as a container orchestration platform, its architecture (control plane, worker nodes), core resource types (pods, services, deployments), and how it enables self-healing, scaling, and declarative infrastructure management.</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>Kubernetes (K8s)</strong> is an open-source container orchestration platform that automates deployment, scaling, and management of containerized applications. It provides a declarative API where you describe the desired state of your system, and K8s continuously works to make the actual state match the desired state.
+</div>
+
+<p>Kubernetes solves the operational problems that emerge when you have hundreds of containers across dozens of machines: scheduling, service discovery, load balancing, self-healing, rolling updates, and auto-scaling.</p>
+
+<h2>Kubernetes Architecture</h2>
+<div class="diagram">
+  ┌─────────────────────── Control Plane ───────────────────────────┐
+  │                                                                   │
+  │  ┌──────────┐  ┌──────────────┐  ┌──────────┐  ┌──────────────┐│
+  │  │  API     │  │    Scheduler  │  │Controller│  │     etcd     ││
+  │  │ Server   │  │              │  │  Manager │  │  (state      ││
+  │  │(REST API)│  │ (assigns pods │  │ (reconciles│ │   store)     ││
+  │  │          │  │  to nodes)   │  │  desired   │ │             ││
+  │  │          │  │              │  │  vs actual)│ │             ││
+  │  └──────────┘  └──────────────┘  └──────────┘  └──────────────┘│
+  └──────────────────────────────┬──────────────────────────────────┘
+                                 │
+              ┌──────────────────┼──────────────────┐
+              ▼                  ▼                  ▼
+  ┌──────────────────┐ ┌────────────────┐ ┌────────────────┐
+  │   Worker Node 1   │ │ Worker Node 2  │ │ Worker Node 3  │
+  │                    │ │                │ │                │
+  │ ┌──────────────┐ │ │ ┌────────────┐ │ │ ┌────────────┐ │
+  │ │ kubelet      │ │ │ │ kubelet    │ │ │ │ kubelet    │ │
+  │ │ (node agent) │ │ │ │            │ │ │ │            │ │
+  │ └──────────────┘ │ │ └────────────┘ │ │ └────────────┘ │
+  │ ┌──────────────┐ │ │ ┌────────────┐ │ │ ┌────────────┐ │
+  │ │ kube-proxy   │ │ │ │ kube-proxy │ │ │ │ kube-proxy │ │
+  │ │ (networking) │ │ │ │            │ │ │ │            │ │
+  │ └──────────────┘ │ │ └────────────┘ │ │ └────────────┘ │
+  │ ┌───┐ ┌───┐    │ │ │ ┌───┐ ┌───┐ │ │ │ ┌───┐        │ │
+  │ │Pod│ │Pod│    │ │ │ │Pod│ │Pod│ │ │ │ │Pod│        │ │
+  │ └───┘ └───┘    │ │ │ └───┘ └───┘ │ │ │ └───┘        │ │
+  └──────────────────┘ └────────────────┘ └────────────────┘
+</div>
+
+<h2>Core Components</h2>
+<table>
+  <tr><th>Component</th><th>Role</th><th>Layer</th></tr>
+  <tr><td><strong>API Server</strong></td><td>REST API, the only entry point to the control plane</td><td>Control plane</td></tr>
+  <tr><td><strong>etcd</strong></td><td>Distributed key-value store, holds cluster state</td><td>Control plane</td></tr>
+  <tr><td><strong>Scheduler</strong></td><td>Assigns pods to nodes based on resource requirements and constraints</td><td>Control plane</td></tr>
+  <tr><td><strong>Controller Manager</strong></td><td>Runs reconciliation loops for deployments, replicasets, nodes</td><td>Control plane</td></tr>
+  <tr><td><strong>kubelet</strong></td><td>Agent on each node, ensures containers are running in pods</td><td>Node</td></tr>
+  <tr><td><strong>kube-proxy</strong></td><td>Maintains network rules for service discovery and load balancing</td><td>Node</td></tr>
+</table>
+
+<h2>Key Resource Types</h2>
+<table>
+  <tr><th>Resource</th><th>What It Does</th><th>Analogy</th></tr>
+  <tr><td><strong>Pod</strong></td><td>Smallest deployable unit; 1+ containers with shared network/storage</td><td>Running process</td></tr>
+  <tr><td><strong>Deployment</strong></td><td>Manages replicated pods, rolling updates, rollbacks</td><td>Process manager</td></tr>
+  <tr><td><strong>Service</strong></td><td>Stable network endpoint for a set of pods (ClusterIP, NodePort, LoadBalancer)</td><td>Load balancer / DNS</td></tr>
+  <tr><td><strong>Ingress</strong></td><td>L7 HTTP(S) routing from outside the cluster to services</td><td>Reverse proxy</td></tr>
+  <tr><td><strong>ConfigMap</strong></td><td>External configuration data (environment variables, config files)</td><td>.env file</td></tr>
+  <tr><td><strong>Secret</strong></td><td>Sensitive data (passwords, API keys, TLS certs)</td><td>Vault</td></tr>
+  <tr><td><strong>PersistentVolume</strong></td><td>Storage abstraction decoupled from pod lifecycle</td><td>Disk volume</td></tr>
+  <tr><td><strong>Namespace</strong></td><td>Logical partitioning of cluster resources</td><td>Virtual cluster</td></tr>
+</table>
+
+<h2>Declarative Model: Desired vs Actual State</h2>
+<div class="callout">
+  <strong>Kubernetes is declarative:</strong> You describe WHAT you want (3 replicas of nginx), not HOW to achieve it. The controller loop continuously reconciles the desired state (in etcd) with the actual state (running pods). If a pod crashes, the controller notices the mismatch and creates a new one.
+</div>
+
+<div class="diagram">
+  You write a YAML manifest:
+  ┌──────────────────────────┐
+  │ apiVersion: apps/v1      │
+  │ kind: Deployment          │
+  │ spec:                    │
+  │   replicas: 3            │  ← Desired state
+  │   template: ...         │
+  └──────────┬───────────────┘
+             │  kubectl apply
+             ▼
+  ┌──────────────────────────┐
+  │  etcd (stores desired    │
+  │  state)                  │
+  └──────────┬───────────────┘
+             │  Controller notices discrepancy
+             ▼
+  ┌──────────────────────────┐
+  │  Controller creates      │
+  │  pods to match desired   │
+  │  state (3 pods running)  │  ← Actual state converges
+  └──────────────────────────┘
+
+  Self-healing: If pod dies → controller detects mismatch → creates replacement
+  Scaling:     Change replicas: 3 → 5 → controller creates 2 more pods
+</div>
+
+<h2>When to Use (and Not Use) Kubernetes</h2>
+<div class="callout green">
+  <strong>Use K8s when:</strong> You have 10+ services, multiple environments, need auto-scaling, have a dedicated platform team, or run on multi-cloud/hybrid infrastructure.
+</div>
+<div class="callout red">
+  <strong>Do not use K8s when:</strong> You have 1-3 services, a small team, simple deployment needs. A managed container service (ECS, App Runner, Cloud Run) or even PaaS (Heroku, Render) is simpler and cheaper.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What is Kubernetes and what problem does it solve?</li>
+  <li>Explain the Kubernetes architecture (control plane and worker nodes).</li>
+  <li>What is the declarative model and how does reconciliation work?</li>
+  <li>What is the difference between a pod and a deployment?</li>
+  <li>What is the role of etcd in Kubernetes?</li>
+  <li>How does Kubernetes handle a node failure?</li>
+  <li>What are the main resource types in Kubernetes?</li>
+  <li>When would you NOT use Kubernetes?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid diving into:</strong> YAML syntax for specific resources, kubectl command flags, Helm chart templates, or Kubernetes admission webhooks. Focus on the architecture, the declarative model, and the key resource types and their relationships.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Documentation</div>
+  <ul>
+    <li><strong>Kubernetes Concepts</strong> — kubernetes.io/docs/concepts/overview/ — Official overview</li>
+    <li><strong>Kubernetes Architecture</strong> — kubernetes.io/docs/concepts/architecture/</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><strong>Kubernetes in Action</strong> (Marko Lukša) — Comprehensive guide to K8s internals</li>
+    <li><strong>Designing Data-Intensive Applications</strong> (Kleppmann) — Chapter on container orchestration patterns</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="docker.html">&larr; Previous: Docker</a>
+  <a href="pods.html">Next: Pods &rarr;</a>
+</div>
+</body>
+</html>

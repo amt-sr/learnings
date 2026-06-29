@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.9.6 Compaction</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#3">3 Storage</a> / <a href="../index.html#3.9">3.9 Storage Engines</a> / 3.9.6
+</div>
+
+<h1>Compaction</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>Why compaction is necessary in LSM trees (read amplification, space amplification)</li>
+  <li>Size-tiered vs leveled compaction strategies</li>
+  <li>The write amplification tradeoff of compaction</li>
+  <li>How compaction handles <a href="tombstones.html">tombstones</a> and过期数据</li>
+</ul>
+
+<h2>Definition</h2>
+<p><strong>Compaction is the background process of merging multiple SSTables into fewer, larger SSTables</strong>. As the <a href="lsm-tree.html">LSM tree</a> accumulates SSTables from memtable flushes, the number of files grows unchecked. Without compaction, reads would need to check hundreds or thousands of files. Compaction merges overlapping SSTables, resolves duplicates (keeping the newest version), removes <a href="tombstones.html">tombstones</a>, and frees disk space.</p>
+
+<div class="diagram">  Why compaction is needed — the problem:
+
+  Without compaction, 10,000 writes produce:
+    Level 0:  [sst_001] [sst_002] [sst_003] ... [sst_500]  (500 files!)
+
+  GET("user:42") → check memtable → check 500 SSTables on disk
+  → Read amplification: 500x (catastrophic)
+
+  With compaction:
+    Level 0:  [sst_498] [sst_499] [sst_500]  (3 files)
+    Level 1:  [sst_101] [sst_102] (non-overlapping)
+    Level 2:  [sst_050]
+    Level 3:  [sst_001]
+
+  GET("user:42") → check memtable → 3 L0 files → 1 L1 file → 1 L2 file
+  → Read amplification: ~5x (manageable)</div>
+
+<h2>Compaction Strategies</h2>
+<h3>1. Size-Tiered Compaction (STCS)</h3>
+<div class="diagram">  Cassandra default. Merge SSTables of similar size.
+
+  Level 0 after many flushes:
+  [sst_001: 100MB] [sst_002: 100MB] [sst_003: 100MB] [sst_004: 100MB]
+
+  When 4 SSTables reach similar size → merge them into one:
+
+  [sst_005: 400MB]
+
+  Next 4 SSTables of ~400MB → merge into 1.6 GB:
+
+  [sst_006: 1.6GB]
+
+  Tier pattern: each tier is 4x (or configurable) larger than the previous.
+
+  Pros: Good for write-heavy workloads, fast merges (few large files)
+  Cons: High read amplification (may check all tiers), high space amplification</div>
+
+<h3>2. Leveled Compaction</h3>
+<div class="diagram">  RocksDB default. Each level has a size limit, non-overlapping key ranges.
+
+  L0 (up to 4 MB):    [sst_a] [sst_b]  (may overlap)
+  L1 (up to 40 MB):    [sst_c] [sst_d] [sst_e]  (non-overlapping)
+  L2 (up to 400 MB):   [sst_f] [sst_g] ...          (non-overlapping)
+  L3 (up to 4 GB):     [sst_h] ...
+  L4 (up to 40 GB):    ...
+  L5 (up to 400 GB):   ...
+  L6 (up to 4 TB):     ...
+
+  Compaction merges ONE file from Ln into overlapping range in Ln+1.
+
+  Example: L1 [sst_c: keys a-m] merges with L2 [sst_f: keys c-k]
+
+  Result: new L2 files replace old ones, non-overlapping.
+
+  Pros: Low read amplification (at most 1 file per level)
+  Cons: Higher write amplification (more data rewritten per level)</div>
+
+<h3>3. FIFO Compaction</h3>
+<div class="diagram">  Simplest strategy. Drop oldest SSTables when size limit reached.
+
+  [sst_001: oldest] [sst_002] [sst_003] [sst_004: newest]
+                              │
+                              ▼
+  When total size > limit → delete sst_001
+
+  Use case: Time-series data with natural TTL
+  Data naturally expires (no need to merge, just drop old files)
+
+  Pros: Zero write amplification, minimal CPU
+  Cons: No deduplication, no tombstone removal
+</div>
+
+<h2>Comparison of Strategies</h2>
+<table>
+  <tr><th></th><th>Size-Tiered</th><th>Leveled</th><th>FIFO</th></tr>
+  <tr><td><strong>Write amplification</strong></td><td class="green">Low-Moderate (~10-15x)</td><td class="red">High (~20-30x)</td><td class="green">Zero</td></tr>
+  <tr><td><strong>Read amplification</strong></td><td class="red">High (check all tiers)</td><td class="green">Low (1 file/level)</td><td class="yellow">Moderate</td></tr>
+  <tr><td><strong>Space amplification</strong></td><td class="red">High (~10-15x)</td><td class="green">Low (~2x)</td><td class="yellow">Moderate</td></tr>
+  <tr><td><strong>Default in</strong></td><td>Cassandra (STCS)</td><td>RocksDB, HBase</td><td>Time-series DBs</td></tr>
+  <tr><td><strong>Best for</strong></td><td>Write-heavy, time-series</td><td>Read-heavy, general purpose</td><td>TTL-based data</td></tr>
+</table>
+
+<h2>The Amplification Tradeoff</h2>
+<div class="callout yellow">
+  <strong>The fundamental LSM tree tradeoff:</strong> There is no free lunch. You must pick two out of low write amplification, low read amplification, and low space amplification. Compaction strategy determines which you optimize for.
+</div>
+
+<pre>  Amplification explained:
+
+  Write amplification:
+    Each key-value pair is rewritten how many times total?
+    Leveled:  WAL(1) + flush(1) + L0→L1(1) + L1→L2(1) + ... = ~10-30x
+    This means writing 1 GB of data actually writes 10-30 GB to disk.
+
+  Read amplification:
+    How many disk seeks per read in worst case?
+    Leveled: check memtable + L0 + L1 + L2 + ... = ~num_levels + L0_files
+    With 7 levels and 4 L0 files: ~11 disk seeks worst case
+
+  Space amplification:
+    How much extra disk space is used vs actual data size?
+    Before compaction runs: old SSTables + new SSTables coexist temporarily
+    Leveled steady-state: ~2x (compaction in progress adds ~1x overhead)</pre>
+
+<h2>Compaction and Tombstones</h2>
+<p>Compaction is when <a href="tombstones.html">tombstones</a> actually delete data. When merging SSTables, if a tombstone is the newest version of a key, and the tombstone has been present longer than a grace period (garbage collection window), the key and tombstone are both discarded during compaction.</p>
+
+<div class="diagram">  SSTable 1:     user:42 = "Alice"
+  SSTable 2:     user:42 = TOMBSTONE    ← delete happened later
+
+  During compaction:
+  Merge SSTable 1 + SSTable 2:
+    user:42 = TOMBSTONE (tombstone is newer, wins)
+
+  If tombstone is older than gc_grace_seconds (e.g., 10 days):
+    user:42 is completely removed (not written to new SSTable)
+    → disk space reclaimed, tombstone cleaned up</div>
+
+<h2>Compaction Tuning in Practice</h2>
+<pre>  RocksDB tuning (common interview scenario):
+
+  write_buffer_size:       64 MB     (memtable size)
+  max_write_buffer_number: 3         (max pending memtables)
+  level0_file_num_compaction_trigger: 4  (L0 files before compaction)
+  max_bytes_for_level_base:   256 MB  (L1 size limit)
+  max_bytes_for_level_multiplier: 10   (each level 10x the previous)
+
+  Cassandra tuning:
+  compaction_throughput_mb_per_sec:  16  (throttle I/O)
+  tombstone_threshold:               0.2  (20% tombstones trigger compaction)
+  min_sstable_size:                   50 MB (STCS minimum)</pre>
+
+<div class="callout red">
+  <strong>Compaction storms:</strong> If writes are too fast, compaction can't keep up. SSTables accumulate in L0, reads get very slow, and disk I/O spikes. This is a production crisis. Mitigation: throttle write rate, add more nodes, increase compaction throughput, or switch to FIFO compaction for TTL data.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What is compaction in an LSM tree?"</strong><br>Compaction is a background process that merges multiple SSTables into fewer, larger SSTables. It resolves duplicates (keeping the newest), removes tombstones, reduces the total number of files, and frees disk space. Without compaction, the number of SSTables grows without bound and read performance degrades catastrophically.</li>
+  <li><strong>"Compare size-tiered vs leveled compaction."</strong><br>Size-tiered: merges SSTables of similar size into larger ones. Better write throughput, higher read amplification. Used by Cassandra. Leveled: each level has a size limit, non-overlapping ranges within a level. Better read performance, higher write amplification. Used by RocksDB and HBase.</li>
+  <li><strong>"What is write amplification and why does compaction cause it?"</strong><br>Write amplification is how many times a piece of data is rewritten. In an LSM tree, each key is written to the WAL, flushed to L0, then rewritten at each compaction level. With 7 levels, a single write may cause ~10-30 total writes. Compaction is the primary source of write amplification — it rewrites existing data to merge and reorganize SSTables.</li>
+  <li><strong>"How would you handle compaction falling behind?"</strong><br>SSTables pile up in L0, causing read amplification to explode. Solutions: throttle incoming writes (backpressure), increase compaction thread count, use a larger buffer so writes happen faster, or add nodes to distribute load. In Cassandra, increase compaction_throughput_mb_per_sec.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>Leveled compaction N^2 analysis proof</li>
+    <li>Stratified compaction (Tiered + Leveled hybrid, research paper)</li>
+    <li>Watermark-based compaction details</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Designing Data-Intensive Applications" — Chapter 3</strong> (Kleppmann)</li>
+    <li><strong>"WiscKey: Separating Keys from Values in SSD-conscious Storage"</strong> — Compaction alternatives</li>
+    <li><strong>RocksDB Wiki: Compaction</strong> — rocksdb.org/wiki/Compaction</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="bloom-filter.html">&larr; bloom-filter.html</a>
+  <a href="tombstones.html">Next: tombstones.html &rarr;</a>
+</div>
+
+</body>
+</html>

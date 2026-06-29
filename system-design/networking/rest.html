@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.4.1 REST</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#2">2 Networking</a> / <a href="../index.html#2.4">2.4 APIs</a> / 2.4.1
+</div>
+
+<h1>REST</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What REST is and its core constraints</li>
+  <li>How to design a proper REST API</li>
+  <li>REST vs <a href="graphql.html">GraphQL</a> vs <a href="grpc.html">gRPC</a></li>
+  <li>Common REST API design mistakes</li>
+</ul>
+
+<h2>Definition</h2>
+<p>REST (Representational State Transfer) is an <strong>architectural style for APIs that uses standard HTTP methods, URIs, and status codes</strong>. Resources are identified by URLs, and operations are performed using standard HTTP verbs.</p>
+
+<h2>Core Constraints</h2>
+<table>
+  <tr><th>Constraint</th><th>Meaning</th></tr>
+  <tr><td><strong>Client-Server</strong></td><td>Separation of concerns — UI and data storage are independent</td></tr>
+  <tr><td><strong>Stateless</strong></td><td>Each request contains all info needed — no server-side session context</td></tr>
+  <tr><td><strong>Cacheable</strong></td><td>Responses must define themselves as cacheable or non-cacheable</td></tr>
+  <tr><td><strong>Uniform Interface</strong></td><td>Standard HTTP methods, URIs, and status codes</td></tr>
+  <tr><td><strong>Layered System</strong></td><td>Client can't tell if it's connected directly to the server or to an intermediary</td></tr>
+  <tr><td><strong>Code on Demand</strong></td><td>Optional — server can extend client functionality (JavaScript)</td></tr>
+</table>
+
+<h2>REST API Design</h2>
+<div class="diagram">  Resources are nouns. Operations are HTTP verbs.
+
+  GET    /users              → List users (200)
+  GET    /users/123          → Get user 123 (200 or 404)
+  POST   /users              → Create user (201, Location: /users/456)
+  PUT    /users/123          → Replace user 123 (200)
+  PATCH  /users/123          → Update user 123 partially (200)
+  DELETE /users/123          → Delete user 123 (204)
+
+  Nested resources:
+  GET    /users/123/posts     → Posts by user 123
+  POST   /users/123/posts     → Create post for user 123
+  GET    /posts/456/comments  → Comments on post 456
+
+  Pagination:
+  GET    /users?page=2&limit=20&sort=created_at:desc
+
+  Filtering:
+  GET    /users?role=admin&status=active
+
+  Versioning:
+  GET    /v2/users (preferred)
+  or Accept: application/vnd.api+json;version=2</div>
+
+<h2>REST vs GraphQL vs gRPC</h2>
+<table>
+  <tr><th></th><th>REST</th><th><a href="graphql.html">GraphQL</a></th><th><a href="grpc.html">gRPC</a></th></tr>
+  <tr><td>Data fetching</td><td>Fixed endpoints</td><td class="green">Client specifies fields</td><td>Fixed endpoints (protobuf)</td></tr>
+  <tr><td>Over-fetching</td><td class="red">Yes (returns full resource)</td><td class="green">No (get only what you need)</td><td class="red">Yes (defined by service)</td></tr>
+  <tr><td>Under-fetching</td><td class="red">Multiple requests needed</td><td class="green">Single query for nested data</td><td class="red">Multiple calls</td></tr>
+  <tr><td>Protocol</td><td>HTTP/1.1 or HTTP/2 + JSON</td><td>HTTP/2 + JSON</td><td class="green">HTTP/2 + Protobuf (binary)</td></tr>
+  <tr><td>Performance</td><td>Good</td><td>Moderate</td><td class="green">Best (binary, smaller)</td></tr>
+  <tr><td>Caching</td><td class="green">HTTP caching works natively</td><td class="red">Harder (single endpoint)</td><td class="red">No HTTP caching semantics</td></tr>
+  <tr><td>Browser support</td><td class="green">Native (fetch, XMLHttpRequest)</td><td class="green">Good (client libraries)</td><td class="red">Poor (needs gRPC-Web)</td></tr>
+  <tr><td>Mobile</td><td class="green">Good</td><td class="green">Great (reduces round trips)</td><td class="green">Great (binary, small)</td></tr>
+  <tr><td>Best for</td><td>CRUD APIs, public APIs</td><td>Complex data, frontend apps</td><td>Internal microservices</td></tr>
+</table>
+
+<div class="callout">
+  <strong>When to use each:</strong> REST for most public-facing APIs and CRUD operations. GraphQL for frontend-heavy apps with complex data requirements. gRPC for internal microservice communication where performance matters most. Many systems use all three: gRPC internally, REST for public API, GraphQL for frontend.
+</div>
+
+<h2>Common Mistakes</h2>
+<pre>✗ Using verbs in URLs:
+  POST /createUser          → POST /users
+  GET /getUser/123           → GET /users/123
+  POST /deleteUser/123      → DELETE /users/123
+
+✗ Not using proper status codes:
+  200 {"error": "Not found"} → 404 Not Found
+  200 {"error": "Unauthorized"} → 401 Unauthorized
+
+✗ Inconsistent naming:
+  /users, /User, /getUsers → pick one (lowercase plural)
+
+✗ No pagination:
+  GET /users → returns 1M users → timeout, OOM
+  → GET /users?page=1&limit=50
+
+✗ No versioning:
+  Changing API breaks existing clients
+  → Use /v1/, /v2/ versioning</pre>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What makes an API RESTful?"</strong><br>Uses standard HTTP methods for CRUD (GET/POST/PUT/PATCH/DELETE), resource-based URLs (nouns, not verbs), proper status codes, stateless requests, and standard JSON format.</li>
+  <li><strong>"REST vs GraphQL — when would you choose?"</strong><br>REST for simple CRUD, public APIs, when HTTP caching is important. GraphQL when the frontend needs flexible data access to complex nested resources, reducing over/under-fetching. See: <a href="graphql.html">GraphQL</a></li>
+  <li><strong>"How would you version your API?"</strong><br>URL path versioning (/v1/users) is simplest and most common. Header-based (Accept: application/vnd.api.v2+json) is cleaner but harder to test. Query parameter (?version=2) is not recommended.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>HATEOAS (Hypermedia as the Engine of Application State) — rarely implemented in practice</li>
+    <li>Richardson Maturity Model</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>Roy Fielding's dissertation</strong> — Chapter 5 (REST)</li>
+    <li><strong>"RESTful Web APIs"</strong> — Leonard Richardson</li>
+    <li><strong>Google API Design Guide</strong> — api-guide.google.com</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="http3.html">&larr; 2.3.3 HTTP/3</a>
+  <a href="graphql.html">Next: 2.4.2 GraphQL &rarr;</a>
+</div>
+
+</body>
+</html>

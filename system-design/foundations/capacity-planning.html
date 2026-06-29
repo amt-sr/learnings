@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.1.10 Capacity Planning</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .formula { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; text-align: center; font-size: 1.1rem; color: #79c0ff; }
+  .formula small { display: block; text-align: left; color: #8b949e; font-size: 0.8rem; margin-top: 0.75rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#1">1 Fundamentals</a> / <a href="../index.html#1.1">1.1 System Design Basics</a> / 1.1.10
+</div>
+
+<h1>Capacity Planning</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>The step-by-step estimation framework used in interviews</li>
+  <li>How to estimate QPS, storage, bandwidth, and server count</li>
+  <li>How to reason about memory and cache sizing</li>
+  <li>Worked examples for Twitter, YouTube, and WhatsApp</li>
+</ul>
+
+<h2>Definition</h2>
+<p>Capacity planning is the <strong>process of determining the resources needed to meet current and future workload demands</strong>.</p>
+<div class="callout yellow">
+  <strong>Analogy:</strong> Planning how many checkout lanes a supermarket needs for Black Friday. Too few = long queues. Too many = wasted money. The goal is the right number with headroom for spikes.
+</div>
+
+<h2>Why It Matters in Interviews</h2>
+<p>Almost every system design interview requires back-of-envelope estimation. "How much storage for Google Photos?" "How many servers for Twitter?" This is where you demonstrate quantitative reasoning.</p>
+
+<h2>The Estimation Framework</h2>
+<div class="diagram">  Step 1: Clarify scale
+    DAU, MAU, total users, growth rate
+
+  Step 2: Requests per user per day
+    From similar systems or user behavior
+
+  Step 3: Total requests per day
+    DAU × requests/user/day
+
+  Step 4: Peak QPS
+    Average QPS × peak factor (2-3x)
+    Some apps use 5-10x for bursty traffic
+
+  Step 5: Read/write split
+    Apply read:write ratio (10:1 to 100:1 for social)
+
+  Step 6: Storage estimation
+    Data size per item × items/day × retention × replication factor
+
+  Step 7: Bandwidth
+    Total bytes/sec in and out
+
+  Step  Step 8: Memory and cache
+    Working set size × cache overhead</div>
+
+<h2>Worked Example: Twitter</h2>
+<pre>Given:  DAU = 100M, 2 tweets/day/user, read:write = 100:1, avg tweet = 200 bytes
+
+Writes:
+  Total writes/day: 100M × 2 = 200M
+  Peak write QPS: 200M / 86400 × 3 (peak factor) = 6,944
+
+Reads:
+  Peak read QPS: 6,944 × 100 = 694,400
+  Assuming 95% cache hit rate: DB read QPS = 34,720
+
+Storage (per year):
+  200M × 365 = 73 billion tweets/year
+  73B × 200 bytes = 14.6 TB/year raw data
+  × 1.5 (metadata overhead) = 21.9 TB
+  × 3 (replication factor) = 65.7 TB
+
+Servers (assuming 5,000 RPS/server):
+  Writes: 6,944 / 5,000 = 2 servers (×2 for redundancy) = 4
+  Reads (DB only): 34,720 / 5,000 = 7 servers (×2 for redundancy) = 14
+  App servers (if needed): 5-10
+
+Network bandwidth (peak writes):
+  6,944 × 200 bytes = 1.39 MB/sec (1.1 GB/min)</pre>
+
+<h2>Worked Example: YouTube</h2>
+<pre>Given: DAU = 5M, 500K video uploads/day, avg video = 500MB, 1K views/video
+
+Uploads:
+  Daily upload: 500K × 500MB = 250 TB/day
+  Monthly: 250TB × 30 = 7.5 PB/month
+  ×3 replication = 22.5 PB/month
+
+Views (read):
+  Daily views: 500K × 1000 = 500M views/day
+  Peak QPS: 500M / 86400 × 3 = 17,361 QPS
+
+Storage (yearly, metadata only in DB):
+  500K videos/day × 365 = 182.5M videos
+  Per video metadata: ~1KB (title, description, creator, views, timestamps)
+  182.5M × 1KB = 182.5 GB/year
+  × 3 replication = 547.5 GB
+
+CDN bandwidth (daily):
+  Assume 50MB avg video, 1K views:
+  500M × 50MB = 25 PB/day through CDN (impossible)
+  → This is why YouTube uses <a href="../messaging/kafka.html">adaptive bitrate</a> streaming
+  → CDN serves multiple quality levels, not the full file every time</div>
+
+<h2>Worked Example: WhatsApp</h2>
+<pre>Given: DAU = 1B, 30 messages/day/user, avg message = 100 bytes
+
+Peak QPS:
+  1B × 30 / 86400 × 2 = 694,444 QPS
+
+Storage (per year):
+  1B × 30 × 365 = 10.95 trillion messages
+  10.95T × 100 bytes = 1.095 PB/year
+  × 3 replication = 3.29 PB/year
+
+This is why WhatsApp rewrote their server in Erlang —
+they needed to handle millions of concurrent connections,
+not millions of QPS.</div>
+
+<h2>Server Sizing</h2>
+<table>
+  <tr><th>Server Type</th><th>Typical Capacity</th><th>Use For</th></tr>
+  <tr><td>Small (4-core, 8GB RAM)</td><td>1,000-3,000 RPS</td><td>API gateways, lightweight services</td></tr>
+  <tr><td>Medium (8-core, 32GB RAM)</td><td>3,000-10,000 RPS</td><td>Application servers, workers</td></tr>
+  <tr><td>Large (16-core, 64GB RAM)</td><td>10,000-20,000 RPS</td><td>Database replicas, compute-heavy services</td></tr>
+</table>
+
+<pre>Example: Need 50,000 peak QPS
+  Using medium servers (5,000 RPS each):
+  50,000 / 5,000 = 10 servers
+  With 50% headroom: 15 servers
+  With redundancy (2×): 15 × 2 = 30 servers</pre>
+
+<h2>Cache Sizing</h2>
+<pre>Working set = data accessed frequently × size per item
+
+Example: 10M active users, each with a profile (~5KB cached data)
+  Working set = 10M × 5KB = 50GB
+  Plus overhead (key size, metadata): ~60-70GB
+  Need Redis cluster with ~64GB memory per node
+
+Hot data rule of thumb: Cache the data that 20% of users access 80% of the time.</pre>
+
+<h2>Capacity Planning Lifecycle</h2>
+<div class="diagram">  Monitor  →  Analyze  →  Forecast  →  Provision  →  Verify
+  (current)    (trends)    (growth)    (acquire)    (validate)</div>
+<div class="callout">
+  <strong>Key principle:</strong> Capacity planning is not a one-time activity. It's a continuous cycle. The moment you stop monitoring, your capacity assumptions become stale.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"Estimate storage for a photo-sharing app with 100M users, each uploading 3 photos/day."</strong><br>100M × 3 × 2MB × 365 = 219 TB/year raw. With 3x replication: 657 TB.</li>
+  <li><strong>"How many servers for a messaging system with 1B DAU?"</strong><br>Peak QPS estimation → server capacity → add headroom → multiply for redundancy.</li>
+  <li><strong>"How do you plan capacity for a system growing 10% month?"</strong><br>Project current usage × 1.1^12 for next year. Plan infrastructure 3-6 months ahead.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>Specific cloud instance pricing (t-3.nano vs c5.xlarge)</li>
+    <li>Enterprise capacity planning tools</li>
+    <li>N detailed performance benchmarking</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>System Design Interview Vol. 1 (Alex Xu)</strong> — Chapter 2: System Design Interview</li>
+    <li><strong>Designing Data-Intensive Applications</strong> — Chapter 6 (Partitioning)</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="throughput.html">&larr; 1.1.9 Throughput</a>
+  <a href="bottleneck-analysis.html">Next: 1.1.11 Bottleneck Analysis &rarr;</a>
+</div>
+
+</body>
+</html>

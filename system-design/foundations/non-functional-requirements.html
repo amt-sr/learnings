@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.1.2 Non-Functional Requirements</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:visited { color: #a371f7; }
+
+  .breadcrumb {
+    margin-bottom: 1.5rem;
+    font-size: 0.85rem;
+    color: #8b949e;
+  }
+  .breadcrumb a { color: #8b949e; }
+  .breadcrumb a:hover { color: #58a6ff; }
+
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta {
+    display: flex;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+    font-size: 0.85rem;
+    color: #8b949e;
+    flex-wrap: wrap;
+  }
+  .meta span { display: flex; align-items: center; gap: 0.35rem; }
+
+  h2 {
+    font-size: 1.2rem;
+    color: #f0f6fc;
+    margin: 2rem 0 0.75rem;
+    padding-bottom: 0.35rem;
+    border-bottom: 1px solid #21262d;
+  }
+  h3 {
+    font-size: 1rem;
+    color: #58a6ff;
+    margin: 1.5rem 0 0.5rem;
+  }
+  h4 {
+    font-size: 0.9rem;
+    color: #c9d1d9;
+    margin: 1rem 0 0.4rem;
+  }
+  p { margin-bottom: 0.75rem; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+
+  .source {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0 1.5rem;
+  }
+  .source-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #58a6ff;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.5rem;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0 1.5rem;
+    font-size: 0.9rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid #21262d;
+  }
+  th { color: #8b949e; font-weight: 600; }
+
+  code {
+    background: #161b22;
+    padding: 0.15rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.9em;
+    color: #c9d1d9;
+  }
+
+  .concept {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    margin: 0.75rem 0 1.25rem;
+  }
+  .concept h4 { margin-top: 0; }
+  .concept .learn { color: #58a6ff; font-weight: 600; font-size: 0.85rem; margin-bottom: 0.3rem; }
+  .concept .resources { color: #8b949e; font-size: 0.85rem; }
+  .concept ul { margin-top: 0.3rem; }
+
+  .skip {
+    background: #1c1c22;
+    border-left: 3px solid #f85149;
+    padding: 1rem 1.25rem;
+    margin: 1.5rem 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .skip h3 { color: #f85149; margin-top: 0; }
+  .skip ul { color: #8b949e; }
+
+  .nav {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #30363d;
+  }
+  .nav a {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    color: #c9d1d9;
+    font-size: 0.9rem;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#1">1 Fundamentals</a> / <a href="../index.html#1.1">1.1 System Design Basics</a> / 1.1.2
+</div>
+
+<h1>Non-Functional Requirements (NFRs)</h1>
+
+<!-- Goal -->
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What Non-Functional Requirements (NFRs) are.</li>
+  <li>Why they are more important than Functional Requirements for architecture.</li>
+  <li>Common categories of NFRs.</li>
+  <li>How NFRs influence system design.</li>
+  <li>How to identify NFRs during interviews.</li>
+</ul>
+
+<!-- Definition -->
+<h2>Definition</h2>
+<p>Non-Functional Requirements describe <strong>how well a system should perform</strong> rather than <strong>what it should do</strong>.</p>
+<p>They define the quality attributes, constraints, and operational characteristics of a system. They often drive architectural decisions more than functional requirements do.</p>
+<p>Examples:</p>
+<ul>
+  <li>99.99% availability</li>
+  <li>Response time &lt; 200 ms</li>
+  <li>Support 10 million daily active users</li>
+  <li>Encrypt data at rest and in transit</li>
+  <li>Survive a regional outage</li>
+</ul>
+
+<!-- Concepts -->
+<h2>Learn These Concepts</h2>
+
+<div class="concept">
+  <h4>1. Performance</h4>
+  <div class="learn">Learn:</div>
+  <ul>
+    <li><a href="latency.html">Latency</a></li>
+    <li><a href="throughput.html">Throughput</a></li>
+    <li>Response Time</li>
+    <li>QPS (Queries Per Second)</li>
+    <li>Concurrent Users</li>
+  </ul>
+  <div class="resources">Resources: DDIA Chapter 1, Alex Xu (Performance section)</div>
+</div>
+
+<div class="concept">
+  <h4>2. Scalability</h4>
+  <div class="learn">Learn:</div>
+  <ul>
+    <li>Horizontal Scaling</li>
+    <li>Vertical Scaling</li>
+    <li>Elasticity</li>
+    <li><a href="capacity-planning.html">Capacity Planning</a></li>
+  </ul>
+  <div class="resources">Resources: DDIA Chapter 1, Alex Xu</div>
+</div>
+
+<div class="concept">
+  <h4>3. Availability</h4>
+  <div class="learn">Learn:</div>
+  <ul>
+    <li><a href="availability.html">High Availability</a></li>
+    <li>Uptime</li>
+    <li>SLA</li>
+    <li>SLO</li>
+    <li>SLI</li>
+  </ul>
+  <div class="resources">Resources: Google SRE Book, DDIA Chapter 1</div>
+</div>
+
+<div class="concept">
+  <h4>4. Reliability</h4>
+  <div class="learn">Learn:</div>
+  <ul>
+    <li>MTBF</li>
+    <li>MTTR</li>
+    <li><a href="fault-tolerance.html">Fault Tolerance</a></li>
+    <li>Redundancy</li>
+  </ul>
+  <div class="resources">Resources: DDIA Chapter 1, Google SRE</div>
+</div>
+
+<div class="concept">
+  <h4>5. Durability</h4>
+  <div class="learn">Learn:</div>
+  <ul>
+    <li>Persistence</li>
+    <li>WAL</li>
+    <li>Replication</li>
+    <li>Backups</li>
+  </ul>
+  <div class="resources">Resources: DDIA Chapters 1 & 3</div>
+</div>
+
+<div class="concept">
+  <h4>6. Security</h4>
+  <div class="learn">Learn:</div>
+  <ul>
+    <li>Authentication</li>
+    <li>Authorization</li>
+    <li>Encryption</li>
+    <li>TLS</li>
+    <li>JWT</li>
+    <li>OAuth</li>
+    <li>RBAC</li>
+  </ul>
+  <div class="resources">Resources: OWASP Top 10, OAuth 2.0 documentation</div>
+</div>
+
+<div class="concept">
+  <h4>7. Maintainability</h4>
+  <div class="learn">Learn:</div>
+  <ul>
+    <li>Modularity</li>
+    <li>Loose Coupling</li>
+    <li>High Cohesion</li>
+    <li>Readability</li>
+    <li>Testability</li>
+  </ul>
+  <div class="resources">Resources: DDIA Chapter 1, Clean Architecture</div>
+</div>
+
+<div class="concept">
+  <h4>8. Observability</h4>
+  <div class="learn">Learn:</div>
+  <ul>
+    <li>Logging</li>
+    <li>Metrics</li>
+    <li>Tracing</li>
+    <li>Correlation IDs</li>
+  </ul>
+  <div class="resources">Resources: OpenTelemetry Documentation, Google SRE Book</div>
+</div>
+
+<div class="concept">
+  <h4>9. Disaster Recovery</h4>
+  <div class="learn">Learn:</div>
+  <ul>
+    <li>Backup</li>
+    <li>Restore</li>
+    <li>RPO</li>
+    <li>RTO</li>
+  </ul>
+  <div class="resources">Resources: AWS Well-Architected Framework</div>
+</div>
+
+<div class="concept">
+  <h4>10. Compliance</h4>
+  <div class="learn">Learn:</div>
+  <ul>
+    <li>GDPR</li>
+    <li>HIPAA (overview)</li>
+    <li>PCI DSS (overview)</li>
+  </ul>
+  <div class="resources">Only understand <strong>why</strong> they affect architecture.</div>
+</div>
+
+<!-- Functional vs Non-Functional -->
+<h2>Functional vs Non-Functional</h2>
+<table>
+  <tr><th>Functional</th><th>Non-Functional</th></tr>
+  <tr><td>Upload image</td><td>Upload in &lt;2 seconds</td></tr>
+  <tr><td>Send message</td><td>99.99% availability</td></tr>
+  <tr><td>Login</td><td>Support 100M users</td></tr>
+  <tr><td>Search products</td><td>P99 latency &lt;100ms</td></tr>
+</table>
+
+<!-- How NFRs Affect Architecture -->
+<h2>How NFRs Affect Architecture</h2>
+<table>
+  <tr><th>Requirement</th><th>Possible Architectural Decision</th></tr>
+  <tr><td>Low latency</td><td>Redis, CDN, caching</td></tr>
+  <tr><td>High availability</td><td>Replication, multiple regions</td></tr>
+  <tr><td>Scalability</td><td>Load balancers, sharding</td></tr>
+  <tr><td>Durability</td><td>WAL, replication, backups</td></tr>
+  <tr><td>Security</td><td>TLS, encryption, OAuth</td></tr>
+  <tr><td>Reliability</td><td>Circuit breakers, retries</td></tr>
+</table>
+
+<!-- Typical Interview Questions -->
+<h2>Typical Interview Questions</h2>
+<ul>
+  <li>What availability target are we designing for?</li>
+  <li>Is eventual consistency acceptable?</li>
+  <li>What is the expected latency?</li>
+  <li>How many daily active users?</li>
+  <li>What read/write ratio should we assume?</li>
+  <li>Should the system survive regional failures?</li>
+  <li>Are there compliance requirements?</li>
+  <li>Is the system globally distributed?</li>
+</ul>
+
+<!-- Common Categories -->
+<h2>Common Categories (Know These)</h2>
+<ul>
+  <li>Performance</li>
+  <li>Scalability</li>
+  <li>Availability</li>
+  <li>Reliability</li>
+  <li>Durability</li>
+  <li>Security</li>
+  <li>Maintainability</li>
+  <li>Observability</li>
+  <li>Compliance</li>
+  <li>Portability</li>
+  <li>Interoperability</li>
+  <li>Cost</li>
+</ul>
+
+<!-- Sources -->
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Primary Sources (Must Read)</div>
+
+  <h3>1. Designing Data-Intensive Applications (Martin Kleppmann)</h3>
+  <p><strong>Read:</strong> Chapter 1 — <em>Reliable, Scalable and Maintainable Applications</em></p>
+  <p><strong>Why:</strong> One of the best explanations of architectural quality attributes.</p>
+  <p><a href="https://bytes.usc.edu/~saty/courses/docs/data/SystemDesignInterview.pdf" target="_blank">Bytes at USC (PDF)</a></p>
+
+  <h3>2. System Design Interview – An Insider's Guide (Alex Xu)</h3>
+  <p><strong>Read:</strong> Requirement Clarification, System Design Framework</p>
+  <p><strong>Why:</strong> Focus on how NFRs influence design decisions.</p>
+  <p><a href="https://bytes.usc.edu/~saty/courses/docs/data/SystemDesignInterview.pdf" target="_blank">Bytes at USC (PDF)</a></p>
+
+  <h3>3. Google SRE Book</h3>
+  <p><strong>Read:</strong> Introduction, Service Level Objectives (SLOs), Service Level Indicators (SLIs), Availability</p>
+  <p><a href="https://sre.google/sre-book/" target="_blank">sre.google/sre-book</a></p>
+
+  <h3>4. Fundamentals of Software Architecture (Mark Richards & Neal Ford)</h3>
+  <p><strong>Read:</strong> Architectural Characteristics (Quality Attributes)</p>
+  <p><strong>Why:</strong> Uses the modern term <em>Architectural Characteristics</em>, closely related to NFRs.</p>
+
+  <h3>5. AWS Well-Architected Framework</h3>
+  <p><strong>Read:</strong> Operational Excellence, Security, Reliability, Performance Efficiency, Cost Optimization</p>
+  <p><a href="https://docs.aws.amazon.com/wellarchitected/latest/framework/welcome.html" target="_blank">docs.aws.amazon.com</a></p>
+
+  <h3>6. Microsoft Azure Architecture Center</h3>
+  <p><strong>Read:</strong> Reliability, Performance, Scalability</p>
+  <p><a href="https://learn.microsoft.com/azure/architecture/" target="_blank">learn.microsoft.com</a></p>
+</div>
+
+<div class="source">
+  <div class="source-label">Reference Only</div>
+  <h3>Requirements Engineering References</h3>
+  <ul>
+    <li><a href="https://en.wikipedia.org/wiki/Functional_requirement" target="_blank">Functional Requirement (Wikipedia)</a></li>
+    <li><a href="https://en.wikipedia.org/wiki/Non-functional_requirement" target="_blank">Non-Functional Requirement (Wikipedia)</a></li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Optional (Advanced)</div>
+  <ul>
+    <li><a href="https://iso25000.com/index.php/en/iso-25000-standards/iso-25010" target="_blank">ISO/IEC 25010 Software Quality Model</a></li>
+    <li><a href="https://owasp.org/www-project-top-ten/" target="_blank">OWASP Top 10</a></li>
+  </ul>
+</div>
+
+<!-- Skip -->
+<div class="skip">
+  <h3>What to Skip</h3>
+  <p>Don't spend time on:</p>
+  <ul>
+    <li>IEEE SRS templates</li>
+    <li>Formal Requirements Engineering processes</li>
+    <li>UML Use Case diagrams</li>
+    <li>Enterprise requirement management tools</li>
+    <li>Academic classifications of NFRs</li>
+  </ul>
+  <p>These have low ROI for system design interviews compared to understanding how NFRs influence architectural decisions.</p>
+</div>
+
+<!-- Navigation -->
+<div class="nav">
+  <a href="functional-requirements.html">&larr; 1.1.1 Functional Requirements</a>
+  <a href="scalability.html">Next: 1.1.3 Scalability &rarr;</a>
+</div>
+
+</body>
+</html>

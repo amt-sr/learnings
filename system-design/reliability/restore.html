@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Restore — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">System Design</a> / <a href="./index.html">Reliability</a> / 10.4.2 Restore</div>
+
+<h1>Restore</h1>
+<div class="meta">
+  <span>Difficulty ⭐⭐⭐</span>
+  <span>Interview Frequency ★★★</span>
+</div>
+
+<div class="callout">
+  <strong>Goal:</strong> Understand the restore process, how RPO and RTO drive restore strategy, the restore vs recovery distinction, testing backups regularly, and restoring at different granularities.
+</div>
+
+<h2>Definition</h2>
+<p><strong>Restore</strong> is the process of recovering data from a backup and bringing a system back to an operational state after a failure. A restore strategy must be RPO/RTO-driven: how much data loss is acceptable (RPO), and how fast must service resume (RTO). A backup is only as good as its restore process — many organizations discover during a real disaster that their backups are incomplete, corrupted, or the restore procedure is poorly documented.</p>
+
+<h2>Restore vs Recovery</h2>
+
+<div class="callout">
+  <strong>Key Distinction:</strong> <strong>Restore</strong> is copying data from backup to a target system. <strong>Recovery</strong> is the full process of restoring data AND bringing the application back to a functional state. Recovery includes restore + reconfiguring + re-deploying + verifying + redirecting traffic.
+</div>
+
+<table>
+  <tr><th>Phase</th><th>Activities</th><th>Typical Duration</th></tr>
+  <tr><td><strong>Assessment</strong></td><td>Determine scope of failure, choose correct backup, notify stakeholders</td><td>Minutes</td></tr>
+  <tr><td><strong>Provisioning</strong></td><td>Spin up new infrastructure (if original is destroyed)</td><td>Minutes to hours</td></tr>
+  <tr><td><strong>Restore</strong></td><td>Copy data from backup to new/existing system</td><td>Minutes to hours (depends on data size)</td></tr>
+  <tr><td><strong>Replay</strong></td><td>Apply incremental backups, WAL logs, replication lag catch-up</td><td>Minutes</td></tr>
+  <tr><td><strong>Verification</strong></td><td>Validate data integrity, run smoke tests, compare checksums</td><td>Minutes</td></tr>
+  <tr><td><strong>Cutover</strong></td><td>Redirect traffic, update DNS, warm caches, monitor</td><td>Minutes</td></tr>
+</table>
+
+<h2>Restore Granularity</h2>
+
+<table>
+  <tr><th>Granularity</th><th>Description</th><th>Use Case</th></tr>
+  <tr><td><strong>Full system</strong></td><td>Restore entire database/system from a point-in-time snapshot</td><td>Complete data loss, region failure</td></tr>
+  <tr><td><strong>Database-level</strong></td><td>Restore a specific database or table</td><td>Accidental DROP TABLE, data corruption in one table</td></tr>
+  <tr><td><strong>Point-in-time (PITR)</strong></td><td>Restore to a specific timestamp using WAL/binlogs</td><td>"Undo" a bad deploy or data corruption at known time</td></tr>
+  <tr><td><strong>Row-level</strong></td><td>Restore specific rows from backup</td><td>Accidental deletion of specific records</td></tr>
+</table>
+
+<h2>Restore Strategies by Failure Type</h2>
+
+<div class="diagram">
+  Failure Type                    Strategy
+  ───────────────────────────────────────────────────────
+
+  Accidental data deletion         → PITR to before deletion, replay logs
+  (human error)                       Duration: minutes to hours
+
+  Data corruption                 → Restore last known-good backup
+  (software bug)                     Then replay clean logs after corruption time
+
+  Single server failure            → Failover to replica (no restore needed)
+  (hardware)                         Restore is passive — replica IS the backup
+
+  Region-wide failure              → Restore from cross-region backup
+  (natural disaster)                 Provision new infrastructure in another region
+
+  Ransomware / attack              → Restore from air-gapped offline backup
+  (security)                         Offline backups cannot be encrypted by attacker
+</div>
+
+<h2>RPO/RTO-Driven Restore Design</h2>
+
+<div class="callout yellow">
+  <strong>Design Principle:</strong> Start with RPO and RTO requirements, then choose the backup and restore strategy that meets them. Never design a backup system and then figure out what RPO/RTO you get — work backwards from business requirements.
+</div>
+
+<table>
+  <tr><th>RPO Requirement</th><th>RTO Requirement</th><th>Strategy</th></tr>
+  <tr><td>&lt; 1 minute</td><td>&lt; 1 minute</td><td>Active-active multi-region with sync replication</td></tr>
+  <tr><td>&lt; 5 minutes</td><td>&lt; 5 minutes</td><td>Active-passive with async replication + automated failover</td></tr>
+  <tr><td>&lt; 1 hour</td><td>&lt; 1 hour</td><td>Continuous replication + point-in-time restore</td></tr>
+  <tr><td>&lt; 24 hours</td><td>&lt; 4 hours</td><td>Daily full backup + hourly incrementals</td></tr>
+  <tr><td>&lt; 7 days</td><td>&lt; 24 hours</td><td>Weekly full + daily incrementals + off-site storage</td></tr>
+</table>
+
+<h2>Restore Testing</h2>
+
+<div class="callout red">
+  <strong>The #1 Rule of Backups:</strong> Test your restore process regularly. An untested backup is a hope, not a plan. Google's SRE teams conduct regular "disaster recovery drills" where they simulate a region failure and time the full recovery process.
+</div>
+
+<h3>Testing Pyramid</h3>
+
+<div class="diagram">
+  Restore Testing Pyramid:
+           ▲
+          ╱ ╲   Full DR Drill (quarterly)
+         ╱   ╲  Simulate complete region failure
+        ╱─────╲ Time the full recovery + measure actual RTO
+       ╱       ╲
+      ╱  Sample  ╲  Application Restore Test (monthly)
+     ╱   Restore   ╲ Restore to staging, run integration tests
+    ╱───────────────╲
+   ╱  Database Restore ╲  DB Restore Test (weekly)
+  ╱  to Staging        ╲ Restore latest backup, verify row counts
+ ╱──────────────────────╲
+╱   Automated Integrity    ╲  Checksum + Metadata Validation (daily)
+╱   Checks (every backup)   ╲ Verify backup completion, sizes, checksums
+</div>
+
+<h3>Restore Time Estimates</h3>
+
+<table>
+  <tr><th>Restore Operation</th><th>Typical Time (100GB DB)</th><th>Typical Time (1TB DB)</th></tr>
+  <tr><td>Snapshot restore (same cloud)</td><td>5-15 minutes</td><td>30-60 minutes</td></tr>
+  <tr><td>Full backup restore (cross-region)</td><td>30-60 minutes</td><td>4-8 hours</td></tr>
+  <tr><td>Incremental replay (last 24h logs)</td><td>15-30 minutes</td><td>2-4 hours</td></tr>
+  <tr><td>PITR restore</td><td>30-45 minutes</td><td>4-10 hours</td></tr>
+</table>
+
+<h2>Common Restore Pitfalls</h2>
+
+<ul>
+  <li><strong>Missing dependencies:</strong> Restored database works but the app cannot connect because config/secrets are missing.</li>
+  <li><strong>DNS caching:</strong> Traffic still points to the failed instance for hours because of DNS TTL.</li>
+  <li><strong>Schema drift:</strong> Backup was from a month ago; schema has changed since. Restore fails on incompatible schema.</li>
+  <li><strong>Orphan data:</strong> Restored data references objects in other services that have moved on (e.g., order data referencing a user account created after the backup).</li>
+  <li><strong>License/encryption:</strong> Backup is encrypted with a key stored in the failed region. Cannot decrypt without the key.</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>"How would you restore a database after accidental data deletion?" — PITR to before the deletion event using WAL/binlog replay. Verify integrity, cutover traffic.</li>
+  <li>"What is the difference between restore and recovery?" — Restore is copying data back. Recovery is the entire process: assess → provision → restore → replay → verify → cutover.</li>
+  <li>"How often should you test backups?" — Daily automated integrity checks, weekly database restores to staging, monthly full application restores, quarterly full DR drills.</li>
+  <li>"How long does it take to restore a 1TB database?" — Depends on the method: snapshot restore ~30-60 min, cross-region full backup 4-8 hours, plus replay time for incrementals.</li>
+  <li>"What could go wrong during a restore?" — Schema drift, missing config/secrets, DNS caching, encryption key unavailability, orphan data references, insufficient capacity in the restore target.</li>
+</ul>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Depth:</strong> Specific tool restore commands (pg_restore, mysql restore, mongorestore syntax). <br>
+  <strong>Depth:</strong> Backup encryption key management (KMS) specifics. <br>
+  <strong>Depth:</strong> Legal/compliance hold requirements during restore.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Google SRE Book — Chapter 13: Data Pipeline Reliability</div>
+  <p>How Google tests backup and restore processes at scale, including automated restore verification.</p>
+</div>
+<div class="source">
+  <div class="source-label">AWS — Disaster Recovery (Well-Architected Framework)</div>
+  <p>RPO/RTO-driven restore strategies with AWS-specific patterns for different recovery objectives.</p>
+</div>
+<div class="source">
+  <div class="source-label">PostgreSQL PITR Documentation</div>
+  <p>Point-in-time recovery using WAL archiving — a concrete example of restore to a specific timestamp.</p>
+</div>
+
+<div class="nav">
+  <a href="backup.html">&larr; Backup</a>
+  <a href="rpo.html">RPO &rarr;</a>
+</div>
+</body>
+</html>

@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.1.3 Scalability</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:visited { color: #a371f7; }
+
+  .breadcrumb {
+    margin-bottom: 1.5rem;
+    font-size: 0.85rem;
+    color: #8b949e;
+  }
+  .breadcrumb a { color: #8b949e; }
+  .breadcrumb a:hover { color: #58a6ff; }
+
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+
+  h2 {
+    font-size: 1.2rem;
+    color: #f0f6fc;
+    margin: 2rem 0 0.75rem;
+    padding-bottom: 0.35rem;
+    border-bottom: 1px solid #21262d;
+  }
+  h3 {
+    font-size: 1rem;
+    color: #58a6ff;
+    margin: 1.5rem 0 0.5rem;
+  }
+  h4 {
+    font-size: 0.9rem;
+    color: #c9d1d9;
+    margin: 1rem 0 0.4rem;
+  }
+  p { margin-bottom: 0.75rem; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+
+  .callout {
+    background: #161b22;
+    border-left: 3px solid #58a6ff;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0 1.5rem;
+    border-radius: 0 6px 6px 0;
+  }
+  .callout.warning {
+    border-left-color: #d29922;
+  }
+  .callout p { margin-bottom: 0.4rem; }
+
+  pre {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+    margin: 1rem 0 1.5rem;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: #79c0ff;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0 1.5rem;
+    font-size: 0.9rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid #21262d;
+  }
+  th { color: #8b949e; font-weight: 600; }
+
+  .source {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0 1.5rem;
+  }
+  .source-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #58a6ff;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.5rem;
+  }
+
+  .comparison {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin: 1rem 0 1.5rem;
+  }
+  .comparison .card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+  }
+  .comparison .card h4 {
+    margin-top: 0;
+    color: #f0f6fc;
+    font-size: 0.95rem;
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.35rem;
+    border-bottom: 1px solid #21262d;
+  }
+  .comparison .card.success { border-top: 3px solid #3fb950; }
+  .comparison .card.fail { border-top: 3px solid #f85149; }
+
+  .layers {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 1.25rem;
+    margin: 1rem 0 1.5rem;
+  }
+  .layers ol { margin: 0.5rem 0 0.5rem 1.5rem; counter-reset: layer; }
+  .layers ol li { margin-bottom: 0.4rem; }
+
+  .nav {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #30363d;
+  }
+  .nav a {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    color: #c9d1d9;
+    font-size: 0.9rem;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#1">1 Fundamentals</a> / <a href="../index.html#1.1">1.1 System Design Basics</a> / 1.1.3
+</div>
+
+<h1>Scalability</h1>
+
+<!-- Definition -->
+<h2>Definition</h2>
+<p>Scalability is the ability of a system to continue meeting its performance objectives as workload increases by adding resources in a predictable and cost-effective manner.</p>
+<p>A scalable system should be able to support growth in:</p>
+<ul>
+  <li>Users</li>
+  <li>Requests</li>
+  <li>Data</li>
+  <li>Geographic regions</li>
+  <li>Services</li>
+</ul>
+<p>without requiring a complete redesign.</p>
+
+<div class="callout">
+  <p>Scalability <strong>does not mean the system is fast today</strong>.</p>
+  <p>It means the system <strong>continues to perform well as demand grows.</strong></p>
+</div>
+
+<!-- Performance vs Scalability -->
+<h2>Performance vs Scalability</h2>
+<p>This is one of the most misunderstood concepts.</p>
+<p>Suppose two systems process 1,000 requests/sec.</p>
+
+<div class="comparison">
+  <div class="card fail">
+    <h4>System A</h4>
+    <pre>1 Server
+1000 RPS
+CPU = 95%</pre>
+    <p>Cannot grow. Needs complete redesign.</p>
+  </div>
+  <div class="card success">
+    <h4>System B</h4>
+    <pre>5 Servers
+1000 RPS
+CPU = 20%</pre>
+    <p>Just add 45 more servers. Performance stayed almost identical.</p>
+  </div>
+</div>
+
+<div class="callout">
+  <p><strong>Performance</strong> is how fast you are today.</p>
+  <p><strong>Scalability</strong> is how easily you can handle tomorrow.</p>
+</div>
+
+<!-- Why Scalability Matters -->
+<h2>Why Scalability Matters</h2>
+<p>Every successful product eventually experiences growth.</p>
+
+<div class="comparison">
+  <div class="card">
+    <h4>Netflix</h4>
+    <pre>2008: Few million users
+Today: Hundreds of millions</pre>
+  </div>
+  <div class="card">
+    <h4>YouTube</h4>
+    <pre>Early: Few TB
+Today: Many Exabytes</pre>
+  </div>
+</div>
+<pre>WhatsApp: Thousands → Billions of messages/day</pre>
+<p>If the architecture cannot grow gradually, every growth milestone becomes a rewrite.</p>
+
+<!-- Types of Scaling -->
+<h2>Types of Scaling</h2>
+
+<h3>Vertical Scaling (Scale Up)</h3>
+<p>Increase the capacity of one machine.</p>
+<pre>8 GB RAM  →  32 GB RAM  →  64 GB RAM
+4 CPU     →  16 CPU     →  64 CPU</pre>
+
+<p><strong>Advantages:</strong></p>
+<ul>
+  <li>Very simple</li>
+  <li>No distributed systems complexity</li>
+  <li>No replication, no sharding</li>
+</ul>
+
+<p><strong>Disadvantages:</strong></p>
+<div class="callout warning">
+  <p>Eventually: <strong>Largest machine reached.</strong> No further scaling possible. Single point of failure. Cost increases exponentially.</p>
+</div>
+
+<h3>Horizontal Scaling (Scale Out)</h3>
+<p>Instead of buying a larger machine, buy more machines.</p>
+<pre>Server A
+
+  ↓
+
+A  B  C  D
+
+Each handles 250 RPS (was 1000 total)
+
+Need 8000 RPS? Simply add more:
+
+A  B  C  D  E  F  G  H</pre>
+
+<p><strong>Advantages:</strong></p>
+<ul>
+  <li>Almost unlimited scaling</li>
+  <li>Better fault tolerance</li>
+  <li>Supports global deployments</li>
+</ul>
+
+<p><strong>Disadvantages:</strong></p>
+<ul>
+  <li>Much harder — now you must solve: <a href="../networking/reverse-proxy.html">Load balancing</a>, <a href="../caching/distributed-cache.html">Distributed cache</a>, <a href="../replication/leader-follower.html">Replication</a>, <a href="../distributed-systems/strong-consistency.html">Consistency</a>, <a href="../reliability/circuit-breaker.html">Failures</a>, <a href="../distributed-systems/raft.html">Consensus</a></li>
+</ul>
+
+<div class="callout">
+  <p>This is why <strong>distributed systems</strong> exist.</p>
+</div>
+
+<!-- Stateless Services -->
+<h2>Horizontal Scaling Requires Stateless Services</h2>
+<pre>User logs in → Request goes to Server A → Session stored in memory
+
+Next request → Load Balancer → Server B
+
+Server B has no session. User appears logged out.</pre>
+<p><strong>Solution:</strong> Store session outside the application.</p>
+<ul>
+  <li><a href="../caching/redis.html">Redis</a></li>
+  <li>Database</li>
+  <li><a href="../security/jwt.html">JWT</a></li>
+</ul>
+<p>Now every server behaves identically. Stateless services are one of the biggest enablers of horizontal scaling.</p>
+
+<!-- Common Bottlenecks -->
+<h2>Common Bottlenecks</h2>
+<p>Every scalable system eventually becomes limited by something. Usually one of:</p>
+<ul>
+  <li>CPU</li>
+  <li>Memory</li>
+  <li>Disk</li>
+  <li>Network</li>
+  <li>Database</li>
+</ul>
+<div class="callout">
+  <p>You optimize your API → CPU drops → Database becomes bottleneck → Add replicas → Network becomes bottleneck. <strong>Optimization is iterative.</strong></p>
+</div>
+
+<!-- Real Example -->
+<h2>Real Example</h2>
+<pre>Today:    100 schools  → 500 RPS   → Single server (works)
+
+Next year: 10000 schools → 40000 RPS → One server cannot handle
+
+Option A (Vertical):
+  Bigger EC2 → Bigger EC2 → Bigger EC2 → Eventually impossible
+
+Option B (Horizontal):
+  Load Balancer → App1 App2 App3 App4 → Each serves ~10000 RPS
+
+Database also becomes bottleneck:
+  Read Replicas → Partitioning → Sharding → Caching
+
+Each scalability technique solves the next bottleneck.</pre>
+
+<!-- Trade-offs -->
+<h2>Trade-offs</h2>
+<table>
+  <tr><th>Vertical Scaling</th><th>Horizontal Scaling</th></tr>
+  <tr><td>Simpler</td><td>More Complex</td></tr>
+  <tr><td>Limited Growth</td><td>Nearly Unlimited Growth</td></tr>
+  <tr><td>Single Failure</td><td>Better Fault Tolerance</td></tr>
+  <tr><td>Expensive Large Machines</td><td>Cheaper Commodity Machines</td></tr>
+  <tr><td>Easier Debugging</td><td>Distributed Systems Complexity</td></tr>
+</table>
+
+<!-- Interview Expectations -->
+<h2>Interview Expectations</h2>
+<p>When an interviewer asks <em>"How would you scale this?"</em>, they expect you to think in layers:</p>
+
+<div class="layers">
+  <ol>
+    <li>Remove obvious bottlenecks</li>
+    <li>Add <a href="../caching/cache-aside.html">caching</a></li>
+    <li>Add <a href="../networking/reverse-proxy.html">load balancers</a></li>
+    <li>Make services stateless</li>
+    <li>Scale reads (<a href="../replication/read-replica.html">read replicas</a>)</li>
+    <li>Scale writes</li>
+    <li><a href="../partitioning/hash-sharding.html">Partition data</a></li>
+    <li>Scale globally</li>
+  </ol>
+</div>
+
+<div class="callout warning">
+  <p><strong>Not</strong> "Let's add Kubernetes." Kubernetes doesn't solve scalability by itself. It only makes deployment easier.</p>
+</div>
+
+<!-- References -->
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>Designing Data-Intensive Applications</strong> — Chapter 1</li>
+    <li><strong>System Design Interview Vol. 1 (Alex Xu)</strong> — Scale From Zero To Millions</li>
+    <li><strong>Google SRE Book</strong> — Chapter 2</li>
+    <li><strong>AWS Well-Architected Framework</strong> — <a href="https://docs.aws.amazon.com/wellarchitected/latest/framework/welcome.html" target="_blank">Performance Efficiency</a></li>
+  </ol>
+</div>
+
+<!-- Navigation -->
+<div class="nav">
+  <a href="non-functional-requirements.html">&larr; 1.1.2 Non-Functional Requirements</a>
+  <a href="availability.html">Next: 1.1.4 Availability &rarr;</a>
+</div>
+
+</body>
+</html>

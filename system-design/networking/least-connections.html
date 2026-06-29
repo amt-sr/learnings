@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.7.9 Least Connections</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#2">2 Networking</a> / <a href="../index.html#2.7">2.7 Load Balancing</a> / 2.7.9
+</div>
+
+<h1>Least Connections</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>How the least connections algorithm dynamically selects the server with fewest active connections</li>
+  <li>Why it is superior to <a href="round-robin.html">round robin</a> when request durations vary</li>
+  <li>Weighted least connections for heterogeneous server pools</li>
+  <li>Trade-offs and real-world configuration</li>
+</ul>
+
+<h2>Definition</h2>
+<p><strong>Least connections</strong> is a dynamic load balancing algorithm that routes each new request to the backend server with the <strong>fewest active connections</strong> at that moment. Unlike round robin (which assigns sequentially regardless of server load), least connections adapts in real time to how busy each server is.</p>
+
+<div class="diagram">  Problem with Round Robin when requests vary in duration:
+
+  Round Robin (naive):
+  Req 1 ──▶ A  (fast, 10ms)   → A finishes quickly
+  Req 2 ──▶ B  (slow, 5000ms) → B is still processing
+  Req 3 ──▶ C  (slow, 5000ms) → C is still processing
+  Req 4 ──▶ A  (slow, 5000ms) → A now busy too
+  Req 5 ──▶ B  (fast, 10ms)   → B still busy with Req 2!
+
+  After 10 requests:
+  A: 4 connections (some done, some pending)
+  B: 3 connections (some done, some pending)
+  C: 3 connections
+  → Load accumulates unevenly because duration varies
+
+
+  Least Connections (adaptive):
+  Req 1 ──▶ A  (fast, 10ms)   → A finishes quickly, 0 active
+  Req 2 ──▶ B  (slow, 5000ms) → B busy, 1 active
+  Req 3 ──▶ C  (slow, 5000ms) → C busy, 1 active
+  Req 4 ──▶ A  (A has 0 active connections!) → A, 1 active
+  Req 5 ──▶ A  (A finished Req 4!)          → A, 1 active
+  Req 6 ──▶ A  (A finished Req 5!)          → A, 1 active
+  Req 7 ──▶ A  (B/C still busy!)            → A, 1 active
+
+  → The fast server handles more traffic naturally,
+    while slow servers aren't overloaded.</div>
+
+<h2>How It Works</h2>
+<ol>
+  <li>For each incoming request, the LB checks the active connection count of every backend</li>
+  <li>It selects the server with the lowest count</li>
+  <li>If there is a tie, it typically uses round robin among tied servers</li>
+  <li>The connection count is incremented when a request starts and decremented when it completes</li>
+</ol>
+
+<pre># Pseudocode
+def select_server(servers):
+    # Find server with minimum active connections
+    best = None
+    min_connections = infinity
+    for server in servers:
+        if server.active_connections < min_connections:
+            min_connections = server.active_connections
+            best = server
+    return best
+
+# Time complexity: O(n) — must scan all servers
+# Space complexity: O(n) — track connection count per server</pre>
+
+<h2>Weighted Least Connections</h2>
+<p>For heterogeneous server pools, weighted least connections normalizes the connection count by dividing it by the server's weight. A server with weight 2 can handle twice as many connections as weight 1.</p>
+
+<div class="diagram">  Weighted Least Connections formula:
+  selected = server with lowest (active_connections / weight)
+
+  Example:
+  Server A: weight=4, connections=8   → 8/4 = 2.0
+  Server B: weight=2, connections=3   → 3/2 = 1.5  ← Selected!
+  Server C: weight=1, connections=1   → 1/1 = 1.0  ← Selected!
+
+  Server C gets the request — it has the lowest ratio.
+  Even though A has more total capacity, C is more "available"
+  relative to what it can handle.</div>
+
+<h2>Configuration Examples</h2>
+<pre># Nginx — least connections
+upstream backend {
+    least_conn;
+    server 10.0.1.10:8080;
+    server 10.0.1.11:8080;
+    server 10.0.1.12:8080;
+}
+
+# Nginx — weighted least connections
+upstream backend {
+    least_conn;
+    server 10.0.1.10:8080 weight=5;  # Higher capacity
+    server 10.0.1.11:8080 weight=3;
+    server 10.0.1.12:8080 weight=2;
+}
+
+# HAProxy — least connections
+backend api_backend
+    balance leastconn
+    server api1 10.0.1.10:8080 weight 5
+    server api2 10.0.1.11:8080 weight 3
+    server api3 10.0.1.12:8080 weight 2
+
+# AWS ALB — uses least outstanding requests by default
+# (similar to least connections, counts pending requests)</pre>
+
+<div class="callout">
+  <strong>AWS ALB note:</strong> AWS ALB uses <strong>least outstanding requests</strong> by default, not round robin. This means it routes to the target with the fewest in-flight requests. This is especially important because ALB targets can have very different response times (Lambda cold starts, varying EC2 load).
+</div>
+
+<h2>Least Connections vs Round Robin</h2>
+<table>
+  <tr><th>Aspect</th><th><a href="round-robin.html">Round Robin</a></th><th><strong>Least Connections</strong></th></tr>
+  <tr><td><strong>Strategy</strong></td><td>Sequential rotation</td><td>Dynamic — fewest active connections</td></tr>
+  <tr><td><strong>Time complexity</strong></td><td class="green">O(1)</td><td class="red">O(n) per request</td></tr>
+  <tr><td><strong>State required</strong></td><td class="green">Minimal (counter)</td><td>Connection count per server</td></tr>
+  <tr><td><strong>Variable request duration</strong></td><td class="red">Poor (uneven load)</td><td class="green">Good (adapts to load)</td></tr>
+  <tr><td><strong>Uniform request duration</strong></td><td class="green">Good (simpler)</td><td class="green">Good (equivalent to RR)</td></tr>
+  <tr><td><strong>Burst handling</strong></td><td class="red">Distributes blindly</td><td class="green">Routes to least loaded</td></tr>
+  <tr><td><strong>Best for</strong></td><td>Short, uniform requests</td><td>Variable-duration requests (APIs, streaming, uploads)</td></tr>
+</table>
+
+<h2>When Least Connections Shines</h2>
+<ul>
+  <li><strong>APIs with variable response times</strong> — Some endpoints return in 10ms, others in 5s. Round robin would overload slow servers.</li>
+  <li><strong>WebSocket connections</strong> — Long-lived connections that accumulate. New connections should go to the server with fewer open sockets.</li>
+  <li><strong>File uploads/downloads</strong> — Requests that take seconds to minutes. A server handling a large upload should not receive new requests.</li>
+  <li><strong>Microservices with varying workloads</strong> — Different services behind the same LB have different processing times.</li>
+</ul>
+
+<h2>Edge Cases and Pitfalls</h2>
+
+<div class="callout yellow">
+  <strong>Slow server problem:</strong> If a server is slow (e.g., hardware issue, resource contention), it finishes requests slowly and keeps a low connection count. The LB sees few active connections and sends more requests to it, creating a death spiral. Mitigate this with <a href="health-checks.html">health checks</a>, circuit breakers, and <a href="weighted-round-robin.html">weighted least connections</a> (reduce the slow server's weight).
+</div>
+
+<div class="callout yellow">
+  <strong>Connection counting accuracy:</strong> The LB must accurately track when connections open and close. With keep-alive connections, a connection may be idle but still counted as active. Use idle timeouts or track active requests (not just TCP connections) for better accuracy.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What is the least connections algorithm?"</strong><br>Routes each request to the server with the fewest active connections. It's a dynamic algorithm — O(n) per request because it must scan all servers. Best suited for variable-duration requests where round robin would cause uneven load. A fast server that finishes requests quickly naturally receives more traffic.</li>
+  <li><strong>"When would you use least connections instead of round robin?"</strong><br>When requests have variable processing times. Example: an API where GET /users takes 10ms but POST /report takes 5 seconds. With round robin, a server could accumulate many slow requests. Least connections sends new requests to whichever server is least busy, adapting to real-time load.</li>
+  <li><strong>"What is weighted least connections?"</strong><br>Like least connections, but divides each server's connection count by its weight. This allows servers with higher capacity to handle proportionally more connections. The selected server has the lowest ratio of (active_connections / weight).</li>
+  <li><strong>"What are the weaknesses of least connections?"</strong><br>O(n) scan per request (vs O(1) for round robin), requires tracking state per server, and can suffer from the "slow server problem" where a struggling server gets more requests because it has fewer active connections (it processes them slowly). Mitigate with health checks and circuit breakers.</li>
+  <li><strong>"What algorithm does AWS ALB use by default?"</strong><br>Round robin is NOT the default. AWS ALB uses <strong>least outstanding requests</strong>, which is functionally similar to least connections — it counts in-flight requests rather than TCP connections. This is better because it accounts for requests in the LB's own queue, not just connections to the backend.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>Optimized least connections data structures (min-heap implementations)</li>
+    <li>Least time (fastest response) algorithm — niche variant</li>
+    <li>Connection draining during server removal details</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>AWS ALB Target Group Attributes</strong> — docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-target-groups</li>
+    <li><strong>HAProxy LeastConn Documentation</strong> — cbonte.github.io/haproxy-dconv/2.4/configuration.html#balance</li>
+    <li><strong>Nginx Upstream Module</strong> — nginx.org/en/docs/http/ngx_http_upstream_module#least_conn</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="weighted-round-robin.html">&larr; 2.7.8 Weighted Round Robin</a>
+  <a href="consistent-hashing.html">Next: 2.7.10 Consistent Hashing &rarr;</a>
+</div>
+
+</body>
+</html>

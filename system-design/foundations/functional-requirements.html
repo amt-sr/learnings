@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.1.1 Functional Requirements</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:visited { color: #a371f7; }
+
+  .breadcrumb {
+    margin-bottom: 1.5rem;
+    font-size: 0.85rem;
+    color: #8b949e;
+  }
+  .breadcrumb a { color: #8b949e; }
+  .breadcrumb a:hover { color: #58a6ff; }
+
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta {
+    display: flex;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+    font-size: 0.85rem;
+    color: #8b949e;
+    flex-wrap: wrap;
+  }
+  .meta span { display: flex; align-items: center; gap: 0.35rem; }
+
+  h2 {
+    font-size: 1.2rem;
+    color: #f0f6fc;
+    margin: 2rem 0 0.75rem;
+    padding-bottom: 0.35rem;
+    border-bottom: 1px solid #21262d;
+  }
+  h3 {
+    font-size: 1rem;
+    color: #58a6ff;
+    margin: 1.5rem 0 0.5rem;
+  }
+  p { margin-bottom: 0.75rem; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+
+  .source {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0 1.5rem;
+  }
+  .source-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #58a6ff;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.5rem;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0 1.5rem;
+    font-size: 0.9rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid #21262d;
+  }
+  th { color: #8b949e; font-weight: 600; }
+
+  code {
+    background: #161b22;
+    padding: 0.15rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.9em;
+    color: #c9d1d9;
+  }
+  pre {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+    margin: 1rem 0 1.5rem;
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .skip {
+    background: #1c1c22;
+    border-left: 3px solid #f85149;
+    padding: 1rem 1.25rem;
+    margin: 1.5rem 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .skip h3 { color: #f85149; margin-top: 0; }
+  .skip ul { color: #8b949e; }
+
+  .nav {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #30363d;
+  }
+  .nav a {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    color: #c9d1d9;
+    font-size: 0.9rem;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#1">1 Fundamentals</a> / <a href="../index.html#1.1">1.1 System Design Basics</a> / 1.1.1
+</div>
+
+<h1>Functional Requirements</h1>
+<div class="meta">
+  <span>Difficulty: ⭐☆☆☆☆ (Easy)</span>
+  <span>Interview Frequency: ★★★★★ (Every interview)</span>
+  <span>Time Investment: ~3 hours</span>
+</div>
+
+<!-- Goal -->
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What Functional Requirements are.</li>
+  <li>Why every system design interview starts with them.</li>
+  <li>How to gather them.</li>
+  <li>Difference from Non-Functional Requirements.</li>
+  <li>How they affect architecture.</li>
+</ul>
+
+<!-- Sources -->
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Primary Source (Must Read)</div>
+  <h3>1. System Design Interview – An Insider's Guide (Alex Xu)</h3>
+  <p><strong>Read:</strong> Requirement Clarification section (before the first design problem), System Design Framework</p>
+  <p><strong>Time:</strong> 20–30 minutes</p>
+  <p><strong>Why:</strong> This is probably the best interview-oriented explanation of requirement gathering. It teaches <em>how to start</em> a system design interview rather than the theory of requirements engineering.</p>
+  <p><a href="https://bytes.usc.edu/~saty/courses/docs/data/SystemDesignInterview.pdf" target="_blank">bytes.usc.edu (PDF)</a></p>
+</div>
+
+<div class="source">
+  <div class="source-label">Secondary Source (Must Read)</div>
+  <h3>2. Designing Data-Intensive Applications (DDIA)</h3>
+  <p><strong>Read:</strong> Chapter 1 — <em>Reliable, Scalable and Maintainable Applications</em>. Stop there.</p>
+  <p><strong>Why:</strong> Chapter 1 explains what systems are trying to achieve, why requirements matter, and how scalability, reliability and maintainability become architectural goals. It builds the right mindset before diving into distributed systems.</p>
+  <p><strong>Time:</strong> 1.5–2 hours</p>
+</div>
+
+<div class="source">
+  <div class="source-label">Software Engineering Perspective</div>
+  <h3>3. Requirements Engineering</h3>
+  <p><strong>Read only:</strong> Functional Requirements, Requirements Analysis, Functional Specification</p>
+  <p><strong>Purpose:</strong> Don't memorize. Just understand the terminology.</p>
+  <p><strong>Time:</strong> ~20 minutes</p>
+  <p>References:</p>
+  <ul>
+    <li><a href="https://en.wikipedia.org/wiki/Functional_requirement" target="_blank">Functional Requirement (Wikipedia)</a></li>
+    <li><a href="https://en.wikipedia.org/wiki/Requirements_analysis" target="_blank">Requirements Analysis (Wikipedia)</a></li>
+    <li><a href="https://en.wikipedia.org/wiki/Requirements_engineering" target="_blank">Requirements Engineering (Wikipedia)</a></li>
+  </ul>
+</div>
+
+<!-- What to Learn -->
+<h2>What to Learn</h2>
+
+<h3>Definition</h3>
+<p>A Functional Requirement specifies <strong>what a system must do</strong>.</p>
+<p>Examples:</p>
+<ul>
+  <li>User can register.</li>
+  <li>User can login.</li>
+  <li>User can upload a file.</li>
+  <li>User can search.</li>
+  <li>User can send messages.</li>
+</ul>
+
+<h3>Functional Requirement Checklist</h3>
+<p>Whenever you're given a design problem, identify:</p>
+<ul>
+  <li>Actors</li>
+  <li>Features</li>
+  <li>Inputs</li>
+  <li>Outputs</li>
+  <li>State Changes</li>
+  <li>External Systems</li>
+  <li>Business Rules</li>
+</ul>
+
+<h3>Functional vs Non-Functional</h3>
+<table>
+  <tr><th>Functional</th><th>Non-Functional</th></tr>
+  <tr><td>Upload File</td><td>Upload within 2 seconds</td></tr>
+  <tr><td>Send Message</td><td>99.99% Availability</td></tr>
+  <tr><td>Login</td><td>10M DAU</td></tr>
+  <tr><td>Search Products</td><td>P99 latency &lt;150 ms</td></tr>
+</table>
+
+<h3>Interview Process</h3>
+<pre>
+Problem
+  ↓
+Clarify Functional Requirements
+  ↓
+Clarify Non Functional Requirements
+  ↓
+Estimate Scale
+  ↓
+High Level Design
+  ↓
+Deep Dive
+</pre>
+<p><strong>Never skip requirement clarification.</strong></p>
+
+<!-- Practice -->
+<h2>Practice</h2>
+<p>For each of these systems, write <strong>only</strong> the functional requirements. No architecture. Only requirements.</p>
+<ul>
+  <li>URL Shortener</li>
+  <li>WhatsApp</li>
+  <li>Uber</li>
+  <li>Dropbox</li>
+  <li>YouTube</li>
+  <li>Instagram</li>
+  <li>Google Docs</li>
+</ul>
+
+<!-- Time Investment -->
+<h2>Time Investment</h2>
+<table>
+  <tr><th>Resource</th><th>Time</th></tr>
+  <tr><td>Alex Xu</td><td>30 min</td></tr>
+  <tr><td>DDIA Chapter 1</td><td>1.5–2 hrs</td></tr>
+  <tr><td>Requirements Engineering references</td><td>20 min</td></tr>
+</table>
+<p><strong>Total: ~3 hours.</strong></p>
+
+<!-- Skip -->
+<div class="skip">
+  <h3>Skip</h3>
+  <p>Do <strong>not</strong> spend time on:</p>
+  <ul>
+    <li>IEEE SRS document templates</li>
+    <li>UML Use Case diagrams</li>
+    <li>Formal requirements engineering processes</li>
+    <li>Enterprise requirement management tools</li>
+    <li>Requirements traceability matrices</li>
+  </ul>
+  <p>Those are valuable in software engineering practice but have very low ROI for senior system design interviews.</p>
+</div>
+
+<!-- Navigation -->
+<div class="nav">
+  <a href="../index.html">&larr; Index</a>
+  <a href="non-functional-requirements.html">Next: 1.1.2 Non-Functional Requirements &rarr;</a>
+</div>
+
+</body>
+</html>

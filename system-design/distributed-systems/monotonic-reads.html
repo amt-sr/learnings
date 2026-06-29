@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.3.8 Monotonic Reads</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">5 Distributed Systems</a> / <a href="../index.html">5.3 Consistency Models</a> / 5.3.8
+</div>
+
+<h1>5.3.8 Monotonic Reads</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the <strong>monotonic reads</strong> guarantee, the specific anomaly it prevents ("time going backward"), implementation approaches, and how it relates to other client-centric consistency models.</p>
+
+<h2>Definition</h2>
+<p><strong>Monotonic reads</strong> guarantees that if a client reads value X for a given key, that client will never subsequently read an <strong>older</strong> value Y for the same key. Data never appears to go "backward in time" from a single client's perspective.</p>
+
+<div class="callout">
+  <strong>The Anomaly It Prevents:</strong> Without monotonic reads, a client could read value X=5, then on the next read see X=3 (an older value that had not yet been updated on a different replica). This makes the system appear as if data is moving backward — a confusing and potentially dangerous user experience.
+</div>
+
+<h2>The Problem: Time Going Backward</h2>
+
+<div class="diagram">
+  Without Monotonic Reads:
+
+  Client reads X from Replica 1 → X=5 (latest)
+  Client reads X from Replica 2 → X=3 (STALE — older value!)
+
+  Timeline:
+    t0: Replica 1 has X=5, Replica 2 has X=3
+    t1: Client reads from R1 → X=5 ✓
+    t2: Client reads from R2 → X=3 ✗ (VIOLATION: time went backward)
+
+  === Monotonic Reads Violation ===
+  The client saw X=5, then X=3 — data appeared to go backward.
+
+  With Monotonic Reads:
+
+  t1: Client reads X from R1 → X=5, client remembers: X >= 5
+  t2: Client reads X from R2, but R2 only has X=3
+      → Server: R2 is behind (X=3 < 5), must wait for sync or redirect
+      → Eventually: R2 catches up to X=5, then returns X=5
+
+  OR:
+  t1: Client reads X from R1 → X=5, remembers replica=R1
+  t2: Client reads X from R1 → X=5 (same replica, monotonic)
+</div>
+
+<h2>Implementation Approaches</h2>
+
+<h3>1. Stick to One Replica</h3>
+<p>Route all reads from the same client to the same replica. Since the replica only processes writes in order, reads from it are always monotonic.</p>
+
+<div class="diagram">
+  Approach: Sticky sessions / read affinity
+
+  Client → Replica 1 → read X=5
+  Client → Replica 1 → read X=5 (always same or newer)
+  Client → Replica 1 → read X=7 (never goes backward)
+
+  ✓ Simple and effective
+  ✗ Tied to one replica (unbalanced load, single point of failure)
+</div>
+
+<h3>2. Track Version / Timestamp</h3>
+<p>The client remembers the version or timestamp of the last read. Subsequent reads must return data at least as recent.</p>
+
+<div class="diagram">
+  Approach: Version tracking
+
+  Client reads X from R1 → X=5, version=42
+  Client stores: last_seen_version=42
+
+  Client reads X from R2:
+    → Server checks: R2 has X=5, version=42 → OK, return X=5
+    OR
+    → Server checks: R2 has X=3, version=40 → STALE, wait/redirect
+    → R2 syncs to version 42 → return X=5
+
+  ✓ Works across replicas, resilient to failure
+  ✗ Extra metadata, may need to wait for sync
+</div>
+
+<h3>3. Read from Leader</h3>
+<p>All reads go through the leader, which has the latest data. This is the strongest approach and provides more than monotonic reads (it provides read-your-writes too).</p>
+
+<table>
+  <tr>
+    <th>Approach</th>
+    <th>Guarantee</th>
+    <th>Latency</th>
+    <th>Availability</th>
+    <th>Complexity</th>
+  </tr>
+  <tr>
+    <td>Sticky to one replica</td>
+    <td>Monotonic (per-replica)</td>
+    <td class="green">Low</td>
+    <td class="green">High</td>
+    <td class="green">Low</td>
+  </tr>
+  <tr>
+    <td>Version tracking</td>
+    <td>Monotonic (any replica)</td>
+    <td>Medium</td>
+    <td>Medium</td>
+    <td>Medium</td>
+  </tr>
+  <tr>
+    <td>Read from leader</td>
+    <td>Monotonic + RYW + strong</td>
+    <td class="red">Higher</td>
+    <td class="red">Lower</td>
+    <td class="green">Low</td>
+  </tr>
+</table>
+
+<h2>Real-World Impact</h2>
+
+<div class="callout yellow">
+  <strong>Interview Tip:</strong> Monotonic reads violation is surprisingly common in systems with multiple replicas and no read affinity. A classic example: an e-commerce product page shows 10 items in stock, the user refreshes and sees 5 items (correct), then refreshes again and sees 12 items (older data from a lagging replica). This is a monotonic reads violation and causes real user confusion.
+</div>
+
+<ul>
+  <li><strong>News feed:</strong> A user scrolls and sees article X, then on next page load, article X disappears (was on a lagging replica that had not yet received the removal). Monotonic reads would prevent this.</li>
+  <li><strong>Dashboard metrics:</strong> A chart shows yesterday's total as 1,000, then refreshes and shows 500 (older snapshot). Users lose trust in the data.</li>
+  <li><strong>Search results:</strong> Search returns 10 results, paginate to page 2, then go back to page 1 and see different (older) results.</li>
+</ul>
+
+<h2>Relationship to Other Models</h2>
+
+<div class="callout">
+  <strong>Key Relationship:</strong> Monotonic reads is implied by read-your-writes. If you always see your own writes, you automatically have monotonic reads (since your writes are the "latest"). The reverse is NOT true — monotonic reads does not guarantee you see your own writes (you may be reading from a replica that has never received your write).
+</div>
+
+<p>In the consistency hierarchy:</p>
+<ul>
+  <li>Linearizability implies sequential consistency implies causal consistency implies monotonic reads</li>
+  <li>Read-your-writes implies monotonic reads</li>
+  <li>Monotonic reads does NOT imply read-your-writes</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>"What is the monotonic reads guarantee?"</li>
+  <li>"What anomaly does monotonic reads prevent? Give a real-world example."</li>
+  <li>"How do you implement monotonic reads in a distributed system?"</li>
+  <li>"Does monotonic reads imply read-your-writes? Does the reverse hold?"</li>
+  <li>"How does monotonic reads relate to sticky sessions?"</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid in interviews:</strong>
+  <ul>
+    <li>Formal definitions of monotonic read semantics from distributed computing theory</li>
+    <li>Read repair mechanism internals (hinted handoff, read repair triggers)</li>
+    <li>Load balancer algorithm specifics (least connections vs. round-robin for read distribution)</li>
+    <li>Specific implementations in Cassandra/DynamoDB of monotonic read tracking</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary Sources</div>
+  <ul>
+    <li>Terry, D. et al. "Session Guarantees for Weakly Consistent Replicated Data" (PDIS, 1994)</li>
+    <li>Kleppmann, M. <strong>Designing Data-Intensive Applications</strong>, Chapter 5</li>
+    <li>Vogels, W. "Eventually Consistent" (ACM Queue, 2009)</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Supplementary</div>
+  <ul>
+    <li>Terry, D. "Replicated Data Consistency Explained Through Baseball" (Microsoft Research, 2013)</li>
+    <li>Abadi, D. "Consistency Tradeoffs in Modern Distributed Database System Design" (Computer, 2012)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="read-your-writes.html">&larr; 5.3.7 Read Your Writes</a>
+  <a href="monotonic-writes.html">5.3.9 Monotonic Writes &rarr;</a>
+</div>
+
+</body>
+</html>

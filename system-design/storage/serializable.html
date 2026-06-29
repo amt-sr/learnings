@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.5.4 Serializable</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#3">3 Storage</a> / <a href="../index.html#3.5">3.5 Isolation Levels</a> / 3.5.4
+</div>
+
+<h1>Serializable</h1>
+<div class="meta">
+  <span>Difficulty: ★★★★☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What Serializable isolation guarantees</li>
+  <li>The two implementation approaches: pessimistic (locking) vs. optimistic (SSI)</li>
+  <li>When serializable isolation is necessary</li>
+  <li>The performance cost and retry logic</li>
+</ul>
+
+<h2>Definition</h2>
+<p><strong>Serializable</strong> is the strictest SQL isolation level. It guarantees that the effect of concurrently executing transactions is equivalent to running them one after another in some serial order. There exists at least one serial ordering of the transactions that produces the same result.</p>
+
+<h2>What Serializable Prevents</h2>
+<table>
+  <tr><th>Anomaly</th><th>Status</th></tr>
+  <tr><td><a href="dirty-read.html">Dirty Read</a></td><td class="green">Prevented</td></tr>
+  <tr><td><a href="non-repeatable-read.html">Non-Repeatable Read</a></td><td class="green">Prevented</td></tr>
+  <tr><td><a href="phantom-read.html">Phantom Read</a></td><td class="green">Prevented</td></tr>
+  <tr><td><a href="lost-update.html">Write Skew</a></td><td class="green">Prevented</td></tr>
+</table>
+
+<div class="callout green">
+  <strong>Strongest guarantee:</strong> Serializable is the only isolation level that prevents all concurrency anomalies, including write skew. If your business logic requires that certain invariants hold across multiple rows, serializable isolation is the simplest way to enforce them.
+</div>
+
+<h2>Implementation Approaches</h2>
+
+<h3>1. Pessimistic: Two-Phase Locking (2PL)</h3>
+<p>Traditional approach used by SQL Server and older systems. All reads acquire shared locks, all writes acquire exclusive locks, and locks are held until transaction end.</p>
+<div class="diagram">  Pessimistic Serializable (Two-Phase Locking)
+
+  Transaction A: READ → shared lock (held until commit)
+  Transaction A: WRITE → exclusive lock (held until commit)
+  Transaction A: COMMIT → release all locks
+
+  Transaction B: tries to READ same row → BLOCKED
+  Transaction B: tries to WRITE same row → BLOCKED
+
+  Problems:
+  - High lock contention → low throughput
+  - Deadlocks (circular wait) → requires deadlock detection + rollback
+  - Performance degrades linearly with concurrency</div>
+
+<h3>2. Optimistic: Serializable Snapshot Isolation (SSI)</h3>
+<p>Modern approach used by PostgreSQL (since 9.1), CockroachDB, and FoundationDB. Transactions proceed without blocking but are checked for serializability violations before commit.</p>
+<div class="diagram">  Optimistic Serializable (SSI)
+
+  Transaction A: READ row 1, WRITE row 2
+  Transaction B: READ row 2, WRITE row 1
+
+  Both proceed without blocking (snapshot reads)
+
+  At commit time, SSI checks:
+  - Did A read something that B wrote? (rw-dependency)
+  - Did B read something that A wrote? (rw-dependency)
+  - Is there a cycle in the dependency graph?
+
+  If cycle exists → abort one transaction ( serialization failure)
+  If no cycle → both commit successfully
+
+  Performance: high concurrency, occasional retries</div>
+
+<div class="callout yellow">
+  <strong>SSI is a breakthrough:</strong> Before SSI, serializable meant terrible performance due to locking. SSI uses snapshot reads (no blocking) with lightweight tracking of read-write dependencies. Only transactions that actually create a conflict cycle are aborted. In practice, the abort rate is low for most workloads.
+</div>
+
+<h2>How SSI Works: Step by Step</h2>
+<pre>1. Each transaction reads from a snapshot (like Repeatable Read)
+2. The database tracks which rows each transaction read
+3. When a transaction writes, it checks if any concurrent transaction
+   read the old value of that row (rw-conflict)
+4. If Transaction A read X, and Transaction B wrote X, and
+   Transaction B read Y, and Transaction A wrote Y:
+   → Cycle detected! Abort one of them.
+5. The aborted transaction must be retried by the application</pre>
+
+<h2>Write Skew Example: Caught by Serializable</h2>
+<pre>-- The on-call doctors example that Repeatable Read cannot prevent
+-- Rule: at least one doctor must be on call
+
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+  SELECT on_call FROM doctors WHERE id = 1;  -- TRUE
+  -- Concurrent transaction sets doctor 2 to off-call
+  UPDATE doctors SET on_call = FALSE WHERE id = 1;
+  -- SSI detects: you read a row that was written by someone else
+COMMIT;
+-- ERROR: could not serialize access due to concurrent update</pre>
+
+<p>The application must catch this error and retry:</p>
+<pre>-- Application-level retry logic (pseudocode)
+MAX_RETRIES = 5
+for attempt in 1..MAX_RETRIES:
+    try:
+        execute_transaction()
+        break  -- success
+    catch SerializationFailure:
+        if attempt == MAX_RETRIES:
+            raise  -- give up after max retries
+        sleep(random_backoff())  -- avoid thundering herd</pre>
+
+<h2>Performance Comparison</h2>
+<table>
+  <tr><th>Aspect</th><th>Pessimistic (2PL)</th><th>Optimistic (SSI)</th></tr>
+  <tr><td>Read blocking</td><td class="red">Readers block writers</td><td class="green">No blocking</td></tr>
+  <tr><td>Write blocking</td><td>Writers block writers</td><td>Writers block writers</td></tr>
+  <tr><td>Deadlocks</td><td class="red">Frequent</td><td class="green">None (aborts instead)</td></tr>
+  <tr><td>Throughput</td><td class="red">Low at high concurrency</td><td class="green">High</td></tr>
+  <tr><td>Retry logic</td><td>Deadlock retry</td><td>Serialization failure retry</td></tr>
+  <tr><td>Implementation</td><td>SQL Server (default serializable)</td><td>PostgreSQL, CockroachDB</td></tr>
+</table>
+
+<h2>When to Use Serializable</h2>
+<ul>
+  <li><strong>Financial systems:</strong> Account transfers, balance constraints, double-spend prevention</li>
+  <li><strong>Inventory management:</strong> Preventing overselling when stock checks span multiple rows</li>
+  <li><strong>Scheduling:</strong> Preventing double-booking when the constraint spans multiple resources</li>
+  <li><strong>Any multi-row invariant:</strong> Business rules like "at least one admin must exist" or "total budget cannot exceed limit"</li>
+</ul>
+
+<div class="callout">
+  <strong>Alternative approach:</strong> Instead of serializable isolation, you can enforce invariants with explicit locking (<code>SELECT ... FOR UPDATE</code>) or application-level locks. This is often more targeted and has lower overhead than full serializable isolation.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"How does PostgreSQL implement serializable isolation?"</strong><br>PostgreSQL uses Serializable Snapshot Isolation (SSI). Transactions read from snapshots (no blocking), but the database tracks read-write dependencies. At commit time, if a cycle is detected in the dependency graph, one transaction is aborted with a serialization error. The application must retry.</li>
+  <li><strong>"What is the performance cost of serializable vs. read committed?"</strong><br>With optimistic SSI (PostgreSQL), the cost is primarily in the rare case of aborts. For low-contention workloads, the overhead is minimal. With pessimistic 2PL (SQL Server), the cost is continuous: readers block writers, throughput drops, and deadlocks increase. The cost difference between the two implementations is enormous.</li>
+  <li><strong>"How do you handle serialization failures in application code?"</strong><br>Wrap the transaction in a retry loop with exponential backoff. Catch the serialization error, wait briefly (with jitter to avoid thundering herd), and retry. Set a maximum retry count and handle the case where retries are exhausted.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>Precise SSI algorithm details (rw-conflict tracking internals)</li>
+    <li>Formal definitions of serializability (conflict serializability, view serializability)</li>
+    <li>Concurrency control theory (strict 2PL, conservative 2PL, etc.)</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Designing Data-Intensive Applications" (Chapter 7)</strong> — Martin Kleppmann</li>
+    <li><strong>PostgreSQL Documentation</strong> — 13.2.4: Serializable Isolation Level</li>
+    <li><strong>"A Critique of ANSI SQL Isolation Levels"</strong> — Hal Berenson et al. (1995) — The paper that defined write skew and SSI</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="repeatable-read.html">&larr; repeatable-read.html</a>
+  <a href="snapshot-isolation.html">Next: snapshot-isolation.html →</a>
+</div>
+
+</body>
+</html>

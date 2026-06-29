@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.4.1 ACID</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="index.html">System Design</a> / <a href="index.html">3 Storage</a> / <a href="index.html">3.4 Transactions</a> / 3.4.1
+</div>
+
+<h1>3.4.1 ACID</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<ul>
+  <li>Define all four ACID properties precisely, with concrete examples of what each guarantees</li>
+  <li>Explain how the four properties interact and the trade-offs between them</li>
+  <li>Identify real-world scenarios where ACID guarantees are violated and the consequences</li>
+  <li>Understand how ACID applies (or breaks down) in distributed systems</li>
+  <li>Articulate when BASE is a viable alternative and the trade-offs involved</li>
+</ul>
+
+<h2>Definition</h2>
+<p><strong>ACID</strong> is an acronym for four properties that guarantee reliable processing of database transactions: <strong>Atomicity</strong>, <strong>Consistency</strong>, <strong>Isolation</strong>, and <strong>Durability</strong>. These properties ensure that database operations are processed reliably -- either all changes within a transaction are applied, or none are. The concept was formalized in the early 1980s by Theo Harder and Andreas Reuter, building on Jim Gray's foundational work on transaction processing.</p>
+
+<div class="callout">
+  <strong>Critical distinction:</strong> ACID is not a monolith. Each property is independently enforced through different mechanisms. A database can provide strong atomicity and durability (via WAL) while offering weak isolation (read committed). Understanding each property independently is essential for system design interviews.
+</div>
+
+<h2>The Four ACID Properties</h2>
+
+<div class="diagram">
+  ┌──────────────────────────────────────────────────────────────────┐
+  │                        ACID PROPERTIES                          │
+  ├──────────────┬──────────────────┬───────────────┬────────────────┤
+  │              │                  │               │                │
+  │  ATOMICITY   │  CONSISTENCY     │  ISOLATION    │  DURABILITY    │
+  │              │                  │               │                │
+  │  "All or     │  "Valid state    │  "Concurrent  │  "Survives     │
+  │   nothing"   │   transitions"   │   correctness"│   crashes"     │
+  │              │                  │               │                │
+  │  Mechanism:  │  Mechanism:      │  Mechanism:   │  Mechanism:    │
+  │  WAL + Undo  │  Constraints,    │  Locking,     │  WAL, fsync,   │
+  │  Log         │  Triggers,       │  MVCC,        │  Replication   │
+  │              │  App logic       │  Timestamps   │                │
+  │              │                  │               │                │
+  └──────────────┴──────────────────┴───────────────┴────────────────┘
+</div>
+
+<h3>Atomicity -- All or Nothing</h3>
+<p>A transaction is an indivisible unit of work. Either all its operations complete successfully, or none of them take effect. There is no intermediate state visible to other transactions.</p>
+
+<table>
+  <tr><th>Violation</th><th>Example</th><th>Consequence</th></tr>
+  <tr><td>Partial write</td><td>Debit account A succeeds, credit account B fails</td><td class="red">Money disappears from the system</td></tr>
+  <tr><td>No rollback</td><td>Multi-step operation fails halfway, earlier steps persist</td><td class="red">Corrupt application state</td></tr>
+</table>
+
+<p><strong>Implementation:</strong> Write-Ahead Log (WAL) with undo information. On commit, the transaction is marked as committed in the WAL. On rollback (or crash before commit), all changes are reversed using the undo log.</p>
+
+<h3>Consistency -- Valid State Transitions</h3>
+<p>A transaction moves the database from one <strong>valid state</strong> to another. Validity is defined by the application's rules: constraints, triggers, cascading rules, and any declared invariants. This is the only ACID property that is partially the <strong>application's responsibility</strong> -- the database enforces declared constraints, but the correctness of business logic is up to the developer.</p>
+
+<table>
+  <tr><th>Constraint Type</th><th>Example</th><th>Enforced By</th></tr>
+  <tr><td>Primary key</td><td>user_id must be unique and non-null</td><td>Database</td></tr>
+  <tr><td>Foreign key</td><td>order.user_id must reference user.id</td><td>Database</td></tr>
+  <tr><td>Check constraint</td><td>account_balance >= 0</td><td>Database</td></tr>
+  <tr><td>Business invariant</td><td>Total debits = total credits</td><td>Application</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Common confusion:</strong> ACID Consistency is NOT the same as "distributed consistency" (reads returning the latest write, strong consistency in CAP theorem). ACID consistency is about maintaining database invariants within a single transaction. Distributed consistency is about read-write ordering across replicas. These are fundamentally different concepts that are frequently conflated in interviews.
+</div>
+
+<h3>Isolation -- Concurrent Correctness</h3>
+<p>Concurrent transactions execute as if they were executed serially, one after the other. The degree of isolation determines how much interference between concurrent transactions is allowed. This is the most nuanced ACID property because it exists on a spectrum with a well-known taxonomy of isolation levels.</p>
+
+<table>
+  <tr><th>Isolation Level</th><th>Dirty Read</th><th>Non-Repeatable Read</th><th>Phantom</th></tr>
+  <tr><td>Read Uncommitted</td><td class="red">Possible</td><td class="red">Possible</td><td class="red">Possible</td></tr>
+  <tr><td>Read Committed</td><td class="green">Prevented</td><td class="red">Possible</td><td class="red">Possible</td></tr>
+  <tr><td>Repeatable Read</td><td class="green">Prevented</td><td class="green">Prevented</td><td class="red">Possible</td></tr>
+  <tr><td>Serializable</td><td class="green">Prevented</td><td class="green">Prevented</td><td class="green">Prevented</td></tr>
+</table>
+
+<p>Each higher isolation level incurs a performance cost. Most production workloads use <strong>Read Committed</strong> (PostgreSQL default, MySQL default for non-InnoDB) or <strong>Repeatable Read</strong> (MySQL InnoDB default) as a practical compromise.</p>
+
+<h3>Durability -- Surviving Failures</h3>
+<p>Once a transaction commits, its effects are permanent even in the face of crashes, power failures, and hardware errors. The data will survive regardless of what happens after the commit acknowledgment is sent.</p>
+
+<p><strong>Implementation:</strong> WAL records are forced to stable storage (fsync) before the commit is acknowledged. Additionally, replication to other nodes provides durability against total node failure.</p>
+
+<h2>Trade-offs Between ACID Properties</h2>
+
+<div class="diagram">
+              Higher Isolation
+                   │
+         Serializability ◄────────── Strongest guarantees
+                   │                    Highest latency
+                   │
+         Repeatable Read                Moderate performance hit
+                   │
+         Read Committed  ◄──────────── Sweet spot for most workloads
+                   │
+         Read Uncommitted ◄─────────── Weakest guarantees
+                   │                     Best performance
+                   │
+                   ▼
+            Lower Latency
+</div>
+
+<table>
+  <tr><th>Trade-off</th><th>More X Means...</th><th>Less X Means...</th></tr>
+  <tr><td>Isolation vs. Performance</td><td>Stronger correctness guarantees, higher contention</td><td>More throughput, more anomalies</td></tr>
+  <tr><td>Durability vs. Latency</td><td>Safer data, slower commits (fsync cost)</td><td>Faster commits, potential data loss</td></tr>
+  <tr><td>Consistency vs. Flexibility</td><td>Stricter constraints, less schema evolution</td><td>Easier migrations, more data validation burden</td></tr>
+  <tr><td>Atomicity vs. Throughput</td><td>Correct partial-failure handling, more WAL overhead</td><td>Less logging, risk of corrupt state</td></tr>
+</table>
+
+<h2>ACID Violations in Practice</h2>
+
+<div class="callout red">
+  <strong>Real-world failure patterns:</strong>
+  <ul>
+    <li><strong>Network partition during commit:</strong> Client receives timeout but transaction actually committed on the server. Client retries, causing double-execution. Mitigation: idempotency keys.</li>
+    <li><strong>Replication lag after commit:</strong> Transaction is acknowledged as committed (durable on leader) but a read from a follower returns stale data. The data is "durable" but not "consistent" from the client's perspective.</li>
+    <li><strong>Schema evolution breaks consistency:</strong> Adding a NOT NULL column without a default value violates consistency for existing rows. Many ORMs generate invalid intermediate states during migrations.</li>
+  </ul>
+</div>
+
+<h2>ACID in Distributed Systems</h2>
+<p>ACID was designed for single-node databases. In distributed systems, providing all four properties simultaneously becomes significantly harder:</p>
+
+<ul>
+  <li><strong>Atomicity:</strong> Achieved via Two-Phase Commit (2PC) or consensus protocols (Raft, Paxos), but with higher latency and availability cost (coordinator failure blocks progress).</li>
+  <li><strong>Consistency:</strong> Distributed constraints (foreign keys across shards) are extremely expensive to enforce. Most sharded systems push this to the application layer.</li>
+  <li><strong>Isolation:</strong> Distributed locks and timestamp ordering (Spanner TrueTime) can provide serializable isolation, but at significant latency cost. Most systems settle for weaker guarantees.</li>
+  <li><strong>Durability:</strong> Achieved via quorum-based replication, but the definition of "committed" becomes nuanced (committed on leader? replicated to quorum? all replicas?).</li>
+</ul>
+
+<div class="callout green">
+  <strong>Interview tip:</strong> Google Spanner is the gold standard example of "ACID in distributed systems." It provides external consistency (linearizable) using TrueTime (synchronized atomic clocks + GPS). The trade-off is geographic latency bound by clock uncertainty (~10ms across datacenters).
+</div>
+
+<h2>BASE: The Alternative</h2>
+<p>BASE (Basically Available, Soft state, Eventual consistency) is an explicit design philosophy that trades ACID guarantees for availability and partition tolerance. It is not a formal specification but a design principle.</p>
+
+<table>
+  <tr><th>Property</th><th>ACID</th><th>BASE</th></tr>
+  <tr><td>Availability</td><td>May block during failures</td><td>Always available (accepts writes)</td></tr>
+  <tr><td>Consistency</td><td>Strong (immediate)</td><td>Eventual (converges over time)</td></tr>
+  <tr><td>Latency</td><td>Higher (synchronization cost)</td><td>Lower (no cross-node coordination)</td></tr>
+  <tr><td>Use case</td><td>Financial transactions, inventory</td><td>Social feeds, caching, analytics</td></tr>
+  <tr><td>Examples</td><td>PostgreSQL, MySQL, Spanner</td><td>Cassandra, DynamoDB (eventual), Redis</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Design principle:</strong> In interviews, avoid framing ACID vs. BASE as a binary choice. Modern systems blend both: DynamoDB offers both eventual and strong consistency modes. CockroachDB provides serializable isolation. Spanner offers external consistency with high availability. The right choice depends on the specific consistency requirements of each operation.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What are the four ACID properties? Give me a real example for each.</li>
+  <li>Why is consistency considered the application's responsibility? What does the database enforce?</li>
+  <li>Explain the difference between ACID consistency and distributed consistency (CAP theorem).</li>
+  <li>What isolation level does your production system use? Why? What anomalies can still occur?</li>
+  <li>Is it possible to have ACID in a distributed database? What are the trade-offs?</li>
+  <li>What happens to ACID guarantees during a network partition?</li>
+  <li>Compare ACID and BASE. When would you choose one over the other?</li>
+  <li>How does a system like Spanner provide ACID across multiple datacenters?</li>
+  <li>Can you give me an example where relaxing isolation improves throughput by 10x?</li>
+  <li>Design a payment system. Which ACID properties are non-negotiable? Which can you relax?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>In an interview setting, skip:</strong>
+  <ul>
+    <li>The full history of transaction processing research (Jim Gray's 1970s papers, etc.)</li>
+    <li>Debating whether ACID is "outdated" -- it remains the gold standard for transactional correctness</li>
+    <li>Reciting isolation level definitions without understanding their performance implications</li>
+    <li>Deep dives into specific database's constraint syntax -- focus on concepts and trade-offs</li>
+    <li>Over-emphasizing BASE when the question is about ACID -- understand both but answer the question asked</li>
+  </ul>
+</div>
+
+<h2>Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ul>
+    <li>"Designing Data-Intensive Applications" (Martin Kleppmann) -- Chapter 7: Transactions (ACID deep-dive with practical examples)</li>
+    <li>"Database System Concepts" (Silberschatz, Korth, Sudarshan) -- Chapter 16-19: Transaction management, concurrency control, recovery</li>
+    <li>"Transaction Processing: Concepts and Techniques" (Gray &amp; Reuter) -- Foundational reference for all transaction concepts</li>
+    <li>Brewer, E. (2000) "Towards Robust Distributed Systems" -- Original BASE/consistency trade-off discussion</li>
+    <li>Google Spanner paper (2012) -- "TrueTime: externally consistent transactions in the cloud"</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="crash-recovery.html">&larr; 3.3.5 Crash Recovery</a>
+  <a href="atomicity.html">Next: 3.4.2 Atomicity &rarr;</a>
+</div>
+
+</body>
+</html>

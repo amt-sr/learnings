@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Leaky Bucket — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">System Design</a> / <a href="./index.html">Reliability</a> / 10.3.2 Leaky Bucket</div>
+
+<h1>Leaky Bucket Algorithm</h1>
+<div class="meta">
+  <span>Difficulty ⭐⭐⭐</span>
+  <span>Interview Frequency ★★★★</span>
+</div>
+
+<div class="callout">
+  <strong>Goal:</strong> Understand the leaky bucket algorithm for rate limiting, how it enforces a constant output rate, its two variants (queue-based vs metered), and when to choose it over token bucket.
+</div>
+
+<h2>Definition</h2>
+<p>The <strong>Leaky Bucket</strong> algorithm controls the rate of outgoing requests by processing them at a constant fixed rate, like water leaking from a bucket with a hole. Incoming requests are added to a queue (the bucket). If the bucket overflows (queue is full), excess requests are rejected. The bucket "leaks" requests at a constant rate regardless of the input rate.</p>
+
+<h2>How It Works</h2>
+
+<div class="diagram">
+  Leaky Bucket (Queue Variant):
+
+  Incoming requests      Queue (Bucket)       Outgoing (to server)
+  ───────────────▶ ┌──────────────────┐ ────────────────▶
+                    │ [R1][R2][R3][R4] │   Constant rate:
+                    │ [R5][R6][   ][   ]│   3 requests/sec
+                    │ [   ][   ][   ][   ]│   (regardless of input)
+                    └──────────────────┘
+                    capacity = 8
+
+  Timeline:
+  t=0s: 10 requests arrive → 8 enter queue, 2 REJECTED (overflow)
+  t=0s: Requests leak out at 3/sec:
+    t=0.0-0.33s: R1, R2, R3 processed
+    t=0.33-0.67s: R4, R5, R6 processed
+    t=0.67-1.0s:  R7, R8 processed, queue now empty
+
+  Key: Output rate is ALWAYS constant (3/sec).
+  Even if 100 requests arrive, output is still 3/sec.
+</div>
+
+<h2>Two Variants</h2>
+
+<h3>Variant 1: Queue-Based (Classic Leaky Bucket)</h3>
+<p>Requests enter a FIFO queue. The queue is drained at a fixed rate. If the queue is full, new requests are rejected.</p>
+
+<div class="diagram">
+  Queue-Based:
+  Request → [Queue] → (fixed rate processor) → Server
+
+  Properties:
+  - Constant output rate (smoothing effect)
+  - Requests may experience queuing delay
+  - Bursty input → steady output
+  - If queue full → reject immediately
+</div>
+
+<h3>Variant 2: Metered (Leaky Bucket as Counter)</h3>
+<p>Similar to token bucket but inverts the logic. The "water level" rises with each request and drains at a fixed rate. If the water level exceeds capacity, the request is rejected.</p>
+
+<div class="diagram">
+  Metered Variant:
+  Request → check water level → if below capacity: allow + add water
+                               → if at capacity: reject
+
+  Water drains at fixed rate:
+  level = max(0, level - elapsed_time × drain_rate)
+
+  Properties:
+  - No queue; requests are immediately allowed or rejected
+  - No queuing delay for accepted requests
+  - Essentially equivalent to token bucket (mathematically)
+</div>
+
+<h2>Leaky Bucket vs Token Bucket Comparison</h2>
+
+<table>
+  <tr><th>Aspect</th><th>Leaky Bucket</th><th>Token Bucket</th></tr>
+  <tr><td><strong>Burst handling</strong></td><td>Poor — output rate is constant, no burst allowed</td><td class="green">Good — allows burst up to bucket capacity</td></tr>
+  <tr><td><strong>Output rate</strong></td><td>Constant (smooth)</td><td>Variable (bursts followed by gaps)</td></tr>
+  <tr><td><strong>Queueing delay</strong></td><td>Yes (queue-based variant)</td><td>No — immediate allow/reject</td></tr>
+  <tr><td><strong>Memory</strong></td><td>O(queue_size) — stores pending requests</td><td>O(1) — just token count + timestamp</td></tr>
+  <tr><td><strong>Simplicity</strong></td><td>Simple concept</td><td>Simple concept</td></tr>
+  <tr><td><strong>Best for</strong></td><td>Traffic shaping (smoothing bursty traffic)</td><td>Rate limiting (protecting services from overload)</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Interview Tip:</strong> Most interviewers asking about "leaky bucket" actually want you to compare it with token bucket. Know the key difference: leaky bucket smooths traffic (constant output), token bucket allows bursts (variable output). Token bucket is generally preferred for API rate limiting because bursts are common in real traffic.
+</div>
+
+<h2>Implementation</h2>
+
+<pre>
+class LeakyBucket {
+    int capacity;        // max queue size
+    double drainRate;    // requests per second
+    Queue&lt;Request&gt; queue;
+    double waterLevel;   // current level (metered variant)
+    long lastDrainTime;
+
+    synchronized boolean allowRequest(Request req) {
+        long now = System.currentTimeMillis();
+        double elapsed = (now - lastDrainTime) / 1000.0;
+
+        // Drain the bucket
+        waterLevel = Math.max(0, waterLevel - elapsed * drainRate);
+        lastDrainTime = now;
+
+        if (waterLevel < capacity) {
+            waterLevel += 1.0;
+            return true;   // request allowed
+        }
+        return false;      // bucket overflow — reject
+    }
+}
+</pre>
+
+<h2>When to Use Leaky Bucket</h2>
+
+<table>
+  <tr><th>Scenario</th><th>Best Algorithm</th><th>Why</th></tr>
+  <tr><td>API rate limiting (per-user)</td><td class="green">Token Bucket</td><td>Burst traffic is natural; users expect to burst then pause</td></tr>
+  <tr><td>Traffic shaping (egress)</td><td class="green">Leaky Bucket</td><td>Want smooth, constant output to downstream network</td></tr>
+  <tr><td>Database connection pool</td><td class="green">Leaky Bucket</td><td>Want constant drain rate to avoid connection spikes</td></tr>
+  <tr><td>Cloud provider API quotas</td><td class="green">Token Bucket</td><td>Burst-friendly; allows catching up during quiet periods</td></tr>
+  <tr><td>Message queue consumer</td><td class="green">Leaky Bucket</td><td>Process messages at constant rate; queue absorbs bursts</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>"How does the leaky bucket algorithm work?" — Requests enter a queue; the queue drains at a constant rate; overflow causes rejection. It smooths bursty input into steady output.</li>
+  <li>"What is the difference between leaky bucket and token bucket?" — Leaky bucket has constant output rate (no burst). Token bucket allows bursts up to bucket capacity. Token bucket is generally better for API rate limiting.</li>
+  <li>"When would you choose leaky bucket over token bucket?" — When you need traffic shaping (smooth output) rather than rate limiting (burst protection). E.g., controlling egress traffic to a downstream service.</li>
+  <li>"Does the leaky bucket cause queuing delay?" — Yes, in the queue-based variant. Requests wait in the queue until they are processed. The metered variant does not queue.</li>
+  <li>"How do you handle the boundary spike problem?" — Leaky bucket does not have the boundary spike problem because there are no time windows. The bucket state is continuous.</li>
+</ul>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Depth:</strong> Network-level token bucket policers (RFC 2698, srTCM, trTCM). <br>
+  <strong>Depth:</strong> Linux tc (traffic control) leaky bucket qdisc configuration. <br>
+  <strong>Depth:</strong> Mathematical equivalence proof between metered leaky bucket and token bucket.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">System Design Primer — Rate Limiting (GitHub)</div>
+  <p>Comprehensive comparison of rate limiting algorithms including leaky bucket, token bucket, and sliding window with diagrams.</p>
+</div>
+<div class="source">
+  <div class="source-label">Wikipedia — Leaky Bucket Algorithm</div>
+  <p>Mathematical definition and history of the algorithm in teletraffic engineering and packet-switched networks.</p>
+</div>
+<div class="source">
+  <div class="source-label">Cloudflare — Rate Limiting at the Edge</div>
+  <p>Cloudflare's analysis of different rate limiting algorithms and why they chose token bucket for most use cases.</p>
+</div>
+
+<div class="nav">
+  <a href="token-bucket.html">&larr; Token Bucket</a>
+  <a href="fixed-window.html">Fixed Window &rarr;</a>
+</div>
+</body>
+</html>

@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.3.10 Writes Follow Reads</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">5 Distributed Systems</a> / <a href="../index.html">5.3 Consistency Models</a> / 5.3.10
+</div>
+
+<h1>5.3.10 Writes Follow Reads</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the <strong>writes-follow-reads</strong> guarantee, the specific anomaly it prevents (writing stale data based on stale reads), its implementation, and how it completes the session consistency family of guarantees.</p>
+
+<h2>Definition</h2>
+<p><strong>Writes-follow-reads</strong> guarantees that a write operation by a client will be sent to a replica that is at least as up-to-date as the replica from which the client last read. This prevents a client from writing stale data based on a stale read.</p>
+
+<div class="callout">
+  <strong>The Anomaly It Prevents:</strong> A client reads value X=5 from Replica 1 (which is behind), then writes an update based on X=5 to Replica 2 (which has X=10). The write overwrites X=10 with a value based on stale X=5, effectively "undoing" another client's update. Writes-follow-reads prevents this by ensuring the write goes to at least as fresh a replica as the read.
+</div>
+
+<h2>The Problem: Writing Based on Stale Data</h2>
+
+<div class="diagram">
+  Without Writes-Follow-Reads:
+
+  Client A reads X from Replica 1 → X=5 (stale, latest is X=10)
+  Client A writes X=7 (based on the X=5 they just read)
+  Client A sends write(X=7) to Replica 2 → overwrites X=10 with X=7
+
+  Timeline:
+    t0: Someone writes X=10 (goes to Replica 2)
+    t1: Client A reads X from Replica 1 → X=5 (replica 1 is behind)
+    t2: Client A computes X=7 based on X=5
+    t3: Client A writes X=7 to Replica 2 → REPLACES X=10 with X=7
+
+  === Lost Update ===
+  X=10 was lost because Client A read stale data and overwrote it.
+  This is the "lost update" or "read-then-write" anomaly.
+
+  With Writes-Follow-Reads:
+
+    t1: Client A reads X from Replica 1 → X=5, version=5
+    t2: Client A wants to write X=7
+        → System checks: write must go to replica with version >= 5
+        → Replica 2 has version=10 (>= 5) → write goes to Replica 2
+        → Replica 2: X=10, but client expected X=5
+        → System detects conflict! (X changed between read and write)
+        → Options: reject write, merge, or let application handle
+
+    OR:
+    t1: Client A reads X from Replica 1 → X=5, version=5
+    t2: Client A writes X=7 with precondition: version must be 5
+        → Replica 2 has X=10, version=10 → precondition fails
+        → Write REJECTED (conditional write / compare-and-swap)
+</div>
+
+<h2>Implementation Strategies</h2>
+
+<h3>1. Route Writes to the Same Replica as the Read</h3>
+
+<div class="diagram">
+  Approach: Sticky sessions (simplest)
+
+  Client reads from Replica 1 → Replica 1
+  Client writes to Replica 1 → Replica 1 (same replica!)
+
+  The replica has whatever the client just read, so no staleness gap.
+  Subsequent reads from Replica 1 also see the write.
+
+  ✓ Simple, no extra coordination
+  ✗ Tied to one replica, unbalanced load
+</div>
+
+<h3>2. Version-Based Conditional Writes</h3>
+
+<div class="diagram">
+  Approach: Compare-and-swap / optimistic concurrency
+
+  Client reads X=5, version=42 from any replica
+  Client computes X=7 based on X=5
+  Client writes X=7 WITH precondition: version must be 42
+
+  At the replica:
+    Current version is 42 → write succeeds (X=7, version=43)
+    Current version is 45 → write FAILS (data changed since read)
+
+  Client handles failure:
+    Retry: re-read current value, recompute, rewrite
+    Or: present conflict to user
+    Or: use merge logic
+
+  ✓ Works across replicas, no session affinity needed
+  ✓ Prevents lost updates (detects conflicts)
+  ✗ Client must handle retry/merge logic
+</div>
+
+<h3>3. Track Read Version on Write</h3>
+
+<div class="diagram">
+  Approach: System tracks the version of the last read
+
+  Client reads X from Replica 2 (version=10)
+  Client wants to write X
+  → System ensures write goes to a replica with version >= 10
+  → If all replicas have version >= 10: write proceeds
+  → If some replicas are behind: write goes to the freshest replica
+
+  ✓ Stronger guarantee: write goes to fresh enough replica
+  ✗ Requires version tracking infrastructure
+</div>
+
+<table>
+  <tr>
+    <th>Approach</th>
+    <th>Guarantee</th>
+    <th>Anomaly Prevention</th>
+    <th>Complexity</th>
+  </tr>
+  <tr>
+    <td>Sticky sessions</td>
+    <td>Writes follow reads (same replica)</td>
+    <td>Prevents stale write target</td>
+    <td class="green">Low</td>
+  </tr>
+  <tr>
+    <td>Conditional writes (CAS)</td>
+    <td>Detects lost updates</td>
+    <td class="green">Prevents lost updates AND stale writes</td>
+    <td>Medium</td>
+  </tr>
+  <tr>
+    <td>Version tracking</td>
+    <td>Writes to fresh replica</td>
+    <td class="green">Prevents writing to stale replica</td>
+    <td>Medium</td>
+  </tr>
+</table>
+
+<h2>Real-World Relevance</h2>
+
+<div class="callout yellow">
+  <strong>Interview Tip:</strong> Writes-follow-reads is the guarantee behind conditional writes and compare-and-swap (CAS) operations. When asked "how do you prevent lost updates in a collaborative editor or an inventory system?", CAS is the standard answer. It is also the basis of optimistic concurrency control in most databases.
+</div>
+
+<ul>
+  <li><strong>Version counters:</strong> Every record has a version field. Write includes "only if version = X". If version changed, write fails.</li>
+  <li><strong>ETags:</strong> HTTP ETags implement writes-follow-reads at the caching layer. If-Match header ensures the resource has not changed.</li>
+  <li><strong>Conditional mutations:</strong> DynamoDB conditional writes, Spanner transactions — all implement writes-follow-reads semantics.</li>
+</ul>
+
+<h2>The Complete Session Consistency Picture</h2>
+
+<p>Writes-follow-reads is the fourth and final guarantee in the Terry et al. session consistency family:</p>
+
+<div class="diagram">
+  Session Consistency (Terry et al., 1994) consists of:
+  ┌──────────────────────────────────────────────┐
+  │  1. Read Your Writes                           │
+  │     After writing, you see your own write       │
+  │                                                │
+  │  2. Monotonic Reads                            │
+  │     Never read an older value (no going back)   │
+  │                                                │
+  │  3. Monotonic Writes                           │
+  │     Your writes are applied in order            │
+  │                                                │
+  │  4. Writes Follow Reads                        │
+  │     Writes go to as fresh a replica as reads    │
+  └──────────────────────────────────────────────┘
+
+  All four together = Session Consistency
+  Any individual guarantee is useful on its own
+  Most real systems implement subsets depending on need
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>"What is the writes-follow-reads guarantee?"</li>
+  <li>"What anomaly does writes-follow-reads prevent?"</li>
+  <li>"How does compare-and-swap implement writes-follow-reads?"</li>
+  <li>"How do HTTP ETags relate to writes-follow-reads?"</li>
+  <li>"Name the four session consistency guarantees from Terry et al."</li>
+  <li>"How would you prevent lost updates in a distributed inventory system?"</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid in interviews:</strong>
+  <ul>
+    <li>Optimistic concurrency control internals (version check implementations in specific databases)</li>
+    <li>HTTP conditional request details (If-Match, If-None-Match, If-Modified-Since syntax)</li>
+    <li>Lock-based concurrency control alternatives (pessimistic locking)</li>
+    <li>Specific DynamoDB conditional write syntax or Spanner transaction isolation levels</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary Sources</div>
+  <ul>
+    <li>Terry, D. et al. "Session Guarantees for Weakly Consistent Replicated Data" (PDIS, 1994)</li>
+    <li>Kleppmann, M. <strong>Designing Data-Intensive Applications</strong>, Chapter 5</li>
+    <li>Vogels, W. "Eventually Consistent" (ACM Queue, 2009)</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Supplementary</div>
+  <ul>
+    <li>Terry, D. "Replicated Data Consistency Explained Through Baseball" (Microsoft Research, 2013)</li>
+    <li>Gray, J. et al. "The Dangers of Replication and a Solution" (ACM SIGMOD, 1996)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="monotonic-writes.html">&larr; 5.3.9 Monotonic Writes</a>
+  <a href="physical-clock.html">5.4.1 Physical Clock &rarr;</a>
+</div>
+
+</body>
+</html>

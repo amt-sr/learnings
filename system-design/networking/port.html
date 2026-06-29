@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.1.2 Port</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#2">2 Networking</a> / <a href="../index.html#2.1">2.1 Network Basics</a> / 2.1.2
+</div>
+
+<h1>Port</h1>
+<div class="meta">
+  <span>Difficulty: ⭐☆☆☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What a port is and how it works with IP addresses</li>
+  <li>Well-known, registered, and dynamic port ranges</li>
+  <li>The socket concept (IP + Port = unique endpoint)</li>
+  <li>Common ports every engineer should know</li>
+</ul>
+
+<h2>Definition</h2>
+<p>A port is a <strong>numbered endpoint that identifies a specific process or service on a machine</strong>. Combined with an IP address, it forms a socket — the actual communication endpoint.</p>
+
+<div class="formula">
+  Socket = IP Address + Port Number
+  <small>Example: 192.168.1.10:8080 identifies process on port 8080 on that specific machine</small>
+</div>
+
+<div class="callout yellow">
+  <strong>Analogy:</strong> If an IP address is a building's street address, a port is the apartment number. Multiple services (tenants) can run on the same machine (building), each reachable by its port number.
+</div>
+
+<h2>Port Ranges</h2>
+<table>
+  <tr><th>Range</th><th>Name</th><th>Ports</th><th>Usage</th></tr>
+  <tr><td>System Ports</td><td>Well-known</td><td>0 – 1023</td><td>Standard services (need root/admin)</td></tr>
+  <tr><td>User Ports</td><td>Registered</td><td>1024 – 49151</td><td>Registered applications</td></tr>
+  <tr><td>Dynamic Ports</td><td>Ephemeral</td><td>49152 – 65535</td><td>Client-side, temporary connections</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Key point:</strong> Well-known ports are assigned by IANA. Registered ports are for known applications but don't require root. Ephemeral ports are assigned by the OS for outgoing connections.
+</div>
+
+<h2>Ports Every Engineer Should Know</h2>
+<table>
+  <tr><th>Port</th><th>Protocol</th><th>Service</th></tr>
+  <tr><td>20, 21</td><td>TCP</td><td>FTP (data, control)</td></tr>
+  <tr><td>22</td><td>TCP</td><td>SSH</td></tr>
+  <tr><td>25</td><td>TCP</td><td>SMTP</td></tr>
+  <tr><td>53</td><td>TCP/UDP</td><td>DNS</td></tr>
+  <tr><td>80</td><td>TCP</td><td>HTTP</td></tr>
+  <tr><td>443</td><td>TCP</td><td>HTTPS</td></tr>
+  <tr><td>3306</td><td>TCP</td><td>MySQL</td></tr>
+  <tr><td>5432</td><td>TCP</td><td>PostgreSQL</td></tr>
+  <tr><td>6379</td><td>TCP</td><td>Redis</td></tr>
+  <tr><td>27017</td><td>TCP</td><td>MongoDB</td></tr>
+  <tr><td>9092</td><td>TCP</td><td>Kafka</td></tr>
+  <tr><td>2181</td><td>TCP</td><td>ZooKeeper</td></tr>
+  <tr><td>8080</td><td>TCP</td><td>HTTP proxy / alternative HTTP</td></tr>
+</table>
+
+<h2>How Connections Work</h2>
+<div class="diagram">  Client (browser)              Server
+  ─────────────              ──────
+  ephemeral port → connects to → port 443 (HTTPS)
+
+  Example connection:
+  10.0.1.5:52341  ──────→  142.250.80.46:443
+
+  The client gets a random ephemeral port (52341).
+  The server listens on a well-known port (443).
+
+  A single server can handle thousands of connections:
+  142.250.80.46:443 ← 10.0.1.5:52341
+  142.250.80.46:443 ← 10.0.1.6:52342
+  142.250.80.46:443 ← 10.0.1.7:52343
+  All three connections share port 443 on the server,
+  but are distinguished by the client IP:port tuple.</div>
+
+<h2>Tuple Uniqueness</h2>
+<p>A TCP connection is uniquely identified by a <strong>5-tuple</strong>:</p>
+<div class="formula">
+  (Source IP, Source Port, Destination IP, Destination Port, Protocol)
+  <small>Two connections are the same ONLY if all 5 elements match.</small>
+</div>
+
+<div class="callout green">
+  <strong>System design implication:</strong> A single server listening on port 443 can theoretically handle ~65,535 concurrent connections from the same client IP (limited by ephemeral port range). From different client IPs, it can handle millions. This is why <a href="tcp.html">TCP</a> connection reuse (keep-alive) matters — it frees up ephemeral ports.
+</div>
+
+<h2>Port Exhaustion</h2>
+<p>When a machine makes too many outbound connections, it can run out of ephemeral ports (typically 49152-65535 = ~16,383 ports).</p>
+<pre>Symptoms: "Address already in use" errors, connection timeouts
+
+Solutions:
+  1. Enable TCP keep-alive to reuse connections
+  2. Use <a href="keep-alive.html">connection pooling</a>
+  3. Tune ephemeral port range (sysctl net.ipv4.ip_local_port_range)
+  4. Enable SO_REUSEADDR socket option
+  5. Use multiple source IPs on the client</pre>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What's the difference between IP address and port?"</strong><br>IP identifies the machine. Port identifies the process on that machine. Together (socket) they uniquely identify a communication endpoint.</li>
+  <li><strong>"What happens when you run out of ephemeral ports?"</strong><br>New outbound connections fail. Solutions: connection pooling, keep-alive, tuning OS port range, using multiple source IPs.</li>
+  <li><strong>"Why can two services both use port 8080 on different machines?"</strong><br>Because ports are per-machine. The socket includes the IP address, so 10.0.1.1:8080 and 10.0.1.2:8080 are different endpoints.</li>
+  <li><strong>"Can two processes on the same machine use the same port?"</strong><br>No — unless they bind to different IPs (e.g., 127.0.0.1:8080 and 0.0.0.0:8080). Same IP + same port = conflict.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>Full IANA registered port list</li>
+    <li>UDP port-specific behaviors</li>
+    <li>Port knocking and security-by-obscurity techniques</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>Computer Networking: A Top-Down Approach (Kurose &amp; Ross)</strong> — Chapter 3 (Transport Layer)</li>
+    <li><strong>TCP/IP Illustrated Vol. 1 (Stevens)</strong> — Chapter 1 (Introduction)</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="ip-address.html">&larr; 2.1.1 IP Address</a>
+  <a href="tcp.html">Next: 2.1.3 TCP &rarr;</a>
+</div>
+
+</body>
+</html>

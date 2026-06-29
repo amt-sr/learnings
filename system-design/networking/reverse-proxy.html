@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.7.1 Reverse Proxy</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#2">2 Networking</a> / <a href="../index.html#2.7">2.7 Load Balancing</a> / 2.7.1
+</div>
+
+<h1>Reverse Proxy</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What a reverse proxy is and how it sits between clients and servers</li>
+  <li>How it differs from a <a href="forward-proxy.html">forward proxy</a></li>
+  <li>TLS termination, rate limiting, and security at the reverse proxy layer</li>
+  <li>Real-world examples: Nginx, HAProxy, AWS ALB</li>
+</ul>
+
+<h2>Definition</h2>
+<p>A <strong>reverse proxy is a server that sits in front of backend servers and forwards client requests to them</strong>. The client never talks directly to the backend — it only knows about the reverse proxy. The reverse proxy decides which backend server handles each request, providing a single entry point for all traffic.</p>
+
+<div class="diagram">  Client Request Flow:
+  ┌────────┐       ┌──────────────┐       ┌─────────────┐
+  │ Client │──────▶│ Reverse Proxy│──────▶│  Server A   │
+  └────────┘       │  (Nginx/ALB) │──────▶│  Server B   │
+                   └──────────────┘──────▶│  Server C   │
+                          │              └─────────────┘
+                          │
+                    Client never sees
+                    Server A, B, or C
+                    directly</div>
+
+<h2>Key Responsibilities</h2>
+<table>
+  <tr><th>Function</th><th>Description</th></tr>
+  <tr><td><strong>Load Distribution</strong></td><td>Distributes requests across multiple backend servers</td></tr>
+  <tr><td><strong>TLS Termination</strong></td><td>Handles SSL/TLS decryption so backends serve plain HTTP</td></tr>
+  <tr><td><strong>Rate Limiting</strong></td><td>Throttles requests per client IP or API key</td></tr>
+  <tr><td><strong>SSL Offloading</strong></td><td>Frees backend servers from expensive encryption work</td></tr>
+  <tr><td><strong>Caching</strong></td><td>Serves cached responses for frequently requested resources</td></tr>
+  <tr><td><strong>Compression</strong></td><td>Compresses responses (gzip/brotli) before sending to clients</td></tr>
+  <tr><td><strong>Security</strong></td><td>Hides backend server IPs, blocks malicious traffic, WAF integration</td></tr>
+</table>
+
+<h2>TLS Termination</h2>
+<p>TLS termination means the reverse proxy <strong>decrypts incoming HTTPS traffic and forwards plain HTTP to backend servers</strong>. This is critical because TLS handshakes are CPU-intensive — offloading this to the proxy frees backend servers to focus on application logic.</p>
+
+<div class="diagram">  Without TLS Termination:
+  Client ──[TLS]──▶ LB ──[TLS]──▶ Server A
+  Client ──[TLS]──▶ LB ──[TLS]──▶ Server B
+  (Every server handles TLS decryption)
+
+  With TLS Termination:
+  Client ──[TLS]──▶ Reverse Proxy ──[HTTP]──▶ Server A
+  Client ──[TLS]──▶ Reverse Proxy ──[HTTP]──▶ Server B
+  (Only the proxy handles TLS decryption)</div>
+
+<div class="callout yellow">
+  <strong>Security consideration:</strong> When using TLS termination, traffic between the reverse proxy and backends is unencrypted. In production, use TLS between the proxy and backends as well (end-to-end TLS), or place everything within a trusted VPC where network-level encryption is unnecessary.
+</div>
+
+<h2>Rate Limiting at the Reverse Proxy</h2>
+<p>A reverse proxy can enforce rate limits <strong>before</strong> requests reach backend servers, protecting them from abuse and traffic spikes.</p>
+<pre># Nginx rate limiting example
+limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
+
+server {
+    location /api/ {
+        limit_req zone=api burst=20 nodelay;
+        proxy_pass http://backend;
+    }
+}
+
+# Common rate limiting strategies:
+# - Per IP address:        rate=10r/s
+# - Per API key:           rate=100r/s  (map $arg_api_key)
+# - Per user (from JWT):   rate=50r/s   (map $jwt_claim_sub)</pre>
+
+<h2>Reverse Proxy vs Forward Proxy</h2>
+<table>
+  <tr><th></th><th><a href="reverse-proxy.html">Reverse Proxy</a></th><th><a href="forward-proxy.html">Forward Proxy</a></th></tr>
+  <tr><td>Position</td><td>In front of servers</td><td>In front of clients</td></tr>
+  <tr><td>Who it serves</td><td class="green">Servers (protects backends)</td><td>Clients (protects users)</td></tr>
+  <tr><td>Visibility</td><td>Client knows proxy's address only</td><td>Server doesn't know real client</td></tr>
+  <tr><td>Use case</td><td>Load balancing, TLS termination</td><td>Privacy, content filtering, caching</td></tr>
+  <tr><td>Control</td><td>Server admin controls the proxy</td><td>Client admin controls the proxy</td></tr>
+  <tr><td>Examples</td><td>Nginx, AWS ALB, HAProxy</td><td>Squid, corporate proxy, VPN</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Memory trick:</strong> A <em>reverse</em> proxy is the reverse of what you'd expect — it sits on the server side, not the client side. A forward proxy is the "normal" direction — it's on the client's behalf.
+</div>
+
+<h2>Real-World Examples</h2>
+
+<h3>Nginx</h3>
+<pre># Nginx as reverse proxy with load balancing
+upstream backend {
+    server 10.0.1.10:8080;
+    server 10.0.1.11:8080;
+    server 10.0.1.12:8080;
+}
+
+server {
+    listen 443 ssl;
+    server_name api.example.com;
+
+    ssl_certificate /etc/ssl/certs/api.pem;
+    ssl_certificate_key /etc/ssl/private/api.key;
+
+    location / {
+        proxy_pass http://backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}</pre>
+
+<h3>HAProxy</h3>
+<pre># HAProxy configuration
+frontend http_front
+    bind *:443 ssl crt /etc/ssl/api.pem
+    default_backend http_back
+
+backend http_back
+    balance roundrobin
+    server web1 10.0.1.10:8080 check
+    server web2 10.0.1.11:8080 check
+    server web3 10.0.1.12:8080 check</pre>
+
+<h3>AWS Application Load Balancer (ALB)</h3>
+<p>AWS ALB is a <a href="l7-load-balancer.html">Layer 7</a> reverse proxy managed by AWS. It supports path-based routing, TLS termination, and integrates with WAF. You pay per hour + per LCU (Load Balancer Capacity Unit).</p>
+<pre># ALB path-based routing rules:
+# /api/users/*     → Target Group: user-service
+# /api/orders/*    → Target Group: order-service
+# /api/payments/*  → Target Group: payment-service
+# /*               → Target Group: web-frontend</pre>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What is a reverse proxy and why do you need one?"</strong><br>Sits in front of backend servers, forwarding client requests to them. Needed for load distribution, TLS termination, security (hides backend IPs), rate limiting, and caching. It provides a single entry point for all traffic.</li>
+  <li><strong>"What is TLS termination and why is it important?"</strong><br>The reverse proxy decrypts HTTPS traffic so backend servers receive plain HTTP. This centralizes certificate management and offloads CPU-intensive crypto work from app servers. Trade-off: traffic between proxy and backend must be secured separately (VPC or mutual TLS).</li>
+  <li><strong>"Reverse proxy vs load balancer — are they the same?"</strong><br>Every reverse proxy can do basic load balancing, but a dedicated load balancer offers advanced algorithms (<a href="least-connections.html">least connections</a>, <a href="consistent-hashing.html">consistent hashing</a>), <a href="health-checks.html">health checks</a>, and often operates at both <a href="l4-load-balancer.html">L4</a> and <a href="l7-load-balancer.html">L7</a>. A reverse proxy is typically more focused on request transformation and routing.</li>
+  <li><strong>"Where would you put rate limiting — at the reverse proxy or the application?"</strong><br>At the reverse proxy for defense-in-depth. Rate limiting at the proxy prevents malicious traffic from reaching the app at all. But the app should also enforce limits for cases where traffic bypasses the proxy (internal services, direct access).</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>Deep Nginx configuration syntax (know concepts, not config flags)</li>
+    <li>Proxy Protocol (rarely asked)</li>
+    <li>WebSocket proxying details</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"NGINX High Performance"</strong> — Owen Garrett (chapters 1-3)</li>
+    <li><strong>HAProxy Official Documentation</strong> — haproxy.org/documentation</li>
+    <li><strong>AWS ELB Documentation</strong> — docs.aws.amazon.com/elasticloadbalancing</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="cache-invalidation.html">&larr; 2.6.9 Cache Invalidation</a>
+  <a href="forward-proxy.html">Next: 2.7.2 Forward Proxy &rarr;</a>
+</div>
+
+</body>
+</html>

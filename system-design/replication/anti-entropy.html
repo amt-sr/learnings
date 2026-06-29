@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.7.5 Anti Entropy</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#4">4 Replication</a> / <a href="../index.html#4.7">4.7 Recovery</a> / 4.7.5
+</div>
+
+<h1>Anti Entropy</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What anti-entropy is and why it's needed in eventually consistent systems</li>
+  <li>How Merkle trees enable efficient comparison of large datasets</li>
+  <li>Read repair vs anti-entropy: on-demand vs background synchronization</li>
+  <li>The role of anti-entropy in DynamoDB, Cassandra, and Riak</li>
+</ul>
+
+<h2>Definition</h2>
+<p><strong>Anti-entropy</strong> is a background process that detects and repairs inconsistencies between replicas by comparing their data and reconciling differences. Unlike <a href="read-repair.html">read repair</a> (triggered on reads), anti-entropy runs continuously or periodically to keep replicas convergent even for data that isn't being read.</p>
+
+<h2>Why Anti-Entropy Is Needed</h2>
+<p>In eventually consistent systems, replicas can diverge due to:</p>
+<ul>
+  <li><strong>Network partitions</strong> — writes accepted on both sides can't be propagated</li>
+  <li><strong>Node failures</strong> — <a href="hinted-handoff.html">hinted handoff</a> writes may not be delivered</li>
+  <li><strong>Write conflicts</strong> — <a href="divergence.html">divergence</a> from multi-leader or concurrent writes</li>
+  <li><strong>Clock skew</strong> — version timestamps may not be perfectly ordered</li>
+</ul>
+
+<div class="diagram">  Anti-entropy catches inconsistencies that read repair misses:
+
+  Scenario: Node C was down, missed writes W3 and W4
+  ┌──────────┐  ┌──────────┐  ┌──────────┐
+  │ Node A   │  │ Node B   │  │ Node C   │
+  │ W1, W2,  │  │ W1, W2,  │  │ W1, W2   │
+  │ W3, W4   │  │ W3, W4   │  │          │
+  └──────────┘  └──────────┘  └──────────┘
+        │            │              │
+        └── anti-entropy ──────────┘
+                  │
+        Detect C is missing W3, W4
+        Repair C → now has W1, W2, W3, W4
+
+  Without anti-entropy: C stays inconsistent until
+  someone reads W3 or W4 from C (read repair).</div>
+
+<h2>Merkle Trees (Hash Trees)</h2>
+<p>The most common anti-entropy mechanism. A Merkle tree is a hash tree where each leaf is a hash of a data chunk, and each parent is a hash of its children. Comparing Merkle trees between replicas identifies <strong>exactly which chunks differ</strong> without transferring all data.</p>
+
+<div class="diagram">  Merkle Tree Example:
+
+  Level 0 (root):  Hash(H01 + H23)
+                   /        \
+  Level 1:    H01            H23
+             /    \         /    \
+  Level 2:  H0    H1      H2    H3
+            │      │       │     │
+  Data:    [A,B]  [C,D]  [E,F] [G,H]
+
+  Anti-entropy comparison:
+  1. Compare root hashes → same? Done.
+  2. Root differs → compare children (H01 vs H01', H23 vs H23')
+  3. H01 differs but H23 same → only check H0, H1
+  4. H0 same, H1 differs → fetch [C,D] chunk from peer
+  5. O(log n) comparisons instead of comparing all data
+
+  For 1M keys: ~20 hash comparisons to find which key(s) differ
+  vs. comparing all 1M keys directly.</div>
+
+<table>
+  <tr><th>Approach</th><th>Comparisons</th><th>Data Transferred</th><th>When to Use</th></tr>
+  <tr><td>Full data comparison</td><td class="red">O(n)</td><td class="red">O(n)</td><td>Small datasets</td></tr>
+  <tr><td class="green">Merkle tree</td><td class="green">O(log n)</td><td class="green">O(differences only)</td><td>Large datasets (Cassandra, Riak)</td></tr>
+  <tr><td>Version vectors</td><td>O(n)</td><td class="green">O(differences only)</td><td>Small n, version-aware systems</td></tr>
+</table>
+
+<h2>Anti-Entropy Process</h2>
+<ol>
+  <li>Node A sends its Merkle tree root hash to Node B</li>
+  <li>If roots match — data is identical, done</li>
+  <li>If roots differ — traverse down the tree comparing child hashes</li>
+  <li>Identify the specific leaf chunks that differ</li>
+  <li>Exchange only the differing data</li>
+  <li>Apply conflict resolution (last-write-wins, CRDT merge, etc.)</li>
+</ol>
+
+<div class="callout">
+  <strong>Merkle tree granularity:</strong> The tree depth determines comparison granularity. A shallow tree (few large buckets) transfers less metadata but more data on differences. A deep tree (many small buckets) transfers more metadata but pinpoints exact differences. Typical: vnodes as tree leaves (100-200 buckets per node).
+</div>
+
+<h2>Read Repair vs Anti-Entropy</h2>
+<table>
+  <tr><th>Aspect</th><th><a href="read-repair.html">Read Repair</a></th><th><strong>Anti-Entropy</strong></th></tr>
+  <tr><td><strong>Trigger</strong></td><td>On read request</td><td>Background, periodic</td></tr>
+  <tr><td><strong>Coverage</strong></td><td class="red">Only data that is read</td><td class="green">All data eventually</td></tr>
+  <tr><td><strong>Latency impact</strong></td><td>Adds latency to reads</td><td>No user-facing impact</td></tr>
+  <tr><td><strong>Resource cost</strong></td><td>Proportional to read traffic</td><td>Constant background overhead</td></tr>
+  <tr><td><strong>Best for</strong></td><td>Hot data, frequent reads</td><td>Cold data, catching silent divergence</td></tr>
+</table>
+
+<div class="callout green">
+  <strong>Key insight:</strong> Read repair and anti-entropy are complementary. Read repair fixes inconsistencies as users encounter them. Anti-entropy catches inconsistencies in data nobody is reading. Production systems use both — Cassandra runs read repair on every read at consistency level QUORUM and anti-entropy (repair) as a background operation.
+</div>
+
+<h2>Systems Using Anti-Entropy</h2>
+<table>
+  <tr><th>System</th><th>Anti-Entropy Mechanism</th></tr>
+  <tr><td><strong>Cassandra</strong></td><td>Nodetool repair (Merkle trees per vnode range)</td></tr>
+  <tr><td><strong>DynamoDB</strong></td><td>Background sync using version vectors</td></tr>
+  <tr><td><strong>Riak</strong></td><td>AAE (Active Anti-Entropy) with Merkle trees per vnode</td></tr>
+  <tr><td><strong>Azure Storage</strong></td><td>Background anti-entropy for geo-replicated data</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Cassandra repair:</strong> Running <code>nodetool repair</code> is critical for Cassandra health. Without periodic anti-entropy, hinted handoffs and read repairs alone cannot guarantee consistency. Best practice: run repair weekly and always before major operations (compaction, topology changes). A full repair on large datasets can take hours — use incremental repair (<code>nodetool repair -inc</code>) to reduce the window.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What is anti-entropy?"</strong><br>A background process that compares replicas and repairs inconsistencies. Uses Merkle trees to efficiently find which data chunks differ between nodes without transferring all data. Runs independently of user traffic, complementing read repair which only fixes data on read paths.</li>
+  <li><strong>"How does a Merkle tree help with anti-entropy?"</strong><br>Each leaf is a hash of a data chunk, parents are hashes of children. To find differences, compare root hashes first. If they match, data is identical. If they differ, traverse down comparing children — only branch into subtrees that differ. This narrows down differences in O(log n) comparisons instead of O(n).</li>
+  <li><strong>"What's the difference between read repair and anti-entropy?"</strong><br>Read repair is triggered on reads and only fixes inconsistencies in the data being read. Anti-entropy runs in the background and covers all data, including cold data that nobody reads. Both are needed for full consistency guarantees in eventually consistent systems.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>Merkle tree proof construction and verification (used in cryptocurrencies, not DB replication)</li>
+    <li>Specific Merkle tree hashing algorithms</li>
+    <li>Gossip-based anti-entropy protocol details</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Designing Data-Intensive Applications"</strong> — Martin Kleppmann (Chapter 5: Replication, anti-entropy section)</li>
+    <li><strong>"Dynamo: Amazon's Highly Available Key-Value Store"</strong> — DeCandia et al. (anti-entropy and Merkle trees)</li>
+    <li><strong>Cassandra Documentation</strong> — nodetool repair and repair mechanics</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="hinted-handoff.html">&larr; 4.7.4 Hinted Handoff</a>
+  <a href="../distributed-systems/consistency.html">Next: 5.1.1 Consistency &rarr;</a>
+</div>
+
+</body>
+</html>

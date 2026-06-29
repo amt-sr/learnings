@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.3.5 Causal Consistency</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">5 Distributed Systems</a> / <a href="../index.html">5.3 Consistency Models</a> / 5.3.5
+</div>
+
+<h1>5.3.5 Causal Consistency</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand <strong>causal consistency</strong> as a model that preserves the order of causally related operations, how it is implemented using vector clocks, and why it strikes an important balance between strong consistency and eventual consistency.</p>
+
+<h2>Definition</h2>
+<p><strong>Causal consistency</strong> guarantees that if operation A causally precedes operation B (i.e., B depends on or was influenced by A), then all nodes see A before B. Causally <em>independent</em> operations can appear in any order on different nodes.</p>
+
+<div class="callout">
+  <strong>What is "Causal" Precedence?</strong> Operations are causally related if:
+  <ul>
+    <li>B reads a value written by A</li>
+    <li>B happens-after A on the same client (client ordering)</li>
+    <li>A and B are both causally related to C (transitivity)</li>
+  </ul>
+  If none of these hold, A and B are causally independent (concurrent).
+</div>
+
+<h2>How Causal Consistency Works</h2>
+
+<div class="diagram">
+  Chat / Messaging Example:
+
+  Alice and Bob are chatting through different replicas:
+
+  t0: Alice writes "Hi!"        (Replica 1, US)
+  t1: Alice reads "Hi!"         (Replica 1, US)
+  t2: Bob reads "Hi!"           (Replica 2, EU) — must see "Hi!" before any reply
+  t3: Bob writes "Hello!"       (Replica 2, EU) — causally depends on "Hi!"
+  t4: Alice reads "Hello!"      (Replica 1, US) — must see "Hi!" before "Hello!"
+
+  Causal dependency chain: "Hi!" → read by Bob → "Hello!"
+
+  === Causally Consistent ===
+  All nodes agree: "Hi!" comes before "Hello!"
+
+  === Concurrent (Independent) Operations ===
+  Carol writes "Hey!" at the same time as Alice's "Hi!"
+  These are NOT causally related — different orderings OK:
+    Node 1 may show: "Hi!" then "Hey!"
+    Node 2 may show: "Hey!" then "Hi!"
+  Both orderings are valid under causal consistency.
+</div>
+
+<h2>Vector Clocks: Implementing Causal Consistency</h2>
+
+<div class="diagram">
+  Vector Clock Example (3 replicas: R1, R2, R3):
+
+  Alice writes "Hi!" at R1:
+    R1: [1, 0, 0]  R2: [0, 0, 0]  R3: [0, 0, 0]
+    Event E1: VC = [1, 0, 0]
+
+  Replicate E1 to R2:
+    R1: [1, 0, 0]  R2: [1, 0, 0]  R3: [0, 0, 0]
+
+  Bob writes "Hello!" at R2 (read "Hi!" first, so depends on E1):
+    Event E2: VC = [1, 1, 0]  (R2's counter incremented after seeing R1's)
+
+  Causal check: E2.VC = [1, 1, 0] dominates E1.VC = [1, 0, 0]
+    → E2 causally depends on E1  ✓
+
+  Carol writes "Hey!" at R3 (no prior reads):
+    Event E3: VC = [0, 0, 1]
+
+  Causal check: E3.VC = [0, 0, 1] vs E1.VC = [1, 0, 0]
+    Neither dominates the other → E1 and E3 are CONCURRENT
+
+  === Vector Clock Comparison Rules ===
+  VC_A dominates VC_B if every element of A >= B and at least one > B
+  If neither dominates: operations are concurrent
+</div>
+
+<h3>Vector Clock Properties</h3>
+<ul>
+  <li>Each node maintains a vector clock with one entry per known node</li>
+  <li>On local event: increment own counter</li>
+  <li>On receive: merge (element-wise max) with received vector clock</li>
+  <li>Comparison enables causal ordering detection</li>
+  <li>Size grows with number of replicas (not ideal for very large clusters)</li>
+</ul>
+
+<h2>Causal Consistency in Practice</h2>
+
+<table>
+  <tr>
+    <th>System</th>
+    <th>Causal Consistency Implementation</th>
+  </tr>
+  <tr>
+    <td>Amazon DynamoDB</td>
+    <td>Global tables use causal consistency across regions for last-writer-wins</td>
+  </tr>
+  <tr>
+    <td>Cassandra</td>
+    <td>Client-side timestamps (LWW) approximate causal ordering</td>
+  </tr>
+  <tr>
+    <td>CouchDB</td>
+    <td>Revision trees track causal history for conflict detection</td>
+  </tr>
+  <tr>
+    <td>MongoDB (causal session)</td>
+    <td>Causal consistency within a session (since v3.6)</td>
+  </tr>
+  <tr>
+    <td>Google Sheets</td>
+    <td>Operational Transformation with causal ordering for collaborative editing</td>
+  </tr>
+</table>
+
+<h2>Where Causal Fits in the Hierarchy</h2>
+
+<div class="diagram">
+  Linearizability (strongest)
+       │
+       │  stronger
+       ▼
+  Sequential Consistency
+       │
+       │  stronger
+       ▼
+  Causal Consistency  ← You are here
+       │
+       │  stronger
+       ▼
+  Session Consistency / Read-Your-Writes / Monotonic Reads
+       │
+       │  stronger
+       ▼
+  Eventual Consistency (weakest)
+
+  Causal consistency:
+  - Stronger than session/read-your-writes (applies globally, not per-client)
+  - Weaker than sequential (no total order for concurrent operations)
+  - Significant practical benefit: prevents confusing reordering
+</div>
+
+<h2>Trade-offs</h2>
+
+<table>
+  <tr>
+    <th>Aspect</th>
+    <th>Causal Consistency</th>
+  </tr>
+  <tr>
+    <td>Concurrency</td>
+    <td class="green">High — concurrent operations can proceed without coordination</td>
+  </tr>
+  <tr>
+    <td>Confusing reordering</td>
+    <td class="green">Prevented — causal dependencies always respected</td>
+  </tr>
+  <tr>
+    <td>Metadata overhead</td>
+    <td class="red">Vector clocks grow with cluster size (O(N) per event)</td>
+  </tr>
+  <tr>
+    <td>Client-visible anomalies</td>
+    <td class="green">None for causally related operations</td>
+  </tr>
+  <tr>
+    <td>Implementation complexity</td>
+    <td class="red">Medium — vector clock management, merge on read/write</td>
+  </tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Interview Tip:</strong> When designing a collaborative system (e.g., Google Docs, Figma, chat), causal consistency is often the right answer. Explain that you need it because: (1) users should not see replies before the original message, (2) edits should be applied in causal order, (3) but you do not need the full cost of linearizability for every keystroke.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>"What is causal consistency and how does it differ from eventual consistency?"</li>
+  <li>"How do vector clocks implement causal consistency?"</li>
+  <li>"Give an example of a system that needs causal consistency."</li>
+  <li>"What happens when two concurrent operations conflict in a causally consistent system?"</li>
+  <li>"How does causal consistency compare to linearizability?"</li>
+  <li>"What is the overhead of vector clocks? How do they scale?"</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid in interviews:</strong>
+  <ul>
+    <li>Version vectors vs. vector clocks distinction (implementation detail)</li>
+    <li>Dotted version vectors or hybrid logical clocks</li>
+    <li>CRDT internals (OR-Set, LWW-Element-Set, etc.) unless you propose them</li>
+    <li>Formal causal consistency models (PBS, CPC, etc.)</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary Sources</div>
+  <ul>
+    <li>Kleppmann, M. <strong>Designing Data-Intensive Applications</strong>, Chapter 5 (Replication)</li>
+    <li>Lamport, L. "Time, Clocks, and the Ordering of Events in a Distributed System" (CACM, 1978)</li>
+    <li>Ahamad, M. et al. "Causal Memory: Definitions, Implementation, and Programming" (Distributed Computing, 1996)</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Supplementary</div>
+  <ul>
+    <li>Mahajan, P. et al. "Depot: Consistency as a First-Class Citizen in Geo-Distributed Storage" (OSDI, 2018)</li>
+    <li>Terry, D. "Replicated Data Consistency Explained Through Baseball" (Microsoft Research, 2013)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="linearizability.html">&larr; 5.3.4 Linearizability</a>
+  <a href="session-consistency.html">5.3.6 Session Consistency &rarr;</a>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.2.1 Broker — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">8. Messaging</a> / 8.2.1 Broker</p>
+
+<h1>8.2.1 Broker (Message Broker)</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+
+<p>Understand the role of a message broker as the middleware that sits between producers and consumers, managing message routing, persistence, and delivery guarantees.</p>
+
+<h2>Definition</h2>
+
+<p>A <strong>message broker</strong> is an intermediary service that receives messages from producers, routes them to the correct destination (queue or topic), and ensures reliable delivery to consumers. It abstracts away the complexity of direct producer-to-consumer communication, handling message storage, ordering, retry logic, and failure recovery.</p>
+
+<div class="callout">
+  <strong>Analogy:</strong> A message broker is like a post office. The sender (producer) drops off a letter without needing to know who will pick it up or whether the recipient is home. The post office (broker) stores, routes, and ensures delivery.
+</div>
+
+<h2>Architecture</h2>
+
+<div class="diagram">
+  Producers              Message Broker              Consumers
+  ┌──────────┐         ┌──────────────────┐        ┌──────────┐
+  │ Service A ├──msg──►│                  │──msg──►│ Worker 1 │
+  │ Service B ├──msg──►│   Message        │──msg──►│ Worker 2 │
+  │ Service C ├──msg──►│   Broker         │        └──────────┘
+  └──────────┘         │  ┌────────────┐  │
+                       │  │ Persistence │  │
+                       │  │  (Disk/RAM) │  │
+                       │  └────────────┘  │
+                       │  ┌────────────┐  │
+                       │  │  Routing    │  │
+                       │  │  Engine     │  │
+                       │  └────────────┘  │
+                       └──────────────────┘
+
+  Responsibilities:
+  • Accept messages from producers
+  • Store messages durably (optional, based on config)
+  • Route messages to correct queues/topics
+  • Handle consumer connections and delivery
+  • Manage message ordering and retries
+</div>
+
+<h2>What the Broker Manages</h2>
+
+<h3>Message Routing</h3>
+<p>The broker determines where each message should go. In simple queue-based systems, this is direct. In pub/sub systems, the broker fans out messages to all subscribers of a topic. Advanced brokers support content-based routing, header-based routing, and complex topology.</p>
+
+<h3>Persistence</h3>
+<p>Messages can be stored in memory (fast but lost on crash) or on disk (durable but slower). Most production brokers write to disk for durability. Kafka writes messages to disk as part of its append-only log, which is why it handles high throughput well.</p>
+
+<h3>Delivery Guarantees</h3>
+<p>The broker coordinates delivery semantics:</p>
+<ul>
+  <li><strong>At most once:</strong> Message may be lost but never duplicated. Best-effort delivery.</li>
+  <li><strong>At least once:</strong> Message is never lost but may be delivered multiple times. Requires idempotent consumers.</li>
+  <li><strong>Exactly once:</strong> Message is delivered exactly once. Most complex guarantee, offered by Kafka with idempotent producer + transactions.</li>
+</ul>
+
+<h3>Flow Control &amp; Backpressure</h3>
+<p>The broker manages the rate mismatch between fast producers and slow consumers. It buffers messages so producers are not blocked. However, if the broker itself runs out of capacity, it must apply backpressure to producers.</p>
+
+<h2>Popular Message Brokers</h2>
+
+<table>
+  <tr><th>Broker</th><th>Model</th><th>Strengths</th><th>Best For</th></tr>
+  <tr><td><strong>Apache Kafka</strong></td><td>Pub/Sub (log-based)</td><td>High throughput, durable, replayable</td><td>Event streaming, data pipelines, log aggregation</td></tr>
+  <tr><td><strong>RabbitMQ</strong></td><td>AMQP (queue + routing)</td><td>Rich routing, flexible protocols, low latency</td><td>Task queues, complex routing, IoT messaging</td></tr>
+  <tr><td><strong>AWS SQS</strong></td><td>Queue (managed)</td><td>Fully managed, serverless, auto-scaling</td><td>Simple work queues, decoupling Lambda functions</td></tr>
+  <tr><td><strong>AWS SNS</strong></td><td>Pub/Sub (managed)</td><td>Fan-out to SQS, HTTP, email, SMS</td><td>Push notifications, event fan-out</td></tr>
+  <tr><td><strong>Google Pub/Sub</strong></td><td>Pub/Sub (managed)</td><td>Global, low latency, serverless</td><td>Event ingestion, real-time analytics</td></tr>
+  <tr><td><strong>Redis Streams</strong></td><td>Log-based</td><td>In-memory, very fast, lightweight</td><td>Caching layer events, lightweight queuing</td></tr>
+  <tr><td><strong>Apache Pulsar</strong></td><td>Pub/Sub (layered)</td><td>Multi-tenant, geo-replication, unified</td><td>Multi-tenant streaming, cross-region</td></tr>
+</table>
+
+<h2>Kafka vs. RabbitMQ</h2>
+
+<div class="callout yellow">
+  <strong>Interview Tip:</strong> "Kafka vs. RabbitMQ" is one of the most common broker comparison questions. Focus on throughput vs. flexibility trade-offs.
+</div>
+
+<table>
+  <tr><th>Aspect</th><th>Kafka</th><th>RabbitMQ</th></tr>
+  <tr><td>Throughput</td><td class="green">Very high (millions/sec)</td><td>Moderate (tens of thousands/sec)</td></tr>
+  <tr><td>Persistence</td><td>Always persists to disk (log)</td><td>Configurable (memory or disk)</td></tr>
+  <tr><td>Message replay</td><td class="green">Yes (reset offset)</td><td>No (once consumed, gone)</td></tr>
+  <tr><td>Ordering</td><td>Per-partition</td><td>Per-queue</td></tr>
+  <tr><td>Routing</td><td>Topic-based only</td><td class="green">Rich routing (direct, topic, fanout, headers)</td></tr>
+  <tr><td>Protocol</td><td>Custom TCP</td><td>AMQP, MQTT, STOMP</td></tr>
+  <tr><td>Consumer model</td><td>Pull</td><td>Push (with QoS)</td></tr>
+  <tr><td>Retained messages</td><td class="green">Yes (configurable retention)</td><td>No</td></tr>
+  <tr><td>Setup complexity</td><td class="red">High (ZooKeeper/KRaft cluster)</td><td>Moderate</td></tr>
+</table>
+
+<h2>When to Use a Broker in System Design</h2>
+
+<div class="callout green">
+  <strong>Rule of thumb:</strong> Introduce a message broker when you need to decouple services, handle asynchronous processing, buffer traffic spikes, or broadcast events to multiple consumers. If your system is small and synchronous, a broker adds unnecessary complexity.
+</div>
+
+<h2>Common Interview Questions</h2>
+
+<ol>
+  <li>"Compare Kafka, RabbitMQ, and SQS — when would you use each?"</li>
+  <li>"What role does the broker play in a microservices architecture?"</li>
+  <li>"Why not just use HTTP calls between services instead of a broker?"</li>
+  <li>"How does a broker handle persistence and durability?"</li>
+  <li>"What happens when the broker itself fails?"</li>
+  <li>"Design a system that uses both Kafka and RabbitMQ — why would you need both?"</li>
+  <li>"How does backpressure work in a broker-based system?"</li>
+</ol>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Do not dive into:</strong>
+  <ul>
+    <li>Broker internals like Kafka's storage layout, index files, or ZooKeeper/KRaft internals — those are too deep for most interviews.</li>
+    <li>RabbitMQ exchange types in exhaustive detail unless specifically asked about routing.</li>
+    <li>Broker benchmark numbers (exact throughput/latency figures) — trends matter more than numbers.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Books &amp; Guides</div>
+  <ul>
+    <li><a href="https://kafka.apache.org/documentation/">Apache Kafka Documentation</a> — Official docs on Kafka architecture and broker role</li>
+    <li><a href="https://www.rabbitmq.com/documentation.html">RabbitMQ Documentation</a> — AMQP model, exchange types, and broker concepts</li>
+    <li><a href="https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/welcome.html">AWS SQS Developer Guide</a> — Managed queue service concepts</li>
+    <li><a href="https://samnewman.io/books/building-microservices-2nd-edition/">Building Microservices, 2nd Ed.</a> — Sam Newman, Ch. 6</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="pub-sub.html">&larr; 8.1.2 Pub/Sub</a>
+  <a href="topic.html">8.2.2 Topic &rarr;</a>
+</div>
+
+</body>
+</html>

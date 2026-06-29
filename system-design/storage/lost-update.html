@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.6.4 Lost Update</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb"><a href="#">System Design</a> / <a href="#">3 Storage</a> / <a href="#">3.6 Transaction Problems</a> / 3.6.4</div>
+
+<h1>Lost Update</h1>
+
+<div class="meta">
+  <span>Difficulty ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the lost update problem, why it occurs in read-then-write patterns, and the spectrum of solutions from atomic operations to optimistic and pessimistic concurrency control.</p>
+
+<h2>Definition</h2>
+<p>A <strong>lost update</strong> occurs when two transactions read the same data, then both update it based on what they read. The second writer overwrites the first writer's change, and the first update is <strong>lost</strong> -- as if it never happened.</p>
+
+<div class="callout">
+  <strong>Core pattern:</strong> Read-then-write without any protection. Both transactions see the same initial value, compute a new value independently, and the second commit silently discards the first commit's work.
+</div>
+
+<h2>Anatomy of a Lost Update</h2>
+
+<div class="diagram">Lost Update Timeline
+─────────────────────────────────────────────────────────────────
+
+  Transaction A (User 1 likes post)     Transaction B (User 2 likes post)
+  ────────────────────────────          ────────────────────────────────
+  BEGIN;
+
+  SELECT likes FROM posts
+    WHERE id = 42;
+  -- reads likes = 100
+
+                                        BEGIN;
+                                        SELECT likes FROM posts
+                                          WHERE id = 42;
+                                        -- reads likes = 100
+
+  UPDATE posts SET likes = 100 + 1
+    WHERE id = 42;
+  -- writes likes = 101
+
+                                        UPDATE posts SET likes = 100 + 1
+                                          WHERE id = 42;
+                                        -- writes likes = 101 (based on stale read!)
+
+  COMMIT;                               COMMIT;
+
+  Final value: likes = 101
+  Expected: likes = 102
+  User 1's like was LOST!</div>
+
+<h2>When Lost Updates Occur</h2>
+<p>Lost updates are not tied to a single isolation level -- they can occur even at Repeatable Read. The problem is structural: the application performs a read-modify-write cycle without ensuring atomicity of the entire cycle.</p>
+
+<table>
+  <tr>
+    <th>Isolation Level</th>
+    <th>Lost Update Possible?</th>
+    <th>Why</th>
+  </tr>
+  <tr>
+    <td><a href="read-uncommitted.html">Read Uncommitted</a></td>
+    <td class="red">Yes</td>
+    <td>No protection at all</td>
+  </tr>
+  <tr>
+    <td><a href="read-committed.html">Read Committed</a></td>
+    <td class="red">Yes</td>
+    <td>Both reads see same committed value, no write conflict detection</td>
+  </tr>
+  <tr>
+    <td><a href="repeatable-read.html">Repeatable Read</a> (SQL standard)</td>
+    <td class="red">Yes</td>
+    <td>Snapshot frozen, but no conflict detection on same-row writes</td>
+  </tr>
+  <tr>
+    <td><a href="snapshot-isolation.html">Snapshot Isolation</a></td>
+    <td class="green">No</td>
+    <td>First-committer-wins aborts second writer on same row</td>
+  </tr>
+  <tr>
+    <td><a href="serializable.html">Serializable</a></td>
+    <td class="green">No</td>
+    <td>Full conflict detection</td>
+  </tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Important nuance:</strong> At standard SQL Repeatable Read (without snapshot isolation), lost updates can still occur because the standard only guarantees that re-reading yields the same value -- it does not detect write-write conflicts on the same row. PostgreSQL's implementation of Repeatable Read uses snapshot isolation internally, so it <em>does</em> prevent lost updates. MySQL/InnoDB's Repeatable Read also prevents them via next-key locks.
+</div>
+
+<h2>Solutions</h2>
+
+<h3>1. Atomic Increment</h3>
+<p>The simplest fix: avoid the read entirely. Use an atomic operation that increments the value in a single statement.</p>
+
+<pre>-- WRONG: read-then-write (lost update)
+SELECT likes FROM posts WHERE id = 42;  -- read
+UPDATE posts SET likes = 100 + 1 WHERE id = 42;  -- write (stale!)
+
+-- CORRECT: atomic increment
+UPDATE posts SET likes = likes + 1 WHERE id = 42;
+-- The database handles the increment atomically.
+-- No read needed in application code.</pre>
+
+<h3>2. SELECT FOR UPDATE (Pessimistic Locking)</h3>
+<p>Explicitly lock the row when reading, preventing other transactions from modifying it until your transaction completes.</p>
+
+<pre>-- Transaction A:
+BEGIN;
+SELECT likes FROM posts WHERE id = 42 FOR UPDATE;
+-- Row is now locked. Transaction B must wait.
+UPDATE posts SET likes = 100 + 1 WHERE id = 42;
+COMMIT;  -- lock released
+
+-- Transaction B (was waiting, now proceeds):
+BEGIN;
+SELECT likes FROM posts WHERE id = 42 FOR UPDATE;
+-- Now reads likes = 101 (A's commit is visible)
+UPDATE posts SET likes = 101 + 1 WHERE id = 42;
+COMMIT;
+
+-- Final: likes = 102</pre>
+
+<h3>3. Optimistic Concurrency Control (Compare-and-Set)</h3>
+<p>Read the value and a version column. When writing, include a WHERE clause that checks the version has not changed. If the update affects zero rows, the application retries.</p>
+
+<pre>-- posts table has a version column:
+-- id | likes | version
+-- 42 | 100   | 5
+
+-- Transaction A:
+BEGIN;
+SELECT likes, version FROM posts WHERE id = 42;
+-- reads likes=100, version=5
+UPDATE posts SET likes = 101, version = version + 1
+  WHERE id = 42 AND version = 5;
+-- Affects 1 row -- success
+COMMIT;
+
+-- Transaction B:
+BEGIN;
+SELECT likes, version FROM posts WHERE id = 42;
+-- reads likes=101, version=6 (A already committed)
+UPDATE posts SET likes = 102, version = version + 1
+  WHERE id = 42 AND version = 5;
+-- Affects 0 rows -- version mismatch! Concurrent modification.
+ROLLBACK;
+-- Application retries the transaction.</pre>
+
+<div class="diagram">Solution Comparison
+─────────────────────────────────────────────────────────────────
+
+  Atomic Increment          SELECT FOR UPDATE         Optimistic CC
+  ──────────────           ─────────────────         ────────────
+  Simplest fix              Pessimistic: lock row     No locking
+  Only for simple ops       Blocks other writers      Retry on conflict
+  No retries needed         Deadlock risk             Best for low contention
+  Single statement          Explicit lock              Version column required
+
+  Use when:                 Use when:                 Use when:
+  Counter increment         Contention is moderate     Low contention
+  No complex logic          Write must be immediate    Read-heavy workload
+                            Transaction is short       Retry is cheap</div>
+
+<h2>Lost Update vs. Write Skew</h2>
+
+<table>
+  <tr>
+    <th>Aspect</th>
+    <th>Lost Update</th>
+    <th>Write Skew</th>
+  </tr>
+  <tr>
+    <td>Pattern</td>
+    <td>Two txs read same row, write same row</td>
+    <td>Two txs read overlapping rows, write different rows</td>
+  </tr>
+  <tr>
+    <td>What is lost</td>
+    <td>One transaction's update to the same row</td>
+    <td>An invariant across multiple rows</td>
+  </tr>
+  <tr>
+    <td>Detected by SI?</td>
+    <td class="green">Yes (same-row conflict)</td>
+    <td class="red">No (disjoint writes)</td>
+  </tr>
+  <tr>
+    <td>Example</td>
+    <td>Counter: 100 to 101, then 100 to 101 = lost one</td>
+    <td>Two doctors both go off-call (different rows, broken invariant)</td>
+  </tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+
+<ol>
+  <li>What is a lost update and how does it occur?</li>
+  <li>How do you prevent lost updates? Name at least three approaches.</li>
+  <li>When would you use SELECT FOR UPDATE vs. optimistic concurrency control?</li>
+  <li>Can a lost update occur at Repeatable Read isolation?</li>
+  <li>What is the difference between a lost update and write skew?</li>
+  <li>How does snapshot isolation prevent lost updates on the same row?</li>
+  <li>Design a rate limiter -- how do you prevent lost updates on the counter?</li>
+  <li>What happens when optimistic concurrency control fails? How does the retry loop work?</li>
+</ol>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Depth to avoid in interviews:</strong>
+  <ul>
+    <li>Deep internals of InnoDB's lock wait timeout and deadlock detection</li>
+    <li>Predicate locking for multi-row lost update scenarios</li>
+    <li>Distributed lost update prevention (e.g., etcd transactions, DynamoDB conditional writes) unless the question specifically targets distributed systems</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Sources</div>
+  <ul>
+    <li><a href="#">Designing Data-Intensive Applications</a> -- Chapter 7, "Lost Updates" (Kleppmann)</li>
+    <li><a href="#">PostgreSQL Documentation</a> -- Chapter 13, "Explicit Locking": SELECT FOR UPDATE behavior</li>
+    <li><a href="#">MySQL Reference Manual</a> -- 15.7.1: InnoDB Locking</li>
+    <li><a href="#">"A Critique of ANSI SQL Isolation Levels"</a> -- Berenson et al. (1995): formal treatment of lost updates</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="phantom-read.html">&larr; 3.6.3 Phantom Read</a>
+  <a href="version-chains.html">Next: 3.7.1 Version Chains &rarr;</a>
+</div>
+
+</body>
+</html>

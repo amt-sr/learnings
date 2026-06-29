@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.8.5 Composite Index</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="#">System Design</a> / <a href="#">3 Storage</a> / <a href="#">3.8 Indexes</a> / 3.8.5
+</div>
+
+<h1>Composite Index</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand how composite (multi-column) indexes work, why column order matters via the leftmost prefix rule, how to choose the optimal column ordering, and when a composite index outperforms multiple single-column indexes.</p>
+
+<h2>Definition</h2>
+<p>A <strong>composite index</strong> (also called a multi-column or compound index) is an index built on two or more columns. The index key is formed by concatenating the column values in the defined order. This order is critical: the index can only be used for queries that reference columns starting from the leftmost column in sequence.</p>
+
+<h2>Leftmost Prefix Rule</h2>
+
+<p>The most important concept for composite indexes. An index on (A, B, C) can satisfy queries that filter on:</p>
+
+<ul>
+  <li>(A) -- yes</li>
+  <li>(A, B) -- yes</li>
+  <li>(A, B, C) -- yes</li>
+  <li>(B) -- no (skips A)</li>
+  <li>(B, C) -- no (skips A)</li>
+  <li>(A, C) -- partial -- uses A for index seek, C is not used (skips B)</li>
+</ul>
+
+<div class="diagram">
+  Index on (last_name, first_name, birth_date)
+
+  Tree is sorted by: last_name -> first_name -> birth_date
+
+  [King]----[Smith]----[Williams]
+   /          |           \
+  [King,A..]  [Smith,J..] [Williams,M..]
+  [King,B..]  [Smith,M..] [Williams,R..]
+
+  Query: WHERE last_name = 'Smith' AND first_name = 'John'
+  -> Index seek on (Smith, John): FULLY USED
+
+  Query: WHERE last_name = 'Smith'
+  -> Index seek on (Smith): FULLY USED (leftmost prefix)
+
+  Query: WHERE first_name = 'John'
+  -> Cannot use index (skips leftmost column last_name)
+
+  Query: WHERE last_name = 'Smith' AND birth_date = '1990-01-01'
+  -> Only last_name='Smith' is used; birth_date is skipped (first_name gap)
+</div>
+
+<h2>Column Ordering Strategy</h2>
+
+<h3>Equality Columns Before Range Columns</h3>
+
+<p>When a composite index contains both equality and range conditions, place equality columns first. Once a range condition is encountered, columns to its right cannot be used for index seek.</p>
+
+<pre>
+-- Given: index on (status, created_at)
+
+-- GOOD: equality on status, range on created_at
+SELECT * FROM orders WHERE status = 'shipped' AND created_at > '2025-01-01';
+-- Index seeks on status='shipped', then range scan on created_at. Both used.
+
+-- BAD: if index were on (created_at, status)
+SELECT * FROM orders WHERE status = 'shipped' AND created_at > '2025-01-01';
+-- Range on created_at first -> status cannot be used. Only partial index utilization.
+</pre>
+
+<h3>High Cardinality First?</h3>
+
+<p>A common rule of thumb is to put the highest-cardinality (most selective) column first. However, this is secondary to the equality-before-range rule. The optimal ordering depends on the query mix.</p>
+
+<div class="callout yellow">
+  <strong>Cardinality vs access pattern:</strong> If column A has 2 values (boolean) and column B has 10,000 values, but queries always filter on A=BETWEEN, putting B first means the index can filter to a small set before scanning the range. Always evaluate based on actual query patterns, not just cardinality alone.
+</div>
+
+<h2>When a Composite Index Works vs Does Not</h2>
+
+<table>
+  <tr>
+    <th>Query</th>
+    <th>Index: (last_name, first_name)</th>
+    <th>Used?</th>
+    <th>Explanation</th>
+  </tr>
+  <tr>
+    <td>WHERE last_name = 'Smith'</td>
+    <td>Leftmost prefix match</td>
+    <td class="green">Yes</td>
+    <td>Single column prefix</td>
+  </tr>
+  <tr>
+    <td>WHERE last_name = 'Smith' AND first_name = 'John'</td>
+    <td>Full key match</td>
+    <td class="green">Yes</td>
+    <td>Both columns used for seek</td>
+  </tr>
+  <tr>
+    <td>WHERE first_name = 'John'</td>
+    <td>Skips leftmost</td>
+    <td class="red">No</td>
+    <td>Cannot skip last_name</td>
+  </tr>
+  <tr>
+    <td>WHERE last_name = 'Smith' AND age = 30</td>
+    <td>Partial match</td>
+    <td class="green">Partial</td>
+    <td>last_name used, age not in index</td>
+  </tr>
+  <tr>
+    <td>ORDER BY last_name, first_name</td>
+    <td>Index order matches</td>
+    <td class="green">Yes</td>
+    <td>Avoids filesort</td>
+  </tr>
+  <tr>
+    <td>ORDER BY first_name, last_name</td>
+    <td>Reverse order</td>
+    <td class="red">No</td>
+    <td>Index is (last, first), not (first, last)</td>
+  </tr>
+</table>
+
+<h2>Covering Index Optimization</h2>
+
+<p>A composite index can serve as a <strong>covering index</strong> when it includes all columns referenced by the query (SELECT, WHERE, ORDER BY, GROUP BY). This eliminates the bookmark lookup entirely.</p>
+
+<pre>
+-- Index on (user_id, created_at, amount)
+-- Query:
+SELECT created_at, amount FROM orders WHERE user_id = 42 ORDER BY created_at;
+
+-- All columns (user_id, created_at, amount) are in the index.
+-- No bookmark lookup needed. Index-only scan.
+</pre>
+
+<p>This ties directly into the next topic: <a href="covering-index.html">3.8.6 Covering Index</a>, where the INCLUDE clause provides additional flexibility for non-key columns.</p>
+
+<h2>Composite Index vs Multiple Single-Column Indexes</h2>
+
+<table>
+  <tr>
+    <th>Aspect</th>
+    <th>Composite Index (A, B)</th>
+    <th>Two Single Indexes (A) + (B)</th>
+  </tr>
+  <tr>
+    <td>Disk space</td>
+    <td>1 index (slightly wider rows)</td>
+    <td>2 indexes (duplicate B+ tree overhead)</td>
+  </tr>
+  <tr>
+    <td>Write amplification</td>
+    <td class="green">1 index to update on INSERT</td>
+    <td class="red">2 indexes to update on INSERT</td>
+  </tr>
+  <tr>
+    <td>WHERE A AND B</td>
+    <td class="green">Single index seek (optimal)</td>
+    <td>Index merge or intersection (slower)</td>
+  </tr>
+  <tr>
+    <td>WHERE A only</td>
+    <td class="green">Leftmost prefix works</td>
+    <td class="green">Direct index use</td>
+  </tr>
+  <tr>
+    <td>WHERE B only</td>
+    <td class="red">Cannot use (skips A)</td>
+    <td class="green">Direct index use</td>
+  </tr>
+  <tr>
+    <td>ORDER BY A, B</td>
+    <td class="green">Avoids filesort</td>
+    <td class="red">Cannot avoid filesort</td>
+  </tr>
+</table>
+
+<div class="callout">
+  <strong>Interview tip:</strong> When asked "how many indexes should this table have?", discuss composite indexes as a way to serve multiple query patterns with fewer total indexes, reducing write amplification. For example, an index on (tenant_id, user_id, status) can serve queries filtering on tenant_id alone, (tenant_id, user_id), and (tenant_id, user_id, status).
+</div>
+
+<h2>Common Interview Questions</h2>
+
+<ul>
+  <li>What is a composite index and why does column order matter?</li>
+  <li>Explain the leftmost prefix rule with an example.</li>
+  <li>Given a query with equality and range filters, how would you order the columns in a composite index?</li>
+  <li>Can a composite index on (A, B, C) be used for a query that filters only on (B, C)?</li>
+  <li>What are the trade-offs between one composite index and multiple single-column indexes?</li>
+  <li>How would you design composite indexes for a multi-tenant SaaS application?</li>
+  <li>Can ORDER BY benefit from a composite index? Under what conditions?</li>
+  <li>How do you decide between high-cardinality-first and equality-before-range column ordering?</li>
+</ul>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Depth to avoid in interviews:</strong>
+  <ul>
+    <li>Index merge intersection/union algorithms (MySQL's index_merge optimization details).</li>
+    <li>Skip scan index access path internals (Oracle/MySQL 8.0 feature).</li>
+    <li>Collation-specific sort order in composite index keys.</li>
+    <li>Bitmap index merge internals in warehouse engines.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><a href="#">Designing Data-Intensive Applications</a> -- Chapter 3: Multi-column indexes and their trade-offs</li>
+    <li><a href="#">High Performance MySQL</a> (Baron Schwartz) -- Composite index strategy, leftmost prefix, column order optimization</li>
+    <li><a href="#">SQL Performance Explained</a> (Markus Winand) -- Chapter 2: The most important index (covering composite indexes)</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Documentation</div>
+  <ul>
+    <li><a href="#">MySQL 8.0 Reference Manual</a> -- 8.3.6 Multiple-Column Indexes</li>
+    <li><a href="#">PostgreSQL Documentation</a> -- 11.5 Multicolumn Indexes</li>
+    <li><a href="#">SQL Server Docs</a> -- Composite Index Design Guidelines</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="non-clustered-index.html">&larr; 3.8.4 Non Clustered Index</a>
+  <a href="covering-index.html">3.8.6 Covering Index &rarr;</a>
+</div>
+
+</body>
+</html>

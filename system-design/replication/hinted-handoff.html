@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.7.4 Hinted Handoff</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">4 Replication</a> / 4.7 Recovery / 4.7.4
+</div>
+
+<h1>Hinted Handoff</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand hinted handoff &mdash; a mechanism that provides high write availability even when replicas are temporarily down, by temporarily storing writes on behalf of unavailable nodes and replaying them when the nodes recover.</p>
+
+<h2>Definition</h2>
+<p><strong>Hinted handoff</strong> is a mechanism in Dynamo-style distributed databases where, when a replica node is unavailable or slow, a neighboring node temporarily stores (hints) the writes intended for the unavailable node. When the downed node comes back online, the hinting node delivers (hands off) all the stored writes to it.</p>
+
+<h2>How Hinted Handoff Works</h2>
+<div class="diagram">
+  NORMAL STATE (3 replicas, N=3, W=2):
+
+  Ring hash:   key="user:42" -> Node-A (primary), Node-B (replica-1), Node-C (replica-2)
+
+  Client writes {user:42, name: "Alice"} with W=2
+
+  Client -> Coordinator -> Node-A: WRITE  [ACK]
+                       -> Node-B: WRITE  [ACK]
+                       -> Node-C: (not needed, W=2 satisfied)
+  Result: Write succeeded with W=2 acknowledgments.
+
+
+  NODE-C GOES DOWN:
+
+  Ring hash:   key="user:42" -> Node-A (primary), Node-B (replica-1), Node-C (DOWN)
+
+  Client writes {user:42, city: "NYC"} with W=2
+
+  Client -> Coordinator -> Node-A: WRITE  [ACK]
+                       -> Node-B: WRITE  [ACK]
+                       -> Node-C: WRITE  [NO RESPONSE - down!]
+
+  HINTED HANDOFF TRIGGERED:
+  Coordinator stores hint on Node-A:
+    Hint = { target: Node-C, key: "user:42", value: {city: "NYC"}, v=8 }
+    (or Coordinator stores locally)
+
+  W=2 still satisfied (A and B acknowledged).
+  Client sees: Write succeeded.
+  But Node-C is missing the write.
+
+
+  NODE-C RECOVERS:
+
+  Node-A detects Node-C is back (gossip protocol / heartbeat)
+
+  HANDOFF:
+  Node-A sends hint to Node-C:
+    "Here are the writes you missed while you were down:
+     { key: user:42, value: {city: "NYC"}, v=8 }"
+
+  Node-C applies the write:
+    Node-C: { user:42, name: "Alice", city: "NYC", v=8 }
+
+  Hint deleted from Node-A.
+
+  All replicas consistent again.
+</div>
+
+<h2>Key Properties</h2>
+
+<table>
+  <tr>
+    <th>Property</th>
+    <th>Details</th>
+  </tr>
+  <tr>
+    <td><strong>Write availability</strong></td>
+    <td>Writes succeed even when some replicas are down. The system does not require all N nodes to be healthy to accept writes (as long as W nodes are reachable).</td>
+  </tr>
+  <tr>
+    <td><strong>Temporary storage</strong></td>
+    <td>Hints are stored on a transient basis. They are not a permanent replacement for the target node. The hinting node is a surrogate, not the owner.</td>
+  </tr>
+  <tr>
+    <td><strong>Eventual delivery</strong></td>
+    <td>Hints are delivered when the target node recovers. Delivery is asynchronous and not guaranteed within a specific timeframe.</td>
+  </tr>
+  <tr>
+    <td><strong>No ordering guarantee</strong></td>
+    <td>Hints may be delivered out of order. The receiving node must handle this (e.g., using timestamps or vector clocks for conflict resolution).</td>
+  </tr>
+</table>
+
+<h2>Hint Storage and Delivery</h2>
+
+<h3>Where Are Hints Stored?</h3>
+<ul>
+  <li><strong>On the coordinator node:</strong> The coordinator that receives the write request stores hints for unreachable replicas locally. Simple but puts extra load on the coordinator.</li>
+  <li><strong>On the next node in the ring:</strong> In a hash ring topology, the node clockwise from the downed node stores hints. This is Cassandra's approach. The ring topology ensures a natural surrogate.</li>
+  <li><strong>Dedicated hint storage:</strong> Some systems use a separate hint store (e.g., a local queue or directory) to isolate hint management from normal data operations.</li>
+</ul>
+
+<h3>How Are Hints Delivered?</h3>
+<ul>
+  <li><strong>Gossip-based detection:</strong> Nodes exchange membership information via gossip. When a hinting node detects the target is back (via gossip), it begins handoff.</li>
+  <li><strong>Bulk delivery:</strong> Hints are replayed in batches to avoid overwhelming the recovering node.</li>
+  <li><strong>Rate limiting:</strong> Handoff rate is throttled to prevent the recovering node from being overloaded with a flood of replayed writes.</li>
+</ul>
+
+<div class="callout yellow">
+  <strong>Hint expiration:</strong> Hints have a TTL (typically 1-3 hours in Cassandra). If the target node does not recover within the TTL, hints are discarded. The data is recovered later via anti-entropy repair (Merkle tree comparison). This prevents hint storage from growing unbounded during prolonged outages.
+</div>
+
+<h2>Hints vs. Write-Ahead Log</h2>
+
+<table>
+  <tr>
+    <th>Aspect</th>
+    <th>Hints</th>
+    <th>WAL / Commit Log</th>
+  </tr>
+  <tr>
+    <td>Purpose</td>
+    <td>Store writes for a <em>specific downed node</em></td>
+    <td>Durability for the <em>local node's</em> writes</td>
+  </tr>
+  <tr>
+    <td>Scope</td>
+    <td>Per-target-node, limited to missed writes</td>
+    <td>All writes, node-wide</td>
+  </tr>
+  <tr>
+    <td>Delivery</td>
+    <td>Sent to the specific node when it recovers</td>
+    <td>Replayed during node recovery (crash recovery)</td>
+  </tr>
+  <tr>
+    <td>Ownership</td>
+    <td>Data belongs to another node</td>
+    <td>Data belongs to the local node</td>
+  </tr>
+</table>
+
+<h2>Use in Production Systems</h2>
+
+<ul>
+  <li><strong>Cassandra:</strong> Enabled by default. Each node can store hints for other nodes in the cluster. Hints stored in a separate directory (<code>hints/</code>) and replayed when the target node is detected via gossip. Configurable TTL (<code>max_hint_window_in_ms</code>, default 3 hours).</li>
+  <li><strong>DynamoDB:</strong> Uses hinted handoff internally. Writes to unavailable replicas are buffered and delivered when the node recovers.</li>
+  <li><strong>Riak:</strong> Supports hinted handoff as a configurable option. Hints stored on fallback nodes and replayed on recovery.</li>
+  <li><strong>Voldemort:</strong> Uses hinted handoff as part of its Dynamo-inspired design.</li>
+</ul>
+
+<h2>Limitations</h2>
+
+<ul>
+  <li><strong>Hint overflow during long outages:</strong> If a node is down for hours, hint storage can grow large. Hint TTL prevents unbounded growth but means data is lost if the node is down too long.</li>
+  <li><strong>Not a substitute for repair:</strong> Hints only capture writes that occurred while the node was down. They do not repair pre-existing inconsistencies. Anti-entropy repair is still needed.</li>
+  <li><strong>Recovery bottleneck:</strong> When a node comes back, the handoff replay can overwhelm it. Rate limiting helps but extends recovery time.</li>
+  <li><strong>Hints can be lost:</strong> If the hinting node itself fails before delivering hints, those writes are lost (for the target node). Anti-entropy repair recovers them later.</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li><strong>"How does Cassandra handle writes when a node is down?"</strong> &mdash; Coordinator writes to available replicas (satisfying W). For the downed node, the coordinator stores a hint on the next node in the ring. When the node recovers (detected via gossip), hints are replayed. If the node is down longer than the hint TTL, anti-entropy repair covers the gap.</li>
+  <li><strong>"What is hinted handoff and why is it useful?"</strong> &mdash; It temporarily stores writes for unavailable replicas, allowing the system to maintain write availability during node failures. Without it, the coordinator would have to wait for all replicas (slowing writes) or lose the write for the downed node.</li>
+  <li><strong>"What happens if hints are lost (hinting node crashes)?"</strong> &mdash; Those writes for the target node are not delivered. The gap is eventually filled by anti-entropy repair (Merkle tree comparison), which compares all replicas and syncs missing data.</li>
+  <li><strong>"How does hinted handoff differ from read repair?"</strong> &mdash> Hinted handoff is write-path: it ensures writes for downed nodes are eventually delivered. Read repair is read-path: it fixes inconsistencies discovered during reads. They are complementary mechanisms for eventual consistency.</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid Cassandra hint storage internals:</strong> The specific file format, directory structure, and disk layout of Cassandra hints are implementation details. Focus on the concept and behavior.<br><br>
+  <strong>Avoid gossip protocol details:</strong> SWIM or gossip membership protocols are covered in separate membership topics. Mention gossip briefly but do not dive into protocol mechanics.<br><br>
+  <strong>Avoid multi-DC hinted handoff:</strong> Cross-datacenter hinted handoff adds complexity (bandwidth, latency). Focus on single-DC hinted handoff unless multi-DC is discussed.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary References</div>
+  <ul>
+    <li>Amazon Dynamo Paper: <a href="https://www.allthingsdistributed.com/2007/10/amazons_dynamo.html">Dynamo: Amazon's Highly Available Key-value Store</a> (DeCandia et al., 2007) &mdash; Section IV: Replication (Hinted Handoff)</li>
+    <li>Apache Cassandra Documentation: <a href="https://cassandra.apache.org/doc/latest/cassandra/architecture/dynamo.html">Hinted Handoff</a></li>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em> &mdash; Chapter 5: Replication (section: "Sloppy Quorums and Hinted Handoff")</li>
+    <li>Alex Petrov, <em>Database Internals</em> &mdash; Chapter 7: Distributed Transactions (hinted handoff and sloppy quorum sections)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="read-repair.html">&larr; 4.7.3 Read Repair</a>
+  <a href="anti-entropy.html">4.7.5 Anti Entropy &rarr;</a>
+</div>
+
+</body>
+</html>

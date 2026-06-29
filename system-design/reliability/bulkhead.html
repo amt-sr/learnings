@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bulkhead — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">System Design</a> / <a href="./index.html">Reliability</a> / 10.2.4 Bulkhead</div>
+
+<h1>Bulkhead</h1>
+<div class="meta">
+  <span>Difficulty ⭐⭐⭐</span>
+  <span>Interview Frequency ★★★★</span>
+</div>
+
+<div class="callout">
+  <strong>Goal:</strong> Understand the bulkhead pattern (thread pool and process isolation), how it prevents one slow dependency from consuming all resources, and how it complements circuit breakers.
+</div>
+
+<h2>Definition</h2>
+<p>The <strong>Bulkhead</strong> pattern isolates different parts of a system into separate resource pools so that a failure in one part cannot cascade to others. Named after ship bulkheads — watertight compartments that prevent the entire ship from sinking if one section is breached. In software, bulkheads typically isolate <strong>threads, connections, or memory</strong> per dependency.</p>
+
+<h2>The Problem It Solves</h2>
+
+<div class="diagram">
+  WITHOUT Bulkhead (shared thread pool):
+  ┌───────────────────────────────────────────┐
+  │          Shared Thread Pool (200)          │
+  │                                             │
+  │  Service A calls ──▶ [50 threads waiting]  │
+  │  Service B calls ──▶ [50 threads waiting]  │
+  │  Service C calls ──▶ [100 threads waiting] │ ← C is slow
+  │                                             │
+  │  A and B cannot get threads because C       │
+  │  consumed all 200 threads                  │
+  │  → Entire service appears DOWN              │
+  └───────────────────────────────────────────┘
+
+  WITH Bulkhead (isolated thread pools):
+  ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
+  │  Pool A (50)     │ │  Pool B (50)     │ │  Pool C (50)     │
+  │  [████████████]  │ │  [████████████]  │ │  [████░░░░░░░░]  │
+  │  Healthy         │ │  Healthy         │ │  C's pool full   │
+  │  A unaffected    │ │  B unaffected    │ │  C requests      │
+  └─────────────────┘ └─────────────────┘ │  rejected        │
+                                           └─────────────────┘
+</div>
+
+<h2>Bulkhead Strategies</h2>
+
+<h3>1. Thread Pool Isolation</h3>
+<p>Each dependency gets its own dedicated thread pool with a fixed number of threads. When the pool is exhausted, new requests are immediately rejected.</p>
+
+<pre>
+// Each dependency gets its own thread pool
+ThreadPoolConfig paymentPool    = new ThreadPool(50);   // max 50 concurrent calls to Payment
+ThreadPoolConfig inventoryPool  = new ThreadPool(30);   // max 30 concurrent calls to Inventory
+ThreadPoolConfig notificationPool = new ThreadPool(20); // max 20 concurrent calls to Notifications
+
+// If Notification service is slow:
+// - Only notificationPool fills up (20 threads)
+// - paymentPool and inventoryPool are unaffected
+// - New notification requests get RejectedExecutionException → handled by fallback
+</pre>
+
+<table>
+  <tr><th>Strategy</th><th>Pros</th><th>Cons</th></tr>
+  <tr><td><strong>Thread Pool Isolation</strong></td><td>Fine-grained control; one slow dependency only affects its own pool</td><td>Thread overhead; need to size pools correctly; thread contention on CPU</td></tr>
+  <tr><td><strong>Process Isolation</strong></td><td>Strongest isolation; crash of one process does not affect others</td><td>Heavy resource overhead; inter-process communication cost; deployment complexity</td></tr>
+  <tr><td><strong>Connection Pool Isolation</strong></td><td>Prevents one dependency from exhausting connection pool</td><td>Less granular than thread pool; connection overhead</td></tr>
+</table>
+
+<h3>2. Process Isolation (Sidecar / Separate Service)</h3>
+<p>Run critical dependencies in separate processes or containers:</p>
+
+<div class="diagram">
+  Main Service Container
+  ┌──────────────────────────────────────────┐
+  │  Core Business Logic                      │
+  │  ├── [Thread Pool: Core - 100 threads]     │
+  │  └── [Thread Pool: Cache - 50 threads]     │
+  └──────────────────────────────────────────┘
+         │
+  ───────┼──── In separate container ─────────
+         ▼
+  ┌──────────────────────────────────────────┐
+  │  Payment Sidecar                          │
+  │  ├── [Thread Pool: Payment - 30 threads]  │
+  │  └── [Own heap, own connections]           │
+  └──────────────────────────────────────────┘
+         │  If payment sidecar crashes or slows:
+         │  Main service still handles cache and core
+         │  Payment requests fail fast
+</div>
+
+<h3>3. Connection Pool Bulkhead</h3>
+<p>Limit the number of connections available to each dependency:</p>
+
+<pre>
+// HikariCP with per-service connection pools
+HikariDataSource paymentDB = new HikariDataSource();
+paymentDB.setMaximumPoolSize(20);
+
+HikariDataSource analyticsDB = new HikariDataSource();
+analyticsDB.setMaximumPoolSize(10);
+
+// If analyticsDB is slow:
+// - Only 10 connections are blocked
+// - paymentDB connections are completely independent
+</pre>
+
+<h2>Sizing Bulkhead Pools</h2>
+<p>Pool sizing is critical. Too small: legitimate traffic is rejected. Too large: defeats the purpose of isolation.</p>
+
+<div class="callout">
+  <strong>Approach:</strong> Start with observed peak concurrent requests + 20% headroom. Monitor rejection rates and adjust. The key metric is: "What percentage of time is the pool exhausted?" Target: &lt;0.1% rejection rate during peak.
+</div>
+
+<table>
+  <tr><th>Pool Type</th><th>Sizing Method</th><th>Example</th></tr>
+  <tr><td>Thread pool (outbound)</td><td>Peak concurrent calls to dependency × 1.2</td><td>Peak 40 calls → 48 threads</td></tr>
+  <tr><td>Connection pool (database)</td><td>Formula: cores × 2 + effective_spindle_count</td><td>16 cores, 1 SSD → 33 connections</td></tr>
+  <tr><td>Semaphore (lightweight)</td><td>Max concurrent + 20% buffer</td><td>Peak 100 → 120 permits</td></tr>
+</table>
+
+<h2>Bulkhead vs Circuit Breaker</h2>
+
+<div class="callout">
+  <strong>They solve different problems:</strong> Circuit breakers detect and stop calling a failing service. Bulkheads limit the resources one dependency can consume. They are complementary — use both.
+</div>
+
+<table>
+  <tr><th>Aspect</th><th>Circuit Breaker</th><th>Bulkhead</th></tr>
+  <tr><td><strong>Question</strong></td><td>"Is the service healthy?"</td><td>"How many resources can this dependency use?"</td></tr>
+  <tr><td><strong>Trigger</strong></td><td>Failure rate exceeds threshold</td><td>Resource pool exhausted</td></tr>
+  <tr><td><strong>Action</strong></td><td>Stop all calls (open circuit)</td><td>Reject excess calls (pool full)</td></tr>
+  <tr><td><strong>Recovery</strong></td><td>Half-open probe after timeout</td><td>Instant — pool drains naturally</td></tr>
+  <tr><td><strong>Protects against</strong></td><td>Sustained failures</td><td>Slow responses consuming resources</td></tr>
+</table>
+
+<h2>Netflix Hystrix Bulkhead (Historical Context)</h2>
+<p>Netflix Hystrix pioneered thread pool isolation for outbound calls. Each Hystrix command ran in its own thread pool, isolated from the Tomcat request thread:</p>
+
+<div class="diagram">
+  Request Thread (Tomcat)         Hystrix Thread Pool
+       │                              │
+  ┌────┴────┐    ┌──────────────────────────────────┐
+  │ Accept  │───▶│  PaymentCommand  [Pool: 30]        │
+  │ Request │    │  InventoryCommand [Pool: 20]      │
+  │         │    │  NotifyCommand   [Pool: 10]        │
+  └────┬────┘    └──────────────────────────────────┘
+       │
+  │  If InventoryCommand threads are all busy:
+  │  - Request thread is NOT blocked (returns immediately with fallback)
+  │  - Other commands continue normally
+  │  - Tomcat threads are preserved for other requests
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>"What is a bulkhead and how does it work?" — Resource isolation per dependency. Each downstream service gets its own thread/connection pool so one slow service cannot consume all resources.</li>
+  <li>"How is it different from a circuit breaker?" — Circuit breaker detects failures and stops calls. Bulkhead limits resources. They complement each other.</li>
+  <li>"How would you size a thread pool bulkhead?" — Based on observed peak concurrent calls to that dependency plus 20% headroom. Monitor and adjust.</li>
+  <li>"What happens when a bulkhead pool is full?" — New requests are immediately rejected (fast fail) with a fallback response. This preserves threads for other dependencies.</li>
+  <li>"Give me a real-world example of needing bulkheads." — Payment service goes slow; without bulkheads, all 200 server threads get stuck waiting for payment responses, making the entire app unresponsive even for non-payment requests.</li>
+</ul>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Depth:</strong> Hystrix-specific semaphore vs thread pool isolation configuration. <br>
+  <strong>Depth:</strong> OS-level cgroups, container resource limits (unless asked about Kubernetes). <br>
+  <strong>Depth:</strong> Resilience4j Bulkhead API syntax and thread pool factory configuration.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Release It! — Michael Nygard (2nd Edition)</div>
+  <p>Chapter 8: Bulkhead pattern. The foundational reference for bulkhead in software architecture.</p>
+</div>
+<div class="source">
+  <div class="source-label">Netflix Hystrix Wiki — Bulkhead Pattern</div>
+  <p>How Netflix implemented thread pool isolation at scale, with real production metrics from their migration.</p>
+</div>
+<div class="source">
+  <div class="source-label">Microservices Patterns — Chris Richardson</div>
+  <p>Section on reliability patterns including bulkhead isolation with connection pooling examples.</p>
+</div>
+
+<div class="nav">
+  <a href="timeout.html">&larr; Timeout</a>
+  <a href="hedged-requests.html">Hedged Requests &rarr;</a>
+</div>
+</body>
+</html>

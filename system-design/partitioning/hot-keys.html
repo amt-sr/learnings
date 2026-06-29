@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.3.5 Hot Keys - System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">6 Partitioning</a> / <a href="index.html">6.3 Consistent Hashing</a> / 6.3.5
+</div>
+
+<h1>Hot Keys</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<div class="callout">
+  <strong>Goal:</strong> Understand why hot keys are a fundamental weakness of hash-based partitioning, recognize real-world hot key scenarios, and apply multiple mitigation strategies from local caching to key splitting.
+</div>
+
+<h2>Definition</h2>
+
+<p>A <strong>hot key</strong> is a single data key that receives disproportionately high read or write traffic compared to other keys. Because hash-based partitioning maps a single key to exactly one shard, all traffic for that key lands on a single machine. No amount of additional shards or vnodes helps -- the hot key's shard becomes a bottleneck.</p>
+
+<div class="callout red">
+  <strong>Core Problem:</strong> Consistent hashing distributes keys uniformly across shards. But it cannot distribute <em>access patterns</em> uniformly. If 10% of your traffic targets one key, 10% of all traffic hits one shard, regardless of how many shards you have.
+</div>
+
+<h2>Real-World Hot Key Examples</h2>
+
+<table>
+  <tr>
+    <th>Scenario</th>
+    <th>Hot Key</th>
+    <th>Traffic Pattern</th>
+  </tr>
+  <tr>
+    <td>Twitter/X</td>
+    <td>Celebrity tweet (e.g., tweet_id=12345)</td>
+    <td>Millions of reads in first seconds</td>
+  </tr>
+  <tr>
+    <td>News site</td>
+    <td>Front page / homepage</td>
+    <td>Disproportionate share of all reads</td>
+  </tr>
+  <tr>
+    <td>Gaming leaderboard</td>
+    <td>Top-10 global ranking key</td>
+    <td>Every player reads this key</td>
+  </tr>
+  <tr>
+    <td>Counter/aggregation</td>
+    <td>Global view count (e.g., video_id=popular)</td>
+    <td>High write frequency from all users</td>
+  </tr>
+  <tr>
+    <td>Feature flag</td>
+    <td>Global feature toggle key</td>
+    <td>Every request reads this key</td>
+  </tr>
+</table>
+
+<div class="diagram">  Normal Distribution:         Hot Key Distribution:
+
+  Shard A: 33% traffic        Shard A: 70% traffic (hot key here!)
+  Shard B: 33% traffic        Shard B: 15% traffic
+  Shard C: 33% traffic        Shard C: 15% traffic
+
+  Even with 100 shards:       Still 70% on Shard A!
+
+  Shard A: 70%                Shard B: 0.3%
+  Shard C: 0.3%               ... (98 more shards at ~0.3%)
+
+  The hot key ALWAYS goes to ONE shard.
+  Hash(user_key) is deterministic -- same key = same shard.</div>
+
+<h2>Why Consistent Hashing Does Not Help</h2>
+
+<p>Consistent hashing ensures that each key maps to exactly one shard. This is a feature for data consistency but a limitation for hot keys. Adding more shards spreads the <em>other</em> keys more thinly, but the hot key remains concentrated on its single shard. The problem is at the key level, not the shard level.</p>
+
+<h2>Solutions</h2>
+
+<h3>Solution 1: Split Hot Key (Key Splitting)</h3>
+
+<p>Divide the hot key into multiple sub-keys, each stored on a different shard. Combine results at read time.</p>
+
+<pre>// Instead of:
+key = "tweet:12345"           // all reads hit one shard
+
+// Split into N sub-keys:
+for i in 0..N:
+    sub_key = "tweet:12345:part_{i}"
+
+// Write: fan out to all sub-keys
+// Read: read from random sub-key OR merge all
+
+// Example: split a counter
+key = "video:view_count:42"
+split into: "video:view_count:42:shard_0", "video:view_count:42:shard_1", ...
+Read: sum all parts = total view count</pre>
+
+<div class="callout yellow">
+  <strong>Tradeoff:</strong> Key splitting requires changes to the read path (merge/aggregate results). For counters, summing is trivial. For complex data, merging may be expensive or impossible.
+</div>
+
+<h3>Solution 2: Local Caching</h3>
+
+<p>Cache the hot key's value in memory on the application server or in a local in-process cache (e.g., Guava cache, LRU cache). Subsequent reads hit the local cache and never reach the shard.</p>
+
+<pre>Application Server
+  |
+  +-- Local Cache (in-memory, ~1ms)
+  |     key="tweet:12345" => value (cached)
+  |
+  +-- Cache Miss? -> Fetch from shard (only once)
+  |
+  Shard (only gets ~1 request per cache expiry)</pre>
+
+<div class="callout green">
+  <strong>Best for:</strong> Read-heavy hot keys where eventual consistency is acceptable. A local cache with a 10-second TTL reduces shard traffic by 99%+ for a key getting 1000 QPS.
+</div>
+
+<h3>Solution 3: Caching Layer</h3>
+
+<p>Place a dedicated caching layer (Redis, Memcached) in front of the data store. The cache absorbs the read traffic before it reaches the shards.</p>
+
+<div class="diagram">  Client
+    |
+    v
+  [Redis / Memcached Cluster]     <-- Cache layer absorbs hot reads
+    |         |
+    | (miss)  |
+    v         v
+  [Shard A]  [Shard B]           <-- Rarely hit for hot keys
+    |
+    v
+  [Persistent Storage]</div>
+
+<p>For write-heavy hot keys, the cache helps less (writes still go to the shard), but read-heavy keys benefit enormously.</p>
+
+<h3>Solution 4: Read Replicas for Hot Partition</h3>
+
+<p>Create additional read replicas specifically for the shard holding the hot key. Distribute read traffic across replicas while writes go to the primary.</p>
+
+<div class="diagram">              Write
+                |
+                v
+          [Shard A - Primary]     Holds hot key
+           /   |   \
+          v    v    v
+        [R1] [R2] [R3]           Read replicas for hot key
+
+  Reads distributed across replicas (primary handles writes only)
+  Replica lag is acceptable for hot reads (eventual consistency)</div>
+
+<h2>Comparing Solutions</h2>
+
+<table>
+  <tr>
+    <th>Solution</th>
+    <th>Best For</th>
+    <th>Reads</th>
+    <th>Writes</th>
+    <th>Consistency</th>
+  </tr>
+  <tr>
+    <td>Key Splitting</td>
+    <td>Counters, aggregatable data</td>
+    <td class="green">Good</td>
+    <td class="green">Good</td>
+    <td class="green">Strong</td>
+  </tr>
+  <tr>
+    <td>Local Caching</td>
+    <td>Read-heavy, tolerable staleness</td>
+    <td class="green">Excellent</td>
+    <td>No help</td>
+    <td class="red">Eventual</td>
+  </tr>
+  <tr>
+    <td>Caching Layer</td>
+    <td>General read-heavy keys</td>
+    <td class="green">Excellent</td>
+    <td>No help</td>
+    <td class="red">Eventual</td>
+  </tr>
+  <tr>
+    <td>Read Replicas</td>
+    <td>Hot reads, strong write needs</td>
+    <td class="green">Good</td>
+    <td>Still on primary</td>
+    <td class="yellow">Replica lag</td>
+  </tr>
+</table>
+
+<h2>Detection</h2>
+
+<p>Hot keys are detected by monitoring per-key or per-shard request rates:</p>
+
+<ul>
+  <li><strong>Shard-level metrics:</strong> If one shard has 10x the QPS of others, it likely holds a hot key.</li>
+  <li><strong>Key-level sampling:</strong> Sample a fraction of requests and count per-key frequency. Keys appearing far above the median are hot.</li>
+  <li><strong>Latency anomaly detection:</strong> A shard with elevated latency may be overwhelmed by a hot key.</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+
+<ol>
+  <li>What is a hot key and why is it a problem for hash-based partitioning?</li>
+  <li>How would you handle a celebrity tweet that gets millions of reads per second?</li>
+  <li>Why doesn't adding more shards solve the hot key problem?</li>
+  <li>Explain how key splitting works. What are its limitations?</li>
+  <li>Compare local caching vs. a caching layer for hot key mitigation.</li>
+  <li>How would you detect hot keys in a production system?</li>
+  <li>Design a counter system that handles millions of writes per second on a single logical key.</li>
+  <li>How do read replicas help with hot keys? What are their limitations?</li>
+</ol>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Avoid going deep into:</strong>
+  <ul>
+    <li>Cache invalidation strategies for hot keys -- this is a caching topic, not a partitioning topic.</li>
+    <li>Specific Redis cluster anti-affinity or key migration internals.</li>
+    <li>Write-ahead log or write splitting for write-heavy hot keys beyond the counter pattern, unless the interviewer asks for it.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Primary Sources</div>
+  <ul>
+    <li>Dynamo: Amazon's Highly Available Key-value Store (2007) -- Section 4.6: Handling Server Failures and Permanent Failures</li>
+    <li>Instagram Engineering: "Sharding and_IDS at Instagram" -- handling hot keys in distributed counters</li>
+    <li>Redis Cluster Specification: Hot key awareness and mitigation</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Recommended Reading</div>
+  <ul>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em>, Chapter 6: Partitioning</li>
+    <li>Alex Xu, <em>System Design Interview Vol. 2</em>, Chapter 8: Design a News Feed System (hot key discussion)</li>
+    <li>System Design Interview blog: "How to handle hot keys in distributed systems"</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="resharding.html">&larr; 6.3.4 Resharding</a>
+  <a href="hot-partitions.html">6.3.6 Hot Partitions &rarr;</a>
+</div>
+
+</body>
+</html>

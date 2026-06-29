@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.10.2 Key-Value Store</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#3">3 Storage</a> / <a href="../index.html#3.10">3.10 Database Models</a> / 3.10.2
+</div>
+
+<h1>Key-Value Store</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What a key-value store is: simple get/put/delete API on opaque values</li>
+  <li>Why key-value stores offer extreme simplicity and performance</li>
+  <li>Common use cases: caching, session storage, configuration, leaderboards</li>
+  <li>Tradeoffs: no joins, no queries by non-key columns, limited consistency models</li>
+</ul>
+
+<h2>Definition</h2>
+<p>A <strong>key-value store is the simplest database model — each piece of data is stored as a value indexed by a unique key</strong>. The API is minimal: PUT(key, value), GET(key), DELETE(key). The database does not understand or query the structure of the value — it's treated as an opaque blob. This simplicity enables extreme performance and horizontal scalability.</p>
+
+<div class="diagram">  Key-Value Store — Simple API
+
+  ┌───────────────────────────────────────────────────────┐
+  │                   Key-Value Store                      │
+  │                                                       │
+  │  PUT("session:abc123", '{"user_id": 42, "token": ...}')│
+  │  PUT("user:42:profile", '{"name":"Alice","age":30}')   │
+  │  PUT("cache:homepage:html", '<html>...</html>')      │
+  │  PUT("counter:page_views", "1584293")                 │
+  │  PUT("config:feature_flags", '{"dark_mode": true}')  │
+  │                                                       │
+  │  GET("session:abc123")  → '{"user_id": 42, ...}'      │
+  │  GET("user:42:profile") → '{"name":"Alice", ...}'     │
+  │  DELETE("session:abc123")                             │
+  │                                                       │
+  │  Rules:                                                │
+  │  - Keys are unique (PUT overwrites existing key)      │
+  │  - Values are opaque (DB doesn't inspect content)      │
+  │  - No joins, no SQL, no schema                        │
+  │  - Lookup ONLY by exact key                           │
+  └───────────────────────────────────────────────────────┘</div>
+
+<h2>API Comparison</h2>
+<table>
+  <tr><th>Operation</th><th>Redis</th><th>DynamoDB</th><th>Memcached</th></tr>
+  <tr><td><strong>Put</strong></td><td><code>SET key value</code></td><td><code>PutItem({key, value})</code></td><td><code>set(key, value)</code></td></tr>
+  <tr><td><strong>Get</strong></td><td><code>GET key</code></td><td><code>GetItem({key})</code></td><td><code>get(key)</code></td></tr>
+  <tr><td><strong>Delete</strong></td><td><code>DEL key</code></td><td><code>DeleteItem({key})</code></td><td><code>delete(key)</code></td></tr>
+  <tr><td><strong>TTL</strong></td><td><code>SETEX key 3600 value</code></td><td><code>TTL attribute</code></td><td><code>set(key, value, 3600)</code></td></tr>
+  <tr><td><strong>Atomic increment</strong></td><td><code>INCR key</code></td><td><code>UpdateItem(ADD)</code></td><td class="red">Not supported</td></tr>
+</table>
+
+<h2>Key Characteristics</h2>
+<table>
+  <tr><th>Characteristic</th><th>Detail</th></tr>
+  <tr><td><strong>Schema-free</strong></td><td>No schema definition. Any key maps to any value. Values can be strings, JSON, binary blobs, numbers.</td></tr>
+  <tr><td><strong>Single-key access</strong></td><td>Data is accessed only by its primary key. No secondary indexes (in pure KV stores). No queries by non-key fields.</td></tr>
+  <tr><td><strong>Opaque values</strong></td><td>The database does not parse or understand values. No server-side joins, no filtering, no aggregation.</td></tr>
+  <tr><td><strong>Horizontal scaling</strong></td><td>Key-based partitioning (hash or range) distributes data across nodes. Simple and effective.</td></tr>
+  <tr><td><strong>Low latency</strong></td><td>Single key lookup = single disk read (or memory hit). Sub-millisecond common.</td></tr>
+</table>
+
+<h2>Common Use Cases</h2>
+<div class="callout green">
+  <strong>Key-value stores excel when access patterns are simple:</strong> you always know the key and need to get/put a single value. They fail when you need complex queries, joins, or filtering.
+</div>
+
+<table>
+  <tr><th>Use Case</th><th>Example</th><th>Why KV Works</th></tr>
+  <tr><td><strong>Session storage</strong></td><td>Store user session tokens</td><td>Accessed by session ID, TTL handles expiry</td></tr>
+  <tr><td><strong>Caching</strong></td><td>Cache database query results, rendered pages</td><td>TTL, LRU eviction, in-memory speed</td></tr>
+  <tr><td><strong>Configuration</strong></td><td>Feature flags, app settings</td><td>Key = config name, value = JSON with settings</td></tr>
+  <tr><td><strong>Rate limiting</strong></td><td>API call counters per user</td><td>Atomic INCR, TTL resets counters</td></tr>
+  <tr><td><strong>Shopping cart</strong></td><td>Cart items per user</td><td>Key = user ID, value = serialized cart</td></tr>
+  <tr><td><strong>Leaderboards</strong></td><td>Game scores</td><td>Redis sorted sets provide O(log n) ranking</td></tr>
+  <tr><td><strong>Pub/Sub</strong></td><td>Real-time notifications</td><td>Redis pub/sub channels</td></tr>
+</table>
+
+<h2>Redis vs DynamoDB vs Memcached</h2>
+<table>
+  <tr><th></th><th>Redis</th><th>DynamoDB</th><th>Memcached</th></tr>
+  <tr><td><strong>Storage</strong></td><td class="green">In-memory (disk persistence optional)</td><td>Disk-backed (SSD)</td><td>In-memory only</td></tr>
+  <tr><td><strong>Data types</strong></td><td class="green">Strings, lists, sets, sorted sets, hashes, streams</td><td>Scalar types, lists, maps, sets</td><td>Strings only</td></tr>
+  <tr><td><strong>Durability</strong></td><td>Configurable (RDB snapshots, AOF)</td><td class="green">Durable by default (replicated)</td><td class="red">Volatile (no persistence)</td></tr>
+  <tr><td><strong>Managed service</strong></td><td class="green">AWS ElastiCache, Upstash</td><td class="green">AWS native (fully managed)</td><td>AWS ElastiCache</td></tr>
+  <tr><td><strong>Latency</strong></td><td class="green">~0.1 ms (memory)</td><td>~5-10 ms (disk)</td><td class="green">~0.1 ms (memory)</td></tr>
+  <tr><td><strong>Scaling</strong></td><td>Cluster mode (sharding)</td><td class="green">Automatic, serverless</td><td>Client-side sharding</td></tr>
+  <tr><td><strong>Pricing</strong></td><td>Per node/hour</td><td>Per read/write + storage</td><td>Per node/hour</td></tr>
+  <tr><td><strong>Best for</strong></td><td>Caching, leaderboards, pub/sub, rate limiting</td><td>Application data store, shopping carts, user profiles</td><td>Simple caching layer</td></tr>
+</table>
+
+<h2>Under the Hood</h2>
+<pre>  Key-Value Store Architecture:
+
+  Client
+    │
+    ▼
+  Consistent Hash Ring (partitioning)
+    │
+    ├── Node A (shard 1):  keys hash(key) ∈ [0, 42)
+    ├── Node B (shard 2):  keys hash(key) ∈ [42, 85)
+    └── Node C (shard 3):  keys hash(key) ∈ [85, 128)
+
+  GET("user:42"):
+    hash("user:42") = 67 → Node B → lookup → return value
+
+  Storage per node:
+    Redis:     in-memory hash table + RDB/AOF persistence
+    DynamoDB:  LSM tree (like RocksDB) + multi-AZ replication
+    Memcached: slab allocation + LRU eviction in memory</pre>
+
+<h2>Limitations</h2>
+<div class="callout red">
+  <strong>Key limitations:</strong> No secondary queries, no joins, no aggregation, no server-side filtering (in basic KV). To query by non-key fields, you must either maintain secondary indexes yourself (e.g., composite keys) or use a database with built-in secondary indexing (DynamoDB GSI).
+</div>
+
+<ul>
+  <li><strong>No ad-hoc queries</strong> — cannot <code>SELECT * WHERE age > 25</code>. You need the key.</li>
+  <li><strong>No joins</strong> — related data must be denormalized into a single value or fetched with multiple GETs.</li>
+  <li><strong>Value size limits</strong> — DynamoDB: 400 KB item max. Memcached: 1 MB.</li>
+  <li><strong>Eventual consistency</strong> (in some systems) — reads may return stale data briefly after writes.</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"When would you use a key-value store instead of a relational database?"</strong><br>When access patterns are simple get/put by key: session management, caching, configuration, rate limiting. When you need sub-millisecond latency. When you need effortless horizontal scaling. When data has no relationships or those relationships are denormalized into the value.</li>
+  <li><strong>"How would you implement a shopping cart using Redis?"</strong><br>Key = <code>cart:{user_id}</code>, value = Redis Hash with product_id fields and quantity values. Operations: <code>HSET cart:42 product:1 3</code>, <code>HINCRBY cart:42 product:1 1</code>, <code>HGETALL cart:42</code>. TTL for cart expiry. Atomic operations prevent race conditions.</li>
+  <li><strong>"Redis vs Memcached for a caching layer?"</strong><br>Redis: data structures, persistence, pub/sub, Lua scripting, more memory overhead. Memcached: simpler, slightly faster for pure string gets, multithreaded, no persistence. Choose Redis unless you need pure string caching with maximum memory efficiency.</li>
+  <li><strong>"How does DynamoDB partition data?"</strong><br>DynamoDB uses a hash of the partition key to determine which physical partition stores the item. Each partition is on a specific node. If you also have a sort key, items with the same partition key are stored together (ordered by sort key). This enables efficient queries within a partition key.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>Riak, etcd, Consul internals (unless specifically asked)</li>
+    <li>Redis cluster internals (sentinel, Gossip protocol details)</li>
+    <li>Memcached slab allocator implementation</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Designing Data-Intensive Applications" — Chapter 3</strong> (Kleppmann)</li>
+    <li><strong>Redis documentation</strong> — redis.io/docs</li>
+    <li><strong>DynamoDB Developer Guide</strong> — docs.aws.amazon.com/dynamodb</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="relational-database.html">&larr; relational-database.html</a>
+  <a href="document-database.html">Next: document-database.html &rarr;</a>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>14.3 — OAuth 2.0</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">Security</a> / 14.3 OAuth 2.0</div>
+<h1>OAuth 2.0</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand OAuth 2.0 as a delegation framework (not authentication), the authorization code flow with PKCE, the roles (client, resource owner, auth server, resource server), tokens (access token, refresh token), and security considerations.</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>OAuth 2.0</strong> is an authorization framework that allows a third-party application to access a user's resources on another service without sharing the user's credentials. It delegates access by issuing tokens with limited scope and lifetime.
+</div>
+
+<div class="callout yellow">
+  <strong>OAuth is NOT authentication.</strong> OAuth 2.0 delegates authorization (access to resources). OpenID Connect (OIDC) is the authentication layer built on top of OAuth 2.0. This is a common interview trap — always clarify the distinction.
+</div>
+
+<h2>The Four Roles</h2>
+<table>
+  <tr><th>Role</th><th>What It Is</th><th>Example</th></tr>
+  <tr><td><strong>Resource Owner</strong></td><td>The user who owns the data being accessed</td><td>Alice (wants an app to access her Google Drive)</td></tr>
+  <tr><td><strong>Client</strong></td><td>The application requesting access</td><td>A third-party photo editor app</td></tr>
+  <tr><td><strong>Authorization Server</strong></td><td>Issues tokens after verifying the resource owner's consent</td><td>Google's OAuth server (accounts.google.com)</td></tr>
+  <tr><td><strong>Resource Server</strong></td><td>The API that holds the protected resources</td><td>Google Drive API</td></tr>
+</table>
+
+<h2>Authorization Code Flow (with PKCE)</h2>
+<div class="diagram">
+  ┌────────┐                ┌──────────────┐              ┌──────────────┐
+  │ Client │                │ Auth Server │              │ Resource     │
+  │ (App)  │                │ (Google/Okta)│              │ Server       │
+  └───┬────┘                └──────┬───────┘              └──────┬───────┘
+      │                            │                             │
+  1.  │ "Login with Google"        │                             │
+      │───────────────────────────▶                             │
+      │  + code_verifier, code_challenge                        │
+      │  + redirect_uri, scope, client_id                       │
+      │                            │                             │
+  2.  │  Show consent screen       │                             │
+      │◀───────────────────────────│                             │
+      │                            │                             │
+  3.  │  User consents            │                             │
+      │───────────────────────────▶                             │
+      │                            │                             │
+  4.  │  Redirect: ?code=xyz      │                             │
+      │◀───────────────────────────│                             │
+      │                            │                             │
+  5.  │ POST /token               │                             │
+      │  code=xyz                  │                             │
+      │  code_verifier=abc         │  ← server verifies          │
+      │───────────────────────────▶    challenge = SHA256(verifier)│
+      │                            │                             │
+  6.  │  { access_token,          │                             │
+      │     refresh_token,         │                             │
+      │     id_token,              │                             │
+      │     expires_in }          │                             │
+      │◀───────────────────────────│                             │
+      │                            │                             │
+  7.  │  GET /api/drive/files     │                             │
+      │  Authorization: Bearer <access_token>                    │
+      │────────────────────────────────────────────────────────▶│
+      │                            │                             │
+  8.  │  { files: [...] }        │                             │
+      │◀────────────────────────────────────────────────────────│
+      │                            │                             │
+</div>
+
+<h2>PKCE (Proof Key for Code Exchange)</h2>
+<div class="callout">
+  <strong>PKCE</strong> (pronounced "pixie") prevents authorization code interception attacks. The client generates a random code_verifier, hashes it (SHA-256) to create a code_challenge, and sends the challenge in the auth request. When exchanging the code for a token, the client sends the original verifier. The server verifies <code>SHA256(verifier) == challenge</code>.
+</div>
+
+<div class="callout yellow">
+  <strong>PKCE is mandatory for all OAuth flows.</strong> Originally designed for public clients (mobile apps, SPAs) that cannot securely store a client secret, PKCE is now recommended for all OAuth 2.0 flows. The OAuth 2.1 draft makes it required.
+</div>
+
+<h2>Access Token vs Refresh Token</h2>
+<table>
+  <tr><th>Dimension</th><th>Access Token</th><th>Refresh Token</th></tr>
+  <tr><td>Purpose</td><td>Access resources (API calls)</td><td>Obtain new access tokens</td></tr>
+  <tr><td>Lifetime</td><td>Short (15 min - 1 hour)</td><td>Long (days, weeks, months)</td></tr>
+  <tr><td>Content</td><td>Opaque or JWT with claims/scopes</td><td>Opaque (random string stored server-side)</td></tr>
+  <tr><td>Storage</td><td>Memory or short-lived storage</td><td>Encrypted, long-term storage (DB)</td></tr>
+  <tr><td>Exposure</td><td>High (sent with every API call)</td><td>Low (sent only to token endpoint)</td></tr>
+  <tr><td>Revocation</td><td>Effective until expiry</td><td class="green">Can be revoked immediately</td></tr>
+</table>
+
+<h2>Token Security</h2>
+<ul>
+  <li><strong>Always use HTTPS:</strong> Tokens transmitted in plain text over HTTP can be intercepted.</li>
+  <li><strong>Short-lived access tokens:</strong> Limit blast radius if stolen. 15 minutes is a good default.</li>
+  <li><strong>Use refresh token rotation:</strong> Each time a refresh token is used, issue a new one and invalidate the old. Detects token theft.</li>
+  <li><strong>Bind refresh tokens to client:</strong> If a refresh token is used from a different client fingerprint, revoke it.</li>
+  <li><strong>Scope limitation:</strong> Tokens should have the minimum scopes needed (principle of least privilege).</li>
+</ul>
+
+<div class="callout green">
+  <strong>Interview tip:</strong> "For my OAuth implementation, I would use the Authorization Code flow with PKCE for all clients. Access tokens would be JWTs with 15-minute expiry. Refresh tokens would be stored as opaque values in the database with rotation enabled. If a refresh token is used from a different IP or user-agent, I would revoke it and force re-authentication."
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What is OAuth 2.0 and is it authentication or authorization?</li>
+  <li>Explain the authorization code flow step by step.</li>
+  <li>What is PKCE and why is it needed?</li>
+  <li>Compare access tokens and refresh tokens.</li>
+  <li>What are the OAuth 2.0 grant types and when would you use each?</li>
+  <li>How would you secure tokens in a mobile app?</li>
+  <li>What is refresh token rotation and why does it matter?</li>
+  <li>What is the difference between OAuth 2.0 and OpenID Connect?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid diving into:</strong> Client credentials flow details (service-to-service), device authorization grant (IoT), or specific provider implementations (Google OAuth console setup). Focus on the authorization code flow with PKCE and token security.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Standards</div>
+  <ul>
+    <li><strong>OAuth 2.0 RFC 6749</strong> — tools.ietf.org/html/rfc6749</li>
+    <li><strong>PKCE RFC 7636</strong> — tools.ietf.org/html/rfc7636</li>
+    <li><strong>OAuth 2.1 Draft</strong> — oauth.net/2.1/ — Best current practices</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Articles</div>
+  <ul>
+    <li><strong>"OAuth 2.0 Simplified"</strong> — Aaron Parecki — oauth.com — Best OAuth explanation</li>
+    <li><strong>"OAuth 2.0 for Browser-Based Apps"</strong> — oauth.net/Browser-Based-Apps — Current best practices</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="authorization.html">&larr; Previous: Authorization</a>
+  <a href="jwt.html">Next: JWT &rarr;</a>
+</div>
+</body>
+</html>

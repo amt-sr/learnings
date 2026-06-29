@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.1.9 Throughput</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .formula { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; text-align: center; font-size: 1.1rem; color: #79c0ff; }
+  .formula small { display: block; text-align: left; color: #8b949e; font-size: 0.8rem; margin-top: 0.75rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#1">1 Fundamentals</a> / <a href="../index.html#1.1">1.1 System Design Basics</a> / 1.1.9
+</div>
+
+<h1>Throughput</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What throughput is and how it differs from latency</li>
+  <li>Little's Law and how to apply it</li>
+  <li>Amdahl's Law and why adding servers has diminishing returns</li>
+  <li>How to estimate QPS in interviews</li>
+  <li>Factors that limit throughput</li>
+</ul>
+
+<h2>Definition</h2>
+<p>Throughput is the <strong>number of operations a system processes per unit of time</strong>.</p>
+<div class="formula">
+  Throughput = Operations / Time
+  <small>Common units: RPS (Requests Per Second), QPS (Queries Per Second), TPS (Transactions Per Second), IOPS (I/O Operations Per Second)</small>
+</div>
+
+<div class="callout yellow">
+  <strong>Analogy:</strong> Latency is the speed limit on a highway. Throughput is how many cars pass through per hour. A narrow lane (low latency) can still have high throughput if cars are bumper-to-bumper.
+</div>
+
+<h2>Throughput vs Latency</h2>
+<table>
+  <tr><th></th><th>Optimize Latency</th><th>Optimize Throughput</th></tr>
+  <tr><td>Strategy</td><td>Smaller requests, parallelism, <a href="latency.html">caching</a></td><td>Batching, larger payloads, pipelining</td></tr>
+  <tr><td>Batching</td><td class="red">Higher latency (wait for batch)</td><td class="green">Higher throughput (amortized overhead)</td></tr>
+  <tr><td>Connection pooling</td><td class="green">Fewer connection setups</td><td class="green">Fewer connection setups</td></tr>
+  <tr><td>Concurrency</td><td>Fewer connections, less contention</td><td>More concurrent connections</td></tr>
+  <tr><td>Use when</td><td>User-facing APIs, real-time systems</td><td>ETL, log processing, bulk imports</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Key insight:</strong> High latency does NOT always mean low throughput. A message queue processing batches of 1000 messages has high per-message latency but very high throughput. This is why <a href="latency.html">latency</a> and throughput are independent metrics that must be specified separately.
+</div>
+
+<h2>Little's Law</h2>
+<p>The most useful queueing theory result for system design.</p>
+<div class="formula">
+  L = &lambda; &times; W
+  <small>L = number of items in the system (queue + processing)<br>&lambda; = arrival rate (items/time)<br>W = average time an item spends in the system</small>
+</div>
+
+<pre>Example 1 — Concurrent users:
+   DAU = 10M, average time on site = 5 min = 300s
+  Arrival rate = 10M / 86400 = ~116 requests/sec
+  Concurrent users L = 116 × 300 = 34,700
+
+Example 2 — Server capacity:
+  Server handles 5ms per request, want max latency of 50ms
+  W = 50ms = 0.05s
+  Max throughput = L/W = 1 / 0.05 = 20 RPS per server
+
+Example 3 — How many servers?
+  Need to handle 10,000 RPS, each server handles 2,000 RPS
+  Servers needed = 10,000 / 2,000 = 5 servers
+  With redundancy: 5 + 2 = 7 servers</pre>
+
+<h2>Amdahl's Law</h2>
+<p>Adding more processors has diminishing returns because only the parallelizable portion benefits.</p>
+<div class="formula">
+  Speedup(n) = 1 / ((1 - p) + p / n)
+  <small>p = fraction of work that is parallelizable<br>n = number of processors</small>
+</div>
+<pre>Example: 8 servers, p = 0.5 (50% parallelizable)
+Speedup = 1 / (0.5 + 0.5/8) = 1 / 0.5625 = 1.78x
+
+You added 8x the hardware, got only 1.78x the speedup.
+The serial portion is the bottleneck.
+
+If p = 0.95 (95% parallelizable):
+Speedup = 1 / (0.05 + 0.95/8) = 1 / 0.16875 = 5.93x
+
+Better, but still not linear. This is why
+"just add more servers" doesn't always work.</pre>
+
+<h3>Universal Scalability Law (Gunther)</h3>
+<p>Extends Amdahl by accounting for contention and coherency overhead.</p>
+<div class="formula">
+  Throughput(n) = n / (1 + &sigma;(n-1) + &delta;n(n-1))
+  <small>&sigma; = contention coefficient (waiting for shared resources)<br>&delta; = coherency coefficient (overhead of keeping state consistent)</small>
+</div>
+<div class="callout yellow">
+  <strong>Real-world implication:</strong> 10 servers might only deliver 6x throughput, not 10x. Adding more servers beyond a point can actually decrease throughput due to contention/coherency overhead. This is why microservices with many inter-service calls can perform worse than monoliths at the same request rate.
+</div>
+
+<h2>Factors Limiting Throughput</h2>
+<table>
+  <tr><th>Resource</th><th>Limiting Indicator</th><th>Mitigation</th></tr>
+  <tr><td>CPU</td><td>100% utilization, high load average</td><td>Horizontal scaling, more cores</td></tr>
+  <tr><td>Memory</td><td>OOM kills, high page fault rate</td><td>More RAM, reduce memory per request</td></tr>
+  <tr><td>Disk I/O</td><td>High iowait, slow queries</td><td>SSD, <a href="../caching/cache-aside.html">caching</a>, <a href="../replication/read-replica.html">read replicas</a></td></tr>
+  <tr><td>Network</td><td>Bandwidth saturation, high retransmit</td><td><a href="latency.html">CDN</a>, compression, multiple paths</td></tr>
+  <tr><td>DB connections</td><td>"Too many connections" error</td><td>Connection pooling, <a href="../partitioning/hash-sharding.html">sharding</a></td></tr>
+  <tr><td>Thread pool</td><td>Request queuing, high wait time</td><td>Larger pools, async I/O</td></tr>
+  <tr><td>GC pauses</td><td>Application freezes periodically</td><td>Optimize GC settings, use off-heap storage</td></tr>
+</table>
+
+<h2>How to Increase Throughput</h2>
+<table>
+  <tr><th>Technique</th><th>Throughput Gain</th><th>Trade-off</th></tr>
+  <tr><td><a href="scalability.html">Horizontal scaling</a></td><td class="green">Nearly linear</td><td>Operational complexity</td></tr>
+  <tr><td><a href="../caching/cache-aside.html">Caching</a></td><td class="green">10-1000x for reads</td><td>Staleness, memory cost</td></tr>
+  <tr><td><a href="../replication/read-replica.html">Read replicas</a></td><td class="green">Scales reads linearly</td><td>Replication lag</td></tr>
+  <tr><td>Connection pooling</td><td>Eliminates connection setup overhead</td><td>Pool size management</td></tr>
+  <tr><td>Batching</td><td>10-100x for bulk operations</td><td>Higher per-item latency</td></tr>
+  <tr><td>Async processing</td><td>Decouples request from response</td><td>Eventual consistency</td></tr>
+  <tr><td><a href="../partitioning/hash-sharding.html">Sharding</a></td><td class="green">Scales writes across nodes</td><td>Cross-shard queries, operational</td></tr>
+  <tr><td><a href="latency.html">HTTP/2 multiplexing</a></td><td>Fewer TCP connections needed</td><td>Connection management</td></tr>
+</table>
+
+<h2>QPS Estimation in Interviews</h2>
+<div class="diagram">  Step 1: Clarify scale
+    "How many DAU?" → Estimate MAU if needed
+
+  Step 2: Requests per user per day
+    Typical: 10-50 for social apps, 5-20 for productivity
+
+  Step 3: Total requests per day
+    DAU × requests per user per day
+
+  Step 4: Average QPS
+    Total requests per day / 86400
+
+  Step 5: Peak QPS (use peak factor)
+    Peak QPS = Average QPS × 2 to 3 (some use 5x for bursty apps)
+
+  Step 6: Read/write split
+    Apply read:write ratio (typically 10:1 to 100:1 for social apps)</pre>
+
+<pre>Examples:
+
+Twitter:   DAU=100M, 2 tweets/day per user, read:write=100:1
+  Total writes/day: 200M
+  Peak write QPS: 200M / 86400 × 3 = 6,944
+  Peak read QPS: 6,944 × 100 = 694,400
+  Cache 95% reads: DB read QPS = 34,720
+
+WhatsApp: DAU=1B, 30 messages/day per user
+  Peak QPS: 1B × 30 / 86400 × 2 = 694,444
+
+URL Shortener: DAU=1M, 5 shortens/day
+  Peak write QPS: 1M × 5 / 86400 × 3 = 174
+
+YouTube: DAU=5M, 30 views/day
+  Peak QPS: 5M × 30 / 86400 × 3 = 5,208</pre>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"How do you estimate QPS for a system?"</strong><br>DAU → requests/day per user → total/day → average QPS → peak QPS (×2-3) → split reads/writes.</li>
+  <li><strong>"What limits throughput more — CPU or database?"</strong><br>Depends on the workload. Read-heavy: DB. Compute-heavy: CPU. Write-heavy: DB writes. Most real systems hit DB first because adding app servers is easier than scaling databases.</li>
+  <li><strong>"Why doesn't adding servers always increase throughput linearly?"</strong><br>Amdahl's Law (serial portion limits parallelism), Universal Scalability Law (contention/coherency overhead), shared resource bottlenecks.</li>
+  <li><strong>"How does Little's Law help with capacity planning?"</strong><br>Calculate concurrent users (L) from arrival rate (&lambda;) and time on site (W). L = &lambda; × W. This tells you how many connections your servers need.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>Network traffic shaping and QoS details</li>
+    <li>TCP window size tuning and congestion control internals</li>
+    <li>NIC-level throughput optimization</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>Designing Data-Intensive Applications</strong> — Chapter 1</li>
+    <li><strong>System Design Interview Vol. 1 (Alex Xu)</strong> — Capacity Estimation chapter</li>
+    <li><strong>"A Universal Law of Scalability"</strong> — Neil Gunther — extends Amdahl's Law</li>
+    <li><strong>Little's Law (Wikipedia)</strong> — <a href="https://en.wikipedia.org/wiki/Little%27s_law" target="_blank">wikipedia.org</a></li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="latency.html">&larr; 1.1.8 Latency</a>
+  <a href="capacity-planning.html">Next: 1.1.10 Capacity Planning &rarr;</a>
+</div>
+
+</body>
+</html>

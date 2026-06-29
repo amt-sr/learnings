@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>11.5 — Correlation IDs</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">Observability</a> / 11.5 Correlation IDs</div>
+<h1>Correlation IDs</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐</span>
+  <span>Interview Frequency: ★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand how correlation IDs enable end-to-end request tracking in distributed systems, the standard headers used (X-Request-ID), propagation strategies across synchronous and asynchronous boundaries, and why this is a fundamental building block for observability.</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>Correlation ID</strong> is a unique identifier attached to a request at its entry point and propagated to every downstream service, log entry, and trace span. It enables you to reconstruct the complete lifecycle of a single request across all services by filtering all telemetry data by this one ID.
+</div>
+
+<p>A correlation ID is the simplest form of distributed request tracking. It does not provide timing information (that is what tracing adds), but it connects all logs, metrics, and events belonging to the same request. In practice, correlation IDs are embedded within the trace context as the trace ID.</p>
+
+<h2>How It Works</h2>
+<div class="diagram">
+  Client Request
+       │
+       ▼
+  ┌─────────────┐   generate or accept correlation_id
+  │ API Gateway  │   X-Request-ID: req-abc-123
+  └──────┬──────┘
+         │  header: X-Request-ID: req-abc-123
+         ▼
+  ┌─────────────┐
+  │ User Service │   log: {correlation_id: "req-abc-123", msg: "user looked up"}
+  └──────┬──────┘
+         │  header: X-Request-ID: req-abc-123
+         ▼
+  ┌─────────────┐
+  │ Order Service│   log: {correlation_id: "req-abc-123", msg: "order fetched"}
+  └──────┬──────┘
+         │  publish to Kafka with header: X-Request-ID: req-abc-123
+         ▼
+  ┌─────────────┐
+  │ Notification │   log: {correlation_id: "req-abc-123", msg: "email sent"}
+  │  Consumer    │
+  └─────────────┘
+
+  Kibana/Log Query: correlation_id:"req-abc-123"
+  → Returns all 4 log entries in chronological order across 4 services
+</div>
+
+<h2>Standard Headers</h2>
+<table>
+  <tr><th>Header</th><th>Standard</th><th>Description</th></tr>
+  <tr><td><strong>X-Request-ID</strong></td><td>De facto (Heroku/Amazon)</td><td>Simple correlation ID for request tracking</td></tr>
+  <tr><td><strong>traceparent</strong></td><td>W3C Trace Context</td><td>W3C standard: version + trace-id + parent-id + flags</td></tr>
+  <tr><td><strong>tracestate</strong></td><td>W3C Trace Context</td><td>Vendor-specific trace context data (list of key=value pairs)</td></tr>
+  <tr><td><strong>X-B3-TraceId</strong></td><td>Zipkin B3</td><td>Zipkin propagation (legacy but still widely used)</td></tr>
+  <tr><td><strong>X-B3-SpanId</strong></td><td>Zipkin B3</td><td>Zipkin span identifier</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Modern guidance:</strong> Use W3C Trace Context (traceparent) for new systems. It is the open standard supported by OpenTelemetry, AWS X-Ray, Azure Monitor, and most tracing libraries. X-Request-ID is acceptable for simpler setups but does not carry span information.
+</div>
+
+<h2>Propagation Strategies</h2>
+<h3>Synchronous (HTTP/gRPC)</h3>
+<pre>
+// Middleware / interceptor: extract incoming or generate
+func CorrelationMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        correlationID := r.Header.Get("X-Request-ID")
+        if correlationID == "" {
+            correlationID = uuid.New().String()
+        }
+        ctx := context.WithValue(r.Context(), "correlation_id", correlationID)
+        // Pass to downstream via header
+        w.Header().Set("X-Request-ID", correlationID)
+        next.ServeHTTP(w, r.WithContext(ctx))
+    })
+}
+</pre>
+
+<h3>Asynchronous (Message Queues)</h3>
+<pre>
+// Kafka producer: embed correlation_id in message headers
+producer.send({
+  topic: "order-events",
+  key: order.id,
+  headers: {
+    "X-Request-ID": correlationID  // propagate from original request
+  },
+  value: orderEvent
+})
+
+// Kafka consumer: extract and include in all log output
+consumer.on("message", (msg) => {
+    const correlationID = msg.headers["X-Request-ID"]
+    logger.info({ correlation_id: correlationID }, "Processing order event")
+    // ... process and pass to next service with same correlation_id
+})
+</pre>
+
+<h2>UUID Format and Generation</h2>
+<table>
+  <tr><th>Format</th><th>Example</th><th>Pros</th><th>Cons</th></tr>
+  <tr><td>UUID v4 (random)</td><td><code>550e8400-e29b-41d4-a716-446655440000</code></td><td>No coordination needed</td><td>36 chars, not sortable</td></tr>
+  <tr><td>ULID</td><td><code>01HQE5R5J3K5N8Q9P0R1S2T3V4</code></td><td class="green">Sortable by time, compact</td><td>Less common</td></tr>
+  <tr><td>UUID v7 (time-based)</td><td><code>0190a0e0-...</code></td><td class="green">Sortable, standard</td><td>Newer, less tooling</td></tr>
+  <tr><td>Snowflake-style</td><td><code>1234567890123456789</code></td><td class="green">K-sortable, compact</td><td>Requires coordination service</td></tr>
+</table>
+
+<div class="callout green">
+  <strong>Best practice:</strong> Use ULID or UUID v7 for correlation IDs. Time-sortability means logs are naturally ordered, making debugging faster. This is a detail that signals seniority in interviews.
+</div>
+
+<h2>Common Pitfalls</h2>
+<ul>
+  <li><strong>Missing propagation:</strong> One service forgets to pass X-Request-ID downstream → trace breaks. Every outbound call must propagate.</li>
+  <li><strong>Async boundary breaks:</strong> Message queue publishes without copying the correlation ID header → consumer logs are orphaned.</li>
+  <li><strong>Batch processing:</strong> A batch job processes 1000 records — use the batch ID as a "virtual" correlation ID, or generate per-record IDs.</li>
+  <li><strong>Third-party calls:</strong> External APIs do not accept X-Request-ID. Log the external request/response with the correlation ID anyway.</li>
+  <li><strong>Cross-language boundaries:</strong> Different services use different header names. Enforce a standard (W3C traceparent) organization-wide.</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What is a correlation ID and how does it help with debugging?</li>
+  <li>How would you propagate a correlation ID through a message queue?</li>
+  <li>What happens if a service in the chain does not propagate the correlation ID?</li>
+  <li>How does a correlation ID differ from a trace ID?</li>
+  <li>What header format would you use and why?</li>
+  <li>How would you handle correlation IDs in a fan-out scenario?</li>
+  <li>How do you generate correlation IDs — UUID, ULID, Snowflake?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid diving into:</strong> Specific UUID generation library internals, log formatting details, or W3C header byte-level encoding. Focus on the propagation challenge, where IDs get lost, and how to maintain end-to-end tracking across both synchronous and asynchronous boundaries.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Standards</div>
+  <ul>
+    <li><strong>W3C Trace Context</strong> — w3.org/TR/trace-context — Canonical standard for correlation and trace propagation</li>
+    <li><strong>W3C Correlation Context</strong> — w3.org/TR/correlation-context — Extended correlation data</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Articles</div>
+  <ul>
+    <li><strong>"Correlation IDs for Microservices Architecture"</strong> — Microsoft Azure docs on correlation patterns</li>
+    <li><strong>ULID Spec</strong> — github.com/ulid/spec — Time-sortable unique identifiers</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="distributed-tracing.html">&larr; Previous: Distributed Tracing</a>
+  <a href="../cloud-architecture/monolith.html">Next: Monolith &rarr;</a>
+</div>
+</body>
+</html>

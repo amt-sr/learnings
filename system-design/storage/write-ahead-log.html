@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.3.1 Write Ahead Log</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#3">3 Storage</a> / <a href="../index.html#3.3">3.3 Database Write Path</a> / 3.3.1
+</div>
+
+<h1>Write Ahead Log (WAL)</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>The WAL rule: write the log entry BEFORE writing the data page</li>
+  <li>How WAL enables atomicity and <a href="crash-recovery.html">crash recovery</a></li>
+  <li>Why the WAL is append-only and why sequential writes are critical</li>
+  <li>The relationship between WAL and the <a href="redo-log.html">redo log</a></li>
+  <li>fsync considerations: when must the WAL hit physical disk?</li>
+  <li>How InnoDB and PostgreSQL implement WAL differently</li>
+</ul>
+
+<h2>Definition</h2>
+<p>The Write-Ahead Log (WAL, also called the <strong>transaction log</strong>) is an <strong>append-only log file that records every modification made to database pages before those modifications are written to the actual data files</strong>. It is the fundamental mechanism that enables crash recovery: if the database crashes before dirty pages are flushed from the <a href="buffer-pool.html">buffer pool</a>, the WAL can replay the modifications to restore the database to a consistent state.</p>
+
+<h2>The WAL Rule</h2>
+<div class="callout red">
+  <strong>The Write-Ahead Logging Protocol:</strong> Before a modified data page is written to the data file on disk, the log record describing that modification MUST be written to the WAL on disk first. This is sometimes stated as: <strong>"WAL records must precede data page writes."</strong>
+</div>
+
+<div class="diagram">  The WAL Rule in Action:
+
+  Transaction: UPDATE users SET balance = balance - 100 WHERE id = 42
+
+  Step 1: Record the intention in the WAL
+  ┌───────────────────────────────────────────┐
+  │ WAL Log Record (appended sequentially)      │
+  │ LSN: 1024                                  │
+  │ Type: UPDATE                               │
+  │ Table: users                               │
+  │ Page: #42, Offset: 156                     │
+  │ Before: balance = 500                      │
+  │ After:  balance = 400                      │
+  │ Transaction ID: TXN-789                    │
+  └───────────────────────────────────────────┘
+          │
+          ↓ fsync (MUST hit disk BEFORE commit)
+
+  Step 2: Modify the data page in the buffer pool
+  ┌───────────────────────────────────────────┐
+  │ Buffer Pool: Page #42                      │
+  │ Record: (id=42, balance=400) ← modified   │
+  │ Status: DIRTY                             │
+  └───────────────────────────────────────────┘
+          │
+          ↓ (later, by background thread — NOT blocking)
+
+  Step 3: Flush dirty page to data file
+  ┌───────────────────────────────────────────┐
+  │ Data File: Page #42                        │
+  │ Record: (id=42, balance=400) ← persisted  │
+  └───────────────────────────────────────────┘</div>
+
+<h2>Why WAL Works</h2>
+<h3>Atomicity</h3>
+<p>A transaction either fully completes or not at all. Before acknowledging commit to the client, the database ensures the transaction's WAL records are durably on disk (via fsync). If the system crashes after the WAL is written but before data pages are flushed, the <a href="crash-recovery.html">recovery</a> process replays the WAL to complete the transaction.</p>
+
+<h3>Crash Recovery</h3>
+<p>After a crash, the database reads the WAL from the last <a href="checkpoint.html">checkpoint</a> and replays any committed changes that were not yet flushed to data files:</p>
+<ul>
+  <li>Redo (forward): Replay committed WAL records to reconstruct dirty pages</li>
+  <li>Undo (backward): Roll back any uncommitted transactions using the <a href="undo-log.html">undo log</a></li>
+</ul>
+
+<h3>Performance</h3>
+<p>The WAL is append-only, meaning writes are always sequential. Sequential writes are fast even on <a href="hdd.html">HDDs</a> (100–200 MB/s) and extremely fast on <a href="ssd.html">SSDs</a>. By contrast, updating data pages requires random I/O (seeking to the correct page on disk). WAL converts many random writes into a single sequential append.</p>
+
+<div class="diagram">  Without WAL (random writes for every transaction):
+
+  TXN 1: UPDATE page_42 → random write to page 42
+  TXN 2: UPDATE page_87 → random write to page 87
+  TXN 3: UPDATE page_15 → random write to page 15
+  TXN 4: UPDATE page_201 → random write to page 201
+  = 4 random disk seeks per 4 transactions
+
+  With WAL (sequential append + deferred page writes):
+
+  TXN 1: APPEND WAL record → sequential write
+  TXN 2: APPEND WAL record → sequential write
+  TXN 3: APPEND WAL record → sequential write
+  TXN 4: APPEND WAL record → sequential write
+  = 1 sequential disk write for all 4 transactions
+
+  Page writes happen later, in batch, by background thread
+  (and can be reordered for efficiency)</div>
+
+<h2>WAL and Redo Log Relationship</h2>
+<p>The WAL and <a href="redo-log.html">redo log</a> are closely related concepts:</p>
+<table>
+  <tr><th>Concept</th><th>Description</th></tr>
+  <tr><td><strong>WAL (protocol)</strong></td><td>The write-ahead logging <em>rule</em>: log before data. This is a protocol/constraint.</td></tr>
+  <tr><td><strong>Redo log (data structure)</strong></td><td>The physical log file that implements the WAL protocol. Contains the actual byte-level changes to replay during recovery.</td></tr>
+</table>
+
+<p>In practice, these terms are often used interchangeably. In MySQL InnoDB, the redo log IS the WAL implementation. In PostgreSQL, the WAL is the actual log file. The <a href="redo-log.html">redo log</a> section covers the physical log records in detail.</p>
+
+<h2>fsync Considerations</h2>
+<p>Durability requires that the WAL record is physically on disk before the transaction is committed. The <code>fsync()</code> system call forces data from the OS page cache to the physical disk:</p>
+<table>
+  <tr><th>Durability Setting</th><th>Behavior</th><th>Performance</th><th>Risk</th></tr>
+  <tr><td><code>fsync=ON</code></td><td>fsync WAL on every commit</td><td class="red">Slowest (~1 fsync per commit)</td><td class="green">Fully durable</td></tr>
+  <tr><td><code>fsync_group_commit</code></td><td>Batch fsyncs from multiple commits</td><td>Fast (amortizes fsync cost)</td><td class="green">Fully durable</td></tr>
+  <tr><td><code>fsync=OFF</code></td><td>Let OS flush WAL to disk eventually</td><td class="green">Fastest</td><td class="red">Risk of data loss on OS crash</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Interview tip:</strong> <code>fsync</code> costs ~1–10 ms depending on the storage device. At 10 ms per fsync with no group commit, you get ~100 TPS maximum. This is why group commit and battery-backed write caches (BBWC) are critical for high-transaction throughput. Modern SSDs with power-loss protection (PLP) can complete fsync in ~0.1–0.5 ms, enabling thousands of TPS.
+</div>
+
+<h2>WAL in Major Databases</h2>
+<table>
+  <tr><th>Database</th><th>WAL Name</th><th>Implementation</th><th>Group Commit</th></tr>
+  <tr><td><strong>PostgreSQL</strong></td><td>WAL (pg_wal/)</td><td>Physical log records per page change</td><td class="green">Yes (commit_delay, commit_siblings)</td></tr>
+  <tr><td><strong>MySQL InnoDB</strong></td><td>Redo Log (ib_logfile0/1)</td><td>Physical log records with LSN</td><td class="green">Yes (innodb_flush_log_at_trx_commit=1 with group)</td></tr>
+  <tr><td><strong>Oracle</strong></td><td>Redo Log (online redo logs)</td><td>Physical + logical log records</td><td class="green">Yes (LGWR process)</td></tr>
+  <tr><td><strong>SQL Server</strong></td><td>Transaction Log (.ldf)</td><td>Logical + physical log records</td><td class="green">Yes (lazy writer)</td></tr>
+</table>
+
+<h3>PostgreSQL WAL Details</h3>
+<ul>
+  <li>WAL files are 16 MB each, stored in <code>pg_wal/</code></li>
+  <li>Each WAL record contains: LSN, transaction ID, modified page ID, before/after images (delta)</li>
+  <li>WAL is fsync'd based on <code>wal_sync_method</code> (fdatasync by default on Linux)</li>
+  <li>WAL recycling: old WAL files are reused once all <a href="checkpoint.html">checkpoints</a> have moved past them</li>
+</ul>
+
+<h3>MySQL InnoDB WAL Details</h3>
+<ul>
+  <li>Redo log files are circular (ib_logfile0, ib_logfile1, typically 48 MB–1 GB each)</li>
+  <li>Written to the redo log buffer in memory, flushed to log files on commit or every second</li>
+  <li><code>innodb_flush_log_at_trx_commit</code>: 0=flush every second (risk), 1=flush on commit (safe), 2=flush to OS cache on commit (risk on OS crash)</li>
+  <li>Uses <a href="redo-log.html">LSN (Log Sequence Number)</a> to track position in the log</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What is WAL and why is it important?"</strong><br>WAL (Write-Ahead Logging) is a protocol where every modification to a data page is first recorded in an append-only log file before the data page is written to disk. This ensures atomicity (transactions are all-or-nothing) and durability (committed data survives crashes). The WAL also improves performance by converting random page writes into sequential log appends.</li>
+  <li><strong>"Why is WAL append-only?"</strong><br>Appending to the end of a file is a sequential write — the disk head (on HDD) does not seek, and the write completes at the disk's sequential throughput rate. On <a href="ssd.html">SSDs</a>, sequential writes avoid write amplification from garbage collection. If the log were randomly written, it would be no faster than writing data pages directly.</li>
+  <li><strong>"What happens if the database crashes after writing to the WAL but before flushing the data page?"</strong><br>During <a href="crash-recovery.html">crash recovery</a>, the database reads the WAL from the last <a href="checkpoint.html">checkpoint</a> and replays (redoes) all committed changes that were not flushed to data files. The WAL contains the complete record of what each page should look like. The <a href="redo-log.html">redo log</a> is the data structure used for this replay.</li>
+  <li><strong>"What is group commit and why does it matter?"</strong><br>Group commit batches multiple transactions' WAL records into a single fsync. Instead of one fsync per transaction (~10 ms each, limiting to 100 TPS), multiple transactions that commit within the same time window share one fsync, potentially achieving 10,000+ TPS. Both PostgreSQL and MySQL InnoDB implement group commit.</li>
+  <li><strong>"What is the difference between WAL and redo log?"</strong><br>WAL is the protocol (write log before data). The redo log is the physical implementation — the file containing the actual log records used to replay changes during recovery. In MySQL, the redo log IS the WAL. In PostgreSQL, the WAL files serve as the redo log. The terms overlap significantly.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>WAL compression algorithms (PostgreSQL LZ4, ZSTD for WAL compression)</li>
+    <li>WAL archiving and Point-in-Time Recovery (PITR) configuration details</li>
+    <li>Replication slot internals (PostgreSQL physical/logical replication)</li>
+    <li>InnoDB doublewrite buffer internals</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Database Internals" by Alex Petrov</strong> — Chapter 6 (Write-Ahead Logging)</li>
+    <li><strong>"Designing Data-Intensive Applications" by Martin Kleppmann</strong> — Chapter 7 (Transactions)</li>
+    <li><strong>"The Internals of PostgreSQL" — InterDB</strong> — interdb.jp/pg/pgsql09.html (WAL)</li>
+    <li><strong>MySQL Reference Manual: InnoDB Redo Log</strong> — dev.mysql.com/doc/refman/8.0/en/innodb-redo-log.html</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="page-cache.html">&larr; 3.2.5 Page Cache</a>
+  <a href="redo-log.html">Next: 3.3.2 Redo Log &rarr;</a>
+</div>
+
+</body>
+</html>

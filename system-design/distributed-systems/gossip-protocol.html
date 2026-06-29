@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.6.5 Gossip Protocol - System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">5 Distributed Systems</a> / <a href="index.html">5.6 Consensus</a> / 5.6.5
+</div>
+
+<h1>5.6.5 Gossip Protocol</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<div class="callout green">
+  <strong>Goal:</strong> Understand how gossip protocols propagate information through a cluster using epidemic-style messaging. Know the O(log n) convergence properties, the tradeoffs versus consensus-based approaches, and how systems like Cassandra use gossip for membership and state dissemination.
+</div>
+
+<h2>Definition</h2>
+
+<p>A <strong>gossip protocol</strong> (also called epidemic protocol) is a decentralized communication mechanism where each node periodically exchanges state information with a randomly selected peer. Information spreads through the cluster like a rumor or an epidemic disease -- exponentially at first, then reaching all nodes in O(log n) rounds.</p>
+
+<h2>How Gossip Works</h2>
+
+<p>The core idea is simple: each node talks to a random peer every few hundred milliseconds and exchanges information. Like a rumor spreading through an office, information fans out exponentially.</p>
+
+<div class="diagram">
+  Gossip Propagation (8-node cluster)
+  ───────────────────────────────────
+
+  Round 0:  Node A learns new state X
+  A: X  |  B: -  |  C: -  |  D: -  |  E: -  |  F: -  |  G: -  |  H: -
+
+  Round 1:  A gossips to random node B
+  A: X  |  B: X  |  C: -  |  D: -  |  E: -  |  F: -  |  G: -  |  H: -
+            │
+  Round 2:  A→C, B→D (both know X)
+  A: X  |  B: X  |  C: X  |  D: X  |  E: -  |  F: -  |  G: -  |  H: -
+                  │
+  Round 3:  A→E, B→F, C→G, D→H
+  A: X  |  B: X  |  C: X  |  D: X  |  E: X  |  F: X  |  G: X  |  H: X
+
+  All 8 nodes know X after log2(8) = 3 rounds!
+</div>
+
+<h3>Key Properties</h3>
+
+<ul>
+  <li><strong>O(log n) rounds:</strong> Information reaches all n nodes in O(log n) rounds because the number of informed nodes doubles each round.</li>
+  <li><strong>Decentralized:</strong> No leader, no coordinator. Every node is equal.</li>
+  <li><strong>Fault-tolerant:</strong> Node failures do not prevent gossip propagation (other nodes continue gossiping).</li>
+  <li><strong>Eventually consistent:</strong> All nodes eventually converge to the same state, but there may be temporary inconsistencies.</li>
+</ul>
+
+<h2>Infection-Style Propagation</h2>
+
+<p>Gossip protocols come in two main flavors:</p>
+
+<table>
+  <tr>
+    <th>Style</th>
+    <th>Mechanism</th>
+    <th>Use Case</th>
+  </tr>
+  <tr>
+    <td><strong>Rumor mongering (push)</strong></td>
+    <td>Node with new info pushes it to a random peer. Peer pushes to another. Info "infects" nodes.</td>
+    <td>Disseminating cluster state, metadata updates</td>
+  </tr>
+  <tr>
+    <td><strong>Anti-entropy (push-pull)</strong></td>
+    <td>Two nodes exchange their full (or diff) state and reconcile differences</td>
+    <td>Repairing inconsistencies, synchronizing replicas</td>
+  </tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Rumor mongering is fast but may miss updates.</strong> Anti-entropy is reliable but bandwidth-intensive. Production systems combine both: rumor mongering for fast propagation, anti-entropy for periodic repair.
+</div>
+
+<div class="diagram">
+  Push vs. Pull vs. Push-Pull Gossip
+  ───────────────────────────────────
+
+  PUSH (rumor mongering):
+  [A has update] ──push──→ [B]
+  [A has update] ──push──→ [C]
+  [B has update] ──push──→ [D]
+  Fast fan-out. Low overhead. May miss updates.
+
+  PULL:
+  [A] ──pull──→ [B] "What do you know?"
+  [A] &larr;──reply── [B] "Here's everything I know"
+  Good for catching up. Higher latency.
+
+  PUSH-PULL (anti-entropy):
+  [A] ════exchange════ [B]
+  A sends: {key1: v3, key2: v1}
+  B sends: {key1: v2, key2: v5, key3: v1}
+  After reconcile: both have {key1: v3, key2: v5, key3: v1}
+  Most reliable. Highest overhead.
+</div>
+
+<h2>Anti-Entropy via Gossip</h2>
+
+<p>Anti-entropy is the mechanism by which nodes reconcile their state to ensure consistency. It is typically used for periodic repair rather than fast propagation.</p>
+
+<h3>Merkle Tree-Based Anti-Entropy</h3>
+
+<p>Instead of exchanging full datasets, nodes compare <strong>Merkle tree</strong> hashes to identify specific differences:</p>
+
+<ol>
+  <li>Both nodes compute a Merkle tree over their key ranges.</li>
+  <li>They exchange root hashes. If different, they drill down to child hashes.</li>
+  <li>When they find differing leaf hashes, they know exactly which keys differ and exchange only those.</li>
+</ol>
+
+<div class="diagram">
+  Merkle Tree Anti-Entropy
+  ────────────────────────
+
+  Node A:                          Node B:
+      hash(ABCD)                     hash(ABCD)
+       /      \                       /      \
+  hash(AB)  hash(CD)             hash(AB)  hash(CD)  ← different!
+     / \      / \                    / \      / \
+   A   B    C   D                 A   B    C   D    ← root cause
+
+  C is different (hash mismatch at leaf)
+  Only key C is exchanged → minimal bandwidth
+</div>
+
+<h2>Gossip in Cassandra</h2>
+
+<p>Cassandra uses gossip extensively for cluster management:</p>
+
+<ul>
+  <li><strong>Membership:</strong> Nodes gossip their own state (IP address, generation timestamp) to track cluster membership.</li>
+  <li><strong>Failure detection:</strong> Gossip messages serve as heartbeats for the phi accrual failure detector.</li>
+  <li><strong>Token metadata:</strong> Each node gossips its token range assignment so other nodes know where to route data.</li>
+</ul>
+
+<div class="callout">
+  <strong>Cassandra gossip details:</strong> Each node runs a gossip round every second, talking to one random peer. Gossip messages include the sender's state and the states of up to 3 other nodes (to accelerate convergence). The generation timestamp prevents old state from overwriting newer state (last-write-wins per-node).
+</div>
+
+<h2>Convergence Time</h2>
+
+<p>For a cluster of N nodes, the expected number of rounds for full propagation is O(log N). With a gossip interval of 1 second and a 100-node cluster:</p>
+
+<pre>
+Rounds to full propagation: log2(100) ≈ 7 rounds
+Time to full propagation:  7 × 1 second = ~7 seconds
+
+This is much faster than O(N) broadcasting from a single coordinator,
+but slower than O(1) multicast (which is not available on standard networks).
+</pre>
+
+<h2>Gossip vs. Consensus</h2>
+
+<table>
+  <tr>
+    <th>Property</th>
+    <th>Gossip</th>
+    <th>Consensus (Raft/Paxos)</th>
+  </tr>
+  <tr>
+    <td>Consistency guarantee</td>
+    <td>Eventual</td>
+    <td>Strong (linearizable)</td>
+  </tr>
+  <tr>
+    <td>Latency</td>
+    <td class="green">Low (local gossip round)</td>
+    <td class="red">Higher (quorum round trip)</td>
+  </tr>
+  <tr>
+    <td>Throughput</td>
+    <td class="green">High (no coordination)</td>
+    <td class="red">Limited by leader</td>
+  </tr>
+  <tr>
+    <td>Availability</td>
+    <td class="green">High (no leader dependency)</td>
+    <td class="red">Limited (needs quorum)</td>
+  </tr>
+  <tr>
+    <td>Complexity</td>
+    <td class="green">Simple to implement</td>
+    <td class="red">Complex to implement correctly</td>
+  </tr>
+  <tr>
+    <td>Use case</td>
+    <td>Membership, metadata, DNS</td>
+    <td>Leader election, log replication, config</td>
+  </tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+
+<ul>
+  <li>What is a gossip protocol and how does it work?</li>
+  <li>Why does gossip converge in O(log n) rounds?</li>
+  <li>What is the difference between rumor mongering and anti-entropy?</li>
+  <li>How does Cassandra use gossip for cluster membership?</li>
+  <li>What is Merkle tree-based anti-entropy?</li>
+  <li>When would you use gossip instead of consensus?</li>
+  <li>What are the weaknesses of gossip protocols?</li>
+  <li>How do you handle conflicting information in gossip (e.g., two different values for the same key)?</li>
+</ul>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Do NOT implement a full gossip protocol from scratch</strong> in an interview unless explicitly asked. Skip the mathematical proof of O(log n) convergence -- the intuition of doubling is sufficient. Do not dive into the HyParView or Cyclon gossip overlay network protocols. Skip the gossip protocol variants used in blockchain (though mentioning them briefly shows breadth). Focus on the core concepts: rumor mongering, anti-entropy, and Merkle trees.
+</div>
+
+<div class="source">
+  <div class="source-label">Reading Sources</div>
+  <ul>
+    <li>Epidemic Algorithms for Reliable Distributed Systems (Demers et al., 1987)</li>
+    <li>SWIM: Scalable Weakly-consistent Infection-style Process Group Membership Protocol (Das et al., 2002)</li>
+    <li>Designing Data-Intensive Applications (Kleppmann) -- Chapter 5, gossip and failure detection</li>
+    <li>Cassandra documentation on Gossip and Ring Architecture</li>
+    <li>Akka Cluster documentation on gossip protocol implementation</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="failure-detector.html">&larr; 5.6.4 Failure Detector</a>
+  <a href="membership.html">5.6.6 Membership &rarr;</a>
+</div>
+
+</body>
+</html>

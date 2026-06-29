@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.2.2 Topic — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">8. Messaging</a> / 8.2.2 Topic</p>
+
+<h1>8.2.2 Topic (Kafka Topic)</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+
+<p>Understand what a Kafka topic is, how it is partitioned for parallelism, how retention works, and how to design topic naming conventions for a production system.</p>
+
+<h2>Definition</h2>
+
+<p>A <strong>topic</strong> in Kafka is a named category or feed to which messages (called <strong>records</strong> or <strong>events</strong>) are published. Topics are the fundamental unit of organization in Kafka — producers write to topics, and consumers read from topics. Each topic is divided into one or more <strong>partitions</strong>, which enable parallel processing.</p>
+
+<div class="callout">
+  <strong>Analogy:</strong> A topic is like a table in a database. It has a name (schema), contains records, and is organized for efficient reads and writes. Partitions are like shards — they split the data for parallel access.
+</div>
+
+<h2>Topic Architecture</h2>
+
+<div class="diagram">
+  Topic: "user-events"
+  ┌─────────────────────────────────────────────────────┐
+  │                                                     │
+  │  Partition 0       Partition 1       Partition 2    │
+  │  ┌───────────┐     ┌───────────┐    ┌───────────┐  │
+  │  │ msg1 (0)  │     │ msg3 (0)  │    │ msg5 (0)  │  │
+  │  │ msg2 (1)  │     │ msg4 (1)  │    │ msg6 (1)  │  │
+  │  │ msg7 (2)  │     │ msg9 (2)  │    │ msg8 (2)  │  │
+  │  │ msg10(3)  │     │ ...       │    │ msg11(3)  │  │
+  │  │ ...       │     └───────────┘    │ ...       │  │
+  │  └───────────┘                      └───────────┘  │
+  │                                                     │
+  │  • Each partition is an ordered, append-only log     │
+  │  • Messages are distributed across partitions       │
+  │  • Partition count = max parallelism for consumers   │
+  └─────────────────────────────────────────────────────┘
+
+  Retention: Messages kept for 7 days (configurable)
+  ┌─ New messages appended at the end of each partition
+  └─ Old messages deleted after retention period expires
+</div>
+
+<h2>Key Properties</h2>
+
+<h3>Partitions for Parallelism</h3>
+<p>A topic with N partitions supports up to N consumers reading in parallel (within a consumer group). Each partition is consumed by exactly one consumer in the group. The number of partitions is set at topic creation time and is critical for system design — too few partitions limit throughput; too many increase overhead.</p>
+
+<h3>Retention Period</h3>
+<p>Kafka retains messages for a configurable period (e.g., 7 days) or until a size limit is reached. Unlike traditional queues where messages are deleted after consumption, Kafka messages persist regardless of whether they have been consumed. This enables replay, reprocessing, and multiple independent consumer groups reading the same topic at different rates.</p>
+
+<table>
+  <tr><th>Retention Strategy</th><th>Configuration</th><th>Use Case</th></tr>
+  <tr><td>Time-based</td><td><code>retention.ms</code> (default: 7 days)</td><td>Most common — delete old messages after N days</td></tr>
+  <tr><td>Size-based</td><td><code>retention.bytes</code></td><td>Cap total topic storage (e.g., 10 GB)</td></tr>
+  <tr><td>Compact</td><td><code>cleanup.policy=compact</code></td><td>Keep latest value per key (like a changelog stream)</td></tr>
+  <tr><td>Delete + Compact</td><td><code>cleanup.policy=delete,compact</code></td><td>Delete old records + compact per key</td></tr>
+</table>
+
+<h3>Topic Compaction</h3>
+<p>With compacted topics, Kafka keeps only the latest value for each key. Earlier records with the same key are removed. This is useful for table-like state (e.g., latest user profile, latest account balance).</p>
+
+<h2>Topic Naming Conventions</h2>
+
+<div class="callout yellow">
+  <strong>Interview Tip:</strong> When designing a Kafka-based system, topic naming comes up often. Use a consistent, hierarchical naming convention that encodes the domain and event type.
+</div>
+
+<table>
+  <tr><th>Pattern</th><th>Example</th><th>Notes</th></tr>
+  <tr><td><code>{domain}.{entity}.{event}</code></td><td><code>orders.order.created</code></td><td>Most common — clear and hierarchical</td></tr>
+  <tr><td><code>{domain}.{event-type}</code></td><td><code>payments.payment-processed</code></td><td>Simpler, fewer topics</td></tr>
+  <tr><td><code>{domain}.{entity}</code></td><td><code>users.user-profile</code></td><td>Compacted topic — latest state per key</td></tr>
+</table>
+
+<h2>Choosing the Number of Partitions</h2>
+
+<ul>
+  <li><strong>Throughput target:</strong> Total desired throughput / throughput per partition ≈ partition count. A single Kafka partition typically handles 10-100 MB/s depending on hardware.</li>
+  <li><strong>Consumer count:</strong> Partition count is the upper bound on parallel consumers per group. If you need 10 consumers processing in parallel, you need at least 10 partitions.</li>
+  <li><strong>Key-based ordering:</strong> If you need ordering for a specific key (e.g., all events for user 123 in order), the key must always hash to the same partition. More partitions mean more keys sharing a partition, but also more potential for hot partitions.</li>
+  <li><strong>Operational overhead:</strong> More partitions = more open file handles, more leader election overhead, larger recovery time. A reasonable starting point is 6-12 partitions per topic in production.</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+
+<ol>
+  <li>"What is a Kafka topic and how is it organized?"</li>
+  <li>"How do you decide the number of partitions for a topic?"</li>
+  <li>"What happens to messages after the retention period?"</li>
+  <li>"Explain topic compaction and when you would use it."</li>
+  <li>"How would you name topics in a large e-commerce system?"</li>
+  <li>"Can multiple consumer groups read from the same topic?"</li>
+  <li>"What is the difference between a log-compacted topic and a regular topic?"</li>
+  <li>"How do you handle increasing partition count on an existing topic?"</li>
+</ol>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Do not dive into:</strong>
+  <ul>
+    <li>Kafka's internal storage format (segment files, index files, time-index) — too implementation-specific for most interviews.</li>
+    <li>Topic-level authorization ACLs and security configuration unless the question focuses on security.</li>
+    <li>KRaft/ZooKeeper topic metadata storage details — focus on the conceptual model.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Books &amp; Guides</div>
+  <ul>
+    <li><a href="https://kafka.apache.org/documentation/#topics">Kafka Documentation — Topics</a> — Official docs on topic configuration and management</li>
+    <li><a href="https://www.confluent.io/learn/kafka-tutorial/">Confluent Kafka Tutorial</a> — Topics, partitions, and basic operations</li>
+    <li><a href="https://www.oreilly.com/library/view/designing-event-driven-systems/9781492036734/">Designing Event-Driven Systems</a> — Ben Stopford, Kafka topic design patterns</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="broker.html">&larr; 8.2.1 Broker</a>
+  <a href="partition.html">8.2.3 Partition &rarr;</a>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.3.1 At Most Once — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">8. Messaging</a> / 8.3.1 At Most Once</p>
+
+<h1>8.3.1 At Most Once</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+
+<p>Understand the at-most-once delivery guarantee — where messages may be lost but are never duplicated — and the scenarios where it is appropriate.</p>
+
+<h2>Definition</h2>
+
+<p><strong>At most once</strong> delivery means each message is delivered zero or one times. A message may be lost (never delivered) but will never be delivered more than once. There are no duplicates. This is the "fire-and-forget" approach — the system does not retry delivery on failure.</p>
+
+<div class="callout">
+  <strong>Guarantee:</strong> No duplicates, but potential data loss. The system prioritizes avoiding duplicate processing over guaranteeing delivery.
+</div>
+
+<h2>How It Works</h2>
+
+<div class="diagram">
+  At Most Once — Producer Side (acks=0):
+
+  Producer ──send(msg1)──► Broker  ──✓ received
+  Producer ──send(msg2)──► Broker  ──✗ network error (msg2 LOST)
+  Producer ──send(msg3)──► Broker  ──✓ received
+  Producer does not retry → msg2 is gone forever
+
+  At Most Once — Consumer Side (commit before processing):
+
+  Consumer ──poll(msg1)──► Broker
+  Consumer ──commit(offset)──► Broker    ← commit BEFORE processing
+  Consumer ──process(msg1)──► CRASH!     ← msg1 processed? unknown
+  Consumer ──poll(msg2)──► Broker       ← resumes from msg2, never retries msg1
+  Result: msg1 may or may not have been processed, but it is never reprocessed
+</div>
+
+<h2>Two Ways to Achieve At Most Once</h2>
+
+<h3>Producer-Side: Fire and Forget</h3>
+<p>The producer sends the message and does not wait for an acknowledgment. If the message is lost in transit or the broker fails before writing, the message is gone.</p>
+
+<pre>
+acks=0  // Fire-and-forget, no acknowledgment
+retries=0  // Do not retry
+</pre>
+
+<h3>Consumer-Side: Commit Before Processing</h3>
+<p>The consumer commits the offset immediately after receiving the message, before processing it. If processing fails, the consumer does not reprocess the message because the offset has already advanced past it.</p>
+
+<pre>
+consumer.poll()
+consumer.commitSync()   // Commit BEFORE processing
+process(record)          // If this fails, offset already committed → message lost
+</pre>
+
+<h2>When Is At Most Once Acceptable?</h2>
+
+<div class="callout yellow">
+  <strong>Interview Tip:</strong> The interviewer often asks "when is losing a message okay?" Have concrete examples ready. The key criterion: the business can tolerate the loss, or the data is regenerated/repeated frequently enough that a single loss is negligible.
+</div>
+
+<table>
+  <tr><th>Use Case</th><th>Why At Most Once Is OK</th></tr>
+  <tr><td>IoT sensor telemetry</td><td>Next reading arrives in seconds/minutes; one lost reading is negligible</td></tr>
+  <tr><td>Real-time analytics counters</td><td>Missing one page view does not materially affect metrics</td></tr>
+  <tr><td>Log aggregation</td><td>Losing a few log lines is acceptable; logs are best-effort diagnostics</td></tr>
+  <tr><td>Heartbeat/ping messages</td><td>Missing one heartbeat triggers a timeout check on the next one</td></tr>
+  <tr><td>Stock ticker prices</td><td>Price updates arrive continuously; missing one tick is acceptable</td></tr>
+  <tr><td>Social media metrics</td><td>Losing a few "like" events is tolerable for approximate counts</td></tr>
+</table>
+
+<h2>Trade-offs</h2>
+
+<table>
+  <tr><th>Aspect</th><th>At Most Once</th></tr>
+  <tr><td>Duplicates</td><td class="green">Never — zero duplicates guaranteed</td></tr>
+  <tr><td>Data loss</td><td class="red">Possible — messages can be lost</td></tr>
+  <tr><td>Latency</td><td class="green">Lowest — no retry or waiting for acks</td></tr>
+  <tr><td>Throughput</td><td class="green">Highest — no backpressure from acks</td></tr>
+  <tr><td>Complexity</td><td class="green">Simplest — no retry logic, no idempotency needed</td></tr>
+  <tr><td>Consumer idempotency</td><td class="green">Not required</td></tr>
+</table>
+
+<h2>Comparison with Other Guarantees</h2>
+
+<table>
+  <tr><th>Guarantee</th><th>Data Loss</th><th>Duplicates</th><th>Complexity</th></tr>
+  <tr><td><strong>At most once</strong></td><td class="red">Possible</td><td class="green">None</td><td class="green">Low</td></tr>
+  <tr><td><strong>At least once</strong></td><td class="green">None</td><td class="red">Possible</td><td>Moderate</td></tr>
+  <tr><td><strong>Exactly once</strong></td><td class="green">None</td><td class="green">None</td><td class="red">High</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+
+<ol>
+  <li>"Explain at-most-once delivery. When would you use it?"</li>
+  <li>"How do you implement at-most-once semantics in Kafka?"</li>
+  <li>"What is the trade-off between at-most-once and at-least-once?"</li>
+  <li>"Give an example where losing a message is acceptable."</li>
+  <li>"How does acks=0 affect data durability?"</li>
+  <li>"Compare at-most-once, at-least-once, and exactly-once delivery."</li>
+  <li>"If you were designing an IoT data pipeline, which delivery guarantee would you choose?"</li>
+</ol>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Do not dive into:</strong>
+  <ul>
+    <li>Kafka transaction API internals (that belongs to the exactly-once section).</li>
+    <li>Idempotent producer implementation details — at-most-once does not require idempotency.</li>
+    <li>Specific broker retry policies — the focus is on the guarantee semantics, not implementation.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source>
+  <div class="source-label">Books &amp; Guides</div>
+  <ul>
+    <li><a href="https://kafka.apache.org/documentation/#semantics">Kafka Documentation — Delivery Semantics</a> — Official delivery guarantee definitions</li>
+    <li><a href="https://www.confluent.io/learn/kafka-exactly-once/">Confluent — Exactly-Once Semantics in Apache Kafka</a> — Covers all three delivery levels</li>
+    <li><a href="https://www.oreilly.com/library/view/kafka-the-definitive/9781491936153/">Kafka: The Definitive Guide</a> — Ch. 6 (Reliability), delivery guarantee comparison</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="isr.html">&larr; 8.2.9 ISR</a>
+  <a href="at-least-once.html">8.3.2 At Least Once &rarr;</a>
+</div>
+
+</body>
+</html>

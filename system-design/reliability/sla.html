@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SLA — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">System Design</a> / <a href="./index.html">Reliability</a> / 10.1.1 SLA</div>
+
+<h1>Service Level Agreement (SLA)</h1>
+<div class="meta">
+  <span>Difficulty ⭐⭐</span>
+  <span>Interview Frequency ★★★★</span>
+</div>
+
+<div class="callout">
+  <strong>Goal:</strong> Understand what an SLA is, how uptime percentages translate to real downtime, why SLAs matter in system design, and how they drive architectural decisions around redundancy and failover.
+</div>
+
+<h2>Definition</h2>
+<p>A <strong>Service Level Agreement (SLA)</strong> is a formal, legally binding contract between a service provider and a customer that defines the minimum expected level of service. It specifies measurable metrics (typically uptime), the consequences of failing to meet those targets (credits, penalties, or termination rights), and the scope of what is covered. SLAs are externally facing commitments that set customer expectations.</p>
+
+<h2>Uptime Percentages and Real Downtime</h2>
+<p>Understanding the math behind "nine" is critical for interviews. Every additional nine is an order of magnitude harder to achieve.</p>
+
+<table>
+  <tr><th>Availability</th><th>Downtime per Year</th><th>Downtime per Month</th><th>Downtime per Day</th></tr>
+  <tr><td>99% (Two nines)</td><td>3 days 15 hours</td><td>7 hours 18 min</td><td>14 min 24 sec</td></tr>
+  <tr><td>99.9% (Three nines)</td><td>8 hours 46 min</td><td>43 min 50 sec</td><td>1 min 26 sec</td></tr>
+  <tr><td>99.99% (Four nines)</td><td>52 min 36 sec</td><td>4 min 23 sec</td><td>8.64 sec</td></tr>
+  <tr><td>99.999% (Five nines)</td><td>5 min 15 sec</td><td>26 sec</td><td>0.86 sec</td></tr>
+  <tr><td>99.9999% (Six nines)</td><td>31.5 sec</td><td>2.6 sec</td><td>86 ms</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Interview Tip:</strong> When an interviewer says "design a system with 99.99% availability," they are saying your system can only be down 52 minutes per year. That demands multi-region active-active or active-passive failover, not just "add a load balancer."
+</div>
+
+<h2>SLA Structure</h2>
+
+<div class="diagram">
+  ┌─────────────────────────────────────────────────────────┐
+  │                    SLA Contract                          │
+  ├─────────────────────────────────────────────────────────┤
+  │  1. Service Scope        → What services are covered      │
+  │  2. Uptime Target        → 99.95%, 99.99%, etc.         │
+  │  3. Measurement Method  → How uptime is measured         │
+  │  4. Exclusions           → Planned maintenance windows    │
+  │  5. Credits / Penalties  → Financial remediation          │
+  │  6. Claim Process        → How customers report breaches  │
+  │  7. Termination Clause   → Chronic breach consequences    │
+  └─────────────────────────────────────────────────────────┘
+</div>
+
+<h3>Typical SLA Penalty Tiers</h3>
+<table>
+  <tr><th>Uptime Below</th><th>Penalty (Service Credit)</th><th>Typical Cap</th></tr>
+  <tr><td>99.95%</td><td class="red">10% of monthly bill</td><td rowspan="4">Usually capped at 100% of one month's bill — SLAs are <strong>not</strong> insurance policies</td></tr>
+  <tr><td>99.5%</td><td class="red">20% of monthly bill</td></tr>
+  <tr><td>99.0%</td><td class="red">30% of monthly bill</td></tr>
+  <tr><td>&lt;99.0%</td><td class="red">Termination right</td></tr>
+</table>
+
+<h2>SLA vs SLO vs SLI</h2>
+
+<div class="callout">
+  <strong>Key Distinction:</strong> SLAs are external, contractual commitments. SLOs are internal engineering targets. SLIs are the measurements. SLA targets are typically set <em>below</em> SLO targets to leave a safety margin.
+</div>
+
+<table>
+  <tr><th>Concept</th><th>Audience</th><th>Nature</th><th>Example</th></tr>
+  <tr><td><strong>SLA</strong></td><td>Customer / Legal</td><td>Contractual obligation</td><td>"99.95% uptime or 10% credit"</td></tr>
+  <tr><td><strong>SLO</strong></td><td>Engineering team</td><td>Internal target</td><td>"99.99% uptime target"</td></tr>
+  <tr><td><strong>SLI</strong></td><td>Monitoring system</td><td>Measurement</td><td>"Success rate of API calls = 99.97%"</td></tr>
+</table>
+
+<h2>Architectural Implications of SLA Targets</h2>
+<p>Higher SLA targets require progressively more expensive and complex architectures:</p>
+
+<table>
+  <tr><th>Target</th><th>Required Architecture</th><th>Cost Multiplier</th></tr>
+  <tr><td>99.9%</td><td>Multi-AZ within one region, active-passive</td><td>1x</td></tr>
+  <tr><td>99.99%</td><td>Multi-region active-passive with automated failover</td><td>2-3x</td></tr>
+  <tr><td>99.999%</td><td>Multi-region active-active, global DNS failover &lt; 30s</td><td>5-10x</td></tr>
+  <tr><td>99.9999%</td><td>Global active-active with local failover, N+2 redundancy</td><td>10-20x</td></tr>
+</table>
+
+<h3>Composite SLAs</h3>
+<p>In practice, end-to-end availability is the <strong>product</strong> of all component availabilities. If your app depends on three services each with 99.9% uptime:</p>
+<pre>End-to-end = 0.999 × 0.999 × 0.999 = 0.997 → 99.7% (25 hours downtime/year)</pre>
+<p>This is why senior engineers push for <strong>higher SLOs on dependencies</strong> or design for <strong>graceful degradation</strong> so one dependency cannot take down the whole system.</p>
+
+<h2>Planned Maintenance Exclusions</h2>
+<p>Most SLAs exclude planned maintenance windows. A typical clause:</p>
+<div class="callout green">
+  <strong>Example Clause:</strong> "Scheduled maintenance occurring during the maintenance window of Sunday 00:00-04:00 UTC shall not count toward downtime calculations. Provider will give 72 hours advance notice."
+</div>
+
+<h2>How SLA Drives Design Decisions</h2>
+
+<div class="diagram">
+  SLA Target: 99.99%
+       │
+       ├── Data Layer
+       │     └── Multi-AZ replication with sync writes
+       │         RPO = 0, RTO &lt; 30s
+       │
+       ├── Compute Layer
+       │     └── Auto-scaling groups in 2+ AZs
+       │         Health checks with 10s interval
+       │
+       ├── Network Layer
+       │     └── Multi-region DNS with health-checked routing
+       │         TTL &lt; 60s for failover speed
+       │
+       └── Application Layer
+             └── Circuit breakers, retry with backoff
+                 Graceful degradation for non-critical paths
+                 Async processing for write-heavy operations
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>"How many 'nines' of availability does your system need?" — Think about the business impact per minute of downtime.</li>
+  <li>"What is the difference between SLA, SLO, and SLI?" — External contract vs internal target vs measurement.</li>
+  <li>"How would you design a system for 99.99% availability?" — Multi-region, auto-failover, circuit breakers, async writes.</li>
+  <li>"What happens when you chain services with 99.9% SLA each?" — Composite SLA multiplication degrades overall availability.</li>
+  <li>"How do you handle planned maintenance without SLA violations?" — Rolling deployments, blue-green, maintenance windows.</li>
+  <li>"How would you negotiate an SLA with a third-party vendor?" — Define measurement method, exclusions, credit tiers, and termination rights.</li>
+</ul>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Depth:</strong> Legal contract negotiation tactics, specific vendor SLA terms (e.g., AWS S3 vs Azure Blob comparison). <br>
+  <strong>Depth:</strong> Detailed penalty calculation formulas unless the interviewer asks. <br>
+  <strong>Depth:</strong> ITIL/ITSM frameworks for SLA management — too process-heavy for system design interviews.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Google SRE Book</div>
+  <p>Chapter 4 — Service Level Objectives. Discusses SLAs, SLOs, SLIs and how they relate to error budgets.</p>
+</div>
+<div class="source">
+  <div class="source-label">AWS — Building and Operating a Well-Architected SaaS</div>
+  <p>SLA best practices for multi-tenant SaaS, including composite SLAs and customer communication.</p>
+</div>
+<div class="source">
+  <div class="source-label">Martin Fowler — SLAs, SLOs, SLIs</div>
+  <p>blog.pragmaticengineer.com and martinfowler.com articles on practical SLA engineering.</p>
+</div>
+
+<div class="nav">
+  <a href="../distributed-transactions/compensation.html">&larr; Compensation (Saga)</a>
+  <a href="slo.html">SLO &rarr;</a>
+</div>
+</body>
+</html>

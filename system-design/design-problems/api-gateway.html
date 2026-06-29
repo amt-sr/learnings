@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>15.19 API Gateway — System Design</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../">Handbook</a> / <a href="../">System Design</a> / 15. Design Problems / 15.19 API Gateway</p>
+
+<h1>API Gateway</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Design an API gateway that serves as the single entry point for all client requests to backend microservices. The gateway handles routing, authentication, rate limiting, caching, request/response transformation, protocol translation, and observability (logging, metrics, tracing) — decoupling cross-cutting concerns from individual services.</p>
+
+<h2>Functional Requirements</h2>
+<ul>
+  <li>Route requests to the correct backend service based on path, method, headers</li>
+  <li>Authenticate and authorize requests (JWT validation, API keys, OAuth)</li>
+  <li>Rate limit requests per client, per endpoint, per tier</li>
+  <li>Cache responses for GET requests (configurable TTL per route)</li>
+  <li>Transform requests and responses (add/remove headers, body mapping)</li>
+  <li>Translate between protocols (HTTP → gRPC, WebSocket proxy)</li>
+  <li>Circuit breaking and load balancing across backend instances</li>
+  <li>Comprehensive logging, metrics, and distributed tracing</li>
+</ul>
+
+<h2>Non-Functional Requirements</h2>
+<ul>
+  <li><strong>Low latency:</strong> add &lt; 5ms of overhead per request (gateway must be thin)</li>
+  <li><strong>High throughput:</strong> handle 100K+ requests/sec per gateway instance</li>
+  <li><strong>High availability:</strong> 99.99% uptime (gateway failure = all services down)</li>
+  <li><strong>Scalability:</strong> horizontally scalable, stateless</li>
+  <li><strong>Extensibility:</strong> add new routes/services without redeploying the gateway</li>
+  <li><strong>Security:</strong> TLS termination, WAF integration, DDoS protection</li>
+</ul>
+
+<h3>Capacity Estimates</h3>
+<table>
+  <tr><th>Metric</th><th>Estimate</th><th>Notes</th></tr>
+  <tr><td>Requests/sec</td><td>500K</td><td>Total across all routes</td></tr>
+  <tr><td>Backend services</td><td>50-200</td><td>Microservices behind the gateway</td></tr>
+  <tr><td>Routes configured</td><td>500+</td><td>API routes with various policies</td></tr>
+  <tr><td>Gateway instances</td><td>50</td><td>10K RPS per instance (with headroom)</td></tr>
+  <tr><td>Cache hit rate</td><td>30%</td><td>For cacheable endpoints</td></tr>
+  <tr><td>Auth validation time</td><td>&lt; 1ms</td><td>JWT verification (local, no network call)</td></tr>
+</table>
+
+<h2>API Design (Gateway Configuration)</h2>
+<pre>
+# Route configuration (stored in config service or database)
+{
+  "route": {
+    "path": "/api/v1/users/{user_id}",
+    "methods": ["GET", "PATCH"],
+    "backend": "user-service",
+    "backend_path": "/users/{user_id}",
+    "timeout_ms": 5000,
+    "retry_policy": { "max_retries": 2, "backoff_ms": [100, 500] }
+  },
+  "auth": {
+    "type": "jwt",
+    "issuer": "https://auth.example.com",
+    "scopes_required": ["read:users"]
+  },
+  "rate_limit": {
+    "requests_per_minute": 100,
+    "key": "client_ip"  // or "user_id", "api_key"
+  },
+  "cache": {
+    "methods": ["GET"],
+    "ttl_seconds": 300,
+    "key_template": "/users/{user_id}"
+  },
+  "plugins": ["cors", "request_id", "logging", "tracing"]
+}
+</pre>
+
+<h2>High-Level Design</h2>
+<div class="diagram">
+                    ┌──────────────────────────────────────────────┐
+                    │                   Client                       │
+                    └───────────────────────┬──────────────────────┘
+                                            │
+                    ┌───────────────────────▼──────────────────────┐
+                    │              Load Balancer (L4)               │
+                    │         (TLS termination, DDoS mitigation)     │
+                    └───────────────────────┬──────────────────────┘
+                                            │
+          ┌─────────────────────────────────┼─────────────────────────────┐
+          │                                 │                              │
+   ┌──────▼──────┐  ┌──────────────┐  ┌────▼───────┐  ┌──────────────┐
+   │  Gateway-1   │  │  Gateway-2   │  │  Gateway-3  │  │  Gateway-N   │
+   │  (stateless) │  │  (stateless) │  │  (stateless)│  │  (stateless) │
+   │              │  │              │  │              │  │              │
+   │  Filters:    │  │  Filters:    │  │  Filters:    │  │  Filters:    │
+   │  1. Auth     │  │  1. Auth     │  │  1. Auth     │  │  1. Auth     │
+   │  2. RateLimit│  │  2. RateLimit│  │  2. RateLimit│  │  2. RateLimit│
+   │  3. Transform│  │  3. Transform│  │  3. Transform│  │  3. Transform│
+   │  4. Route    │  │  4. Route    │  │  4. Route    │  │  4. Route    │
+   │  5. LB       │  │  5. LB       │  │  5. LB       │  │  5. LB       │
+   │  6. Cache    │  │  6. Cache    │  │  6. Cache    │  │  6. Cache    │
+   └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘
+          │                  │                  │                  │
+          └──────────────────┬┘──────────────────┘──────────────────┘
+                             │
+          ┌──────────────────┼──────────────────────────────────┐
+          │                  │                                   │
+   ┌──────▼──────┐  ┌───────▼──────┐  ┌──────────────────┐
+   │ User Service │  │ Order Service│  │ Payment Service   │
+   └─────────────┘  └──────────────┘  └──────────────────┘
+
+  Cross-cutting services:
+  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+  │ Config Svc   │  │ Redis Cluster│  │ Metrics Svc  │  │ Tracing Svc  │
+  │ (routes,     │  │ (rate limit, │  │ (Prometheus  │  │ (Jaeger/     │
+  │  policies)    │  │  cache)      │  │  /statsd)    │  │  Zipkin)     │
+  └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘
+</div>
+
+<h2>Deep Dive: Request Processing Pipeline</h2>
+<p>Each request passes through a chain of filters/middleware before reaching the backend. The pipeline is configurable per route.</p>
+
+<div class="diagram">
+  Request Pipeline (ordered filters):
+
+  1. [Request ID]     → Generate unique request ID, inject into header (X-Request-ID)
+  2. [Logging]        → Log request start (method, path, client_ip, request_id)
+  3. [Rate Limit]     → Check rate limit, reject if exceeded (429)
+  4. [Auth]           → Validate JWT/API key, inject user_id into header
+  5. [CORS]           → Validate/insert CORS headers
+  6. [Transform]      → Modify request (add headers, map body fields)
+  7. [Cache Lookup]   → Check cache for GET requests, return 304/200 if hit
+  8. [Circuit Breaker]→ Check circuit state, reject if open (503)
+  9. [Load Balance]   → Select backend instance (round-robin, least-conn)
+  10.[Proxy]          → Forward request to selected backend
+  11.[Cache Store]    → Store response in cache (GET 200 responses only)
+  12.[Transform]      → Modify response (strip internal headers, add custom)
+  13.[Logging]        → Log request completion (status, latency, backend)
+  14.[Metrics]        → Record request metrics (latency histogram, status code)
+
+  Response: ←─────────────────────────────────────────────────────────
+</div>
+
+<h2>Deep Dive: Routing and Configuration</h2>
+<p>Route configuration is stored centrally and pushed to gateway instances via a configuration service.</p>
+
+<pre>
+# Route matching (priority order):
+# 1. Exact path match:   /api/v1/users/123
+# 2. Prefix match:       /api/v1/users/  (for listing)
+# 3. Regex match:         /api/v1/{service}/{resource} (dynamic routing)
+# 4. Method match:       GET /api/v1/users/123 → user-service
+#                        POST /api/v1/users → user-service
+
+# Dynamic configuration reload:
+# - Config Service (consul, etcd, or custom) stores route configs
+# - Gateway instances watch for config changes (long-polling or push via gRPC)
+# - On change: hot-reload routes without restart (atomic swap)
+# - No rolling deployment needed for route changes
+</pre>
+
+<div class="callout green">
+  <strong>Hot reload:</strong> Gateway routes must be dynamically configurable without restarting. Use a watch-based configuration system (etcd watch, Consul template, or a custom config push service) that triggers hot-reload. New routes appear within seconds of configuration changes.
+</div>
+
+<h2>Deep Dive: Authentication</h2>
+<p>The gateway validates authentication before requests reach backend services.</p>
+
+<table>
+  <tr><th>Method</th><th>How it Works</th><th>Latency</th><th>Best For</th></tr>
+  <tr><td>JWT (local validation)</td><td>Gateway verifies JWT signature using public key cached locally</td><td class="green">&lt; 1ms</td><td>Service-to-service, internal APIs</td></tr>
+  <tr><td>API Key (Redis lookup)</td><td>Gateway looks up API key in Redis to get associated identity and scopes</td><td>~1-2ms</td><td>Third-party developers, public APIs</td></tr>
+  <tr><td>OAuth introspection</td><td>Gateway calls auth service to validate token</td><td class="red">~10-50ms</td><td>External OAuth tokens</td></tr>
+  <tr><td>mTLS</td><td>Client certificate validation</td><td class="green">&lt; 1ms</td><td>Service mesh, high-security</td></tr>
+</table>
+
+<div class="callout">
+  <strong>JWT optimization:</strong> Cache the auth server's public key (JWKS) locally and refresh periodically. Validate JWT signature locally without calling the auth server on every request. This reduces auth latency from ~10ms to &lt; 1ms. The JWKS refreshes every 5 minutes via background fetch.
+</div>
+
+<h2>Deep Dive: Circuit Breaking</h2>
+<p>Protect backend services from cascading failures. When a backend is unhealthy, the circuit breaker opens and returns fast failures (503) instead of slow timeouts.</p>
+
+<div class="diagram">
+  Circuit Breaker States:
+
+       Success                 Too many failures
+  ┌──────────────┐         ┌──────────────────┐
+  │              │────────►│                  │
+  │    CLOSED    │         │     OPEN         │
+  │  (normal)    │         │  (rejecting all)  │
+  │              │◄────────│                  │
+  └──────────────┘  timeout └────────┬─────────┘
+                                      │ probe request
+                                      │ succeeds
+                               ┌──────▼─────────┐
+                               │                │
+                               │   HALF-OPEN     │
+                               │ (allowing probe) │
+                               │                │
+                               └──────┬─────────┘
+                                      │ probe fails
+                                      ▼
+                               ┌──────────────────┐
+                               │     OPEN         │
+                               └──────────────────┘
+
+  Configuration per route:
+    failure_threshold: 5 failures in 30 seconds → open circuit
+    recovery_timeout: 30 seconds before half-open
+    half_open_max_probes: 3 test requests in half-open state
+</div>
+
+<h2>Deep Dive: Protocol Translation</h2>
+<p>The gateway can translate between protocols, allowing REST clients to communicate with gRPC services and vice versa.</p>
+
+<div class="diagram">
+  REST Client ──► API Gateway ──► gRPC Service
+
+  REST:  POST /api/v1/users
+        Body: { "name": "Alice", "email": "alice@example.com" }
+        Accept: application/json
+
+  Gateway translates to:
+  gRPC:  UserService.CreateUser
+        proto: { name: "Alice", email: "alice@example.com" }
+
+  Gateway translates response back:
+  REST:  201 Created
+        Body: { "user_id": "123", "name": "Alice" }
+</div>
+
+<div class="callout yellow">
+  <strong>Protocol translation trade-off:</strong> Protocol translation adds complexity to the gateway (must understand both protocols). Alternative: use HTTP/2 with gRPC-Web, which allows browsers to call gRPC services directly. Or use a dedicated sidecar (Envoy) per service for translation. Keep the central gateway simple.
+</div>
+
+<h2>Deep Dive: Gateway Technologies</h2>
+<table>
+  <tr><th>Technology</th><th>Type</th><th>Language</th><th>Key Strengths</th></tr>
+  <tr><td>Kong</td><td>Based on Nginx/OpenResty</td><td>Lua</td><td>Rich plugin ecosystem, DB-less mode, community plugins</td></tr>
+  <tr><td>Envoy</td><td>Proxy (data plane)</td><td>C++</td><td class="green">High performance, xDS API, service mesh native</td></tr>
+  <tr><td>AWS API Gateway</td><td>Managed service</td><td>Config-driven</td><td class="green">Zero ops, AWS integration, but vendor lock-in</td></tr>
+  <tr><td>NGINX</td><td>Web server / proxy</td><td>C</td><td class="green">Battle-tested, high performance, mature</td></tr>
+  <tr><td>Tyk</td><td>Open source gateway</td><td>Go</td><td>Good analytics, built-in dashboard</td></tr>
+  <tr><td>APISIX</td><td>Based on Nginx + etcd</td><td>Lua + Go</td><td>Dynamic configuration, Apache foundation</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Choosing a gateway:</strong> For microservices, Envoy is the industry standard (used in Istio service mesh). For API management (developer portals, key management), Kong provides a rich feature set. For AWS-centric architectures, AWS API Gateway + Lambda is the simplest path. Evaluate based on team expertise, operational model, and feature requirements.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>How do you handle configuration updates without downtime? <em>A: Hot reload — gateway watches for config changes (etcd watch, polling, or push via gRPC). New config is applied atomically without dropping in-flight requests. In-flight requests complete with the old config; new requests use the new config.</em></li>
+  <li>What happens when the gateway itself becomes the bottleneck? <em>A: Scale horizontally (stateless instances). If individual features (rate limiting, auth) become bottlenecks, offload to dedicated services. Use a control plane / data plane split (like Envoy xDS) where the data plane is lightweight and the control plane handles heavy computation.</em></li>
+  <li>How do you prevent the gateway from being a single point of failure? <em>A: Deploy multiple instances behind a load balancer. Health check all instances. Use blue-green or canary deployments for gateway updates. Circuit break on every backend route to prevent cascade failures from affecting the gateway process.</em></li>
+  <li>How does the gateway add tracing headers? <em>A: Extract trace context from incoming request (W3C Trace Context, B3 headers). Inject trace ID into backend request headers. Pass through existing trace context for distributed tracing (Jaeger, Zipkin). Add the gateway's span to the trace.</em></li>
+  <li>When should you use an API gateway vs a service mesh? <em>A: API gateway: north-south traffic (external clients → internal services), cross-cutting concerns for public APIs. Service mesh: east-west traffic (service-to-service), per-service features (mTLS, retry policies). In practice, use both: gateway for external edge, mesh for internal communication.</em></li>
+  <li>How do you handle long-running requests (streaming, WebSocket)? <em>A: The gateway proxies WebSocket connections as a bidirectional tunnel. For SSE (Server-Sent Events), the gateway buffers the initial response headers and then streams the body. Set longer timeouts for streaming routes.</em></li>
+</ul>
+
+<div class="callout red">
+  <strong>What to Skip:</strong>
+  <ul>
+    <li>Don't design the backend microservices — focus on the gateway itself</li>
+    <li>Don't implement specific filter plugins in code — describe the interface and behavior</li>
+    <li>Don't design the configuration management system in detail unless asked</li>
+    <li>Don't get into Web Application Firewall (WAF) rules — mention as an integration point</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Documentation</div>
+  <ul>
+    <li>Envoy documentation: "Architecture Overview" (envoyproxy.io/docs/envoy/latest/intro/arch_overview)</li>
+    <li>Kong documentation: "Gateway Concepts" (docs.konghq.com/gateway/latest)</li>
+    <li>AWS API Gateway documentation: "Developing REST APIs" (docs.aws.amazon.com/apigateway)</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Articles</div>
+  <ul>
+    <li>Nguyen Quy Hy: "API Gateway Pattern" (microservices.io/patterns/apigateway.html)</li>
+    <li>"Envoy xDS REST and gRPC API Reference" (envoyproxy.io)</li>
+    <li>Cloudflare Engineering: "How Cloudflare Handles 20M RPS Through Its Edge Network"</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><em>Building Microservices</em> — Sam Newman (API gateway chapter)</li>
+    <li><em>Designing Data-Intensive Applications</em> — Martin Kleppmann (load balancing, partitioning)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="amazon-s3.html">&larr; Previous: Amazon S3</a>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.6.8 Paxos - System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">5 Distributed Systems</a> / <a href="index.html">5.6 Consensus</a> / 5.6.8
+</div>
+
+<h1>5.6.8 Paxos</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<div class="callout green">
+  <strong>Goal:</strong> Understand the Paxos consensus algorithm at a conceptual level. Know the roles (proposer, acceptor, learner), the prepare/promise/accept/learned protocol flow, and how it guarantees safety. Be able to compare Paxos with Raft and explain why Paxos is hard to understand. Know Multi-Paxos and real-world usage (Google Chubby, Spanner).
+</div>
+
+<h2>Definition</h2>
+
+<p><strong>Paxos</strong> is a family of consensus protocols developed by Leslie Lamport (1989, published 1998). It is the theoretical foundation for consensus in distributed systems. Paxos guarantees that a value chosen by the protocol is the one with the highest proposal number that received a majority of promises, ensuring that all nodes agree on a single value despite concurrent proposers and node failures.</p>
+
+<h2>Why Paxos Is Hard to Understand</h2>
+
+<p>The original Paxos paper ("The Part-Time Parliament," Lamport, 1989) was rejected multiple times and rewritten. Lamport later published a more formal version ("Paxos Made Simple," 2001), but even that is notoriously difficult to follow. The difficulty comes from:</p>
+
+<ul>
+  <li><strong>Abstract presentation:</strong> The algorithm is described in terms of proposers, acceptors, and learners with no obvious mapping to real system components.</li>
+  <li><strong>Single-decree vs. Multi-decree:</strong> The basic protocol decides a single value. Extending it to decide a sequence of values (Multi-Paxos) is left as an exercise.</li>
+  <li><strong>Minimalist design:</strong> Paxos makes the minimum assumptions needed for safety, which means it has fewer implementation hints than Raft.</li>
+  <li><strong>Concurrency:</strong> Multiple proposers can compete, leading to complex interleaving scenarios.</li>
+</ul>
+
+<div class="callout yellow">
+  <strong>Lamport's own admission:</strong> "There is no known Paxos algorithm, only a family of algorithms that meet the Paxos specification." This ambiguity is part of why understanding Paxos is challenging. In contrast, Raft provides a single, concrete algorithm.
+</div>
+
+<h2>Roles</h2>
+
+<table>
+  <tr>
+    <th>Role</th>
+    <th>Responsibility</th>
+    <th>Typical Mapping</th>
+  </tr>
+  <tr>
+    <td><strong>Proposer</strong></td>
+    <td>Proposes values and drives the consensus process</td>
+    <td>Client or leader node</td>
+  </tr>
+  <tr>
+    <td><strong>Acceptor</strong></td>
+    <td>Votes on proposals (promises and accepts)</td>
+    <td>Server nodes in the cluster</td>
+  </tr>
+  <tr>
+    <td><strong>Learner</strong></td>
+    <td>Learns the chosen value (passive observer)</td>
+    <td>Replicas, clients, or non-voting nodes</td>
+  </tr>
+</table>
+
+<p>In practice, a single node often plays multiple roles: a server is both an acceptor and a learner, and the leader is both a proposer and an acceptor.</p>
+
+<h2>The Paxos Protocol</h2>
+
+<p>Paxos uses a two-phase protocol to decide a single value. Each value slot (called an "instance") is decided independently.</p>
+
+<div class="diagram">
+  Paxos Protocol (Single Decree)
+  ──────────────────────────────
+
+  Phase 1: PREPARE / PROMISE (Numbering)
+  ──────────────────────────────────────
+
+  Proposer              Acceptor 1        Acceptor 2        Acceptor 3
+     │                     │                 │                 │
+     │──PREPARE(n=42)─────→│                 │                 │
+     │                     │                 │                 │
+     │                     │  no higher n?   │                 │
+     │←──PROMISE(n=42,     │                 │                 │
+     │     accepted=none)──│                 │                 │
+     │                     │                 │                 │
+     │──PREPARE(n=42)────────────────────────→│                 │
+     │                     │                 │                 │
+     │                     │                 │  no higher n?   │
+     │                     │                 │  but accepted   │
+     │                     │                 │  (n=30, v=X)   │
+     │←──PROMISE(n=42,     │                 │                 │
+     │     accepted={30:X})──────────────────│                 │
+
+  Phase 2: ACCEPT / ACCEPTED (Value Selection)
+  ────────────────────────────────────────────
+
+  Proposer sees accepted value X with n=30.
+  Proposer MUST propose X (not its own value!)
+     │                     │                 │                 │
+     │──ACCEPT(n=42, v=X)─→│                 │                 │
+     │                     │  n=42 is highest │                 │
+     │←──ACCEPTED──────────│                 │                 │
+     │                     │                 │                 │
+     │──ACCEPT(n=42, v=X)────────────────────→│                 │
+     │                     │                 │                 │
+     │                     │                 │  n=42 is highest │
+     │                     │                 │                 │
+     │←──ACCEPTED────────────────────────────│                 │
+
+  Quorum of acceptors accepted (n=42, v=X) → VALUE X IS CHOSEN
+
+  Phase 3: LEARN (Notification)
+  ─────────────────────────────
+  Acceptors notify learners of the chosen value.
+</div>
+
+<h3>Protocol Rules</h3>
+
+<h4>Phase 1: Prepare/Promise</h4>
+<ol>
+  <li>A proposer picks a unique proposal number <strong>n</strong> and sends <strong>PREPARE(n)</strong> to a majority of acceptors.</li>
+  <li>An acceptor that receives <strong>PREPARE(n)</strong> responds with <strong>PROMISE</strong> if: (a) n is greater than any previous proposal number it has seen, AND (b) it promises not to accept any proposal with a lower number. The promise includes any previously accepted proposal (if any).</li>
+</ol>
+
+<h4>Phase 2: Accept/Accepted</h4>
+<ol>
+  <li>If the proposer receives promises from a majority: it picks the value to propose. If any acceptor had previously accepted a value, the proposer MUST use the value with the highest proposal number. Otherwise, it may propose its own value.</li>
+  <li>The proposer sends <strong>ACCEPT(n, v)</strong> to all acceptors (or just the majority that promised).</li>
+  <li>An acceptor accepts if n is the highest proposal number it has seen, and sends <strong>ACCEPTED(n, v)</strong>.</li>
+</ol>
+
+<div class="callout">
+  <strong>Critical safety rule:</strong> In Phase 2, if the proposer discovers that another value was previously accepted (with a lower proposal number), it must propose that previously accepted value, NOT its own value. This is the key to Paxos's safety guarantee -- it ensures that only one value can be chosen per instance.
+</div>
+
+<h2>Multi-Paxos</h2>
+
+<p>Single-decree Paxos is impractical for real systems because each value requires two round trips (prepare + accept). <strong>Multi-Paxos</strong> optimizes by electing a distinguished proposer (a "leader") that can skip Phase 1 for subsequent values:</p>
+
+<div class="diagram">
+  Multi-Paxos with Leader
+  ─────────────────────────
+
+  Without leader (Single Paxos per value):
+  Value 1: PREPARE → PROMISE → ACCEPT → ACCEPTED  (2 round trips)
+  Value 2: PREPARE → PROMISE → ACCEPT → ACCEPTED  (2 round trips)
+  Value 3: PREPARE → PROMISE → ACCEPT → ACCEPTED  (2 round trips)
+
+  With leader (Multi-Paxos):
+  Value 1: PREPARE → PROMISE → ACCEPT → ACCEPTED  (2 round trips, elect leader)
+  Value 2: ACCEPT → ACCEPTED                        (1 round trip!)
+  Value 3: ACCEPT → ACCEPTED                        (1 round trip!)
+  Value 4: ACCEPT → ACCEPTED                        (1 round trip!)
+
+  The leader reuses its proposal number, so it only needs
+  Phase 1 once. As long as the leader is stable, all
+  subsequent values are decided in a single round trip.
+</div>
+
+<h2>Google Chubby and Spanner</h2>
+
+<p>Paxos is used extensively in Google's infrastructure:</p>
+
+<ul>
+  <li><strong>Google Chubby</strong> (2006): A lock service that uses Paxos for replication. Chubby provides distributed locking, leader election, and small-file storage. Used by GFS, Bigtable, and MapReduce for coordination.</li>
+  <li><strong>Google Spanner</strong> (2012): A globally distributed database that uses Paxos for replication within each datacenter. Spanner extends Paxos with TrueTime (atomic clocks + GPS) to provide external consistency across datacenters.</li>
+</ul>
+
+<div class="callout">
+  <strong>Interview note:</strong> Mentioning that Google uses Paxos in production (Chubby, Spanner) demonstrates practical knowledge. Be prepared to explain why they chose Paxos over Raft (Paxos was designed earlier, and Google built significant infrastructure around it before Raft existed).
+</div>
+
+<h2>Paxos vs. Raft: Summary</h2>
+
+<table>
+  <tr>
+    <th>Dimension</th>
+    <th>Paxos</th>
+    <th>Raft</th>
+  </tr>
+  <tr>
+    <td>First described</td>
+    <td>1989 (published 1998)</td>
+    <td>2014</td>
+  </tr>
+  <tr>
+    <td>Understandability</td>
+    <td class="red">Notoriously difficult</td>
+    <td class="green">Designed for understandability</td>
+  </tr>
+  <tr>
+    <td>Leader requirement</td>
+    <td>Weak (any proposer can propose)</td>
+    <td>Strong (all entries through leader)</td>
+  </tr>
+  <tr>
+    <td>Log structure</td>
+    <td>Flexible (no required ordering)</td>
+    <td>Strict (leader-ordered replicated log)</td>
+  </tr>
+  <tr>
+    <td>Multi-value optimization</td>
+    <td>Multi-Paxos (elect stable proposer)</td>
+    <td>Built-in (leader persists across entries)</td>
+  </tr>
+  <tr>
+    <td>Implementation correctness</td>
+    <td class="red">Many buggy implementations</td>
+    <td class="green">Reference implementation exists</td>
+  </tr>
+  <tr>
+    <td>Primary users</td>
+    <td>Google (Chubby, Spanner)</td>
+    <td>etcd, Consul, CockroachDB, TiKV</td>
+  </tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+
+<ul>
+  <li>Explain the Paxos consensus algorithm.</li>
+  <li>What are the three roles in Paxos and what do they do?</li>
+  <li>Walk me through the prepare/promise/accept/learned protocol.</li>
+  <li>Why must a proposer use a previously accepted value in Phase 2?</li>
+  <li>What is Multi-Paxos and how does it optimize performance?</li>
+  <li>Compare Paxos and Raft. Why is Raft easier to understand?</li>
+  <li>What real systems use Paxos?</li>
+  <li>What happens if two proposers compete in Paxos?</li>
+  <li>Why can't a basic Paxos instance guarantee liveness?</li>
+  <li>What is the relationship between Paxos and two-phase commit?</li>
+</ul>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Do NOT try to reproduce Lamport's proof of Paxos correctness</strong> -- no interviewer expects that. Skip Fast Paxos, Byzantine Paxos (BPaxos), Egalitarian Paxos (EPaxos), and other Paxos variants unless specifically asked. Skip the details of Google Spanner's TrueTime integration. Do not attempt to implement Paxos from scratch in an interview (even Google engineers have found this challenging). Focus on the single-decree protocol flow, Multi-Paxos concept, and the comparison with Raft.
+</div>
+
+<div class="source">
+  <div class="source-label">Reading Sources</div>
+  <ul>
+    <li>Paxos Made Simple (Lamport, 2001) -- The most accessible Paxos paper</li>
+    <li>The Part-Time Parliament (Lamport, 1989/1998) -- Original Paxos paper with the parliamentary metaphor</li>
+    <li>The Chubby Lock Service for Loosely-Coupled Distributed Systems (Burrows, 2006)</li>
+    <li>Spanner: Google's Globally-Distributed Database (Corbett et al., 2012)</li>
+    <li>In Search of an Understandable Consensus Algorithm (Ongaro &amp; Ousterhout, 2014) -- Raft paper (for comparison)</li>
+    <li>Designing Data-Intensive Applications (Kleppmann) -- Chapter 9, consensus section</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="raft.html">&larr; 5.6.7 Raft</a>
+  <a href="read-quorum.html">5.7.1 Read Quorum &rarr;</a>
+</div>
+
+</body>
+</html>

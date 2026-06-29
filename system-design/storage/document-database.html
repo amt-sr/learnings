@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.10.3 Document Database</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#3">3 Storage</a> / <a href="../index.html#3.10">3.10 Database Models</a> / 3.10.3
+</div>
+
+<h1>Document Database</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What a document database is: stores self-contained documents (typically JSON/BSON)</li>
+  <li>Flexible/dynamic schema vs rigid relational tables</li>
+  <li>Embedding vs referencing: when to nest data vs normalize</li>
+  <li>When document databases are the right choice</li>
+</ul>
+
+<h2>Definition</h2>
+<p>A <strong>document database stores data as documents — typically JSON, BSON, or XML objects — in collections rather than tables</strong>. Each document is self-contained, can have a different structure (flexible schema), and can contain nested objects and arrays. Documents are accessed by a unique document ID, but secondary indexes enable querying by any field.</p>
+
+<div class="diagram">  Relational vs Document — same data, different shape
+
+  RELATIONAL (normalized):          DOCUMENT (denormalized, nested):
+
+  users table:                      ┌─────────────────────────────────┐
+  ┌────┬───────┬─────────┐         │ Document ID: "user:42"          │
+  │ id │ name  │ email    │         │ {                                │
+  ├────┼───────┼─────────┤         │   "_id": ObjectId("..."),        │
+  │ 42 │ Alice │ a@b.com  │         │   "name": "Alice",               │
+  └────┴───────┴─────────┘         │   "email": "a@b.com",            │
+                                    │   "addresses": [                 │
+  addresses table:                   │     {                            │
+  ┌────┬────────┬───────┬──────┐   │       "type": "home",             │
+  │ id │user_id│ street │ city │   │       "street": "123 Main St",   │
+  ├────┼────────┼───────┼──────┤   │       "city": "NYC"              │
+  │  1 │   42   │123 Main│ NYC  │   │     },                           │
+  │  2 │   42   │456 Oak │ SF   │   │     {                            │
+  └────┴────────┴───────┴──────┘   │       "type": "work",             │
+                                    │       "street": "456 Oak Ave",   │
+  To get user + addresses:          │       "city": "SF"               │
+  SELECT * FROM users u             │     }                             │
+  LEFT JOIN addresses a             │   ],                              │
+  ON u.id = a.user_id              │   "preferences": {                │
+  WHERE u.id = 42                   │     "theme": "dark",              │
+                                    │     "notifications": true        │
+  One query, JOIN across 2 tables.  │   }                              │
+                                    │ }                                │
+                                    └─────────────────────────────────┘
+  One read, no join needed.</div>
+
+<h2>Key Characteristics</h2>
+<table>
+  <tr><th>Characteristic</th><th>Detail</th></tr>
+  <tr><td><strong>Flexible schema</strong></td><td>Documents in the same collection can have different fields. New fields can be added to individual documents without altering a schema.</td></tr>
+  <tr><td><strong>Nested documents</strong></td><td>Documents can contain arrays and sub-documents. Related data is often embedded in a single document, eliminating JOINs.</td></tr>
+  <tr><td><strong>Document ID</strong></td><td>Each document has a unique _id (typically auto-generated ObjectId or user-specified). Primary access path.</td></tr>
+  <tr><td><strong>Secondary indexes</strong></td><td>Indexes on any field enable querying by non-ID fields. Unlike pure <a href="key-value-store.html">key-value stores</a>.</td></tr>
+  <tr><td><strong>Rich query language</strong></td><td>Filter, sort, project, aggregate — more powerful than KV but less powerful than SQL.</td></tr>
+</table>
+
+<h2>Embedding vs Referencing</h2>
+<div class="callout">
+  <strong>This is the most important design decision in document databases.</strong> When to embed related data in a single document vs reference other documents.
+</div>
+
+<table>
+  <tr><th></th><th>Embedding (denormalize)</th><th>Referencing (normalize)</th></tr>
+  <tr><td><strong>Pattern</strong></td><td>Nested objects/arrays within document</td><td>Store ID reference to another document</td></tr>
+  <tr><td><strong>Reads</strong></td><td class="green">Fast — single document read</td><td class="red">Slower — multiple reads or JOIN ($lookup)</td></tr>
+  <tr><td><strong>Writes</strong></td><td class="red">Slower if updating embedded data (must update parent)</td><td class="green">Fast — update only the referenced document</td></tr>
+  <tr><td><strong>Data consistency</strong></td><td class="green">Strong — atomic single-document update</td><td class="yellow">Weaker — multi-document updates need transactions</td></tr>
+  <tr><td><strong>Document size</strong></td><td class="red">Can grow large (16 MB MongoDB limit)</td><td class="green">Documents stay small</td></tr>
+  <tr><td><strong>Use when</strong></td><td>1:1 or 1:few relationship, data always read together</td><td>1:many (unbounded), data updated independently</td></tr>
+</table>
+
+<div class="diagram">  Embedding (good):
+
+  { "user_id": 42,
+    "name": "Alice",
+    "addresses": [
+      {"type": "home", "street": "123 Main", "city": "NYC"},
+      {"type": "work", "street": "456 Oak",  "city": "SF"}
+    ]
+  }
+  → User always read with addresses. 1:2 relationship. Perfect for embedding.
+
+  Referencing (good):
+
+  posts collection:
+  { "_id": 1, "author_id": 42, "title": "Hello", "body": "..." }
+  { "_id": 2, "author_id": 42, "title": "World", "body": "..." }
+  ... thousands of posts per user
+
+  → 1:N (unbounded) relationship. Cannot embed (16 MB limit).
+  → Reference author_id, query separately for user info.</div>
+
+<h2>MongoDB</h2>
+<p>MongoDB is the dominant document database. Key features for interviews:</p>
+
+<pre>  Basic CRUD:
+  db.users.insertOne({ name: "Alice", email: "a@b.com" })
+  db.users.findOne({ name: "Alice" })
+  db.users.updateOne({ name: "Alice" }, { $set: { age: 30 } })
+  db.users.deleteOne({ name: "Alice" })
+
+  Querying (richer than KV):
+  db.users.find({ age: { $gte: 25 }, city: "NYC" }).sort({ name: 1 }).limit(10)
+
+  Aggregation (like SQL GROUP BY):
+  db.orders.aggregate([
+    { $match: { status: "completed" } },
+    { $group: { _id: "$user_id", total: { $sum: "$amount" } } },
+    { $sort: { total: -1 } },
+    { $limit: 10 }
+  ])
+
+  Indexes:
+  db.users.createIndex({ email: 1 })          // secondary index
+  db.users.createIndex({ name: 1, age: -1 })   // compound index</pre>
+
+<h2>Document Database vs Relational Database</h2>
+<table>
+  <tr><th></th><th><a href="relational-database.html">Relational</a></th><th>Document</th></tr>
+  <tr><td><strong>Data model</strong></td><td>Tables, rows, columns</td><td>Collections, documents</td></tr>
+  <tr><td><strong>Schema</strong></td><td class="red">Rigid (ALTER TABLE to change)</td><td class="green">Flexible (per-document structure)</td></tr>
+  <tr><td><strong>Nested data</strong></td><td class="red">Separate tables + JOINs</td><td class="green">Native nested objects/arrays</td></tr>
+  <tr><td><strong>Joins</strong></td><td class="green">Native SQL JOINs</td><td class="yellow">$lookup (MongoDB) — slower</td></tr>
+  <tr><td><strong>Query language</strong></td><td class="green">SQL — extremely expressive</td><td class="yellow">MongoDB query language — capable but less standard</td></tr>
+  <tr><td><strong>Transactions</strong></td><td class="green">Full ACID (mature)</td><td class="yellow">Multi-document transactions (MongoDB 4.0+, but slower)</td></tr>
+  <tr><td><strong>Development speed</strong></td><td class="red">Slower (schema migrations)</td><td class="green">Faster (no migrations for new fields)</td></tr>
+  <tr><td><strong>Best for</strong></td><td>Complex relationships, financial data, multi-entity queries</td><td>Content management, user profiles, catalogs, rapidly evolving schemas</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"When would you use a document database?"</strong><br>When your data is naturally document-shaped (user profiles with preferences, product catalogs with attributes), when the schema evolves frequently, when reads are mostly by ID or a few indexed fields, and when related data is usually accessed together (good for embedding). Avoid when you have complex many-to-many relationships or need multi-table JOINs.</li>
+  <li><strong>"Explain embedding vs referencing in MongoDB."</strong><br>Embedding nests related data in a single document (good for 1:1 and 1:few, atomic updates, fast reads). Referencing stores IDs pointing to other documents (needed for 1:many unbounded relationships, independent updates, smaller documents). The key tradeoff: embedding avoids JOINs but risks document size limits and update anomalies.</li>
+  <li><strong>"What is the 16 MB document limit in MongoDB?"</strong><br>BSON documents cannot exceed 16 MB. This limits how much you can embed. If a user has 10,000 comments, you cannot embed them all. You must reference (separate comments collection) or paginate. This is a fundamental constraint that drives the embedding vs referencing decision.</li>
+  <li><strong>"How does indexing work in MongoDB?"</strong><br>MongoDB uses B+ trees for indexes (same as relational databases). You can create indexes on any field, including nested fields and array fields. Compound indexes support queries on multiple fields. The query planner selects the optimal index. Missing indexes lead to collection scans (COLLSCAN) — always check with <code>explain()</code>.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>CouchDB, Couchbase, RavenDB internals</li>
+    <li>MongoDB sharding internals (chunk splitting, balancer)</li>
+    <li>MongoDB replica set election protocol details</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Designing Data-Intensive Applications" — Chapter 2</strong> (Kleppmann) — Data models</li>
+    <li><strong>MongoDB Documentation: Data Modeling</strong> — docs.mongodb.com/manual/core/data-modeling</li>
+    <li><strong>"MongoDB: The Definitive Guide"</strong> — O'Reilly</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="key-value-store.html">&larr; key-value-store.html</a>
+  <a href="wide-column-database.html">Next: wide-column-database.html &rarr;</a>
+</div>
+
+</body>
+</html>

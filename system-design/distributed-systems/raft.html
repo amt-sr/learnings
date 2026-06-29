@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.6.7 Raft - System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">5 Distributed Systems</a> / <a href="index.html">5.6 Consensus</a> / 5.6.7
+</div>
+
+<h1>5.6.7 Raft</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<div class="callout green">
+  <strong>Goal:</strong> Master the Raft consensus algorithm at a level sufficient for FAANG interviews. Understand leader election, log replication, safety guarantees, and membership changes. Be able to walk through the algorithm step-by-step, explain the state machine, and compare Raft with Paxos.
+</div>
+
+<h2>Definition</h2>
+
+<p><strong>Raft</strong> is a consensus algorithm designed by Diego Ongaro and John Ousterhout (2014) for managing a replicated log. It provides the same safety guarantees as Paxos (Multi-Paxos) but was explicitly designed for understandability. Raft decomposes consensus into three sub-problems: leader election, log replication, and safety.</p>
+
+<h2>Why Raft Was Designed</h2>
+
+<p>Paxos is famously difficult to understand. As the original Paxos paper notes, "There is no known Paxos algorithm." Raft was created specifically to be an understandable consensus algorithm. The authors measured understandability by testing CS students on both Paxos and Raft, and found students learned Raft significantly faster.</p>
+
+<div class="callout">
+  <strong>Interview relevance:</strong> Raft is the consensus algorithm you are most likely to be asked about in system design interviews. It is used in etcd, Consul, CockroachDB, TiKV, and many other production systems. Its simplicity makes it an excellent interview topic -- you can explain it clearly within 10-15 minutes.
+</div>
+
+<h2>Raft Overview: Three Sub-Problems</h2>
+
+<div class="diagram">
+  Raft Decomposition
+  ──────────────────
+
+  ┌─────────────────────────────────────────┐
+  │              Raft Consensus              │
+  ├─────────────┬───────────────┬────────────┤
+  │   Leader    │    Log        │  Safety    │
+  │  Election   │  Replication │  Guarantees│
+  ├─────────────┼───────────────┼────────────┤
+  │ • Terms     │ • AppendEntries│ • Election│
+  │ • Timeouts  │ • Commit index │   restrict│
+  │ • Votes     │ • Match index  │ • Commit  │
+  │             │ • Next index  │   rule    │
+  │             │               │ • Log     │
+  │             │               │   matching│
+  └─────────────┴───────────────┴────────────┘
+</div>
+
+<h2>State Transitions</h2>
+
+<div class="diagram">
+  Raft Node States
+  ────────────────
+
+  All nodes start as Followers.
+
+  ┌──────────┐   election timeout   ┌───────────┐   majority votes   ┌────────┐
+  │ FOLLOWER │ ──────────────────→ │ CANDIDATE │ ─────────────────→ │ LEADER │
+  │          │                     │           │                    │        │
+  │          │ ←────────────────── │           │ ←──────────────── │        │
+  └──────────┘  higher term found  └───────────┘  higher term found └───┬────┘
+       ↑                                                              │
+       │                    higher term found                        │
+       └──────────────────────────────────────────────────────────────┘
+
+  Rules:
+  • Follower: Respond to RPCs from candidates and leaders.
+    If no heartbeat within election timeout → become candidate.
+  • Candidate: Start election. Request votes from peers.
+    If receive votes from majority → become leader.
+    If receive AppendEntries with higher term → become follower.
+  • Leader: Send AppendEntries (heartbeats) to all followers.
+    If receive AppendEntries with higher term → become follower.
+</div>
+
+<h2>Leader Election</h2>
+
+<h3>Terms</h3>
+<p>Raft divides time into terms of arbitrary length. Each term begins with an election. If a leader is elected, it manages the cluster for that term. If the election fails (split vote), a new term begins immediately.</p>
+
+<h3>Election Process</h3>
+<ol>
+  <li>A follower increments its <strong>current term</strong> and transitions to <strong>candidate</strong>.</li>
+  <li>It votes for itself and sends <strong>RequestVote</strong> RPCs to all other nodes.</li>
+  <li>A follower grants its vote if: (a) the candidate's term is at least the voter's term, and (b) the candidate's log is at least as up-to-date as the voter's log.</li>
+  <li>If the candidate receives votes from a <strong>majority</strong> of the cluster, it becomes leader.</li>
+  <li>The leader sends <strong>AppendEntries</strong> (heartbeat) RPCs to all followers to establish authority.</li>
+</ol>
+
+<h3>Log Completeness Check</h3>
+
+<div class="callout yellow">
+  <strong>Why check log completeness?</strong> Without this check, a candidate with a stale log could win an election (e.g., if it communicates faster). This would overwrite committed entries. The check ensures only candidates with the most up-to-date log can become leader.
+</div>
+
+<p>The comparison is based on the <strong>last log index</strong> and <strong>last log term</strong>: a candidate's log is "at least as up-to-date" if its last log term is greater, or if terms are equal, its last log index is greater.</p>
+
+<h2>Log Replication</h2>
+
+<p>Once a leader is elected, all client requests go through the leader. The leader appends the request to its log and replicates it to followers using <strong>AppendEntries</strong> RPCs.</p>
+
+<div class="diagram">
+  Log Replication Flow
+  ────────────────────
+
+  Client                Leader               Follower 1            Follower 2
+    │                     │                      │                      │
+    │──write("x=5")──────→│                      │                      │
+    │                     │ append to local log  │                      │
+    │                     │ index=5, term=2      │                      │
+    │                     │                      │                      │
+    │                     │──AppendEntries────────→│──AppendEntries──────→│
+    │                     │  prev=4, entry={x:5}  │  prev=4, entry={x:5} │
+    │                     │                      │                      │
+    │                     │←─────SUCCESS────────←│←─────SUCCESS────────←│
+    │                     │                      │                      │
+    │                     │ matchIndex[1]=5       │                      │
+    │                     │ matchIndex[2]=5       │                      │
+    │                     │ commitIndex=5         │                      │
+    │                     │ (majority replicated) │                      │
+    │                     │                      │                      │
+    │←──OK (committed)────│                      │                      │
+    │                     │──AppendEntries (heartbeat, commit=5)────────→│
+    │                     │  followers apply x=5 to state machine         │
+</div>
+
+<h3>Key Log Replication Concepts</h3>
+
+<table>
+  <tr>
+    <th>Concept</th>
+    <th>Description</th>
+  </tr>
+  <tr>
+    <td><strong>nextIndex[]</strong></td>
+    <td>For each follower, the index of the next log entry to send. Initialized to leader's last log index + 1.</td>
+  </tr>
+  <tr>
+    <td><strong>matchIndex[]</strong></td>
+    <td>For each follower, the highest log entry known to be replicated on that follower. Initialized to 0.</td>
+  </tr>
+  <tr>
+    <td><strong>commitIndex</strong></td>
+    <td>The highest log entry known to be committed (replicated on a majority). Entries are committed but not yet applied.</td>
+  </tr>
+  <tr>
+    <td><strong>lastApplied</strong></td>
+    <td>The highest log entry applied to the state machine. Always &le; commitIndex.</td>
+  </tr>
+</table>
+
+<h3>Commit Rule</h3>
+
+<p>An entry is committed when it is replicated on a <strong>majority of servers</strong>. Importantly, a leader commits an entry from the <strong>current term</strong>, and this implicitly commits all prior entries (even from previous terms).</p>
+
+<div class="callout">
+  <strong>Key safety detail:</strong> A leader never commits entries from a previous term by counting replicas. It only commits entries from the current term. Once a current-term entry is committed, all prior entries are also committed because they are guaranteed to be present on a majority (due to the election restriction).
+</div>
+
+<h2>Safety Guarantees</h2>
+
+<h3>Election Restriction</h3>
+<p>Not all servers are eligible to become leader. A candidate must have the most up-to-date log. This is enforced by the vote restriction: a follower only votes for a candidate whose log is at least as complete as its own. This ensures that any committed entry is present on the new leader.</p>
+
+<h3>Log Matching Property</h3>
+<p>If two logs contain an entry with the same index and term, then the logs are identical up to that index. This is guaranteed by two conditions:</p>
+<ul>
+  <li>Different entries at the same index have different terms (leader appends at most one entry per index per term).</li>
+  <li>If an entry exists on one log, it also exists on the leader's log at the same index and term (due to AppendEntries consistency check).</li>
+</ul>
+
+<h3>Why Raft Is Safe</h3>
+<p>The combination of election restriction and log matching ensures that committed entries are never lost:</p>
+<ol>
+  <li>The election restriction ensures the new leader contains all committed entries.</li>
+  <li>The log matching property ensures all followers converge to the leader's log.</li>
+  <li>The commit rule ensures an entry is only returned to the client after majority replication.</li>
+</ol>
+
+<h2>Membership Changes</h2>
+
+<p>Raft uses <strong>joint consensus</strong> to safely change cluster membership (add/remove nodes) without downtime:</p>
+
+<ol>
+  <li><strong>C_old to C_old,new:</strong> The leader receives a configuration change and commits a joint configuration (C_old,new) that includes both old and new members. Decisions require majority from both groups.</li>
+  <li><strong>C_old,new to C_new:</strong> Once C_old,new is committed, the leader commits C_new (just the new members). Decisions now require majority from only C_new.</li>
+</ol>
+
+<div class="callout yellow">
+  <strong>Why joint consensus?</strong> Without it, two leaders could be elected simultaneously during a membership change -- one by the old majority and one by the new majority. Joint consensus ensures safety during the transition by requiring agreement from both groups simultaneously.
+</div>
+
+<h2>Raft vs. Paxos</h2>
+
+<table>
+  <tr>
+    <th>Aspect</th>
+    <th>Raft</th>
+    <th>Paxos</th>
+  </tr>
+  <tr>
+    <td>Understandability</td>
+    <td class="green">Explicit design goal, decomposed into sub-problems</td>
+    <td class="red">Notoriously difficult to understand and implement</td>
+  </tr>
+  <tr>
+    <td>Leader</td>
+    <td>Strong leader (all log entries through leader)</td>
+    <td>Weak leader (any proposer can propose)</td>
+  </tr>
+  <tr>
+    <td>Log structure</td>
+    <td>Strictly ordered, leader-centric</td>
+    <td>No required log ordering, more flexible</td>
+  </tr>
+  <tr>
+    <td>Membership changes</td>
+    <td>Joint consensus (built-in)</td>
+    <td>Requires additional protocol layer</td>
+  </tr>
+  <tr>
+    <td>Performance</td>
+    <td>Comparable (same theoretical lower bound)</td>
+    <td>Comparable</td>
+  </tr>
+  <tr>
+    <td>Production use</td>
+    <td>etcd, Consul, CockroachDB, TiKV</td>
+    <td>Google Chubby, Spanner (internal)</td>
+  </tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+
+<ul>
+  <li>Explain how Raft achieves consensus.</li>
+  <li>Walk me through the Raft leader election process.</li>
+  <li>How does Raft handle log replication?</li>
+  <li>What is the election restriction and why does it matter?</li>
+  <li>How does Raft ensure that committed entries are never lost?</li>
+  <li>What happens when the leader crashes?</li>
+  <li>How does Raft handle membership changes (joint consensus)?</li>
+  <li>Compare Raft and Paxos. Why was Raft designed?</li>
+  <li>What is the log matching property?</li>
+  <li>How many nodes can Raft tolerate failing?</li>
+  <li>What happens to uncommitted entries on a follower when a new leader is elected?</li>
+</ul>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Do NOT implement the full Raft state machine</strong> in an interview unless explicitly asked (some companies do ask this as a coding exercise). Skip the linearizability proof and the formal safety argument. Do not memorize every field in the RequestVote and AppendEntries RPCs -- focus on the concepts. Skip the ReadIndex optimization for read-only queries unless the interview goes deep. Skip the details of Raft's pre-vote optimization.
+</div>
+
+<div class="source">
+  <div class="source-label">Reading Sources</div>
+  <ul>
+    <li>In Search of an Understandable Consensus Algorithm (Ongaro &amp; Ousterhout, 2014) -- The Raft paper (essential reading)</li>
+    <li>Raft Website -- <a href="https://raft.github.io">https://raft.github.io</a> -- Interactive visualization</li>
+    <li>Designing Data-Intensive Applications (Kleppmann) -- Chapter 5, Section on Consensus</li>
+    <li>etcd Documentation -- Raft implementation details</li>
+    <li>The Secret Lives of Data -- <a href="http://thesecretlivesofdata.com/raft/">Interactive Raft tutorial</a></li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="membership.html">&larr; 5.6.6 Membership</a>
+  <a href="paxos.html">5.6.8 Paxos &rarr;</a>
+</div>
+
+</body>
+</html>

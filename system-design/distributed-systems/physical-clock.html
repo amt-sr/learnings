@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.4.1 Physical Clock</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb"><a href="#">System Design</a> / <a href="#">5 Distributed Systems</a> / <a href="#">5.4 Time</a> / 5.4.1</div>
+<h1>Physical Clock</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand how physical clocks work in distributed systems, why they are insufficient for event ordering, and what solutions exist to improve their accuracy for production use.</p>
+
+<h2>Definition</h2>
+<p>A <strong>physical clock</strong> is a real-world time source (e.g., wall clock,石英 crystal oscillator) that measures time based on physical phenomena. In distributed systems, each node has its own physical clock, but these clocks inevitably drift apart due to hardware imperfections, temperature variations, and network delays.</p>
+
+<div class="callout">
+  <strong>Key insight:</strong> In a single machine, ordering is trivial -- CPU provides a total order. In distributed systems with multiple nodes, there is no shared clock and no universal "now." Physical clocks provide an approximation, but approximation is not enough for correctness.
+</div>
+
+<h2>Clock Drift</h2>
+<p>Even high-quality quartz oscillators drift at a rate of roughly <strong>10<sup>-6</sup> seconds per second</strong> (about 1 second per ~11.6 days). Cheaper hardware drifts even faster. After synchronizing two clocks, they will gradually diverge.</p>
+
+<div class="diagram">Server A:  ----[t=0]--------[t=100]--------[t=200]----  (crystal oscillator)
+Server B:  ----[t=0]---[t=101]---------[t=203]-------  (slightly faster crystal)
+
+After sync, B's clock runs ~1% faster than A's clock.
+Over 1 hour, B gains ~36 seconds relative to A.
+After 1 day, the drift becomes ~864 seconds (14.4 minutes).</div>
+
+<h2>Network Time Protocol (NTP)</h2>
+<p>NTP is the most widely used clock synchronization protocol. It organizes servers into a hierarchy (strata) with GPS/atomic clocks at the top (stratum 1).</p>
+
+<h3>NTP Synchronization Process</h3>
+<div class="diagram">  Client                                              NTP Server
+    |                                                    |
+    |  -- T1: Send request (record local time t0) -->   |
+    |                                                    |
+    |  <-- T2: Receive reply (record local time t3) --   |
+    |      (server recorded send time t1 & recv time t2) |
+    |                                                    |
+    |
+    |  Round-trip time = (t3 - t0) - (t2 - t1)
+    |  Clock offset    = ((t1 - t0) + (t2 - t3)) / 2
+    |  Client adjusts its clock by the calculated offset</div>
+
+<h3>NTP Accuracy Tiers</h3>
+<table>
+  <tr><th>Tier</th><th>Accuracy</th><th>Use Case</th></tr>
+  <tr><td>Software NTP (ntpd, chrony)</td><td>~1-50 ms</td><td>Standard servers, cloud VMs</td></tr>
+  <tr><td>PTP (Precision Time Protocol)</td><td>~100 ns - 1 us</td><td>Financial trading, telecom</td></tr>
+  <tr><td>GPS-synchronized atomic clocks</td><td>~10-100 ns</td><td>Data centers (Spanner, CockroachDB)</td></tr>
+</table>
+
+<h2>Why Physical Clocks Aren't Sufficient for Ordering</h2>
+
+<div class="callout red">
+  <strong>Critical limitation:</strong> Physical clocks cannot guarantee ordering correctness. Even with NTP, two events that are causally related can receive timestamps that appear out of order due to clock skew and network delay.
+</div>
+
+<p>Consider this scenario:</p>
+<div class="diagram">Process A (clock ahead by 50ms)     Process B
+    |                                  |
+    |  Event X (t=A+100ms)            |
+    |  ---- send message ----------->  |
+    |                                  |  Event Y (t=B+60ms)
+    |                                  |
+    |  Physical timestamps:            |
+    |  X = A's clock = 100ms          |
+    |  Y = B's clock = 60ms           |
+    |                                  |
+    |  Problem: X physically happened  |
+    |  before Y (causally), but        |
+    |  timestamp(X=100) > timestamp(Y=60)</div>
+
+<p>This means:</p>
+<ul>
+  <li>Two causally related events can have <strong>out-of-order timestamps</strong></li>
+  <li>Physical time provides <strong>no guarantee of causal consistency</strong></li>
+  <li>Events with close timestamps could be in <strong>any order</strong> -- you cannot distinguish causality from concurrency</li>
+</ul>
+
+<h2>NTP Limitations for Distributed Systems</h2>
+<ul>
+  <li><strong>Asymmetric network delays</strong> -- the return path may differ from the forward path, introducing error in offset calculation</li>
+  <li><strong>Clock slew rate limits</strong> -- NTP gradually adjusts clocks (slewing) to avoid discontinuities, meaning synchronization is never instantaneous</li>
+  <li><strong>No bounded error guarantee</strong> -- NTP does not provide a strict upper bound on clock error, making it unsuitable as a correctness primitive</li>
+  <li><strong>Vulnerability to network partitions</strong> -- during partitions, clocks can drift significantly before re-synchronization</li>
+  <li><strong>Leap seconds</strong> -- NTP must handle leap seconds, which can cause system-level bugs (see the Cloudflare 2017 outage)</li>
+</ul>
+
+<h2>GPS Clocks in Data Centers</h2>
+<p>Major cloud providers and database systems install <strong>GPS-based atomic clocks</strong> (rubidium or cesium) in data centers to achieve microsecond-level synchronization.</p>
+
+<div class="callout green">
+  <strong>Why GPS?</strong> GPS satellites carry atomic clocks and broadcast precise time signals. A GPS receiver with a clear sky view can achieve ~10-100 ns accuracy. Each data center gets a GPS antenna + atomic clock (holds time if GPS signal is lost).
+</div>
+
+<h2>TrueTime (Google Spanner)</h2>
+<p>Spanner introduces <strong>TrueTime</strong>, an API that returns a time <em>interval</em> rather than a single timestamp:</p>
+
+<pre>TrueTime.now() returns [earliest, latest]
+
+  earliest = actual time - epsilon
+  latest   = actual time + epsilon
+
+where epsilon accounts for worst-case clock uncertainty between nodes.</pre>
+
+<p>Spanner uses GPS + atomic clocks to keep epsilon small (typically ~1-10 ms). The interval-based approach means:</p>
+<ul>
+  <li>If commit_timestamp + epsilon < TrueTime.now().earliest, the transaction is <strong>definitely committed</strong></li>
+  <li>Before that point, transactions must wait (commit-wait) to ensure linearizability</li>
+  <li>This trades latency for strong consistency guarantees</li>
+</ul>
+
+<h2>Physical Clock Comparison</h2>
+<table>
+  <tr><th>Method</th><th>Accuracy</th><th>Causality Guarantee</th><th>Cost</th></tr>
+  <tr><td>NTP</td><td>1-50 ms</td><td class="red">None</td><td>Free</td></tr>
+  <tr><td>PTP</td><td>100 ns - 1 us</td><td class="red">None</td><td>Specialized hardware</td></tr>
+  <tr><td>GPS + Atomic (TrueTime)</td><td>1-10 ms epsilon</td><td class="green">Bounded (interval-based)</td><td>Very high</td></tr>
+  <tr><td>Logical Clocks</td><td>N/A (not physical)</td><td class="green">Exact causality</td><td>Software only</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li><strong>"How does NTP work?"</strong> -- Explain the request/reply exchange, round-trip time calculation, and clock offset formula. Mention stratum hierarchy.</li>
+  <li><strong>"Why can't we just use wall-clock time for ordering events?"</strong> -- Clock drift, network delay, and the fundamental impossibility of knowing the exact offset between two clocks. Give the out-of-order timestamp example.</li>
+  <li><strong>"How does Spanner handle time uncertainty?"</strong> -- TrueTime returns an interval. Spanner performs commit-wait: after committing at timestamp ts, it waits until ts + epsilon has passed before making data visible.</li>
+  <li><strong>"What's the difference between NTP and PTP?"</strong> -- PTP (IEEE 1588) is designed for local networks with hardware timestamping support, achieving microsecond accuracy vs NTP's millisecond accuracy.</li>
+  <li><strong>"How do you handle leap seconds in a distributed database?"</strong> -- Smearing (Google, Amazon: stretch the last second of the day over several hours), disabling leap seconds (POSIX time), or using TAI (no leap seconds).</li>
+  <li><strong>"Why does CockroachDB use HLC instead of TrueTime?"</strong> -- TrueTime requires GPS hardware in every data center. HLC achieves similar properties in software-only, making it cheaper to deploy on any cloud.</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Depth to avoid in interviews:</strong>
+  <ul>
+    <li>Stratum 1/2 server topology details -- just know the hierarchy concept</li>
+    <li>Chrony vs ntpd configuration internals</li>
+    <li>GPS signal processing (ephemeris calculations, ionospheric delay correction)</li>
+    <li>PTP Best Master Clock algorithm (BMCA) details</li>
+    <li>Spanner's Paxos implementation details when discussing TrueTime</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Primary References</div>
+  <ul>
+    <li>Spanner: Google's Globally-Distributed Database -- Corbett et al. (2012), Section 3 "TrueTime"</li>
+    <li>Distributed Systems: Time and Global States -- Coulouris et al., Chapter on Physical Clocks</li>
+    <li>NTPv4 Protocol Specification -- RFC 5905</li>
+    <li>CockroachDB: Surviving the leap second -- Cockroach Labs blog (2016)</li>
+    <li>The Trouble with Timestamps (Martin Kleppmann) -- ACM Queue, 2016</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="writes-follow-reads.html">&larr; 5.3.10 Writes Follow Reads</a>
+  <a href="logical-clock.html">5.4.2 Logical Clock &rarr;</a>
+</div>
+
+</body>
+</html>

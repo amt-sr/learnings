@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.2.3 Leaderless (Dynamo-Style) Replication</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">4 Replication</a> / <a href="why-replication.html">4.2 Replication Models</a> / 4.2.3
+</div>
+
+<h1>4.2.3 Leaderless (Dynamo-Style) Replication</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the leaderless replication model that powers DynamoDB, Cassandra, and Riak. Know the quorum-based consistency mechanism, the W + R > N rule, and how systems handle node failures through sloppy quorums and hinted handoff. This is one of the most frequently discussed replication models in interviews.</p>
+
+<h2>Definition</h2>
+
+<div class="callout">
+  <strong>Leaderless replication</strong> (also called <strong>Dynamo-style</strong> or <strong>peer-to-peer replication</strong>) has no designated leader node. Any node can accept write requests from clients, and any node can accept read requests. The client (or a coordinator node) is responsible for ensuring that writes are replicated to enough nodes and that reads retrieve data from enough nodes to achieve the desired consistency level.
+</div>
+
+<p>This model was popularized by Amazon's Dynamo paper (2007) and is the foundation of DynamoDB, Apache Cassandra, and Riak. It trades the simplicity of leader-follower for higher write availability and no single point of failure.</p>
+
+<h2>How It Works</h2>
+
+<div class="diagram">
+  Leaderless Replication: Write Path
+  ─────────────────────────────────
+
+  Client writes key "user:42" with value "Alice"
+
+  N = 3 (total replicas)
+  W = 2 (write quorum: must write to 2 of 3 nodes)
+
+  Client / Coordinator
+       │
+       │  PUT user:42 = "Alice"
+       │
+       ├──────────────▶ Node A ──── Store "Alice"  ✓ ACK
+       ├──────────────▶ Node B ──── Store "Alice"  ✓ ACK
+       └──────────────▶ Node C ──── (down, no ACK)  ✗
+
+  W = 2 ACKs received → WRITE SUCCESS
+  (Node C will be updated via read repair or anti-entropy later)
+
+  No leader election needed. No failover needed.
+  The system is available as long as W nodes are reachable.
+</div>
+
+<div class="diagram">
+  Leaderless Replication: Read Path
+  ─────────────────────────────────
+
+  Client reads key "user:42"
+
+  N = 3 (total replicas)
+  R = 2 (read quorum: must read from 2 of 3 nodes)
+
+  Client / Coordinator
+       │
+       │  GET user:42
+       │
+       ├──────────────▶ Node A ──── Returns "Alice"  (v2)
+       ├──────────────▶ Node B ──── Returns "Alice"  (v2)
+       └──────────────▶ Node C ──── Returns "Bob"    (v1, stale)
+
+  R = 2 responses received
+  Client sees v2 (Alice) from 2 nodes, v1 (Bob) from 1 node
+  v2 is the most recent → Return "Alice"
+</div>
+
+<h2>The Quorum Rule: W + R > N</h2>
+
+<div class="callout">
+  <strong>The fundamental rule of leaderless replication:</strong> If you have <strong>N</strong> replicas, and you require <strong>W</strong> nodes to acknowledge a write and <strong>R</strong> nodes to respond to a read, then <strong>W + R > N</strong> guarantees that at least one node that acknowledged the write will be contacted during the read, ensuring the client sees the latest data.
+</div>
+
+<div class="diagram">
+  W + R > N: Why It Works
+  ────────────────────────
+
+  N = 3 (Node A, B, C)
+  W = 2, R = 2
+
+  Write sent to: A ✓, B ✓, C ✗
+       W nodes = {A, B}
+
+  Read sent to:  A ✓, B ✗, C ✓
+       R nodes = {A, C}
+
+  Intersection: A is in both sets
+  → At least one node that has the latest write is read
+  → Client gets the most recent value ✓
+
+
+  If W + R <= N, this guarantee breaks:
+
+  N = 3, W = 1, R = 1
+  Write to: C only
+  Read from: A only
+  Intersection: empty!
+  → A has stale data, client reads stale value ✗
+</div>
+
+<table>
+  <tr><th>N</th><th>W</th><th>R</th><th>W + R > N?</th><th>Consistency</th><th>Availability</th><th>Use Case</th></tr>
+  <tr><td>3</td><td>1</td><td>1</td><td class="red">No (2)</td><td>Low</td><td class="green">Highest</td><td>Cached data, analytics</td></tr>
+  <tr><td>3</td><td>2</td><td>1</td><td class="green">Yes (3)</td><td>Medium</td><td>High</td><td>Social feeds, activity streams</td></tr>
+  <tr><td>3</td><td>2</td><td>2</td><td class="green">Yes (4)</td><td>Strong</td><td>Medium</td><td>Configuration, user profiles</td></tr>
+  <tr><td>3</td><td>3</td><td>2</td><td class="green">Yes (5)</td><td class="green">Strongest</td><td>Lowest</td><td>Financial data, metadata</td></tr>
+  <tr><td>3</td><td>3</td><td>3</td><td class="green">Yes (6)</td><td class="green">Strongest</td><td class="red">Lowest</td><td>Rarely used (too expensive)</td></tr>
+</table>
+
+<div class="callout green">
+  <strong>Interview Tip:</strong> The W + R > N rule is one of the most important concepts in distributed systems. Memorize the common configurations: N=3, W=2, R=2 is the standard "strong" setting. N=3, W=1, R=1 gives highest availability but weakest consistency. Being able to reason about these tradeoffs quickly is a strong signal in interviews.
+</div>
+
+<h2>Sloppy Quorum and Hinted Handoff</h2>
+
+<p>When a node is down or unreachable, a <strong>sloppy quorum</strong> allows writes to be temporarily stored on a different, available node. When the original node recovers, the temporary node "hands off" the data via <strong>hinted handoff</strong>.</p>
+
+<div class="diagram">
+  Sloppy Quorum + Hinted Handoff
+  ──────────────────────────────
+
+  Normal case (Node B is the designated replica):
+  Client ──▶ Node A ──▶ Node B ──▶ Node C
+
+  Node B is DOWN:
+  Client ──▶ Node A ──▶ Node B (✗ DOWN)
+            └─────────▶ Node D (takes B's write via sloppy quorum)
+                        "Hey, I have a hint for B: store this value
+                         and give it back when B recovers"
+
+  Node B recovers:
+  Node D ──▶ Node B (hinted handoff: "Here's the data
+                        that was written for you while you were down")
+  Node B is now up-to-date
+</div>
+
+<div class="callout">
+  <strong>Key Point:</strong> Sloppy quorum improves write availability during node failures but does not change the W + R > N guarantee. The hint is eventually delivered, so the system converges to the intended state. This is a form of <strong>tunable tradeoff between consistency and availability</strong> during degraded states.
+</div>
+
+<h2>Read Repair</h2>
+
+<p>Read repair is an anti-entropy mechanism that runs during read operations to fix inconsistencies between replicas:</p>
+
+<div class="diagram">
+  Read Repair
+  ───────────
+
+  Client reads key "user:42" from Nodes A, B, C:
+    Node A returns: "Alice" version 3
+    Node B returns: "Alice" version 3
+    Node C returns: "Bob"   version 2  (stale)
+
+  Coordinator detects C is stale:
+    1. Return "Alice" to client (v3 wins)
+    2. Send "Alice" v3 to Node C in background
+    3. Node C updates to v3
+
+  Result: All replicas are now consistent for this key.
+</div>
+
+<p>Read repair is fast and effective for fixing inconsistencies on the hot path. For background anti-entropy (catching inconsistencies that no one reads), systems use <strong>Merkle trees</strong> or <strong>gossip-based anti-entropy</strong> to compare and reconcile data between nodes.</p>
+
+<h2>Versioning and Conflict Resolution</h2>
+
+<p>Because any node can accept writes concurrently, the system needs a way to determine which version of a value is "newest". Leaderless systems typically use one of:</p>
+
+<ul>
+  <li><strong>Last-write-wins (timestamps):</strong> Simple but can lose writes due to clock skew.</li>
+  <li><strong>Vector clocks (version vectors):</strong> Track causal history. Enable detection of concurrent writes rather than blindly discarding one.</li>
+  <li><strong>Dynamo-style versioning:</strong> Each update creates a new version with a unique (node, counter) pair. If versions are concurrent (neither causally precedes the other), both are returned to the client, which must resolve the conflict.</li>
+</ul>
+
+<div class="diagram">
+  Vector Clock Example
+  ───────────────────
+
+  Write 1 (by Node A): [A:1, B:0, C:0] → value "Alice"
+  Write 2 (by Node B): [A:1, B:1, C:0] → value "Alice_updated"
+  Write 3 (by Node A): [A:2, B:1, C:0] → value "Alice_final"
+
+  Causally ordered chain: Write 1 → Write 2 → Write 3
+
+  Write 4 (by Node C, concurrently with Write 2):
+    [A:1, B:0, C:1] → value "Bob"
+
+  Write 4 is CONCURRENT with Write 2 (neither dominates):
+    [A:1, B:1, C:0] vs [A:1, B:0, C:1]
+    Neither is a subset of the other → CONFLICT
+
+  Both versions are stored and returned to client for resolution.
+</div>
+
+<h2>Pros and Cons</h2>
+
+<table>
+  <tr><th>Advantages</th><th>Disadvantages</th></tr>
+  <tr>
+    <td class="green">No leader bottleneck -- all nodes accept writes</td>
+    <td class="red">Client must handle conflict resolution</td>
+  </tr>
+  <tr>
+    <td class="green">No leader failover needed -- always available for writes</td>
+    <td class="red">Eventual consistency by default (tunable to strong with W+R>N)</td>
+  </tr>
+  <tr>
+    <td class="green">Tunable consistency (choose W, R per operation)</td>
+    <td class="red">No ordering guarantee -- writes from different clients are unordered</td>
+  </tr>
+  <tr>
+    <td class="green">Excellent for write-heavy workloads across many keys</td>
+    <td class="red">Read repair adds overhead on the read path</td>
+  </tr>
+  <tr>
+    <td class="green">Sloppy quorum + hinted handoff provides resilience</td>
+    <td class="red">Higher client complexity (or need a smart coordinator)</td>
+  </tr>
+  <tr>
+    <td class="green">No split-brain risk (no leader election to get wrong)</td>
+    <td class="red">Monitoring inconsistency is harder</td>
+  </tr>
+</table>
+
+<h2>Real-World Examples</h2>
+
+<table>
+  <tr><th>System</th><th>N (default)</th><th>Quorum Config</th><th>Consistency Model</th><th>Notes</th></tr>
+  <tr><td><strong>Amazon DynamoDB</strong></td><td>3</td><td>W=2, R=2 (default) but client can override</td><td>Eventually consistent by default; strongly consistent option</td><td>Managed service, no client-side conflict resolution</td></tr>
+  <tr><td><strong>Apache Cassandra</strong></td><td>3 (replication factor)</td><td>QUORUM = ceil(N/2)+1 per operation</td><td>Tunable per-query (ONE, QUORUM, ALL, LOCAL_QUORUM)</td><td>Supports lightweight transactions (Paxos) for linearizable ops</td></tr>
+  <tr><td><strong>Riak</strong></td><td>3 (n_val)</td><td>W, R, DW, RW configurable per bucket</td><td>Eventual; defaults to quorum reads/writes</td><td>Uses vector clocks for sibling detection</td></tr>
+  <tr><td><strong>Voldemort</strong></td><td>2-3</td><td>Configurable W, R</td><td>Eventual with vector clocks</td><td>LinkedIn's key-value store (deprecated)</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+
+<ol>
+  <li><strong>"Explain leaderless replication and the W + R > N rule."</strong><br>
+  Answer: "In leaderless replication, there is no designated leader. Any node can accept writes. The client or coordinator sends the write to N replicas and waits for W acknowledgments. On reads, it queries R replicas and returns the most recent version. The rule W + R > N ensures that the read set and write set overlap, so at least one node with the latest data is always included in the read. For example, with N=3, W=2, R=2, we get strong consistency with good availability. With N=3, W=1, R=1, we get maximum availability but weak consistency."</li>
+
+  <li><strong>"How does DynamoDB handle consistency?"</strong><br>
+  Answer: "DynamoDB uses leaderless replication with N=3 replicas per item. By default, it uses eventually consistent reads (R=1, checking one of the three replicas), which has the lowest latency. For strongly consistent reads, the client sets ConsistentRead=true, which uses R=2, ensuring W+R>N with W=2 default writes. DynamoDB also uses read repair to fix inconsistencies and Merkle trees for background anti-entropy synchronization between replicas."</li>
+
+  <li><strong>"What is sloppy quorum and hinted handoff?"</strong><br>
+  Answer: "Sloppy quorum allows the system to maintain write availability when some replica nodes are down. Instead of waiting for the designated replicas, writes are temporarily stored on any available nodes. Hinted handoff is the mechanism where these temporary nodes forward the data back to the original replicas when they recover. This ensures that data eventually reaches its intended destination without requiring the write to fail during temporary node outages."</li>
+
+  <li><strong>"How does read repair work?"</strong><br>
+  Answer: "During a read, the coordinator contacts R nodes. If the versions returned differ, the coordinator detects which version is the most recent (using timestamps or vector clocks) and returns that to the client. It then sends the latest version back to the nodes that had stale data. This piggybacks consistency repair on normal read operations. For data that is never read, systems use background anti-entropy processes like Merkle tree comparisons to find and fix inconsistencies."</li>
+
+  <li><strong>"Compare leaderless with leader-follower replication."</strong><br>
+  Answer: "Leader-follower has a single leader for writes, providing natural ordering and simple conflict handling, but creates a write bottleneck and requires complex failover. Leaderless has no leader, so all nodes can accept writes, providing no single point of failure and no failover complexity, but requires conflict resolution at the application level and provides weaker consistency by default. Leader-follower is better for systems that need strong consistency and natural ordering. Leaderless is better for systems that prioritize write availability and can tolerate eventual consistency."</li>
+</ol>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Do not go deep into:</strong>
+  <ul>
+    <li>Merkle tree implementation details -- know what they are used for (anti-entropy), not the hash tree construction algorithm.</li>
+    <li>Gossip protocol internals (SWIM, HyParView) -- know that nodes gossip to discover membership and share state, not the protocol messages.</li>
+    <li>Consistent hashing ring implementation -- this is covered in the Sharding chapter; know the concept but skip the virtual node math.</li>
+    <li>DynamoDB internal storage format (BS-trees, transaction logs) -- these are implementation details, not design concepts.</li>
+    <li>Cassandra lightweight transaction (Paxos) internals -- know that they exist for linearizable operations, not the Paxos round details.</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Reading Sources</div>
+  <ul>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em>, Chapter 5, Section "Leaderless Replication" -- covers quorums, sloppy quorum, hinted handoff, read repair, and version vectors.</li>
+    <li>Amazon, <em>Dynamo: Amazon's Highly Available Key-value Store</em> (2007) -- the foundational paper. Focus on the quorum model, vector clocks, sloppy quorum, and hinted handoff.</li>
+    <li>Apache Cassandra documentation, <em>Consistency Levels</em> -- for understanding the tunable consistency levels (ONE, QUORUM, ALL, LOCAL_QUORUM, etc.).</li>
+    <li>Riak documentation, <em>Conflict Resolution and Vector Clocks</em> -- for understanding sibling detection and application-level conflict resolution.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="multi-leader.html">&larr; 4.2.2 Multi-Leader</a>
+  <a href="synchronous.html">4.3.1 Synchronous &rarr;</a>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.1.3 RAM (Random Access Memory)</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#3">3 Storage</a> / <a href="../index.html#3.1">3.1 Physical Storage</a> / 3.1.3
+</div>
+
+<h1>RAM (Random Access Memory)</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>RAM's role in the storage hierarchy — nanosecond access, volatile</li>
+  <li>DRAM vs SRAM and why databases use DRAM</li>
+  <li>How RAM is used for buffer pools, caches, and in-memory databases</li>
+  <li>Memory hierarchy tradeoffs: capacity vs speed vs cost</li>
+  <li>The relationship between RAM, <a href="buffer-pool.html">buffer pools</a>, and <a href="page-cache.html">OS page cache</a></li>
+</ul>
+
+<h2>Definition</h2>
+<p>RAM (Random Access Memory) is <strong>volatile, byte-addressable primary storage with nanosecond-level access times</strong>. It provides the fastest tier of storage available to the CPU for working data, but loses all contents on power loss. In database systems, RAM is the critical resource that determines how much data can be served without touching <a href="ssd.html">SSD</a> or <a href="hdd.html">HDD</a>.</p>
+
+<h2>Storage Hierarchy</h2>
+<div class="diagram">                    Speed ↑  Cost/GB ↑  Capacity ↓
+                     │
+              CPU Registers      ~0.3 ns     < 1 KB
+                     │
+              L1/L2/L3 Cache     1–10 ns     KB–MB
+                     │
+              ┌──────┴──────┐
+              │     RAM      │    50–100 ns  GB–TB
+              └──────┬──────┘
+                     │
+              ┌──────┴──────┐
+              │     SSD      │    50–500 &mu;s  256 GB–8 TB
+              └──────┬──────┘
+                     │
+              ┌──────┴──────┐
+              │     HDD      │    5–10 ms    500 GB–20 TB
+              └──────┴──────┘
+
+  RAM is ~100,000x faster than SSD for random access
+  RAM is ~10,000,000x faster than HDD for random access
+
+  But RAM is ~100x more expensive per GB than SSD
+  And ~500x more expensive per GB than HDD</div>
+
+<h2>DRAM vs SRAM</h2>
+<table>
+  <tr><th></th><th><strong>DRAM</strong></th><th><strong>SRAM</strong></th></tr>
+  <tr><td>Access time</td><td>50–100 ns</td><td class="green">1–10 ns</td></tr>
+  <tr><td>Density</td><td class="green">High (1–16 Gb per chip)</td><td>Low</td></tr>
+  <tr><td>Cost per GB</td><td class="green">$3–8</td><td class="red">$100+</td></tr>
+  <tr><td>Volatility</td><td class="red">Volatile (needs refresh)</td><td class="red">Volatile</td></tr>
+  <tr><td>Used for</td><td>Main memory, <a href="buffer-pool.html">buffer pool</a></td><td>CPU L1/L2/L3 cache</td></tr>
+  <tr><td>How it stores</td><td>Capacitor charge (needs periodic refresh)</td><td>Flip-flop (6 transistors, no refresh)</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Key point:</strong> Database servers use DRAM for their main memory. The CPU cache (SRAM) is managed by hardware and is invisible to the database. When interviewers ask about "in-memory" databases or caching, they are talking about DRAM.
+</div>
+
+<h2>RAM in Database Systems</h2>
+<p>RAM is used in several critical ways within a database server:</p>
+
+<h3>1. Buffer Pool (<a href="buffer-pool.html">dedicated topic</a>)</h3>
+<p>The largest consumer of RAM. The buffer pool caches frequently accessed database <a href="pages.html">pages</a> in memory to avoid disk I/O. Typical sizing: 50–80% of available RAM.</p>
+
+<h3>2. Query Execution Memory</h3>
+<p>Sort operations, hash joins, and intermediate result sets. If the working set exceeds available RAM, the database spills to temporary files on disk, causing dramatic performance degradation.</p>
+
+<h3>3. Log Buffer</h3>
+<p>The <a href="write-ahead-log.html">WAL</a> log buffer holds log records in memory before flushing to disk. Sized to absorb bursts of write activity.</p>
+
+<h3>4. Connection Overhead</h3>
+<p>Each database connection has a thread/process with its own stack and buffers. 10,000 connections can consume 2–10 GB of RAM just for connection state.</p>
+
+<div class="diagram">  Typical Database Server Memory Layout (128 GB RAM):
+
+  ┌────────────────────────────────────────────────────┐
+  │                 Total RAM: 128 GB                  │
+  ├────────────────────────────────────────────────────┤
+  │  Buffer Pool           80–100 GB    (62–78%)       │
+  ├────────────────────────────────────────────────────┤
+  │  OS Page Cache         8–16 GB      (6–12%)       │
+  ├────────────────────────────────────────────────────┤
+  │  Connection Buffers    4–8 GB       (3–6%)        │
+  ├────────────────────────────────────────────────────┤
+  │  Query Execution       4–8 GB       (3–6%)        │
+  │  (Sort, Hash, Temp)                                 │
+  ├────────────────────────────────────────────────────┤
+  │  Log Buffer + Other    2–4 GB       (1–3%)        │
+  ├────────────────────────────────────────────────────┤
+  │  OS Kernel             2–4 GB       (1–3%)        │
+  └────────────────────────────────────────────────────┘</div>
+
+<h2>Memory Bandwidth vs Latency</h2>
+<p>Two distinct performance dimensions matter for databases:</p>
+<table>
+  <tr><th></th><th>Latency</th><th>Bandwidth</th></tr>
+  <tr><td>What it measures</td><td>Time for a single access</td><td>Total data throughput per second</td></tr>
+  <tr><td>DDR4/DDR5 value</td><td>~75–100 ns</td><td>~25–50 GB/s (per channel)</td></tr>
+  <tr><td>Why it matters</td><td><a href="buffer-pool.html">Buffer pool</a> page lookups (pointer chasing in B-trees)</td><td>Table scans, batch processing, analytics</td></tr>
+  <tr><td>Bottleneck</td><td>Pointer-chasing patterns (random access)</td><td>Vectorized processing, columnar scans</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Interview insight:</strong> Memory bandwidth is often the real bottleneck for analytical queries, not latency. A full table scan reading 10 GB of data at 50 GB/s bandwidth takes 200 ms — fast. But 10 GB of random 4KB page reads at 100 ns each through pointer chasing takes ~100 ms per GB = 1 second. This is why in-memory databases like Redis use optimized data structures (compact, cache-line friendly) rather than raw hash tables.
+</div>
+
+<h2>NUMA Considerations</h2>
+<p>Modern multi-socket servers use NUMA (Non-Uniform Memory Access). Memory attached to one CPU socket has lower latency and higher bandwidth for that socket's cores:</p>
+<ul>
+  <li><strong>Local access</strong>: ~75 ns latency, full bandwidth</li>
+  <li><strong>Remote access</strong>: ~120–150 ns latency, reduced bandwidth, crosses QPI/UPI interconnect</li>
+</ul>
+<p>Database buffer pools must be NUMA-aware — binding memory to sockets avoids the ~2x latency penalty for remote memory access. PostgreSQL, MySQL, and Oracle all have NUMA configuration options.</p>
+
+<h2>Cost Analysis</h2>
+<table>
+  <tr><th>Storage Tier</th><th>Cost/GB (2024)</th><th>1 TB Cost</th></tr>
+  <tr><td><a href="hdd.html">HDD</a></td><td class="green">$0.02–0.04</td><td class="green">$20–40</td></tr>
+  <tr><td><a href="ssd.html">SSD</a> (NVMe)</td><td>$0.05–0.15</td><td>$50–150</td></tr>
+  <tr><td>RAM (DDR5)</td><td class="red">$3–8</td><td class="red">$3,000–8,000</td></tr>
+</table>
+<p>This 100x cost gap between SSD and RAM is why caching and intelligent data placement are fundamental to database architecture. You cannot simply "put everything in RAM" at scale.</p>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"How much RAM does a database server need?"</strong><br>It depends on the working set. The golden rule: <strong>buffer pool RAM should cover your hot dataset</strong>. If your active dataset is 100 GB, you need at least 120–150 GB of RAM (buffer pool + overhead). If the hot data does not fit in RAM, you will see excessive disk reads and latency spikes. See: <a href="buffer-pool.html">Buffer Pool</a></li>
+  <li><strong>"Why not just use an in-memory database for everything?"</strong><br>Cost (RAM is 100x more expensive than SSD per GB), volatility (power loss = data loss without replication), and data size (many datasets exceed single-server RAM). In-memory databases like Redis and Memcached complement persistent databases rather than replacing them.</li>
+  <li><strong>"What happens when a query needs more memory than available?"</strong><br>The database spills to disk (temporary files). Sorts, hash joins, and aggregations that exceed the memory limit degrade from memory-speed (~100 ns) to disk-speed (~100 &mu;s for SSD), a 1000x slowdown. This is why <code>work_mem</code> (PostgreSQL) or <code>sort_buffer_size</code> (MySQL) tuning is critical for query performance.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>DRAM refresh circuitry details and timing</li>
+    <li>DDR4 vs DDR5 electrical signaling specifics</li>
+    <li>ECC memory error correction mechanics</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Database Internals" by Alex Petrov</strong> — Chapter 2 (Buffer Pool, Memory Management)</li>
+    <li><strong>"Designing Data-Intensive Applications" by Martin Kleppmann</strong> — Chapter 3 (LSM-Trees, B-Trees)</li>
+    <li><strong>"What Every Programmer Should Know About Memory" by Ulrich Drepper</strong></li>
+    <li><strong>Use the Index, Luke</strong> — use-the-index-luke.com (explains memory and I/O costs)</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="ssd.html">&larr; 3.1.2 SSD</a>
+  <a href="pages.html">Next: 3.2.1 Database Pages &rarr;</a>
+</div>
+
+</body>
+</html>

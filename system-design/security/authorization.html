@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>14.2 — Authorization</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">Security</a> / 14.2 Authorization</div>
+<h1>Authorization (AuthZ)</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand authorization as the process of determining what an authenticated user can do, the three main models (ACL, RBAC, ABAC), and how to design an authorization system for a microservices architecture.</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>Authorization (AuthZ)</strong> is the process of determining what actions an authenticated user (or service) is permitted to perform. It answers the question "what can you do?" and enforces access control based on identity, role, attributes, or policies.
+</div>
+
+<p>Authentication establishes identity. Authorization establishes permissions. Both are required for security, but they serve different purposes. A user can be authenticated but not authorized (valid login, but no access to a resource).</p>
+
+<h2>ACL (Access Control List)</h2>
+<div class="callout">
+  <strong>ACL</strong> associates each resource with a list of users (or groups) who have access. Every resource maintains its own access list.
+</div>
+
+<pre>
+# File-level ACL:
+document_123:
+  - user_456: read, write
+  - user_789: read
+  - group_managers: read, write, delete
+
+# Check: Can user_789 write to document_123?
+# → Look up document_123's ACL → user_789 only has read → DENY
+</pre>
+
+<div class="callout yellow">
+  <strong>ACL limitation:</strong> ACLs are resource-centric, not user-centric. To find all resources a user can access, you must scan every resource's ACL. This does not scale when you have millions of resources.
+</div>
+
+<h2>RBAC (Role-Based Access Control)</h2>
+<div class="callout">
+  <strong>RBAC</strong> assigns permissions to roles, and roles to users. Instead of managing permissions per-user, you assign roles (admin, editor, viewer) that bundle related permissions.
+</div>
+
+<div class="diagram">
+  RBAC Model:
+
+  ┌──────────┐  assigned to  ┌──────────┐  has permissions  ┌──────────┐
+  │  User    │──────────────▶│  Role    │─────────────────▶│Permission│
+  │ "alice"  │               │ "admin"  │                  │ read:users│
+  └──────────┘               └──────────┘                  │ write:users│
+                                                            │ delete:users│
+  User "alice" is assigned role "admin"
+  Role "admin" has permissions: read, write, delete on users resource
+  Therefore: alice can read, write, delete users
+
+  Roles hierarchy:
+  super_admin ──▶ admin ──▶ editor ──▶ viewer
+  (inherits all permissions from child roles)
+</div>
+
+<h2>ABAC (Attribute-Based Access Control)</h2>
+<div class="callout">
+  <strong>ABAC</strong> evaluates access based on attributes of the user, resource, action, and environment. Instead of static roles, policies use conditions: user.department == resource.owner_department AND resource.status == "approved".
+</div>
+
+<pre>
+# ABAC Policy example:
+Policy: "Users can edit documents they own, or if they are managers"
+
+IF user.role == "manager"
+   OR user.id == document.owner_id
+THEN allow action="edit" resource="document"
+
+# Contextual attributes:
+IF user.department == resource.department
+   AND time.hour BETWEEN 9 AND 17
+   AND user.ip IN approved_networks
+THEN allow action="view" resource="financial_reports"
+</pre>
+
+<h2>Comparison</h2>
+<table>
+  <tr><th>Dimension</th><th>ACL</th><th>RBAC</th><th>ABAC</th></tr>
+  <tr><td>Granularity</td><td>Per-resource</td><td>Per-role (bundles)</td><td>Per-attribute (fine-grained)</td></tr>
+  <tr><td>Scalability</td><td class="red">Poor at scale</td><td class="green">Good (manage roles)</td><td class="green">Good (manage policies)</td></tr>
+  <tr><td>Flexibility</td><td class="red">Rigid</td><td>Medium</td><td class="green">High (context-aware)</td></tr>
+  <tr><td>Complexity</td><td class="green">Simple</td><td>Medium</td><td class="red">Complex (policy engine needed)</td></tr>
+  <tr><td>Use case</td><td>File systems, per-object access</td><td>Internal apps, enterprise SaaS</td><td>Multi-tenant, contextual, compliance</td></tr>
+  <tr><td>Example</td><td>AWS S3 bucket policy</td><td>AWS IAM roles</td><td>AWS IAM policies, OPA</td></tr>
+</table>
+
+<h2>Authorization in Microservices</h2>
+<div class="diagram">
+  Approach 1: Centralized Policy Engine
+
+  ┌──────────┐     ┌──────────────┐     ┌──────────────┐
+  │ Service A │────▶│ Policy Engine│────▶│ Policy Store │
+  └──────────┘     │ (OPA / Casbin)│     │ (rules DB)    │
+  ┌──────────┐     └──────────────┘     └──────────────┘
+  │ Service B │────▶│
+  ┌──────────┐     │
+  │ Service C │────▶│
+
+  Each service calls: "Can user X do action Y on resource Z?"
+  Policy engine evaluates rules and returns ALLOW/DENY
+
+
+  Approach 2: Token-based (claims in JWT)
+
+  ┌──────────┐  JWT with claims:      ┌──────────┐
+  │ Client   │  { role: "admin",      │ Service A │ ← validates claims locally
+  │          │    dept: "engineering"│          │
+  └──────────┘  }                     └──────────┘
+
+  Each service extracts claims from JWT and checks locally.
+  No network call needed.
+  Trade-off: less flexible (claims fixed at token issue time)
+</div>
+
+<div class="callout green">
+  <strong>Interview tip:</strong> "For a microservices architecture, I would use RBAC for coarse-grained access (roles in JWT) and ABAC via a central policy engine (OPA) for fine-grained decisions. The API gateway handles coarse-grained checks (is this user authenticated and has a valid role?), and each service handles fine-grained checks (can this user access this specific resource?)."
+</div>
+
+<h2>Common Anti-Patterns</h2>
+<ul>
+  <li><strong>Only checking at the API gateway:</strong> If the gateway checks auth but internal services trust all intra-cluster traffic, a compromised service bypasses all authorization.</li>
+  <li><strong>Hardcoding roles in code:</strong> <code>if user.role == "admin"</code> scattered across code. Changes require redeployment.</li>
+  <li><strong>Ignoring service-to-service auth:</strong> Services calling other services should also authenticate and authorize.</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What is authorization and how is it different from authentication?</li>
+  <li>Compare ACL, RBAC, and ABAC.</li>
+  <li>How would you implement authorization in a microservices architecture?</li>
+  <li>What is OPA and how does it help with authorization?</li>
+  <li>How would you handle authorization at the API gateway vs within each service?</li>
+  <li>What happens when a user's role changes and they have a valid JWT?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid diving into:</strong> OPA Rego syntax, specific Casbin policy definitions, or SAML/OIDC protocol details. Focus on the three models (ACL, RBAC, ABAC), when to use each, and the microservices authorization architecture.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><strong>OWASP Authorization Cheat Sheet</strong> — cheatsheetseries.owasp.org</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Documentation</div>
+  <ul>
+    <li><strong>Open Policy Agent (OPA)</strong> — openpolicyagent.org — Policy engine for cloud-native</li>
+    <li><strong>AWS IAM Policies</strong> — docs.aws.amazon.com/IAM — Real-world ABAC examples</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="authentication.html">&larr; Previous: Authentication</a>
+  <a href="oauth.html">Next: OAuth 2.0 &rarr;</a>
+</div>
+</body>
+</html>

@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.6.2 Leader Election - System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">5 Distributed Systems</a> / <a href="index.html">5.6 Consensus</a> / 5.6.2
+</div>
+
+<h1>5.6.2 Leader Election</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<div class="callout green">
+  <strong>Goal:</strong> Understand why distributed systems need leaders, how leader election works across different algorithms, and be able to walk through the Raft election process in detail. Know the failure modes and how to handle split votes.
+</div>
+
+<h2>Definition</h2>
+
+<p><strong>Leader election</strong> is the process by which nodes in a distributed system agree on a single coordinator (leader) responsible for making decisions, ordering operations, or managing replication. It is one of the most common instances of the consensus problem in real systems.</p>
+
+<h2>Why Systems Elect Leaders</h2>
+
+<p>Many distributed algorithms simplify coordination by designating a single leader:</p>
+
+<ul>
+  <li><strong>Single point of decision-making:</strong> The leader decides the order of operations, avoiding the complexity of coordinating multiple decision-makers.</li>
+  <li><strong>Simplified replication:</strong> Followers replicate from the leader. No complex merge logic needed.</li>
+  <li><strong>Client routing:</strong> Clients can send all writes to the leader, simplifying the client protocol.</li>
+  <li><strong>Failure detection:</strong> The leader monitors followers; if the leader fails, a new election is triggered.</li>
+</ul>
+
+<div class="callout yellow">
+  <strong>Tradeoff:</strong> Leader-based systems create a single point of throughput (all writes go through the leader) and a potential availability bottleneck if election latency is high. Leaderless systems (Dynamo) avoid this but sacrifice strong consistency.
+</div>
+
+<h2>Bully Algorithm</h2>
+
+<p>The simplest election algorithm. Assumes all nodes have unique IDs and communicate via reliable message passing.</p>
+
+<h3>Process</h3>
+<ol>
+  <li>When node N detects the leader has failed, it sends an <strong>ELECTION</strong> message to all nodes with higher IDs.</li>
+  <li>If N receives no response within a timeout, it becomes the leader and sends a <strong>COORDINATOR</strong> message to all nodes.</li>
+  <li>If a higher-ID node responds, that node takes over the election. N stops.</li>
+  <li>The highest-ID alive node always wins.</li>
+</ol>
+
+<div class="diagram">
+  Bully Algorithm Election
+  ───────────────────────
+  Nodes: [1] [2] [3] [4] [5]   (IDs)
+
+  Leader (5) fails!
+       │
+  Node 3 initiates election:
+  [3] ──ELECTION──→ [4] ──ELECTION──→ [5] ✗ (dead)
+       │                │
+  [4] responds "OK"     │
+       │                │
+  Node 4 takes over:    │
+  [4] ──ELECTION──→ [5] ✗
+  [4] ──COORDINATOR──→ [1] [2] [3]
+
+  Result: Node 4 is the new leader (highest ID alive)
+</div>
+
+<p><strong>Weaknesses:</strong> O(n) messages per election. Requires reliable message delivery. The "bully" name comes from the fact that the highest-ID node always wins regardless of who started the election.</p>
+
+<h2>Raft-Style Election (Terms, Timeouts, Votes)</h2>
+
+<p>Raft uses a term-based election mechanism with randomized timeouts to ensure safety and liveness.</p>
+
+<h3>Key Concepts</h3>
+<ul>
+  <li><strong>Term:</strong> A monotonically increasing epoch number. Each term has at most one leader.</li>
+  <li><strong>Election timeout:</strong> A randomized timer (150-300ms in Raft). If a follower receives no heartbeat within this timeout, it becomes a candidate.</li>
+  <li><strong>Vote:</strong> A follower grants its vote to at most one candidate per term (first-come-first-served with log completeness check).</li>
+</ul>
+
+<div class="diagram">
+  Raft Election Process
+  ─────────────────────
+
+  Term 1                              Term 2
+  ─────                              ─────
+  Leader [A] sends heartbeats         [A] crashes
+
+  [B] timeout fires ──→ [B] becomes Candidate (term 2)
+         │
+         ├──RequestVote──→ [C]  (C votes for B ✓)
+         ├──RequestVote──→ [D]  (D votes for B ✓)
+         └──RequestVote──→ [E]  (E votes for B ✓)
+
+  B gets majority → B becomes Leader (term 2)
+  B sends AppendEntries (heartbeat) to all followers
+
+  State transitions:
+  Follower ──timeout──→ Candidate ──majority votes──→ Leader
+     ↑                       │
+     └──higher term discovered──┘
+</div>
+
+<h3>Election Rules</h3>
+
+<table>
+  <tr>
+    <th>Rule</th>
+    <th>Description</th>
+  </tr>
+  <tr>
+    <td>One vote per term</td>
+    <td>A follower votes for at most one candidate per term (voting for self counts)</td>
+  </tr>
+  <tr>
+    <td>Log completeness</td>
+    <td>A candidate must have a log at least as complete as the voter's to receive a vote</td>
+  </tr>
+  <tr>
+    <td>Term always increases</td>
+    <td>Nodes never decrease their current term; they adopt the higher term from any message</td>
+  </tr>
+  <tr>
+    <td>Leader uniqueness</td>
+    <td>At most one leader per term (enforced by the one-vote rule + majority)</td>
+  </tr>
+</table>
+
+<h2>ZooKeeper Leader Election</h2>
+
+<p>ZooKeeper uses Zab (ZooKeeper Atomic Broadcast) for leader election, which is similar to Raft in concept but differs in implementation:</p>
+
+<ol>
+  <li>Nodes create an ephemeral sequential znode under <code>/election</code>.</li>
+  <li>The node with the smallest sequence number is the leader.</li>
+  <li>Each node watches the znode with the next-lower sequence number.</li>
+  <li>If the watched node disappears (leader crash), the watcher triggers and the next node becomes leader.</li>
+</ol>
+
+<div class="callout">
+  <strong>ZooKeeper vs. Raft:</strong> ZooKeeper's election uses the ZooKeeper service itself (bootstrap problem solved by the ensemble), while Raft's election is self-contained. ZooKeeper's approach leverages ephemeral nodes which automatically disappear when a session expires, providing built-in failure detection.
+</div>
+
+<h2>Split Vote Handling</h2>
+
+<p>A <strong>split vote</strong> occurs when no candidate receives a majority of votes in an election round. This can happen if two candidates start elections in the same term (e.g., because their election timeouts fired at nearly the same time).</p>
+
+<div class="diagram">
+  Split Vote Scenario (5 nodes, majority = 3)
+  ─────────────────────────────────────────
+
+  Node [B] becomes candidate (term 4)     Node [C] becomes candidate (term 4)
+       │                                        │
+  B gets votes: B, D                   C gets votes: C, E
+  Total: 2 votes (< 3)                 Total: 2 votes (< 3)
+
+  ❌ No majority → Election fails → Wait for new timeout → New term (5)
+</div>
+
+<h3>Strategies to Avoid Split Votes</h3>
+
+<ul>
+  <li><strong>Randomized election timeouts:</strong> Raft's primary mechanism. By randomizing the timeout (e.g., 150-300ms), the probability of two nodes timing out simultaneously is low.</li>
+  <li><strong>Pre-vote phase:</strong> A candidate first checks if it can win before actually incrementing the term. Avoids disrupting the current leader.</li>
+  <li><strong>Priority-based voting:</strong> Some implementations give preference to nodes with more complete logs or higher priority (etcd's leadership transfer).</li>
+</ul>
+
+<h2>Election Timeout Tuning</h2>
+
+<table>
+  <tr>
+    <th>Parameter</th>
+    <th>Too Low</th>
+    <th>Too High</th>
+  </tr>
+  <tr>
+    <td>Election timeout</td>
+    <td class="red">Unnecessary elections, leader churn, wasted bandwidth</td>
+    <td class="red">Slow failover, longer unavailability after leader crash</td>
+  </tr>
+  <tr>
+    <td>Heartbeat interval</td>
+    <td class="red">High network traffic, CPU overhead</td>
+    <td class="red">Followers may timeout prematurely, triggering unnecessary elections</td>
+  </tr>
+  <tr>
+    <td>Randomization range</td>
+    <td class="red">Higher probability of split votes</td>
+    <td class="red">Slower elections (worst-case timeout is large)</td>
+  </tr>
+</table>
+
+<div class="callout">
+  <strong>Best practice:</strong> Heartbeat interval should be significantly less than the minimum election timeout (e.g., heartbeat every 50ms, election timeout 150-300ms). The ratio of broadcast-time to election-timeout should be at least 10:1 for good reliability.
+</div>
+
+<h2>Common Interview Questions</h2>
+
+<ul>
+  <li>Walk me through how Raft leader election works.</li>
+  <li>What happens if two nodes start an election at the same time?</li>
+  <li>How does Raft prevent split votes?</li>
+  <li>Why does randomized election timeout help?</li>
+  <li>How does ZooKeeper handle leader election differently from Raft?</li>
+  <li>What happens to a running system when the leader crashes?</li>
+  <li>How would you tune election timeouts for a system spanning multiple datacenters?</li>
+  <li>Can a follower reject a vote request? Under what conditions?</li>
+</ul>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Do NOT implement the Bully algorithm</strong> in interview code -- it is rarely used in production. Skip Ring algorithm elections unless specifically asked. Do not memorize ZooKeeper's internal implementation details beyond the ephemeral sequential znode approach. Focus your preparation on Raft-style elections, which are the most commonly expected at FAANG interviews.
+</div>
+
+<div class="source">
+  <div class="source-label">Reading Sources</div>
+  <ul>
+    <li>In Search of an Understandable Consensus Algorithm (Ongaro &amp; Ousterhout, 2014) -- Raft paper, Section 5.2: Leader Election</li>
+    <li>Zab: High-performance broadcast for订单ing (Junqueira, Reed, Serafini, 2011)</li>
+    <li>Designing Data-Intensive Applications (Kleppmann) -- Chapter 5: Replication, Leader Election section</li>
+    <li>etcd Raft Implementation Documentation -- electiontimeout and pre-vote design</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="why-consensus.html">&larr; 5.6.1 Why Consensus</a>
+  <a href="heartbeats.html">5.6.3 Heartbeats &rarr;</a>
+</div>
+
+</body>
+</html>

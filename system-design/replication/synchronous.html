@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.3.1 Synchronous Replication</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">4 Replication</a> / <a href="why-replication.html">4.3 Replication Types</a> / 4.3.1
+</div>
+
+<h1>4.3.1 Synchronous Replication</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the strongest form of replication guarantee: the leader waits for followers to acknowledge writes before committing. Know the zero-data-loss guarantee, the latency cost (writes are as slow as the slowest follower), and when to choose synchronous replication over its alternatives.</p>
+
+<h2>Definition</h2>
+
+<div class="callout">
+  <strong>Synchronous replication</strong> means the leader does not report a write as successful (does not commit) until at least one follower has confirmed that it has received and persisted the write. The client's write request blocks until this acknowledgment is received.
+</div>
+
+<p>This is the replication type with the strongest data durability guarantee: if the leader crashes, no committed data is lost because the data is already safely on at least one follower.</p>
+
+<h2>How It Works</h2>
+
+<div class="diagram">
+  Synchronous Replication: Write Flow
+  ───────────────────────────────────
+
+  Client
+   │
+   │  WRITE: UPDATE accounts SET balance = 500 WHERE id = 7
+   │
+   ▼
+  ┌──────────────────────────────────────────┐
+  │              LEADER                       │
+  │                                          │
+  │  1. Receive write request                │
+  │  2. Write to WAL locally                 │
+  │  3. Send write to FOLLOWER (sync wait)   │
+  │  4. ◀── WAIT for follower ACK ──         │
+  │  5. Commit write                         │
+  │  6. Send ACK to client                   │
+  │                                          │
+  └──────────────┬───────────────────────────┘
+                 │ (step 3)
+                 │
+  ┌──────────────▼───────────────────────────┐
+  │           FOLLOWER                       │
+  │                                          │
+  │  1. Receive write from leader            │
+  │  2. Write to WAL                         │
+  │  3. Send ACK to leader  ─────────────────┘
+  │                                          │
+  └──────────────────────────────────────────┘
+
+  Total write latency = Leader local write + Network RTT + Follower local write
+  Client is blocked during steps 3-4 (sync wait)
+</div>
+
+<div class="callout">
+  <strong>Key guarantee:</strong> The write is on at least TWO machines (leader + follower) before the client gets an ACK. If the leader crashes after step 5 but before step 6, the client may timeout and retry, but no data is lost -- the follower has the committed data.
+</div>
+
+<h2>Performance Impact</h2>
+
+<p>The critical performance characteristic of synchronous replication is that <strong>write latency equals the slowest follower in the synchronous set</strong>.</p>
+
+<div class="diagram">
+  Latency Breakdown (Synchronous Replication)
+  ────────────────────────────────────────────
+
+  t=0ms     Client sends write to leader
+  t=2ms     Leader writes to local WAL (disk I/O)
+  t=3ms     Leader sends write to follower (network send)
+  t=6ms     Follower receives write (network + 3ms RTT)
+  t=8ms     Follower writes to WAL (disk I/O)
+  t=9ms     Follower sends ACK (network send)
+  t=12ms    Leader receives ACK (network + 3ms RTT)
+  t=12ms    Leader commits and ACKs client
+
+  Total latency: ~12ms
+
+  Compare with asynchronous replication:
+  t=0ms     Client sends write
+  t=2ms     Leader writes to WAL
+  t=2ms     Leader ACKs client immediately (no wait)
+  Total latency: ~2ms
+
+  SYNCHRONOUS is ~6x SLOWER in this example.
+</div>
+
+<p>The latency multiplier depends on:</p>
+
+<table>
+  <tr><th>Factor</th><th>Impact</th><th>Mitigation</th></tr>
+  <tr><td>Network RTT to follower</td><td>Dominant factor; each additional millisecond of RTT adds to write latency</td><td>Co-locate followers in the same rack/DC; dedicated network</td></tr>
+  <tr><td>Follower disk speed</td><td>Slow follower disk means slow ACK</td><td>Use SSDs for all replicas; ensure similar hardware</td></tr>
+  <tr><td>Number of sync followers</td><td>More sync followers = wait for more ACKs = higher latency</td><td>Keep the number of required sync followers minimal (typically 1-2)</td></tr>
+  <tr><td>Follower load</td><td>If follower is under heavy read load, ACKs may be delayed</td><td>Dedicated replica for sync (not serving reads)</td></tr>
+</table>
+
+<h2>When to Use Synchronous Replication</h2>
+
+<div class="callout green">
+  <strong>Interview Tip:</strong> The answer to "when should I use synchronous replication?" is always: "When data loss is unacceptable." Be specific about what kinds of data fall into this category.
+</div>
+
+<ul>
+  <li><strong>Financial transactions:</strong> You cannot tell a customer "we lost your payment due to a server crash." Every committed write must be durable.</li>
+  <li><strong>Account credentials and auth tokens:</strong> Lost authentication data means users are locked out of their accounts.</li>
+  <li><strong>System metadata:</strong> Schema changes, configuration updates, service discovery data. Inconsistency here can crash the entire system.</li>
+  <li><strong>Regulatory requirements:</strong> Financial regulations (SOX, PCI-DSS) may mandate zero data loss for certain data types.</li>
+  <li><strong>Order-sensitive operations:</strong> Where the ordering and completeness of writes is critical and cannot be reconstructed.</li>
+</ul>
+
+<h2>Synchronous vs. Asynchronous Comparison</h2>
+
+<table>
+  <tr><th>Property</th><th>Synchronous</th><th>Asynchronous</th></tr>
+  <tr><td><strong>Data loss on leader crash</strong></td><td class="green">None (committed data on follower)</td><td class="red">Possible (unreplicated writes lost)</td></tr>
+  <tr><td><strong>Write latency</strong></td><td class="red">High (blocked by follower ACK)</td><td class="green">Low (immediate ACK)</td></tr>
+  <tr><td><strong>Write throughput</strong></td><td class="red">Lower (serialization at sync point)</td><td class="green">Higher (pipeline writes)</td></tr>
+  <tr><td><strong>Replica lag</strong></td><td class="green">Zero (follower is always up-to-date)</td><td class="red">May lag behind leader</td></tr>
+  <tr><td><strong>Stale reads</strong></td><td class="green">None for committed data</td><td class="red">Possible until replication catches up</td></tr>
+  <tr><td><strong>Follower blocking</strong></td><td class="red">Slow follower blocks ALL writes</td><td class="green">No blocking; writes proceed regardless</td></tr>
+  <tr><td><strong>Complexity</strong></td><td>Moderate</td><td>Low</td></tr>
+</table>
+
+<h2>Real-World Examples</h2>
+
+<table>
+  <tr><th>System</th><th>Synchronous Replication Support</th><th>Notes</th></tr>
+  <tr><td><strong>PostgreSQL</strong></td><td>synchronous_standby_names setting</td><td>Can require N sync standbys; common for financial systems</td></tr>
+  <tr><td><strong>MySQL</strong></td><td>Not natively; use semi-sync or Group Replication</td><td>Fully synchronous is rare in MySQL; semi-sync is the practical compromise</td></tr>
+  <tr><td><strong>Oracle</strong></td><td>Data Guard in "SYNC" mode</td><td>Zero data loss (ZDL) guarantee; commonly used in banking</td></tr>
+  <tr><td><strong>CockroachDB</strong></td><td>Raft consensus (effectively synchronous)</td><td>All writes go through Raft; committed writes survive any single node failure</td></tr>
+  <tr><td><strong>Google Spanner</strong></td><td>Paxos-based (effectively synchronous)</td><td>Uses TrueTime for ordering; strong consistency across regions</td></tr>
+  <tr><td><strong>etcd</strong></td><td>Raft consensus</td><td>All writes through Raft leader; majority must acknowledge</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+
+<ol>
+  <li><strong>"Explain synchronous replication."</strong><br>
+  Answer: "In synchronous replication, the leader waits for one or more followers to confirm they have received and persisted a write before acknowledging it to the client. This means every committed write exists on at least two machines. The tradeoff is write latency: the leader is blocked until the follower responds, so total latency includes the round trip to the follower plus the follower's write time. The main benefit is zero data loss -- if the leader crashes, no committed data is lost."</li>
+
+  <li><strong>"What is the performance impact of synchronous replication?"</strong><br>
+  Answer: "Write latency roughly doubles (or more) compared to asynchronous replication because the leader must wait for a network round trip to the follower and the follower's disk write. If the follower is slow or the network has high latency, the impact is worse. However, the benefit is that read-after-write consistency is guaranteed and no data can be lost on leader failure. The throughput impact is also significant because writes are serialized at the sync point -- the leader cannot pipeline writes as aggressively."</li>
+
+  <li><strong>"When would you choose synchronous over asynchronous replication?"</strong><br>
+  Answer: "I choose synchronous replication when data loss is unacceptable: financial transactions, authentication data, system metadata, and any data covered by regulatory requirements. For most other data types -- user activity logs, analytics events, social feeds -- asynchronous replication is acceptable because occasional data loss on leader crash is tolerable. In practice, many systems use a hybrid: synchronous for critical data paths and asynchronous for the rest."</li>
+</ol>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Do not go deep into:</strong>
+  <ul>
+    <li>PostgreSQL synchronous_standby_names configuration syntax and options.</li>
+    <li>Disk I/O scheduling and WAL flush mechanisms at the OS level (fsync, O_DIRECT).</li>
+    <li>Network transport optimization (TCP vs. RDMA for replication traffic).</li>
+    <li>Multi-sync-follower topologies (daisy-chaining synchronous replicas).</li>
+    <li>Specific storage engine internals for how writes are flushed to disk.</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Reading Sources</div>
+  <ul>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em>, Chapter 5, Section "Synchronous vs. Asynchronous Replication" -- the canonical comparison of replication timing.</li>
+    <li>PostgreSQL Documentation, <em>High Availability, Load Balancing, and Replication</em> -- specifically the synchronous replication section.</li>
+    <li>Oracle Data Guard Concepts Guide, <em>Redo Transport Services: SYNC vs. ASYNC</em> -- for understanding enterprise-grade synchronous replication.</li>
+    <li>High Performance MySQL (O'Reilly), Chapter "Replication" -- covers MySQL's approach to sync and semi-sync replication.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="leaderless.html">&larr; 4.2.3 Leaderless</a>
+  <a href="asynchronous.html">4.3.2 Asynchronous &rarr;</a>
+</div>
+
+</body>
+</html>

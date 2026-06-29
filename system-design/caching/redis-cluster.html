@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.6.2 Redis Cluster</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">7 Caching</a> / <a href="index.html">7.6 Redis</a> / 7.6.2
+</div>
+
+<h1>Redis Cluster</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand how Redis Cluster enables horizontal scaling of Redis across multiple nodes. Know the hash slot mechanism, master-replica topology, client-side routing, failover behavior, and the critical limitations around cross-slot operations. Be ready to discuss trade-offs against client-side sharding and proxy-based approaches.</p>
+
+<h2>Definition</h2>
+<p><strong>Redis Cluster</strong> is Redis's native solution for horizontal scaling and high availability. It distributes data across multiple Redis nodes using a fixed set of 16384 hash slots. Each master node owns a subset of slots, and replicas provide failover. Clients receive redirections when accessing a key on the wrong node.</p>
+
+<div class="callout">
+  <strong>Key insight:</strong> Redis Cluster provides sharding <em>and</em> replication in a single deployment model. Unlike client-side sharding (which requires application logic to manage partitions) or proxy-based solutions (Twemproxy, Codis), Redis Cluster embeds routing metadata directly in the protocol -- clients learn the slot-to-node mapping and self-correct after redirects.
+</div>
+
+<h2>Hash Slots</h2>
+<p>Redis Cluster uses a fixed hash space of <strong>16384 hash slots</strong>. Each key is mapped to a slot via: <code>CRC16(key) % 16384</code>. Each master node is assigned a contiguous range of slots.</p>
+
+<div class="diagram">
+ Redis Cluster with 3 Masters + 3 Replicas
+
+  16384 Hash Slots:
+  ┌─────────────┬──────────────┬─────────────┐
+  │  Slots       │  Slots       │  Slots      │
+  │  0 - 5460    │  5461 - 10922│  10923 -    │
+  │              │              │  16383      │
+  └──────┬───────┴──────┬───────┴──────┬──────┘
+         │              │              │
+    Master A        Master B       Master C
+    Port 7000       Port 7001      Port 7002
+         │              │              │
+    Replica A'       Replica B'     Replica C'
+    Port 7003        Port 7004      Port 7005
+
+  Key routing:
+    SET user:1001 "Alice"
+      CRC16("user:1001") % 16384 = 8923 → Master B (slots 5461-10922)
+
+    GET user:1001
+      Client sends to Master A → MOVED 8923 10.0.0.2:7001
+      Client updates local map → retries directly to Master B
+</div>
+
+<h3>Hash Tags</h3>
+<p>Keys enclosed in <code>{}</code> use only the content inside the braces for hashing. This allows related keys to be placed on the same slot, enabling multi-key operations.</p>
+<pre>
+# Both keys hash to the SAME slot (only "user1001" is hashed)
+SET {user1001}:profile '{"name":"Alice"}'
+SET {user1001}:sessions "abc123"
+
+# MGET works because both keys are on the same slot
+MGET {user1001}:profile {user1001}:sessions
+</pre>
+
+<h2>Master-Replica Topology</h2>
+<p>Each master has one or more replicas. If a master fails, its replicas participate in an election (Raft-like consensus using gossip protocol). The replica with the most recent replication offset becomes the new master.</p>
+
+<div class="diagram">
+ Failover Scenario:
+
+  Before failure:
+    Master B (healthy) ←── Replica B' (in sync)
+    Clients route to Master B
+
+  Master B crashes:
+    1. Replica B' detects master is down (gossip + PING timeout)
+    2. Replica B' requests election from majority of masters
+    3. Other masters vote → Replica B' promoted to Master
+    4. Clients receive MOVED redirects to new Master B' (former replica)
+
+  After failover:
+    Master B' (formerly Replica B')  ←── (need new replica)
+    Clients route to Master B' at new address
+</div>
+
+<h2>Client-Side Routing</h2>
+<p>Redis Cluster clients maintain a local mapping of hash slots to nodes. The routing flow:</p>
+<ol>
+  <li>Client computes the slot for a key: <code>CRC16(key) % 16384</code></li>
+  <li>Client looks up the slot in its local map → sends command to the owning node</li>
+  <li>If the mapping is stale, the node responds with <code>MOVED &lt;slot&gt; &lt;ip:port&gt;</code></li>
+  <li>Client updates its local map and retries the command to the correct node</li>
+</ol>
+
+<div class="callout yellow">
+  <strong>Smart vs Dumb clients:</strong> A "smart" client (Jedis, redis-py-cluster) maintains the full slot map locally and proactively routes. A "dumb" client sends every command to a random node and follows MOVED redirects. Smart clients reduce round trips but must handle map refresh on resharding.
+</div>
+
+<h2>Cross-Slot Limitations</h2>
+<div class="callout red">
+  <strong>Critical limitation:</strong> Multi-key operations (MGET, MSET, pipeline, Lua scripts, transactions) only work when <em>all keys</em> map to the same hash slot. If keys are on different slots, Redis returns a <code>CROSSSLOT</code> error. This is a fundamental constraint of the hash-slot architecture.
+</div>
+<ul>
+  <li><strong>MGET/MSET across slots:</strong> Must use hash tags to co-locate keys, or issue separate commands per slot.</li>
+  <li><strong>Lua scripts:</strong> All keys accessed by a Lua script must be on the same slot (or use hash tags).</li>
+  <li><strong>Transactions (MULTI/EXEC):</strong> Same constraint -- all keys must be on one slot.</li>
+  <li><strong>Key enumeration:</strong> <code>KEYS *</code> and <code>SCAN</code> only iterate over one node's keys, not the entire cluster.</li>
+</ul>
+
+<h2>Resharding</h2>
+<p>Moving hash slots between nodes for capacity rebalancing. Redis Cluster supports live resharding -- data migrates incrementally without downtime:</p>
+<ol>
+  <li><code>CLUSTER SETSLOT &lt;slot&gt; IMPORTING &lt;node-id&gt;</code> -- destination node marks slot as importing</li>
+  <li><code>CLUSTER SETSLOT &lt;slot&gt; MIGRATING &lt;node-id&gt;</code> -- source node marks slot as migrating</li>
+  <li>Source node returns <code>ASK &lt;slot&gt; &lt;ip:port&gt;</code> for keys still on source but assigned to destination</li>
+  <li>Client follows ASK redirect (one-time, unlike MOVED which updates the permanent map)</li>
+  <li>All keys migrated → slot ownership transferred permanently</li>
+</ol>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>How does Redis Cluster shard data? Explain the hash slot mechanism.</li>
+  <li>What happens when a client sends a command to the wrong node?</li>
+  <li>How does failover work in Redis Cluster? What triggers it?</li>
+  <li>What are hash tags and why are they important?</li>
+  <li>What is the limitation of cross-slot operations? How do you work around it?</li>
+  <li>Compare Redis Cluster vs client-side sharding vs a proxy (Twemproxy/Codis).</li>
+  <li>How does resharding work without downtime?</li>
+  <li>What is the difference between MOVED and ASK redirects?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Skip in interviews:</strong>
+  <ul>
+    <li>Redis Cluster bus protocol internals (Gossip message format, PING/PONG packet structure).</li>
+    <li>Exact details of the gossip protocol's message types and failure detection tuning.</li>
+    <li>Redis Cluster proxy (redis-cluster-proxy) -- it is niche and rarely deployed at scale.</li>
+    <li>Configuration file details for cluster creation unless asked about operational specifics.</li>
+    <li>Redis on Flash (disk-backed keys with RAM index) -- mention it exists but don't explain internals.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Primary</div>
+  <ul>
+    <li><a href="https://redis.io/docs/manual/scaling/">Redis Cluster Tutorial</a> -- official tutorial on creating and managing clusters</li>
+    <li><a href="https://redis.io/docs/reference/cluster-spec/">Redis Cluster Specification</a> -- authoritative reference for protocols, hash slots, failover</li>
+    <li><a href="https://redis.io/docs/management/scaling/">Redis Scaling Guide</a> -- when and how to scale with Cluster</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Supplementary</div>
+  <ul>
+    <li><a href="https://antirez.com/news/102">Redis Cluster Specification (antirez blog)</a> -- original design rationale from Redis creator</li>
+    <li><a href="https://engineering.fb.com/2021/09/02/core-data/redis-at-scale/">Redis at Scale at Facebook/Meta</a> -- production Redis Cluster deployment at extreme scale</li>
+    <li><a href="https://medium.com/@madhukard/redis-cluster-design-and-implementation-6d9239f25f3a">Redis Cluster Design Deep Dive</a> -- blog post on internal mechanics</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="redis-basics.html">&larr; 7.6.1 Redis Basics</a>
+  <a href="distributed-cache.html">7.6.3 Distributed Cache &rarr;</a>
+</div>
+
+</body>
+</html>

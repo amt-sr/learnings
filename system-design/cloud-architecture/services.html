@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>12.2.7 — Services</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">Cloud Architecture</a> / 12.2.7 Services</div>
+<h1>Services</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the Kubernetes Service abstraction as a stable networking layer over ephemeral pods, the three service types (ClusterIP, NodePort, LoadBalancer), and how service discovery works within a cluster.</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>Kubernetes Service</strong> is an abstraction that provides a stable network endpoint (IP address and DNS name) for a set of pods. Since pods are ephemeral and their IPs change on recreation, Services provide a fixed address that load-balances traffic across healthy, ready pods.
+</div>
+
+<p>Without Services, pods would need to know each other's IP addresses, which change on every restart. Services decouple consumers from pod locations and provide built-in load balancing.</p>
+
+<h2>Service Types</h2>
+<div class="diagram">
+  ┌─────────────────────────────────────────────────────────────┐
+  │                    Kubernetes Cluster                         │
+  │                                                               │
+  │  ClusterIP (internal only):                                   │
+  │  ┌───────────────┐                                           │
+  │  │ Service A     │ 10.96.0.1                                 │
+  │  │ (ClusterIP)   │  service-a.default.svc.cluster.local       │
+  │  └───────┬───────┘                                           │
+  │          │  load balances to:                                  │
+  │          ├──▶ Pod A1 (10.244.1.5:8080)                       │
+  │          ├──▶ Pod A2 (10.244.2.8:8080)                       │
+  │          └──▶ Pod A3 (10.244.3.1:8080)                       │
+  │                                                               │
+  │  NodePort (expose on each node's IP):                         │
+  │  ┌───────────────┐     Node1:30080                            │
+  │  │ Service B     │─────▶Node2:30080 (accessible externally)   │
+  │  │ (NodePort)    │     Node3:30080                            │
+  │  └───────────────┘                                           │
+  │                                                               │
+  │  LoadBalancer (cloud provider LB):                            │
+  │  ┌───────────────┐     ┌───────────────────────┐            │
+  │  │ Service C     │────▶│ Cloud LB (AWS ELB,     │──▶Internet │
+  │  │ (LoadBalancer) │     │ GCP LB, Azure LB)     │            │
+  │  └───────────────┘     └───────────────────────┘            │
+  └─────────────────────────────────────────────────────────────┘
+</div>
+
+<table>
+  <tr><th>Type</th><th>Scope</th><th>Access</th><th>Use Case</th></tr>
+  <tr><td><strong>ClusterIP</strong></td><td>Cluster-internal only</td><td>Other pods and services within the cluster</td><td>Internal microservice communication (default)</td></tr>
+  <tr><td><strong>NodePort</strong></td><td>External via node IP</td><td>NodeIP:NodePort from outside the cluster</td><td>Development/testing, simple external access</td></tr>
+  <tr><td><strong>LoadBalancer</strong></td><td>External via cloud LB</td><td>Cloud provider provisions a load balancer with a public IP</td><td>Production external-facing services</td></tr>
+  <tr><td><strong>ExternalName</strong></td><td>DNS alias</td><td>Returns a CNAME record for an external name</td><td>Referencing external services (external DB, SaaS API)</td></tr>
+</table>
+
+<h2>Service Discovery</h2>
+<p>Kubernetes provides two service discovery mechanisms:</p>
+
+<h3>1. Environment Variables</h3>
+<pre>
+# When a pod starts, K8s injects environment variables for every service:
+MY_SERVICE_SERVICE_HOST=10.96.0.1
+MY_SERVICE_SERVICE_PORT=8080
+MY_SERVICE_PORT=tcp://10.96.0.1:8080
+
+# Downside: services must exist BEFORE the consuming pod is created
+</pre>
+
+<h3>2. DNS (Primary Method)</h3>
+<pre>
+# CoreDNS runs in the cluster and resolves service names
+# Within same namespace:
+my-service → 10.96.0.1
+
+# Across namespaces:
+my-service.my-namespace.svc.cluster.local → 10.96.0.1
+
+# Headless services (ClusterIP: None): returns individual pod IPs
+my-service-headless.my-namespace.svc.cluster.local → 10.244.1.5, 10.244.2.8, 10.244.3.1
+</pre>
+
+<div class="callout yellow">
+  <strong>Best practice:</strong> Always use DNS names (not IPs) to reference services. This makes deployments portable and eliminates hardcoding.
+</div>
+
+<h2>How Services Find Healthy Pods</h2>
+<div class="diagram">
+  Service uses labels and selectors to match pods:
+
+  Service definition:
+  ┌───────────────────────────────────┐
+  │ kind: Service                     │
+  │ metadata:                         │
+  │   name: order-service             │
+  │ spec:                             │
+  │   selector:                       │
+  │     app: orders            ← LABEL│
+  │     tier: backend                 │
+  │   ports:                          │
+  │     - port: 80                    │
+  │       targetPort: 8080            │
+  └───────────────────────────────────┘
+
+  Matching pods (have matching labels):
+  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐
+  │ Pod: v2  │  │ Pod: v2  │  │ Pod: v2  │  │ Pod: v1  │
+  │app=orders│  │app=orders│  │app=orders│  │app=users│  ← NO match
+  │tier=backend│ │tier=backend│ │tier=backend│ │tier=backend│
+  │ READY ✓  │  │ READY ✓  │  │ NOT READY │  │ READY ✓  │
+  └──────────┘  └──────────┘  └──────────┘  └──────────┘
+       │             │             │
+       └────── Service routes traffic to these 2 ready pods
+              (Pod 3 excluded because readiness probe failed)
+</div>
+
+<div class="callout">
+  <strong>Endpoint objects:</strong> Kubernetes maintains an Endpoints object per Service that lists the IPs of all currently ready pods matching the selector. kube-proxy watches this object and updates iptables/IPVS rules accordingly. A pod is included only if its readiness probe passes.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What is a Kubernetes Service and why is it needed?</li>
+  <li>Explain the three service types: ClusterIP, NodePort, LoadBalancer.</li>
+  <li>How does service discovery work inside a Kubernetes cluster?</li>
+  <li>How does a Service know which pods to send traffic to?</li>
+  <li>What happens to a Service when pods are added or removed?</li>
+  <li>What is a headless Service and when would you use it?</li>
+  <li>How does kube-proxy work?</li>
+  <li>Compare Kubernetes Services with an external load balancer like AWS ALB.</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid diving into:</strong> iptables vs IPVS implementation details, kube-proxy mode configuration, CoreDNS configuration, or EndpointSlice objects. Focus on the Service abstraction, its types, label selectors, and DNS resolution.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Documentation</div>
+  <ul>
+    <li><strong>Kubernetes Services</strong> — kubernetes.io/docs/concepts/services-networking/service/</li>
+    <li><strong>DNS for Services</strong> — kubernetes.io/docs/concepts/services-networking/dns-pod-service/</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="deployments.html">&larr; Previous: Deployments</a>
+  <a href="ingress.html">Next: Ingress &rarr;</a>
+</div>
+</body>
+</html>

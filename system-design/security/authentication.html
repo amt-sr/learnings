@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>14.1 — Authentication</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">Security</a> / 14.1 Authentication</div>
+<h1>Authentication (AuthN)</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand authentication as the process of verifying identity ("who are you?"), the evolution from passwords to MFA, session-based vs token-based auth, and the OAuth flow for third-party authentication.</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>Authentication (AuthN)</strong> is the process of verifying that a user or system is who they claim to be. It answers the question "who are you?" and produces a verifiable identity that can be used for subsequent authorization decisions ("what can you do?").
+</div>
+
+<p>Authentication is the first gate in any secured system. Without reliable identity verification, authorization is meaningless because you cannot make access decisions based on unverified identity.</p>
+
+<h2>Authentication Mechanisms</h2>
+<table>
+  <tr><th>Mechanism</th><th>How It Works</th><th>Security</th><th>Use Case</th></tr>
+  <tr><td><strong>Password</strong></td><td>User provides secret known only to them</td><td class="red">Weak alone (phishing, reuse)</td><td>Basic authentication, legacy systems</td></tr>
+  <tr><td><strong>MFA (TOTP)</strong></td><td>Password + time-based one-time code (Google Authenticator)</td><td class="green">Strong (requires physical device)</td><td>High-value accounts, internal tools</td></tr>
+  <tr><td><strong>SMS OTP</strong></td><td>Password + SMS code</td><td>Medium (SIM swap attacks)</td><td>Consumer apps (convenience)</td></tr>
+  <tr><td><strong>Biometric</strong></td><td>Fingerprint, face, voice</td><td class="green">Strong (cannot be shared/typed)</td><td>Mobile devices, physical access</td></tr>
+  <tr><td><strong>OAuth/Social</strong></td><td>Delegate to trusted provider (Google, GitHub)</td><td class="green">Strong (leverages provider security)</td><td>Consumer apps, B2B SaaS</td></tr>
+  <tr><td><strong>Certificate</strong></td><td>Client presents TLS certificate</td><td class="green">Strong (mutual TLS)</td><td>Service-to-service auth</td></tr>
+  <tr><td><strong>API Key</strong></td><td>Static key in request header</td><td>Medium (no expiration by default)</td><td>Developer APIs, internal services</td></tr>
+</table>
+
+<h2>Password Storage</h2>
+<pre>
+# NEVER store plain text passwords
+# NEVER use MD5 or SHA-1 (fast, easily brute-forced)
+
+# BEST PRACTICE: bcrypt with cost factor 12+
+# bcrypt is intentionally slow (100-500ms) to make brute-force impractical
+hash = bcrypt(password, cost_factor=12, random_salt)
+# Example: $2b$12$LJ3m4yxK2YbQZ.0qn.jXuO1JXMdJQv.yYQJKVMbX7J3f4wX.1m2C
+
+# Argon2id is even better (winner of Password Hashing Competition)
+hash = argon2id(password, salt, memory_cost=65536, time_cost=3, parallelism=4)
+
+# Key rules:
+# 1. Use a unique random salt per password (prevents rainbow table attacks)
+# 2. Use adaptive hashing (increase cost as hardware gets faster)
+# 3. Never roll your own crypto
+</pre>
+
+<h2>Session-Based vs Token-Based Auth</h2>
+<div class="diagram">
+  SESSION-BASED:
+
+  Client ──credentials──▶ Server
+  Server creates session (Redis/DB)
+  Server returns session cookie (set-cookie: sid=abc123)
+  Client sends cookie on every request
+  Server looks up session in store → validates → returns data
+
+  ┌────────┐    Cookie: sid=abc123    ┌──────────┐    ┌────────┐
+  │ Client │─────────────────────────▶│ Server   │───▶│ Session│
+  └────────┘                         │          │    │ Store  │
+       ◀─────────────────────────────│          │◀───│(Redis) │
+            Response                  └──────────┘    └────────┘
+
+  TOKEN-BASED (JWT):
+
+  Client ──credentials──▶ Server
+  Server verifies credentials
+  Server returns JWT (access_token)
+  Client sends JWT in Authorization header on every request
+  Server validates JWT (signature check, no DB lookup needed)
+
+  ┌────────┐  Auth: Bearer <jwt>     ┌──────────┐
+  │ Client │─────────────────────────▶│ Server   │
+  └────────┘                         │(validates │
+       ◀─────────────────────────────│ JWT sig)  │
+            Response                  └──────────┘
+</div>
+
+<table>
+  <tr><th>Dimension</th><th>Session</th><th>JWT Token</th></tr>
+  <tr><td>State</td><td>Stateful (server stores session)</td><td>Stateless (token is self-contained)</td></tr>
+  <tr><td>Server lookup</td><td>Required (Redis/DB per request)</td><td class="green">None needed (verify signature only)</td></tr>
+  <tr><td>Revocation</td><td class="green">Instant (delete from store)</td><td class="red">Hard (need blacklist or short expiry)</td></tr>
+  <tr><td>Scalability</td><td class="red">Session store is a dependency</td><td class="green">No shared state needed</td></tr>
+  <tr><td>Size</td><td>Small (session ID in cookie)</td><td>Large (token contains claims)</td></tr>
+  <tr><td>Mobile-friendly</td><td class="red">Cookie-based, CSRF risk</td><td class="green">Header-based, no CSRF</td></tr>
+</table>
+
+<h2>MFA (Multi-Factor Authentication)</h2>
+<div class="callout">
+  <strong>MFA</strong> requires two or more independent verification factors: something you know (password), something you have (phone/hardware key), or something you are (biometric). MFA blocks 99.9% of automated attacks even if the password is compromised.
+</div>
+
+<h3>MFA Implementation Flow</h3>
+<pre>
+1. User submits username + password
+2. Server validates credentials
+3. Server prompts for second factor:
+   - TOTP: User enters 6-digit code from authenticator app
+   - SMS: Server sends code, user enters it
+   - Push: Server sends push notification, user approves
+   - WebAuthn: User touches hardware security key
+4. Server validates second factor
+5. Server issues session/token
+</pre>
+
+<div class="callout yellow">
+  <strong>Modern guidance:</strong> Prefer TOTP (Google Authenticator, Authy) or WebAuthn (YubiKey) over SMS OTP. SMS is vulnerable to SIM swap attacks and SS7 protocol exploits. Apple and Google are deprecating SMS for 2FA.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What is authentication and how is it different from authorization?</li>
+  <li>How would you securely store user passwords?</li>
+  <li>Compare session-based and token-based authentication.</li>
+  <li>What is MFA and why is it important?</li>
+  <li>How does OAuth work for third-party authentication?</li>
+  <li>What are the risks of SMS-based 2FA?</li>
+  <li>How would you implement "remember me" functionality?</li>
+  <li>What is credential stuffing and how do you prevent it?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid diving into:</strong> Specific OAuth grant type protocol details (covered in 14.3), JWT internals (covered in 14.4), or password hashing library API. Focus on the high-level authentication concepts and the session vs token trade-off.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><strong>OWASP Authentication Cheat Sheet</strong> — cheatsheetseries.owasp.org</li>
+    <li><strong>Real-World Web Security</strong> (Lewis, Fowler) — Practical auth patterns</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Standards</div>
+  <ul>
+    <li><strong>NIST SP 800-63B</strong> — Digital Identity Guidelines (Authentication)</li>
+    <li><strong>WebAuthn Specification</strong> — w3.org/TR/webauthn — Passwordless authentication</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="../architectural-patterns/strangler-pattern.html">&larr; Previous: Strangler Pattern</a>
+  <a href="authorization.html">Next: Authorization &rarr;</a>
+</div>
+</body>
+</html>

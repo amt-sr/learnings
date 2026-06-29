@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.10.5 Graph Database</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#3">3 Storage</a> / <a href="../index.html#3.10">3.10 Database Models</a> / 3.10.5
+</div>
+
+<h1>Graph Database</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What a graph database is: nodes, edges/relationships, properties</li>
+  <li>Why graph databases excel at relationship-heavy queries</li>
+  <li>How relationship traversal performance differs from JOIN-based approaches</li>
+  <li>Common use cases: social networks, fraud detection, recommendation engines</li>
+</ul>
+
+<h2>Definition</h2>
+<p>A <strong>graph database stores data as nodes (entities) connected by edges (relationships), where both nodes and edges can have properties</strong>. Unlike <a href="relational-database.html">relational databases</a> that model relationships through foreign keys and JOINs, graph databases store relationships as first-class citizens, enabling efficient traversal of connected data.</p>
+
+<div class="diagram">  Graph Database — Social Network Example
+
+       [Alice]────KNOWS────►[Bob]────KNOWS────►[Carol]
+          │                    │                    │
+        WORKS_AT            WORKS_AT             WORKS_AT
+          │                    │                    │
+          ▼                    ▼                    ▼
+     [Company A]        [Company B]          [Company A]
+          │
+       LIKES
+          │
+          ▼
+       [Post:42]
+
+  Nodes (entities):       Alice, Bob, Carol, Company A, Company B, Post:42
+  Edges (relationships): KNOWS, WORKS_AT, LIKES
+  Properties on nodes:    Alice: {name, age, email}
+  Properties on edges:    KNOWS: {since: 2020, strength: 0.8}
+
+  Query: "Find all people Alice knows who work at Company A"
+  → Start at Alice → follow KNOWS edges → filter by WORKS_AT = Company A
+  → Result: Carol (2 hops from Alice)
+
+  In a relational database:
+  → SELECT p.* FROM people p
+    JOIN knows k ON p.id = k.friend_id
+    JOIN employment e ON p.id = e.person_id
+    WHERE k.person_id = 42 AND e.company_id = (SELECT id FROM companies WHERE name = 'Company A')
+
+  With indexes: O(log n) per join. With 6-table joins: expensive.
+  In Neo4j:    O(1) index-free adjacency — traverse pointer directly.</div>
+
+<h2>Core Concepts</h2>
+<table>
+  <tr><th>Concept</th><th>Description</th><th>Example</th></tr>
+  <tr><td><strong>Node</strong></td><td>An entity (like a row in a table, but not constrained to a table structure)</td><td>Person, Company, Post</td></tr>
+  <tr><td><strong>Label</strong></td><td>Category/type of a node (like a table name, but a node can have multiple labels)</td><td>:Person, :Employee, :Admin</td></tr>
+  <tr><td><strong>Relationship (Edge)</strong></td><td>A directed connection between two nodes with a named type</td><td>FRIENDS_WITH, WORKS_AT, LIKES</td></tr>
+  <tr><td><strong>Properties</strong></td><td>Key-value pairs attached to nodes or relationships</td><td>Node: {name: "Alice"} Edge: {since: 2020}</td></tr>
+  <tr><td><strong>Traversal</strong></td><td>Following relationships from node to node</td><td>Find friends of friends (2-hop traversal)</td></tr>
+</table>
+
+<h2>Index-Free Adjacency</h2>
+<div class="callout green">
+  <strong>This is the key performance advantage.</strong> Each node stores direct pointers to its adjacent nodes (edges are pointers). Traversing a relationship is O(1) — you don't need an index lookup. In a relational database, traversing a relationship requires a JOIN, which requires an index lookup: O(log n) per hop.
+</div>
+
+<pre>  Performance comparison for multi-hop queries:
+
+  Query: "Find all friends of friends of Alice" (3-hop traversal)
+
+  Relational database:
+    SELECT DISTINCT f2.friend_id
+    FROM friends f1
+    JOIN friends f2 ON f1.friend_id = f2.person_id
+    WHERE f1.person_id = 42
+
+    Each JOIN = index lookup O(log n)
+    2 hops = 2 index lookups
+    But with friends-of-friends explosion: could scan millions of rows
+    Time: O(n * log n) where n = average friends per person
+
+  Graph database (Neo4j):
+    MATCH (alice:Person {name: "Alice"})-[:KNOWS]->()-[:KNOWS]->(fof)
+    RETURN fof
+
+    Each hop = pointer dereference O(1)
+    Time: O(n) where n = actual friends traversed
+    No index needed for relationship traversal
+
+  For 5-hop queries, the gap widens dramatically.
+  For 10+ hops, relational databases practically cannot do it efficiently.</pre>
+
+<h2>Cypher Query Language</h2>
+<p>Neo4j's Cypher is the most common graph query language:</p>
+<pre>-- Create nodes and relationships
+CREATE (alice:Person {name: "Alice", age: 30})
+CREATE (bob:Person {name: "Bob", age: 25})
+CREATE (company:Company {name: "Acme Corp"})
+CREATE (alice)-[:WORKS_AT {since: 2022}]->(company)
+CREATE (alice)-[:KNOWS {since: 2020}]->(bob)
+
+-- Find coworkers of Alice
+MATCH (alice:Person {name: "Alice"})-[:WORKS_AT]->(c:Company)
+      <-[:WORKS_AT]-(coworker:Person)
+RETURN coworker.name
+
+-- Find mutual friends (people Alice and Bob both know)
+MATCH (alice:Person {name: "Alice"})-[:KNOWS]->(mutual:Person)
+      <-[:KNOWS]-(bob:Person {name: "Bob"})
+RETURN mutual.name
+
+-- Shortest path between two people
+MATCH path = shortestPath(
+  (a:Person {name: "Alice"})-[*]-(b:Person {name: "Frank"})
+)
+RETURN path</pre>
+
+<h2>Common Use Cases</h2>
+<table>
+  <tr><th>Use Case</th><th>Why Graph</th><th>Example Query</th></tr>
+  <tr><td><strong>Social networks</strong></td><td>Friends, followers, recommendations are natural graph traversals</td><td>"Friends of friends in common"</td></tr>
+  <tr><td><strong>Fraud detection</strong></td><td>Detect rings: shared addresses, phones, devices across seemingly unrelated accounts</td><td>"Find clusters of accounts sharing IP + device"</td></tr>
+  <tr><td><strong>Recommendation engines</strong></td><td>"Users who liked X also liked Y" — collaborative filtering as graph traversal</td><td>"Products purchased by similar users"</td></tr>
+  <tr><td><strong>Network/IT operations</strong></td><td>Dependencies between services, impact analysis</td><td>"What services are affected if DB goes down?"</td></tr>
+  <tr><td><strong>Authorization/permissions</strong></td><td>Role hierarchies, resource access graphs</td><td>"Does user X have access to resource Y through role chain?"</td></tr>
+  <tr><td><strong>Knowledge graphs</strong></td><td>Google Knowledge Graph, entity relationships</td><td>"Entities related to 'Albert Einstein'"</td></tr>
+</table>
+
+<h2>Neo4j</h2>
+<table>
+  <tr><th>Feature</th><th>Detail</th></tr>
+  <tr><td><strong>Storage</strong></td><td>Nodes and relationships stored as fixed-size records with adjacency lists. Each node has a pointer to its first relationship. Relationships have pointers to source and target nodes.</td></tr>
+  <tr><td><strong>Query language</strong></td><td>Cypher — declarative, pattern-matching syntax</td></tr>
+  <tr><td><strong>ACID</strong></td><td class="green">Full ACID transactions (single-machine)</td></tr>
+  <tr><td><strong>Scaling</strong></td><td class="red">Single-machine for ACID. Neo4j Aura (cloud) provides scaling. Community edition is single-node.</td></tr>
+  <tr><td><strong>Performance</strong></td><td class="green">Millions of traversals/second for simple hops. Degrades for very complex patterns.</td></tr>
+</table>
+
+<h2>Graph Database vs Relational Database</h2>
+<table>
+  <tr><th></th><th><a href="relational-database.html">Relational</a></th><th>Graph</th></tr>
+  <tr><td><strong>Relationship modeling</strong></td><td>Foreign keys + JOINs</td><td class="green">Direct edges (pointers)</td></tr>
+  <tr><td><strong>2-3 hop queries</strong></td><td>Feasible with indexes</td><td class="green">Fast (index-free adjacency)</td></tr>
+  <tr><td><strong>5+ hop queries</strong></td><td class="red">Very expensive (multiple JOINs)</td><td class="green">Still fast (pointer chasing)</td></tr>
+  <tr><td><strong>Aggregate queries</strong></td><td class="green">Excellent (SQL GROUP BY, SUM, AVG)</td><td class="red">Limited</td></tr>
+  <tr><td><strong>Schema flexibility</strong></td><td class="red">Rigid tables</td><td class="green">Flexible (nodes can have any properties)</td></tr>
+  <tr><td><strong>Scaling</strong></td><td class="green">Vertical scaling, read replicas</td><td class="yellow">Limited (Neo4j is mostly single-node)</td></tr>
+  <tr><td><strong>Maturity</strong></td><td class="green">40+ years, battle-tested</td><td class="yellow">15+ years, growing adoption</td></tr>
+</table>
+
+<div class="callout">
+  <strong>In practice:</strong> Most systems don't need a dedicated graph database. Graph-like queries can often be handled in a relational database with recursive CTEs, or in a <a href="document-database.html">document database</a> with graph-like features. Dedicated graph databases are worth it when relationship traversal is the core access pattern and queries involve many hops.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What is a graph database?"</strong><br>A database that stores data as nodes connected by directed, typed relationships. Both nodes and relationships can have properties. Relationships are first-class citizens — stored as direct pointers (index-free adjacency), making multi-hop traversals O(1) per hop instead of O(log n) per JOIN.</li>
+  <li><strong>"When would you use a graph database instead of a relational database?"</strong><br>When your core access pattern is traversing relationships between entities: social networks (friends-of-friends), fraud detection (shared attributes across accounts), recommendation engines (collaborative filtering), dependency graphs, or any scenario where queries involve many-hop traversals. Relational databases can handle 2-3 JOINs, but graph databases handle 5-10+ hops efficiently.</li>
+  <li><strong>"What is index-free adjacency?"</strong><br>Each node in a graph database stores direct pointers to its adjacent nodes. Traversing a relationship means following a pointer — O(1) — no index lookup needed. In a relational database, traversing a relationship requires a JOIN, which requires an index lookup — O(log n). For multi-hop queries, the gap compounds: k hops = k index lookups in SQL vs k pointer dereferences in a graph DB.</li>
+  <li><strong>"How would you implement friend recommendations with a graph database?"</strong><br>Store people as nodes, friendships as :KNOWS edges. For recommendations: find friends-of-friends who are not already direct friends. Cypher: <code>MATCH (me:Person)-[:KNOWS]->(friend)-[:KNOWS]->(fof) WHERE NOT (me)-[:KNOWS]->(fof) RETURN fof.name, COUNT(*) AS mutual_friends ORDER BY mutual_friends DESC</code>. This is a 2-hop traversal, O(1) per hop.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>JanusGraph, TigerGraph, ArangoDB internals</li>
+    <li>Graph algorithms (PageRank, community detection) unless asked</li>
+    <li>RDF, SPARQL, semantic web standards</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Designing Data-Intensive Applications" — Chapter 2</strong> (Kleppmann) — Data models and graph models</li>
+    <li><strong>Neo4j Graph Database documentation</strong> — neo4j.com/docs</li>
+    <li><strong>"Graph Databases" — Ian Robinson et al.</strong> — O'Reilly</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="wide-column-database.html">&larr; wide-column-database.html</a>
+  <a href="time-series-database.html">Next: time-series-database.html &rarr;</a>
+</div>
+
+</body>
+</html>

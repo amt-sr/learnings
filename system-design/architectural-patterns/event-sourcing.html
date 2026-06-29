@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>13.3 — Event Sourcing</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">Architectural Patterns</a> / 13.3 Event Sourcing</div>
+<h1>Event Sourcing</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand event sourcing as a persistence model where events are the source of truth, how to rebuild state from an event log, projections, snapshots, and when event sourcing provides value over traditional CRUD.</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>Event sourcing</strong> is a persistence pattern where instead of storing the current state of an entity, you store a sequence of events that led to that state. The current state is derived by replaying (rehydrating) events from the beginning.
+</div>
+
+<p>In traditional CRUD, you overwrite state: <code>UPDATE orders SET status='shipped' WHERE id=123</code>. The previous state is lost. In event sourcing, you append an immutable event: <code>OrderShipped{orderId: 123, timestamp: ...}</code>. The full history is preserved forever.</p>
+
+<h2>Traditional State vs Event Sourced</h2>
+<div class="diagram">
+  TRADITIONAL (CRUD):
+  ┌──────────────────────┐
+  │  orders table         │
+  │  id: 123              │
+  │  status: "shipped"     │  ← only current state
+  │  total: 99.99          │  ← previous state LOST
+  └──────────────────────┘
+
+  EVENT SOURCED:
+  ┌──────────────────────────────────────────────────┐
+  │  event_log (append-only)                         │
+  │  [1] OrderCreated   {orderId:123, items:[...]}   │
+  │  [2] PaymentReceived {orderId:123, amount:99.99}  │
+  │  [3] OrderShipped  {orderId:123, trackingId:...} │
+  │                                                  │
+  │  Current state = replay events 1→2→3:             │
+  │  Order {id:123, status:"shipped", paid:true, ...}│
+  └──────────────────────────────────────────────────┘
+</div>
+
+<h2>Rebuilding State: Projections</h2>
+<div class="diagram">
+  Event Log (immutable source of truth)
+  ┌──────────────────────────────────────────┐
+  │ e1: ItemAdded     {orderId:1, item:"A"}   │
+  │ e2: ItemAdded     {orderId:1, item:"B"}   │
+  │ e3: ItemRemoved   {orderId:1, item:"A"}   │
+  │ e4: OrderPlaced   {orderId:1}             │
+  └───────────────────┬──────────────────────┘
+                      │
+         ┌────────────┼────────────┐
+         ▼            ▼            ▼
+  ┌────────────┐ ┌────────────┐ ┌────────────┐
+  │ Projection │ │ Projection │ │ Projection │
+  │ "Order     │ │ "Inventory │ │ "Analytics │
+  │  Summary"  │ │  Update"   │ │  Count"    │
+  │            │ │            │ │            │
+  │ Replay:    │ │ Replay:    │ │ Replay:    │
+  │ current    │ │ items added│ │ total      │
+  │ items=[B]  │ │ minus      │ │ orders     │
+  │ status=    │ │ removed    │ │ created    │
+  │ placed     │ │            │ │            │
+  └────────────┘ └────────────┘ └────────────┘
+
+  Each projection serves a different read model / query need
+  Projections are updated by subscribing to the event log
+</div>
+
+<h2>Snapshots</h2>
+<p>Replaying thousands of events for every read is expensive. Snapshots periodically persist the current state, so replay only needs events since the last snapshot.</p>
+
+<pre>
+# Without snapshot: replay 10,000 events (slow)
+# With snapshot: replay snapshot + 50 events (fast)
+
+Snapshot at event 9950:
+  Order {id: 123, status: "processing", items: [...], total: 450.00}
+
+To get current state at event 10000:
+  1. Load snapshot (event 9950)
+  2. Replay events 9951-10000 (50 events)
+  3. Current state = result
+
+Snapshot frequency: every N events or time-based
+</pre>
+
+<h2>Event Log Properties</h2>
+<table>
+  <tr><th>Property</th><th>Description</th><th>Why It Matters</th></tr>
+  <tr><td><strong>Append-only</strong></td><td>Events are only appended, never modified or deleted</td><td>Immutable audit trail</td></tr>
+  <tr><td><strong>Ordered</strong></td><td>Events for a single entity are sequenced</td><td>Replay produces deterministic state</td></tr>
+  <tr><td><strong>Immutable</strong></td><td>Once written, events cannot change</td><td>Prevents data corruption, enables time travel</td></tr>
+  <tr><td><strong>Schema versioned</strong></td><td>Events include version for compatibility</td><td>Supports schema evolution over time</td></tr>
+</table>
+
+<h2>Advantages and Disadvantages</h2>
+<table>
+  <tr><th>Advantage</th><th>Disadvantage</th></tr>
+  <tr><td class="green">Complete audit trail</td><td class="red">Increased complexity</td></tr>
+  <tr><td class="green">Time travel (rebuild state at any point)</td><td class="red">Eventual consistency for projections</td></tr>
+  <tr><td class="green">Natural fit for event-driven architecture</td><td class="red">Event schema evolution is hard</td></tr>
+  <tr><td class="green">Debugging: replay events to reproduce bugs</td><td class="red">Stale events: correcting an event requires a compensating event</td></tr>
+  <tr><td class="green">Multiple projections from same event log</td><td class="red">Storage growth: events accumulate forever</td></tr>
+  <tr><td class="green">No data loss: all changes preserved</td><td class="red">Learning curve for the team</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>When to use:</strong> Financial systems (transactions), audit-critical domains (healthcare, compliance), domains where "what happened" is as important as "what is the current state," and systems that benefit from temporal queries ("what was the balance on March 15?").
+</div>
+
+<div class="callout green">
+  <strong>Interview tip:</strong> "For a banking system, I would use event sourcing because every transaction must be auditable. The event log is the source of truth, and I can rebuild any account balance at any point in time. For read-heavy queries, I would project into a materialized view." This shows you know when to apply advanced patterns.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What is event sourcing and how does it differ from traditional CRUD?</li>
+  <li>How do you rebuild state from events?</li>
+  <li>What is a projection and why do you need multiple projections?</li>
+  <li>What are snapshots and when do you use them?</li>
+  <li>How do you handle event schema evolution?</li>
+  <li>How do you correct a wrong event in an event-sourced system?</li>
+  <li>When would you NOT use event sourcing?</li>
+  <li>How does event sourcing relate to CQRS?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid diving into:</strong> Event store implementation details (Kafka log compaction, custom event store), aggregate design (DDD terminology), or specific event store libraries (EventStoreDB). Focus on the conceptual model: events as source of truth, replay, projections, and trade-offs.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><strong>Designing Data-Intensive Applications</strong> (Kleppmann) — Chapter 7: "Transactions" covers event sourcing</li>
+    <li><strong>"Event Sourcing"</strong> — Martin Fowler — martinfowler.com/eaaDev/EventSourcing.html</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Documentation</div>
+  <ul>
+    <li><strong>"Event Sourcing Pattern"</strong> — Microsoft Azure Architecture Center</li>
+    <li><strong>EventStoreDB Documentation</strong> — eventstore.com/docs</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="cqrs.html">&larr; Previous: CQRS</a>
+  <a href="materialized-view.html">Next: Materialized View &rarr;</a>
+</div>
+</body>
+</html>

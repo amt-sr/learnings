@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>12.2.6 — Deployments</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">Cloud Architecture</a> / 12.2.6 Deployments</div>
+<h1>Deployments</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand Kubernetes Deployments as the mechanism for declarative pod management, including rolling updates, rollbacks, replica management, and health probes (readiness and liveness).</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>Deployment</strong> is a Kubernetes resource that manages a ReplicaSet and provides declarative updates for pods. It defines the desired state (number of replicas, container image version, resource limits) and the controller continuously reconciles actual state to match.
+</div>
+
+<p>Deployments are the primary way to deploy stateless applications in Kubernetes. They add rolling update and rollback capabilities on top of ReplicaSets.</p>
+
+<h2>Rolling Update Flow</h2>
+<div class="diagram">
+  Initial state: replicas: 3, image: v1
+
+  ┌──────────┐ ┌──────────┐ ┌──────────┐
+  │  Pod v1  │ │  Pod v1  │ │  Pod v1  │
+  └──────────┘ └──────────┘ └──────────┘
+
+  Rolling update to v2 (maxSurge: 1, maxUnavailable: 0):
+
+  Step 1: Create 1 new pod (v2)
+  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
+  │  Pod v1  │ │  Pod v1  │ │  Pod v1  │ │  Pod v2  │ ← new
+  └──────────┘ └──────────┘ └──────────┘ └──────────┘
+
+  Step 2: Delete 1 old pod (v1), create 1 new pod (v2)
+  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
+  │  Pod v1  │ │  Pod v1  │ │  Pod v2  │ │  Pod v2  │
+  └──────────┘ └──────────┘ └──────────┘ └──────────┘
+
+  Step 3: Delete 1 old pod, create 1 new pod
+  ┌──────────┐ ┌──────────┐ ┌──────────┐
+  │  Pod v1  │ │  Pod v2  │ │  Pod v2  │
+  └──────────┘ └──────────┘ └──────────┘
+
+  Step 4: Final old pod replaced
+  ┌──────────┐ ┌──────────┐ ┌──────────┐
+  │  Pod v2  │ │  Pod v2  │ │  Pod v2  │
+  └──────────┘ └──────────┘ └──────────┘
+
+  Key: At every step, enough pods are serving traffic.
+  maxUnavailable: 0 = never reduce serving capacity below desired
+  maxSurge: 1 = allow 1 extra pod during rollout
+</div>
+
+<h2>Rollback</h2>
+<p>Every deployment change creates a new ReplicaSet revision. Rollback reverts to a previous ReplicaSet.</p>
+<pre>
+# Rollback is instant because old ReplicaSet still exists
+# New pods are created from the old image, old pods are terminated
+
+Revision 3 (current):  image: v3  ← broken
+Revision 2 (rollback): image: v2  ← target
+Revision 1:            image: v1
+
+# kubectl rollout undo deployment/my-app --to-revision=2
+</pre>
+
+<h2>Readiness vs Liveness Probes</h2>
+<table>
+  <tr><th>Probe</th><th>Question</th><th>Failure Action</th><th>Use Case</th></tr>
+  <tr><td><strong>Readiness</strong></td><td>"Is the pod ready to serve traffic?"</td><td>Remove from Service endpoint (no traffic routed)</td><td>Wait for app to warm up, load config, connect to DB</td></tr>
+  <tr><td><strong>Liveness</strong></td><td>"Is the pod still running correctly?"</td><td>Restart the container (kill and recreate)</td><td>Detect deadlocks, infinite loops, unresponsive processes</td></tr>
+  <tr><td><strong>Startup</strong></td><td>"Has the app started?" (disables other probes during startup)</td><td>Failure counts toward liveness</td><td>Slow-starting apps (Java, ML models) where liveness would fire prematurely</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Common mistake:</strong> Using a liveness probe that is too aggressive. If the probe checks an endpoint that depends on an external service (DB, API) and that service is slow, the liveness probe will kill the pod repeatedly (CrashLoopBackOff), making the situation worse. Liveness probes should check local health only.
+</div>
+
+<pre>
+readinessProbe:
+  httpGet:
+    path: /health/ready
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+livenessProbe:
+  httpGet:
+    path: /health/live
+    port: 8080
+  initialDelaySeconds: 15
+  periodSeconds: 20
+  failureThreshold: 3    # 3 failures before restart
+</pre>
+
+<h2>Replica Management</h2>
+<p>The Deployment controller ensures the desired number of replicas are always running. If a node fails, pods on that node are recreated on healthy nodes.</p>
+
+<div class="diagram">
+  Deployment: replicas: 3
+
+  Desired:  3 pods running and healthy
+  Actual:   (continuously monitored by controller)
+
+  ┌──────────────────────────────────────────────────┐
+  │  Deployment Controller                           │
+  │                                                  │
+  │  1. Compare desired replicas vs actual running    │
+  │  2. If gap: create/delete pods via ReplicaSet     │
+  │  3. Wait for readiness probe to pass              │
+  │  4. Pod is "available" when ready                │
+  └──────────────────────────────────────────────────┘
+
+  Node 1 fails:
+  Before: [Pod A (node1), Pod B (node2), Pod C (node3)]
+  After:  [Pod B (node2), Pod C (node3)]  ← Pod A gone
+  Controller detects: 2/3 running → creates Pod D on node2 or node3
+</div>
+
+<h2>Deployment Strategies Comparison</h2>
+<table>
+  <tr><th>Strategy</th><th>Downtime</th><th>Resource Overhead</th><th>Risk</th><th>Use Case</th></tr>
+  <tr><td><strong>Rolling Update</strong></td><td>None</td><td>Low (maxSurge pods)</td><td>Low</td><td>Default for most apps</td></tr>
+  <tr><td><strong>Recreate</strong></td><td class="red">Yes (all down, then all up)</td><td>None</td><td>High</td><td>Major DB schema changes that need all instances updated at once</td></tr>
+  <tr><td><strong>Blue/Green</strong></td><td>None</td><td class="red">2x (full duplicate)</td><td>Low (instant rollback)</td><td>Critical services needing instant rollback</td></tr>
+  <tr><td><strong>Canary</strong></td><td>None</td><td>Low</td><td>Medium</td><td>Progressive rollout with validation</td></tr>
+</table>
+
+<div class="callout green">
+  <strong>Interview tip:</strong> When asked about deployment strategies, mention canary deployments: "I would roll out to 1% of traffic, monitor error rates and latency for 10 minutes, then progressively increase to 25%, 50%, 100%. If metrics degrade, automatically rollback." This demonstrates operational maturity.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>How does a Kubernetes Deployment work?</li>
+  <li>Explain rolling updates with maxSurge and maxUnavailable.</li>
+  <li>What is the difference between readiness and liveness probes?</li>
+  <li>How does Kubernetes handle a pod failure within a deployment?</li>
+  <li>What is a ReplicaSet and how does it relate to a Deployment?</li>
+  <li>How would you implement a canary deployment in Kubernetes?</li>
+  <li>What is a common mistake with liveness probes?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid diving into:</strong> Deployment YAML syntax, strategy-specific YAML fields, pod disruption budgets (PDB), or kubectl rollout commands. Focus on the concepts: rolling update flow, probe semantics, and strategy trade-offs.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Documentation</div>
+  <ul>
+    <li><strong>Kubernetes Deployments</strong> — kubernetes.io/docs/concepts/workloads/controllers/deployment/</li>
+    <li><strong>Pod Lifecycle</strong> — kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-termination</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="pods.html">&larr; Previous: Pods</a>
+  <a href="services.html">Next: Services &rarr;</a>
+</div>
+</body>
+</html>

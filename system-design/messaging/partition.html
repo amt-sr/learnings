@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.2.3 Partition — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">8. Messaging</a> / 8.2.3 Partition</p>
+
+<h1>8.2.3 Partition (Kafka Partition)</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+
+<p>Understand Kafka partitions as the unit of parallelism and ordering, how key-based partitioning works, and the implications for consumer scalability.</p>
+
+<h2>Definition</h2>
+
+<p>A <strong>partition</strong> is an ordered, append-only sequence of records within a Kafka topic. Each topic is divided into one or more partitions. Messages within a single partition are strictly ordered by their offset. Partitions are distributed across Kafka brokers, enabling parallel read and write operations.</p>
+
+<div class="callout">
+  <strong>Key Insight:</strong> The partition is the fundamental trade-off point in Kafka. It gives you parallelism (more partitions = more concurrent consumers) but limits ordering (ordering is only guaranteed within a partition, not across partitions).
+</div>
+
+<h2>Architecture</h2>
+
+<div class="diagram">
+  Topic: "order-events"  (4 partitions)
+  ┌──────────────────────────────────────────────────────────────┐
+  │                                                              │
+  │  Broker 1                 Broker 2              Broker 3     │
+  │  ┌──────────────────┐    ┌──────────────────┐  ┌──────────┐│
+  │  │ Partition 0      │    │ Partition 1      │  │ Partition ││
+  │  │  key=A → [m1,m2] │    │  key=B → [m3,m4] │  │ 2        ││
+  │  │  key=C → [m5    ] │    │  key=A → [m6,m7] │  │ [m9,m10] ││
+  │  │  (Leader)        │    │  (Leader)        │  │ (Leader) ││
+  │  ├──────────────────┤    ├──────────────────┤  └──────────┘│
+  │  │ Partition 3      │    │ Partition 1      │              │
+  │  │  (Follower)      │    │  (Follower on   │  ┌──────────┐│
+  │  │  [m8,m11,m12]    │    │   Broker 1)     │  │ Partition ││
+  │  │                  │    │                  │  │ 3 (Follow)││
+  │  └──────────────────┘    └──────────────────┘  │ on Broker ││
+  │                                              │    2      ││
+  │                                              └──────────┘│
+  └──────────────────────────────────────────────────────────────┘
+
+  Ordering Guarantee:
+  ✓ Messages in Partition 0 are ordered: m1 before m2 before m5
+  ✗ No ordering guarantee between Partition 0 and Partition 1
+
+  Parallelism:
+  4 partitions → up to 4 consumers in a group can read in parallel
+</div>
+
+<h2>Key-Based Partition Assignment</h2>
+
+<p>When a producer sends a message with a key, Kafka uses a hash of the key to determine which partition the message goes to:</p>
+
+<pre>
+partition = hash(key) % num_partitions
+</pre>
+
+<p>This ensures that <strong>all messages with the same key always go to the same partition</strong>, preserving ordering for that key across the entire topic.</p>
+
+<div class="callout green">
+  <strong>Practical Example:</strong> If you publish order events keyed by <code>order_id</code>, all events for the same order will appear in the same partition in order. Event A (order created) will always be before Event B (order paid) for the same order — even though other orders' events are interleaved.
+</div>
+
+<h2>Partition Count: Trade-offs</h2>
+
+<table>
+  <tr><th>Consideration</th><th>Fewer Partitions</th><th>More Partitions</th></tr>
+  <tr><td>Throughput</td><td class="red">Lower — limited parallelism</td><td class="green">Higher — more parallel consumers</td></tr>
+  <tr><td>Ordering scope</td><td class="green">Broader — more keys share a partition</td><td class="red">Narrower — keys spread across partitions</td></tr>
+  <tr><td>Failover time</td><td class="green">Faster — fewer partitions to recover</td><td class="red">Slower — more partitions to elect leaders for</td></tr>
+  <tr><td>File handles</td><td class="green">Fewer</td><td class="red">More open files per broker</td></tr>
+  <tr><td>Memory overhead</td><td class="green">Less</td><td class="red">More — each partition has its own buffers</td></tr>
+  <tr><td>Producer batching</td><td class="green">Better batching per partition</td><td class="red">Smaller batches per partition</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Interview Tip:</strong> A common follow-up: "How would you pick the number of partitions?" Answer: start with a number based on target throughput (partition throughput / desired throughput) and the maximum number of consumers you need. You can increase partitions later, but you <em>cannot</em> decrease them without recreating the topic.
+</div>
+
+<h2>Partition and Ordering: Critical Nuance</h2>
+
+<ul>
+  <li><strong>Within a partition:</strong> Messages are ordered by offset. If producer sends m1 then m2 to the same partition, every consumer sees m1 before m2.</li>
+  <li><strong>Across partitions:</strong> No ordering guarantee. Message m1 in partition 0 and message m2 in partition 1 have no defined relative order.</li>
+  <li><strong>Key-based ordering:</strong> Use the same key for all messages that need relative ordering. The hash ensures they land in the same partition.</li>
+  <li><strong>No key:</strong> Messages are distributed round-robin across partitions. No ordering guarantee at all.</li>
+</ul>
+
+<h2>Partition Reassignment</h2>
+
+<p>Kafka supports reassigning partitions between brokers (e.g., when adding a new broker to the cluster). This is done via partition reassignment commands and moves data between brokers. It does not change partition count.</p>
+
+<div class="diagram">
+  Before Reassignment:        After Adding Broker 3:
+  ┌────────────┐┌────────────┐    ┌────────────┐┌────────────┐┌────────────┐
+  │ Broker 1   ││ Broker 2   │    │ Broker 1   ││ Broker 2   ││ Broker 3   │
+  │ P0, P2, P4 ││ P1, P3, P5 │    │ P0, P3     ││ P1, P4     ││ P2, P5     │
+  └────────────┘└────────────┘    └────────────┘└────────────┘└────────────┘
+
+  Partition reassignment redistributes partitions to balance load
+</div>
+
+<h2>Common Interview Questions</h2>
+
+<ol>
+  <li>"Explain Kafka partitions and why they are important."</li>
+  <li>"How does key-based partitioning work?"</li>
+  <li>"What is the ordering guarantee for Kafka partitions?"</li>
+  <li>"How do you choose the number of partitions for a topic?"</li>
+  <li>"Can you change the number of partitions after creating a topic?"</li>
+  <li>"What happens when a partition's leader broker fails?"</li>
+  <li>"If you need global ordering (all messages in order), how many partitions do you need?"</li>
+  <li>"How does partitioning affect consumer parallelism?"</li>
+</ol>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Do not dive into:</strong>
+  <ul>
+    <li>Log segment internals (how partitions map to files on disk, segment rolling, index structures).</li>
+    <li>Partition reassignment tool internals and detailed rebalance protocols.</li>
+    <li>Custom partitioner implementation details — focus on the default hash partitioner and its behavior.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Books &amp; Guides</div>
+  <ul>
+    <li><a href="https://kafka.apache.org/documentation/#intro_topics">Kafka Documentation — Partitions</a> — Official docs on partition concepts</li>
+    <li><a href="https://www.confluent.io/learn/kafka-partitions/">Confluent — Understanding Kafka Partitions</a> — Deep dive on partition parallelism</li>
+    <li><a href="https://www.oreilly.com/library/view/designing-event-driven-systems/9781492036734/">Designing Event-Driven Systems</a> — Ben Stopford, Ch. 2 (Event Streams)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="topic.html">&larr; 8.2.2 Topic</a>
+  <a href="offset.html">8.2.4 Offset &rarr;</a>
+</div>
+
+</body>
+</html>

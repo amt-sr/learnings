@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.3.2 Cache Coherence — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb"><a href="../../../">System Design</a> / <a href="../">7 Caching</a> / <a href="#">7.3 Cache Consistency</a> / 7.3.2</div>
+
+<h1>7.3.2 Cache Coherence</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<div class="callout green">
+  <strong>Goal:</strong> Understand cache coherence — the problem of keeping multiple copies of the same data consistent across different caches. Distinguish it from cache invalidation, understand the origins in CPU architecture, and map the concept to distributed systems.
+</div>
+
+<h2>Definition</h2>
+
+<p>Cache coherence is the consistency model that ensures multiple caches (typically CPU caches in a multi-core system) maintain a consistent view of a single memory location. When one core writes to a memory address, all other cores that have cached that address must be notified so they can update or invalidate their local copy. Cache coherence is a <strong>hardware-level protocol</strong> that operates transparently below the operating system and application layers.</p>
+
+<div class="callout yellow">
+  <strong>Cache Invalidation vs. Cache Coherence:</strong> These terms are related but distinct.
+  <ul>
+    <li><strong>Cache Invalidation</strong> (7.3.1): A general technique for removing stale data from cache. It is a <em>software concept</em> that application developers manage.</li>
+    <li><strong>Cache Coherence</strong> (this section): A hardware-level protocol that ensures consistency across multiple cache instances automatically. It is a <em>systems architecture concept</em> managed by the CPU/hardware.</li>
+  </ul>
+  In system design interviews, cache invalidation is the more practical and frequently tested concept. Cache coherence comes up when discussing distributed cache clusters or multi-core consistency.
+</div>
+
+<h2>Origin: CPU Multi-Core Caches</h2>
+
+<p>Cache coherence was originally designed for multi-core processors where each core has its own L1/L2 cache but shares the same main memory:</p>
+
+<div class="diagram">
+  Core 0                    Core 1                    Core N
+  ┌──────────────┐          ┌──────────────┐          ┌──────────────┐
+  │ L1 Cache     │          │ L1 Cache     │          │ L1 Cache     │
+  │ L2 Cache     │          │ L2 Cache     │          │ L2 Cache     │
+  └──────┬───────┘          └──────┬───────┘          └──────┬───────┘
+         │                         │                         │
+         └─────────────────────────┼─────────────────────────┘
+                                   │
+                            ┌──────▼───────┐
+                            │ Cache        │
+                            │ Coherence    │
+                            │ Protocol     │
+                            │ (MESI, MOESI)│
+                            └──────┬───────┘
+                                   │
+                            ┌──────▼───────┐
+                            │ Main Memory  │
+                            │ (RAM)        │
+                            └──────────────┘
+</div>
+
+<p>Without coherence protocols, Core 0 could modify address X in its cache while Core 1 continues reading the stale value from its own cache. The coherence protocol prevents this by ensuring all cores see the same value for any given memory location.</p>
+
+<h2>Coherence Protocols</h2>
+
+<h3>MESI Protocol</h3>
+
+<p>The most common cache coherence protocol, named after its four states:</p>
+
+<table>
+  <tr><th>State</th><th>Meaning</th><th>Can Read?</th><th>Can Write?</th></tr>
+  <tr><td><strong>M</strong>odified</td><td>Cache line modified — only this cache has it, memory is stale</td><td>Yes</td><td>Yes (local only)</td></tr>
+  <tr><td><strong>E</strong>xclusive</td><td>Cache line unmodified — only this cache has it, matches memory</td><td>Yes</td><td>Yes (becomes Modified)</td></tr>
+  <tr><td><strong>S</strong>hared</td><td>Cache line unmodified — multiple caches may have it, matches memory</td><td>Yes</td><td>No (must request Exclusive)</td></tr>
+  <tr><td><strong>I</strong>nvalid</td><td>Cache line is invalid — data not available in this cache</td><td>No</td><td>No</td></tr>
+</table>
+
+<div class="diagram">
+  State Transitions (simplified):
+
+  Invalid ──(read)──> Shared    (fetch from memory, other caches may have it)
+  Invalid ──(write)─> Modified  (fetch exclusive, modify)
+  Shared  ──(write)─> Modified  (broadcast invalidate to other caches)
+  Modified──(read)──> Shared    (write-back to memory, share)
+  Modified──(evict)──> Invalid   (write-back to memory, discard)
+  Shared  ──(evict)──> Invalid   (simply discard)
+  Exclusive─(write)──> Modified
+  Exclusive─(evict)──> Invalid
+</div>
+
+<h3>MOESI Protocol</h3>
+
+<p>An extension of MESI that adds the <strong>Owner</strong> state, allowing a modified cache line to be shared (as dirty data) with other caches without writing back to memory first. Used by AMD processors.</p>
+
+<h2>Cache Coherence in Distributed Systems</h2>
+
+<p>While cache coherence is a hardware concept, the same problem arises in distributed systems with multiple cache nodes:</p>
+
+<div class="diagram">
+  App Instance A            App Instance B            App Instance C
+       │                         │                         │
+  ┌────▼────┐              ┌────▼────┐              ┌────▼────┐
+  │ Local   │              │ Local   │              │ Local   │
+  │ Cache   │              │ Cache   │              │ Cache   │
+  └────┬────┘              └────┬────┘              └────┬────┘
+       │                        │                         │
+       └────────────────────────┼─────────────────────────┘
+                                │
+                    ┌───────────▼───────────┐
+                    │   Distributed Cache    │
+                    │   Cluster (Redis,     │
+                    │   Memcached)           │
+                    └───────────────────────┘
+
+  Problem: If App A writes user:123 to its local cache,
+           App B's local cache may serve stale data.
+</div>
+
+<h3>Solutions for Distributed Cache Coherence</h3>
+
+<table>
+  <tr><th>Approach</th><th>How It Works</th><th>Tradeoffs</th></tr>
+  <tr><td>Central cache (no local)</td><td>All app instances read from a shared Redis/Memcached cluster</td><td>No coherence problem, but adds network hop on every cache access</td></tr>
+  <tr><td>Invalidate via pub/sub</td><td>On write, publish invalidation; all local caches subscribe and evict</td><td>Low staleness, but adds pub/sub infrastructure</td></tr>
+  <tr><td>Versioned keys</td><td>Include data version in cache key; stale versions naturally miss</td><td>Simple but requires version lookup on each read</td></tr>
+  <tr><td>Short TTL</td><td>Local caches have very short TTL; data refreshed from central cache</td><td>Simplicity at the cost of higher staleness</td></tr>
+  <tr><td>Multicast invalidation</td><td>Use multicast/UDP to broadcast invalidations to all nodes</td><td>Fast but unreliable (at-most-once delivery)</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+
+<ul>
+  <li>What is cache coherence? How does it differ from cache invalidation?</li>
+  <li>Explain the MESI protocol. What does each state represent?</li>
+  <li>How does cache coherence work in a multi-core CPU?</li>
+  <li>In a distributed system with local application caches, how do you keep them coherent?</li>
+  <li>When would you use a central cache vs. local caches with coherence?</li>
+</ul>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>For a system design interview, skip:</strong>
+  <ul>
+    <li>Detailed MESI state transition diagrams with every bus transaction type (BusRd, BusRdX, BusUpgr, etc.).</li>
+    <li>Cache coherence in NUMA architectures and inter-node coherence protocols.</li>
+    <li>MOESI vs. MESI performance comparison at the hardware level.</li>
+    <li>Snooping vs. directory-based coherence protocol internals.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Books &amp; Papers</div>
+  <ul>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em> — Chapter 5: Replication (consistency models)</li>
+    <li>David A. Patterson, John L. Hennessy, <em>Computer Organization and Design</em> — Chapter on Cache Coherence</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Online Resources</div>
+  <ul>
+    <li>MESI Protocol — <a href="https://en.wikipedia.org/wiki/MESI_protocol">en.wikipedia.org/wiki/MESI_protocol</a></li>
+    <li>Intel Multi-Core Architecture — <a href="https://www.intel.com/content/www/us/en/architecture-and-technology/">intel.com/architecture-and-technology</a></li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="cache-invalidation.html">← 7.3.1 Cache Invalidation</a>
+  <a href="ttl.html">7.3.3 TTL →</a>
+</div>
+
+</body>
+</html>

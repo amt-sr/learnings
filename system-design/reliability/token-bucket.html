@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Token Bucket — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">System Design</a> / <a href="./index.html">Reliability</a> / 10.3.1 Token Bucket</div>
+
+<h1>Token Bucket Algorithm</h1>
+<div class="meta">
+  <span>Difficulty ⭐⭐⭐</span>
+  <span>Interview Frequency ★★★★★</span>
+</div>
+
+<div class="callout">
+  <strong>Goal:</strong> Understand the token bucket algorithm for rate limiting, its parameters (capacity, refill rate), how it allows burst traffic while enforcing average rate, and implementation considerations.
+</div>
+
+<h2>Definition</h2>
+<p>The <strong>Token Bucket</strong> algorithm is a rate limiting mechanism that controls the rate of requests by maintaining a bucket of tokens. Each request consumes one token. Tokens are added to the bucket at a fixed rate (refill rate). If the bucket is empty when a request arrives, the request is rejected. The bucket has a maximum capacity, allowing <strong>burst traffic</strong> up to the bucket size.</p>
+
+<h2>How It Works</h2>
+
+<div class="diagram">
+  Token Bucket:
+  ┌─────────────────────────────┐
+  │         Bucket              │
+  │   capacity = 10 tokens      │
+  │                             │
+  │   ┃████████████┃  ← tokens  │
+  │   ┃░░░░░░░░░░░┃  ← empty   │
+  │   └─────────────┘           │
+  └─────────────────────────────┘
+         ▲              │
+         │              ▼
+  Refill rate:      Each request
+  2 tokens/sec     consumes 1 token
+  (constant)       (if available)
+
+  Timeline:
+  t=0s:  Bucket has 10 tokens  (full)
+  t=0s:  8 requests arrive → consume 8 → 2 remaining
+  t=0s:  2 more arrive → consume 2 → 0 remaining
+  t=0s:  1 more arrives → REJECTED (no tokens)
+
+  t=0.5s: 1 token refilled (0.5 × 2)
+  t=1.0s: 2 tokens refilled (1.0 × 2)
+  t=2.0s: 4 tokens refilled (capped at capacity of 10)
+
+  Key insight: 10 requests can fire instantly (burst),
+  then sustained at 2/sec average.
+</div>
+
+<h2>Parameters</h2>
+
+<table>
+  <tr><th>Parameter</th><th>Description</th><th>Example</th></tr>
+  <tr><td><strong>Capacity (Burst Size)</strong></td><td>Maximum tokens the bucket can hold</td><td>10 tokens</td></tr>
+  <tr><td><strong>Refill Rate</strong></td><td>Tokens added per unit time</td><td>2 tokens/second</td></tr>
+  <tr><td><strong>Token Cost</strong></td><td>Tokens consumed per request (usually 1)</td><td>1 token/request</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Design Tradeoff:</strong> Capacity controls burst tolerance (how many requests can fire at once). Refill rate controls sustained throughput (average rate over time). High capacity = more burst tolerance but less protection. Low refill rate = stricter limiting.
+</div>
+
+<h2>Token Bucket Properties</h2>
+
+<ul>
+  <li><strong>Burst-friendly:</strong> Allows short bursts up to bucket capacity, making it suitable for real-world traffic patterns.</li>
+  <li><strong>Memory efficient:</strong> Only need to store: bucket size, current tokens, last refill time. O(1) space per rate limiter.</li>
+  <li><strong>O(1) per request:</strong> Each request just checks tokens and does arithmetic. No sliding windows or logs.</li>
+  <li><strong>Average rate enforcement:</strong> Over time, the average rate is bounded by the refill rate.</li>
+</ul>
+
+<h2>Algorithm Implementation</h2>
+
+<pre>
+class TokenBucket {
+    double capacity;      // max tokens
+    double refillRate;    // tokens per second
+    double tokens;         // current tokens
+    long lastRefillTime;   // last refill timestamp
+
+    synchronized boolean allowRequest() {
+        long now = System.currentTimeMillis();
+        double elapsed = (now - lastRefillTime) / 1000.0;
+
+        // Refill tokens (capped at capacity)
+        tokens = Math.min(capacity, tokens + elapsed * refillRate);
+        lastRefillTime = now;
+
+        if (tokens >= 1.0) {
+            tokens -= 1.0;
+            return true;   // request allowed
+        }
+        return false;      // request rejected (rate limited)
+    }
+}
+</pre>
+
+<h2>Implementation in Distributed Systems</h2>
+<p>Single-node token buckets are easy. Distributed token buckets are harder due to race conditions:</p>
+
+<div class="diagram">
+  Single Node:                              Distributed (Redis + Lua):
+  ┌──────────┐                              ┌──────────┐
+  │  Service  │                              │ Service A│──┐
+  │  Instance │                              │          │  │
+  │  [bucket] │                              └──────────┘  │
+  └──────────┘                                             │
+                                                          ▼
+  Works for single server.                          ┌──────────┐     ┌──────────┐
+  For multiple instances, each                     │  Redis   │     │ Service B│
+  instance has its own bucket.                     │  [atomic │◀────│          │
+  → 3 instances = 3x the limit!                     │  bucket] │     │          │
+                                                    └──────────┘     └──────────┘
+
+  Solution: Centralized token bucket in Redis
+  using Lua script for atomic check-and-decrement
+</pre>
+
+<pre>
+-- Redis Lua script for distributed token bucket
+-- KEYS[1] = rate_limit:{user_id}
+-- ARGV[1] = capacity, ARGV[2] = refill_rate, ARGV[3] = now
+
+local rate_limit_key = KEYS[1]
+local capacity = tonumber(ARGV[1])
+local refill_rate = tonumber(ARGV[2])
+local now = tonumber(ARGV[3])
+
+local bucket = redis.call("HMGET", rate_limit_key, "tokens", "last_refill")
+local tokens = tonumber(bucket[1]) or capacity
+local last_refill = tonumber(bucket[2]) or now
+
+-- Refill tokens
+local elapsed = (now - last_refill) / 1000.0
+tokens = math.min(capacity, tokens + elapsed * refill_rate)
+
+if tokens >= 1.0 then
+    tokens = tokens - 1.0
+    redis.call("HMSET", rate_limit_key, "tokens", tokens, "last_refill", now)
+    redis.call("EXPIRE", rate_limit_key, capacity / refill_rate * 2)
+    return 1   -- allowed
+else
+    redis.call("HMSET", rate_limit_key, "tokens", tokens, "last_refill", now)
+    return 0   -- rejected
+end
+</pre>
+
+<h2>Real-World Usage</h2>
+
+<table>
+  <tr><th>System</th><th>Algorithm</th><th>Notes</th></tr>
+  <tr><td>AWS API Gateway</td><td>Token Bucket</td><td>Default: 10,000 RPS burst, 5,000 RPS steady</td></tr>
+  <tr><td>Stripe API</td><td>Token Bucket</td><td>Per-key rate limiting with burst allowance</td></tr>
+  <tr><td>Google Cloud API</td><td>Token Bucket</td><td>Per-project quotas with burst and sustained rate</td></tr>
+  <tr><td>Envoy / Istio</td><td>Token Bucket</td><td>Global and per-filter rate limits</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>"How does the token bucket algorithm work?" — Tokens in a bucket; requests consume tokens; tokens refill at a constant rate; burst up to bucket capacity allowed.</li>
+  <li>"What is the difference between token bucket and leaky bucket?" — Token bucket allows bursting; leaky bucket enforces a constant output rate. Token bucket is burst-friendly, leaky bucket is smoother.</li>
+  <li>"How would you implement a distributed rate limiter?" — Centralized token bucket in Redis using Lua scripts for atomic operations. Consistent hashing for multi-Redis sharding at scale.</li>
+  <li>"What happens at the boundary of a time window?" — No boundary spike problem with token buckets (unlike fixed-window counters). The bucket state carries over continuously.</li>
+  <li>"How would you design a rate limiter for an API?" — Token bucket with per-user keys in Redis, Lua for atomicity, 429 Too Many Requests response with Retry-After header.</li>
+</ul>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Depth:</strong> Generic cell rate algorithm (GCRA) implementation details — it is mathematically equivalent to token bucket. <br>
+  <strong>Depth:</strong> Redis Cluster sharding strategies for rate limiting keys. <br>
+  <strong>Depth:</strong> Netflix Zuul / Spring Cloud Gateway specific rate limiting configuration.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">AWS — Rate Limiting with Token Bucket</div>
+  <p>How AWS API Gateway implements token bucket rate limiting with burst and steady-state rates.</p>
+</div>
+<div class="source">
+  <div class="source-label">Rate Limiting — System Design Primer (GitHub)</div>
+  <p>Comprehensive comparison of rate limiting algorithms with diagrams and implementation examples.</p>
+</div>
+<div class="source">
+  <div class="source-label">Cloudflare — How We Designed Rate Limiting</div>
+  <p>Cloudflare's approach to distributed rate limiting at edge scale with token buckets.</p>
+</div>
+
+<div class="nav">
+  <a href="graceful-degradation.html">&larr; Graceful Degradation</a>
+  <a href="leaky-bucket.html">Leaky Bucket &rarr;</a>
+</div>
+</body>
+</html>

@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Backup Strategies — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">System Design</a> / <a href="./index.html">Reliability</a> / 10.4.1 Backup</div>
+
+<h1>Backup Strategies</h1>
+<div class="meta">
+  <span>Difficulty ⭐⭐⭐</span>
+  <span>Interview Frequency ★★★★</span>
+</div>
+
+<div class="callout">
+  <strong>Goal:</strong> Understand backup strategies (full, incremental, differential), snapshot vs continuous backup, the 3-2-1 backup rule, and how to design backup systems that enable recovery within RPO/RTO targets.
+</div>
+
+<h2>Definition</h2>
+<p>A <strong>backup</strong> is a copy of data stored separately from the original, intended for recovery in case of data loss, corruption, hardware failure, or disaster. Backup strategy determines <em>what</em> to back up, <em>how often</em>, <em>how long</em> to retain backups, and <em>how</em> to verify they are recoverable. A backup that cannot be restored is not a backup — it is an illusion.</p>
+
+<h2>Backup Types</h2>
+
+<h3>Full Backup</h3>
+<p>Complete copy of all data. Simple but slow and storage-intensive.</p>
+
+<div class="diagram">
+  Full Backup Timeline:
+  Day 1:  ████████████████████  Full (100 GB)
+  Day 2:  ████████████████████  Full (102 GB)
+  Day 3:  ████████████████████  Full (104 GB)
+  Day 4:  ████████████████████  Full (107 GB)
+
+  Storage: 4 × ~100GB = ~400GB for 4 days
+  Backup time: ~4 hours each
+  Restore: Fast — single file to restore from
+</div>
+
+<h3>Incremental Backup</h3>
+<p>Only backs up data that has changed <em>since the last backup of any type</em>. Most storage-efficient but restore requires the full backup + all subsequent incrementals.</p>
+
+<div class="diagram">
+  Incremental Backup Timeline:
+  Day 1:  ████████████████████  Full (100 GB)
+  Day 2:  ██                   Incremental (2 GB changed)
+  Day 3:  █                    Incremental (1 GB changed)
+  Day 4:  ███                  Incremental (3 GB changed)
+
+  Storage: 100 + 2 + 1 + 3 = 106 GB (much less!)
+  Backup time: ~10 min each day
+  Restore: SLOW — need Full + Day2 + Day3 + Day4
+
+  To restore Day 4:
+  1. Restore Full (Day 1)
+  2. Apply Incremental (Day 2)
+  3. Apply Incremental (Day 3)
+  4. Apply Incremental (Day 4)
+  If ANY incremental is corrupted → data loss from that point forward
+</div>
+
+<h3>Differential Backup</h3>
+<p>Backs up all data that has changed <em>since the last full backup</em>. A middle ground: faster restore than incremental, less storage than full.</p>
+
+<div class="diagram">
+  Differential Backup Timeline:
+  Day 1:  ████████████████████  Full (100 GB)
+  Day 2:  ████                  Differential (2 GB + 1 GB prior = 3 GB)
+  Day 3:  █████                 Differential (2 GB + 1 GB + 1 GB = 4 GB)
+  Day 4:  ████████              Differential (2+1+1+3 = 7 GB)
+
+  Storage: 100 + 3 + 4 + 7 = 114 GB
+  Restore: Fast — Full + latest differential only
+
+  To restore Day 4:
+  1. Restore Full (Day 1)
+  2. Apply Differential (Day 4) ← only 2 steps!
+</div>
+
+<h2>Comparison</h2>
+
+<table>
+  <tr><th>Aspect</th><th>Full</th><th>Incremental</th><th>Differential</th></tr>
+  <tr><td><strong>Storage</strong></td><td class="red">High (N × full size)</td><td class="green">Low (full + deltas)</td><td>Medium</td></tr>
+  <tr><td><strong>Backup Speed</strong></td><td class="red">Slow</td><td class="green">Fast</td><td>Medium</td></tr>
+  <tr><td><strong>Restore Speed</strong></td><td class="green">Fast (1 file)</td><td class="red">Slow (full + all incrementals)</td><td class="green">Fast (full + latest diff)</td></tr>
+  <tr><td><strong>Corruption Risk</strong></td><td class="green">Low</td><td class="red">High (one bad incremental breaks chain)</td><td class="green">Low</td></tr>
+  <tr><td><strong>Complexity</strong></td><td class="green">Simple</td><td>Moderate</td><td>Moderate</td></tr>
+</table>
+
+<h2>Snapshot vs Continuous Backup</h2>
+
+<h3>Storage Snapshots</h3>
+<p>Point-in-time, immutable captures of the entire storage volume. Near-instant creation (copy-on-write).</p>
+
+<div class="callout">
+  <strong>Key Advantage:</strong> Snapshots are nearly instantaneous because they use copy-on-write. Only changed blocks are stored after the snapshot. However, snapshots are tied to the storage system — if the storage system fails, snapshots may be lost too.
+</div>
+
+<table>
+  <tr><th>Aspect</th><th>Snapshot</th><th>Continuous / Replication</th></tr>
+  <tr><td><strong>Creation time</strong></td><td class="green">Near-instant</td><td>Ongoing (always running)</td></tr>
+  <tr><td><strong>RPO</strong></td><td>Last snapshot point</td><td class="green">Near-zero (seconds)</td></tr>
+  <tr><td><strong>Storage location</strong></td><td>Same storage system (risk!)</td><td class="green">Separate system / region</td></tr>
+  <tr><td><strong>Use case</strong></td><td>Quick rollback, testing</td><td>Disaster recovery</td></tr>
+</table>
+
+<h2>The 3-2-1 Backup Rule</h2>
+
+<div class="callout green">
+  <strong>3-2-1 Rule:</strong> Keep at least <strong>3</strong> copies of your data, on at least <strong>2</strong> different types of storage media, with at least <strong>1</strong> copy off-site (different region/cloud provider).
+</div>
+
+<div class="diagram">
+  Production Data
+       │
+       ├── Copy 1: Primary replication (same region, different AZ)
+       │
+       ├── Copy 2: Cross-region replication (different region, same cloud)
+       │
+       └── Copy 3: Off-site backup (different cloud provider or cold storage)
+             └── S3 Glacier, Google Coldline, or physical tape
+</div>
+
+<h2>Backup Verification</h2>
+
+<div class="callout red">
+  <strong>Critical Rule:</strong> An untested backup is not a backup. You must regularly restore backups to a staging environment and verify data integrity. Google's SRE team reports that untested backups fail to restore in ~30% of cases.
+</div>
+
+<table>
+  <tr><th>Verification Type</th><th>Frequency</th><th>What It Catches</th></tr>
+  <tr><td>Automated checksum</td><td>Every backup</td><td>Bit-level corruption during transfer</td></tr>
+  <tr><td>Metadata validation</td><td>Every backup</td><td>Missing files, incomplete backups</td></tr>
+  <tr><td>Sample restore test</td><td>Weekly</td><td>Restore process failures, format incompatibilities</td></tr>
+  <tr><td>Full restore drill</td><td>Quarterly</td><td>RTO feasibility, dependency ordering, data integrity</td></tr>
+</table>
+
+<h2>Database-Specific Backup Strategies</h2>
+
+<table>
+  <tr><th>Database</th><th>Native Backup Method</th><th>Cloud Equivalent</th></tr>
+  <tr><td>PostgreSQL</td><td>pg_dump, WAL archiving, pg_basebackup</td><td>RDS automated snapshots + cross-region replica</td></tr>
+  <tr><td>MySQL</td><td>mysqldump, binlog replication</td><td>RDS automated snapshots + read replica</td></tr>
+  <tr><td>MongoDB</td><td>mongodump, oplog replication</td><td>Atlas automated snapshots + cloud backup</td></tr>
+  <tr><td>DynamoDB</td><td>Point-in-time recovery (PITR)</td><td>On-demand or continuous backup to S3</td></tr>
+  <tr><td>Cassandra</td><td>SSTable snapshots, incremental repair</td><td>Multi-region replication + S3 snapshots</td></tr>
+</table>
+
+<h2>Backup Retention Policy</h2>
+
+<div class="diagram">
+  Retention Pyramid:
+        ▲
+       ╱ ╲      Last 7 days:    Daily full + incrementals
+      ╱   ╲     Keep: 7 days
+     ╱─────╲    Cost: High (fast recovery for recent incidents)
+    ╱       ╲
+   ╱         ╲  Last 4 weeks:   Weekly full backups
+  ╱───────────╲ Keep: 4 weeks
+               Cost: Medium
+  ╱             ╲
+ ╱  Last 12 months:  Monthly full backups
+╱───────────────────╲ Keep: 12 months
+                      Cost: Low (infrequent recovery needs)
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>"How would you design a backup strategy for a production database?" — Full backup weekly, incremental daily, WAL/log shipping for near-real-time recovery, cross-region replication for disaster recovery. Verify restores weekly.</li>
+  <li>"What is the 3-2-1 backup rule?" — 3 copies, 2 media types, 1 off-site. Prevents single-point-of-failure in backup storage.</li>
+  <li>"Full vs incremental vs differential — which would you choose?" — Incremental for storage efficiency + weekly full for restore reliability. Most production systems use a combination.</li>
+  <li>"What is RPO and how does backup strategy affect it?" — RPO is the maximum acceptable data loss. Continuous replication → RPO near zero. Daily backups → RPO of 24 hours. Choose based on data criticality.</li>
+  <li>"Why is testing backups important?" — 30%+ of untested backups fail to restore. Corrupted backups, format changes, missing dependencies, and incorrect procedures all cause restore failures.</li>
+  <li>"What about cloud-managed database backups?" — AWS RDS, Cloud SQL, Atlas all provide automated snapshots. But you still need cross-region copies and off-site backups (different cloud provider) for true disaster recovery.</li>
+</ul>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Depth:</strong> Specific backup tool syntax (mysqldump flags, pg_dump options). <br>
+  <strong>Depth:</strong> Tape backup hardware and media lifecycle management. <br>
+  <strong>Depth:</strong> Deduplication algorithms and compression techniques for backup storage.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Google SRE Book — Chapter 13: Data Pipeline Reliability</div>
+  <p>How Google designs backup and recovery for large-scale data systems including Bigtable and Spanner.</p>
+</div>
+<div class="source">
+  <div class="source-label">AWS — Backup and Recovery Best Practices</div>
+  <p>AWS well-architected framework guidance on backup strategies, RPO/RTO tradeoffs, and cross-region DR.</p>
+</div>
+<div class="source">
+  <div class="source-label">Designing Data-Intensive Applications — Martin Kleppmann</div>
+  <p>Chapter on replication and data durability, including backup strategies and the CAP theorem implications for recovery.</p>
+</div>
+
+<div class="nav">
+  <a href="sliding-window.html">&larr; Sliding Window</a>
+  <a href="restore.html">Restore &rarr;</a>
+</div>
+</body>
+</html>

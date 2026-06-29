@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.2.2 HTTP Methods</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#2">2 Networking</a> / <a href="../index.html#2.2">2.2 HTTP</a> / 2.2.2
+</div>
+
+<h1>HTTP Methods</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What each HTTP method does and its semantics</li>
+  <li>Idempotency and safety — the two properties that matter most</li>
+  <li>How methods map to CRUD operations</li>
+  <li>Common API design mistakes with methods</li>
+</ul>
+
+<h2>Core Methods</h2>
+<table>
+  <tr><th>Method</th><th>Purpose</th><th>Idempotent</th><th>Safe</th><th>Has Body</th><th>Has Response Body</th></tr>
+  <tr><td><strong>GET</strong></td><td>Read a resource</td><td class="green">Yes</td><td class="green">Yes</td><td>No</td><td>Yes</td></tr>
+  <tr><td><strong>POST</strong></td><td>Create a resource</td><td class="red">No</td><td class="red">No</td><td>Yes</td><td>Yes</td></tr>
+  <tr><td><strong>PUT</strong></td><td>Replace a resource entirely</td><td class="green">Yes</td><td class="red">No</td><td>Yes</td><td>Optional</td></tr>
+  <tr><td><strong>PATCH</strong></td><td>Partial update</td><td class="yellow">Maybe</td><td class="red">No</td><td>Yes</td><td>Optional</td></tr>
+  <tr><td><strong>DELETE</strong></td><td>Delete a resource</td><td class="green">Yes</td><td class="red">No</td><td>Optional</td><td>Optional</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Safe:</strong> Does not modify server state (read-only).<br>
+  <strong>Idempotent:</strong> Calling it once has the same effect as calling it N times. GET /users/1 always returns the same user. DELETE /users/1 deletes the user — calling it again returns 404, but the effect (user is deleted) is the same.
+</div>
+
+<h2>CRUD Mapping</h2>
+<div class="diagram">  CRUD       HTTP Method    Example URI
+  ────       ───────────    ──────────
+  Create     POST           POST /users
+  Read       GET            GET /users/123
+  Update     PUT/PATCH      PUT /users/123 (full replace)
+                             PATCH /users/123 (partial)
+  Delete     DELETE         DELETE /users/123
+
+  Collection endpoints:
+  GET    /users          → List all users
+  POST   /users          → Create user
+
+  Resource endpoints:
+  GET    /users/123      → Get user 123
+  PUT    /users/123      → Replace user 123
+  PATCH  /users/123      → Partial update user 123
+  DELETE /users/123      → Delete user 123</div>
+
+<h2>Method Details</h2>
+
+<h3>GET</h3>
+<pre>Rules: Must be safe and idempotent. Never has a request body.
+Use for: Fetching resources, search queries.
+
+GET /users                     → List users (with pagination)
+GET /users/123                 → Get user 123
+GET /users?role=admin          → Filter users
+GET /users?sort=name&limit=50 → Sorted, paginated list
+
+Common mistake: Using GET for actions that modify state.
+  ✗ GET /users/123/delete     → NEVER do this
+  ✓ DELETE /users/123         → Use DELETE instead</pre>
+
+<h3>POST</h3>
+<pre>Rules: NOT idempotent. Creates new resources or triggers actions.
+Use for: Creating resources, complex queries, actions.
+
+POST /users
+  Body: {"name": "Alice", "email": "alice@example.com"}
+  Response: 201 Created, Location: /users/456
+
+POST /users/search
+  Body: {"filters": {"role": "admin"}, "sort": "name"}
+  Use POST when query is too complex for URL params.
+
+POST /orders/123/checkout  → Action endpoint (not CRUD)</pre>
+
+<h3>PUT vs PATCH</h3>
+<pre>PUT: Full replacement. Send the entire resource.
+  PUT /users/123
+  Body: {"name": "Alice", "email": "alice@new.com", "role": "admin"}
+  → Missing fields will be reset to defaults or cleared
+
+PATCH: Partial update. Send only changed fields.
+  PATCH /users/123
+  Body: {"email": "alice@new.com"}
+  → Only email changes, other fields preserved
+
+  PUT is idempotent (send same full state → same result).
+  PATCH may not be (depends on the operation).
+    Example: PATCH {"op": "increment", "field": "view_count"} is NOT idempotent.</pre>
+
+<h3>DELETE</h3>
+<pre>Rules: Idempotent. Returns 204 No Content or 200 OK.
+  DELETE /users/123 → 204 (success, no body)
+  DELETE /users/123 → 404 (already deleted — idempotent: same effect)
+
+  Batch delete:
+  DELETE /users?ids=1,2,3 → Delete multiple users</pre>
+
+<h2>Less Common Methods</h2>
+<table>
+  <tr><th>Method</th><th>Purpose</th><th>Usage</th></tr>
+  <tr><td>HEAD</td><td>Like GET but no response body</td><td>Check if resource exists, get <a href="headers.html">Content-Length</a></td></tr>
+  <tr><td>OPTIONS</td><td>Get allowed methods for a URL</td><td>CORS preflight requests</td></tr>
+  <tr><td>TRACE</td><td>Loop-back test (echoes request)</td><td>Debugging (rarely used, often disabled)</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What's the difference between PUT and PATCH?"</strong><br>PUT replaces the entire resource — all fields must be sent, missing fields are reset. PATCH updates only specified fields — other fields are preserved. PUT is always idempotent; PATCH depends on the operation.</li>
+  <li><strong>"What does idempotent mean?"</strong><br>Calling the operation N times produces the same effect as calling it once. GET is idempotent (reading doesn't change state). POST is not (creates a new resource each time). PUT and DELETE are idempotent.</li>
+  <li><strong>"Is POST idempotent?"</strong><br>No. POST /users creates a new user each time. Calling it 3 times creates 3 users. If you need idempotent creation, use PUT with a client-generated ID or check for duplicates.</li>
+  <li><strong>"Why not use GET for everything?"</strong><br>GET must be safe (no side effects). It shouldn't modify state. GET URLs are logged, cached, bookmarked, and pre-fetched by browsers — you don't want any of those to trigger mutations.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>CONNECT method (used for tunnels/proxies)</li>
+    <li>WebDAV methods (PROPFIND, LOCK, UNLOCK, etc.)</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong><a href="rest.html">REST</a>ful Web APIs (Leonard Richardson)</strong> — HTTP Methods chapter</li>
+    <li><strong>RFC 7231</strong> — Hypertext Transfer Protocol (HTTP/1.1): Semantics</li>
+    <li><strong>MDN Web Docs</strong> — HTTP request methods</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="http-request-lifecycle.html">&larr; 2.2.1 HTTP Request Lifecycle</a>
+  <a href="status-codes.html">Next: 2.2.3 Status Codes &rarr;</a>
+</div>
+
+</body>
+</html>

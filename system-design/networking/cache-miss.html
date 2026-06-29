@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.6.3 Cache Miss</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#2">2 Networking</a> / <a href="../index.html#2.6">2.6 CDN</a> / 2.6.3
+</div>
+
+<h1>Cache Miss</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What a cache miss is and why it happens</li>
+  <li>Origin pull / origin shield architecture</li>
+  <li>How cache population works after a miss</li>
+  <li>The cold start problem and how to mitigate it</li>
+  <li>Miss penalty and its impact on performance and cost</li>
+</ul>
+
+<h2>Definition</h2>
+<p>A <strong>cache miss occurs when the CDN edge server does not have the requested resource in its local cache and must fetch it from the origin server</strong>. Every cache miss results in a full round trip to the origin, higher latency for the requesting user, and increased load on the origin infrastructure.</p>
+
+<div class="diagram">  Cache Miss Flow (detailed):
+
+  ┌───────┐  GET /api/products   ┌─────────────────┐   ┌─────────────────┐   ┌────────┐
+  │Client │ ──────────────────►  │  Edge Server    │   │ Origin Shield   │   │ Origin │
+  │       │                      │  (Tokyo PoP)    │   │ (Regional PoP)  │   │        │
+  │       │                      │                 │   │                 │   │        │
+  │       │  1. Cache lookup:    │                 │   │                 │   │        │
+  │       │     NOT FOUND        │                 │   │                 │   │        │
+  │       │                      │ ──── MISS ────► │ ──── MISS ────► │ ──────► │        │
+  │       │                      │                 │   │                 │   │        │
+  │       │  4. Store in         │  3. Forward,     │  2. Cache lookup: │  Fetch  │        │
+  │       │     local cache,     │     store in     │     NOT FOUND     │        │        │
+  │       │  5. Respond to       │     shield cache,│                 │  200 OK │        │
+  │       │     client           │  forward to      │   200 OK         │ ◄────── │        │
+  │       │ ◄──── 200 OK ─────── │     shield       │ ◄─── response ── │         │        │
+  │       │  (~200ms)            │                 │   │                 │         │        │
+  └───────┘                      └─────────────────┘   └─────────────────┘   └────────┘
+
+  Subsequent requests: Client → Edge (cache HIT, ~10ms)</div>
+
+<h2>Types of Cache Misses</h2>
+<table>
+  <tr><th>Miss Type</th><th>Cause</th><th>Frequency</th><th>Preventable?</th></tr>
+  <tr><td><strong>First request</strong></td><td>Nobody has requested this URL yet at this edge</td><td>Once per resource per PoP</td><td>Partially (prefetch, <a href="cache-invalidation.html">pre-warm</a>)</td></tr>
+  <tr><td><strong>Expired</strong></td><td>Resource was cached but TTL expired</td><td>Depends on TTL</td><td class="green">Yes (longer TTL, stale-while-revalidate)</td></tr>
+  <tr><td><strong>Evicted</strong></td><td>Cache is full, LRU evicted this entry to make room</td><td>Varies with cache size</td><td class="green">Yes (larger cache, smarter eviction)</td></tr>
+  <tr><td><strong>Uncacheable</strong></td><td>Origin returned Cache-Control: no-store</td><td>Every request</td><td class="yellow">Review caching headers</td></tr>
+  <tr><td><strong>Bypass</strong></td><td>Request with auth cookies, method not GET/HEAD</td><td>Specific URLs</td><td>Design decision (correct behavior)</td></tr>
+  <tr><td><strong>Invalidated</strong></td><td>Explicit <a href="cache-invalidation.html">purge</a> removed the entry</td><td>After content updates</td><td class="yellow">Minimize unnecessary purges</td></tr>
+</table>
+
+<h2>Origin Pull</h2>
+<p>When a cache miss occurs, the CDN performs an <strong>origin pull</strong> &mdash; it makes an HTTP request to the origin server on behalf of the client, receives the response, caches it locally, and then serves it to the client.</p>
+
+<div class="diagram">  Origin Pull Details:
+
+  Edge Server → Origin Server
+  ┌──────────────────────────────────────────────────────────────┐
+  │ 1. Edge sends request to origin:                            │
+  │    GET /images/hero.jpg HTTP/1.1                             │
+  │    Host: example.com                                         │
+  │    X-Forwarded-For: 203.0.113.50                            │
+  │    X-CDN-Request-ID: req_abc123                              │
+  │                                                              │
+  │ 2. Origin processes and responds:                           │
+  │    HTTP/1.1 200 OK                                          │
+  │    Cache-Control: max-age=86400                              │
+  │    ETag: "xyz789"                                            │
+  │    Content-Type: image/jpeg                                  │
+  │    [binary data...]                                          │
+  │                                                              │
+  │ 3. Edge stores response in local cache with metadata:       │
+  │    Key:      /images/hero.jpg                                │
+  │    TTL:      86400s (from Cache-Control)                    │
+  │    Size:     245 KB                                          │
+  │    ETag:     "xyz789"                                        │
+  │    CachedAt: 2026-06-28T10:00:00Z                           │
+  │                                                              │
+  │ 4. Edge serves cached response to waiting client            │
+  └──────────────────────────────────────────────────────────────┘</div>
+
+<h2>Origin Shield</h2>
+<p>Without an origin shield, a popular new resource can cause a <strong>thundering herd</strong> &mdash; hundreds of edge servers all requesting the same resource from origin simultaneously after a <a href="cache-invalidation.html">cache invalidation</a>.</p>
+
+<div class="diagram">  WITHOUT Origin Shield (thundering herd):
+
+  Edge (Tokyo) ─────────────────┐
+  Edge (London) ────────────────┤
+  Edge (Frankfurt) ─────────────┼── 500 concurrent requests for same asset!
+  Edge (Sydney) ────────────────┤   Origin gets crushed
+  Edge (Singapore) ─────────────┘
+                                ▼
+                           ┌────────┐
+                           │ Origin │ ← 500 simultaneous requests!
+                           └────────┘
+
+  WITH Origin Shield:
+
+  Edge (Tokyo)      ──┐
+  Edge (London)     ──┤
+  Edge (Frankfurt)  ──┼──► ┌──────────────┐    ┌────────┐
+  Edge (Sydney)     ──┤    │ Origin Shield │───►│ Origin │
+  Edge (Singapore)  ──┘    │ (1 regional   │    │        │
+                           │  PoP caches)  │    │        │
+                           └──────────────┘    └────────┘
+                                │
+  First request: shield MISS → origin fetch → cache in shield
+  Next 499 requests: shield HIT → served instantly
+
+  Origin receives: 1 request (not 500)</div>
+
+<div class="callout green">
+  <strong>Origin shield is critical for large-scale systems.</strong> Cloudflare calls it the "Tiered Cache," Akamai calls it "Midgress." The origin shield sits between all edge PoPs and the origin. Even if 10,000 edge servers need the same resource after invalidation, only ONE request reaches the origin. The shield deduplicates concurrent requests and caches the response regionally.
+</div>
+
+<h3>Request Coalescing</h3>
+<pre>Even within a single PoP, multiple clients may request the same uncached
+resource simultaneously. CDNs use request coalescing to handle this:
+
+  Client A ──GET /new-product.jpg──┐
+  Client B ──GET /new-product.jpg──┤  All arrive within 100ms
+  Client C ──GET /new-product.jpg──┘
+
+  Edge Server behavior:
+  1. Client A's request triggers origin fetch
+  2. Client B and C's requests are QUEUED (not sent to origin)
+  3. When origin responds, all three clients get the same response
+  4. Result: 1 origin request instead of 3
+
+  Cloudflare: "Request Coalescing"
+  Fastly:     "Stale If Error + shielding"
+  Akamai:     "SureRoute with prefetch"</pre>
+
+<h2>Cache Population</h2>
+<p>After a cache miss, the CDN must store the response for future hits. The population strategy matters for both performance and cost.</p>
+
+<table>
+  <tr><th>Strategy</th><th>Description</th><th>Trade-off</th></tr>
+  <tr><td><strong>Populate on read (pull)</strong></td><td>Cache is populated when a client requests a resource that is not cached</td><td>First user pays latency penalty; simple to implement</td></tr>
+  <tr><td><strong>Pre-warm / prefetch (push)</strong></td><td>Proactively fetch popular resources into edge caches before users request them</td><td>Requires predicting demand; uses bandwidth but eliminates cold starts</td></tr>
+  <tr><td><strong>Background refresh</strong></td><td>Periodically re-fetch popular resources before TTL expires</td><td>Users never see a miss for popular content; uses extra bandwidth</td></tr>
+</table>
+
+<h2>Cold Start Problem</h2>
+<p>The <strong>cold start problem</strong> occurs when a resource has never been requested at a particular edge PoP, so every new user at that location experiences a cache miss on their first request. This is especially painful after:</p>
+
+<ul>
+  <li>A new deployment or release (new asset URLs)</li>
+  <li>A <a href="cache-invalidation.html">cache purge</a> that clears entries across all PoPs</li>
+  <li>Adding a new edge PoP to the CDN</li>
+  <li>A viral event that drives traffic from a region that has not accessed the content before</li>
+</ul>
+
+<div class="diagram">  Cold Start Timeline after cache purge:
+
+  Time    Event                          User Latency    Origin Load
+  ──────────────────────────────────────────────────────────────────
+  T+0s    Cache purge issued             —               —
+  T+1s    First user requests asset      ~300ms (miss)   1 request
+  T+2s    Second user requests asset     ~300ms (miss)   2 concurrent
+  T+3s    Third user requests asset      ~10ms  (hit!)   0 requests
+  T+4s+   All subsequent users           ~10ms  (hit)    0 requests
+
+  Problem: During T+1s to T+2s, origin may receive a burst of requests
+           before any edge server has populated its cache.
+
+  Solution: Pre-warm the cache BEFORE purging:
+  1. Deploy new assets with new URLs (content hashing)
+  2. Trigger pre-warm requests to all major PoPs
+  3. THEN invalidate old asset URLs
+  4. Users seamlessly get new assets from edge (no cold start)</div>
+
+<div class="callout yellow">
+  <strong>Interview tip:</strong> When asked about cold start, the strongest answer combines three techniques: (1) content-hashed URLs so old and new assets coexist, (2) pre-warming PoPs via the CDN's API before switching traffic, and (3) origin shield to absorb any remaining thundering herd.
+</div>
+
+<h2>Miss Penalty</h2>
+<p><strong>Miss penalty</strong> is the cost incurred when a cache miss occurs. It has three dimensions:</p>
+
+<table>
+  <tr><th>Dimension</th><th>Impact of Miss</th><th>Typical Cost</th></tr>
+  <tr><td><strong>Latency</strong></td><td class="red">User waits for full round trip to origin instead of local edge response</td><td>200ms+ extra (cross-region), vs 10ms on cache hit</td></tr>
+  <tr><td><strong>Origin load</strong></td><td class="red">Every miss generates real work for the origin (CPU, DB queries, bandwidth)</td><td>10-100x more expensive than serving from edge</td></tr>
+  <tr><td><strong>Availability risk</strong></td><td class="red">If origin is degraded, all misses result in errors or timeouts</td><td>Cascading failure if origin goes down</td></tr>
+</table>
+
+<pre>Example: E-commerce site during a flash sale
+
+  Normal traffic: 10,000 requests/sec
+  Cache hit ratio: 90%
+  Origin load:    1,000 requests/sec (manageable)
+
+  Flash sale traffic: 100,000 requests/sec
+  Cache hit ratio: 90%  (cold content is cached)
+  Origin load:     10,000 requests/sec (strain)
+
+  If cache hit ratio drops to 70% during the sale (new products listed,
+  many first-time requests):
+  Origin load:     30,000 requests/sec → origin may crash
+
+  With origin shield + request coalescing:
+  Shield absorbs most duplicates
+  Origin load:     ~3,000 requests/sec (manageable)
+  Even at 70% hit ratio, the shield deduplicates concurrent requests</pre>
+
+<h2>Reducing Cache Misses</h2>
+<ol>
+  <li><strong>Content hashing in URLs</strong> &mdash; <code>app.a1b2c3.js</code> changes URL when content changes, allowing infinite TTL and near-100% hit ratio</li>
+  <li><strong>Pre-warming</strong> &mdash; use CDN APIs to pre-fetch into edge caches before traffic arrives</li>
+  <li><strong>Origin shield</strong> &mdash; deduplicate concurrent miss requests before they hit origin</li>
+  <li><strong>Longer TTLs with stale-while-revalidate</strong> &mdash; serve stale content while refreshing in the background</li>
+  <li><strong>Normalize cache keys</strong> &mdash; strip tracking parameters, sort query strings, ignore case differences</li>
+  <li><strong>Larger edge cache capacity</strong> &mdash; reduce LRU evictions for long-tail content</li>
+</ol>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What happens on a cache miss?"</strong><br>The edge server checks its local cache, finds nothing, and performs an origin pull: it forwards the request to the origin server, receives the response, caches it locally (respecting Cache-Control headers), and serves it to the client. The miss penalty is an extra ~200ms of latency and origin server load.</li>
+  <li><strong>"What is the cold start problem and how do you solve it?"</strong><br>Cold start happens when a resource is not cached at a particular edge PoP, so the first user at that location always experiences a miss. Solutions: pre-warm caches via CDN APIs, use origin shields to absorb thundering herds, deploy content with hashed URLs (so new assets don't invalidate old ones), and use background refresh for popular content.</li>
+  <li><strong>"How would you handle a thundering herd after a cache purge?"</strong><br>Three layers of defense: (1) origin shield / tiered cache to deduplicate requests before they reach origin, (2) request coalescing within each PoP so only one origin request per resource is made, (3) serve stale content with stale-while-revalidate so users see instant responses while the cache repopulates in the background.</li>
+  <li><strong>"Design a system where the origin must never be overwhelmed by cache misses."</strong><br>Use origin shield (regional caching layer), request coalescing at every PoP, circuit breaker pattern to shed load if origin is degraded, pre-warm caches before deploying new content, and implement rate limiting at the edge. The origin should handle a predictable, bounded load regardless of client traffic spikes.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>CDN vendor-specific shield configuration syntax</li>
+    <li>Deep dive into LRU vs LFU vs ARC eviction algorithms &mdash; know LRU is most common, don't memorize variants</li>
+    <li>Specific CDN pricing for bandwidth overage from origin pulls</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Understanding Origin Shield" &mdash; Cloudflare Blog</strong> &mdash; blog.cloudflare.com</li>
+    <li><strong>"Cache Miss Penalties" &mdash; High Performance Browser Networking (Ilya Grigorik)</strong></li>
+    <li><strong>"Thundering Herd" &mdash; Martin Fowler Blog</strong> &mdash; martinfowler.com/bliki/ThunderingHerdProblem.html</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="cache-hit.html">&larr; cache-hit.html</a>
+  <a href="cache-invalidation.html">Next: cache-invalidation.html &rarr;</a>
+</div>
+
+</body>
+</html>

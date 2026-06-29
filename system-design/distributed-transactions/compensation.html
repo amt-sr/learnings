@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>9.2.4 Compensation</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb"><a href="../">System Design</a> / <a href="./">Section 9: Distributed Transactions</a> / 9.2.4 Compensation</div>
+
+<h1>Compensation</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand compensation as the mechanism for reversing partial distributed transactions. This is the backbone of the Saga pattern and a critical concept for handling failures in distributed workflows where atomic rollback is not possible.</p>
+
+<h2>Definition</h2>
+<p>Compensation is the process of <strong>undoing the effects of a completed step in a distributed transaction</strong> when a subsequent step fails. Unlike traditional database rollbacks (which reverse all changes atomically), compensation is a <strong>semantic reversal</strong> -- each step must define its own compensating action that logically undoes the business effect of the original step. Compensation is fundamental to the Saga pattern because there is no global transaction to roll back; each local transaction must be reversed individually.</p>
+
+<div class="callout">
+  <strong>Key Insight:</strong> Compensation is not a rollback. A database rollback undoes all changes atomically using the write-ahead log. Compensation applies a <em>new</em> operation that logically reverses the business effect. The original operation may have had side effects (emails sent, logs written, external API calls made) that cannot be truly reversed. This is why compensation is called "semantic" -- it restores business correctness, not database state.
+</div>
+
+<h2>Semantic vs Physical Compensation</h2>
+
+<table>
+  <tr><th>Property</th><th>Physical (DB Rollback)</th><th>Semantic (Compensation)</th></tr>
+  <tr><td>Scope</td><td>Database only</td><td>Any system (DB, API, external service)</td></tr>
+  <tr><td>Granularity</td><td>All changes in a transaction</td><td>Per-step reversal</td></tr>
+  <tr><td>Side effects</td><td>None (complete undo)</td><td class="red">May leave residual effects (logs, sent emails)</td></tr>
+  <tr><td>Isolation</td><td>Rollback is invisible to others</td><td class="red">Intermediate state visible to other transactions</td></tr>
+  <tr><td>Timing</td><td>Immediate (same transaction)</td><td>Delayed (separate transactions)</td></tr>
+  <tr><td>Idempotency</td><td>N/A (rollback is idempotent by nature)</td><td class="red">Must be explicitly designed as idempotent</td></tr>
+</table>
+
+<h2>Compensation in a Saga</h2>
+
+<div class="diagram">
+  <strong>Saga with Compensation Flow</strong>
+
+  <strong>HAPPY PATH:</strong>
+
+  [T1: Create Order]  -->  [T2: Reserve Inventory]  -->  [T3: Charge Payment]
+       |                        |                            |
+       v                        v                            v
+    Order created            Stock reserved              Card charged
+
+  <strong>FAILURE PATH (Payment fails):</strong>
+
+  [T1: Create Order]  -->  [T2: Reserve Inventory]  -->  [T3: Charge Payment]
+       |                        |                            |
+       v                        v                        [FAIL]
+    Order created            Stock reserved                   |
+       |                        |                            |
+       |                        v                            |
+       |                 [C2: Release Inventory]              |
+       |                        |                            |
+       v                        v                            v
+    [C1: Cancel Order] <--------------------------------------+
+       |
+       v
+  All steps compensated (system returned to consistent state)
+</div>
+
+<h2>Compensation Strategies</h2>
+
+<h3>Strategy 1: Full Reversal</h3>
+<p>Each compensating transaction completely undoes the original operation.</p>
+<ul>
+  <li>Reserve inventory --> Release inventory reservation</li>
+  <li>Charge credit card --> Refund credit card</li>
+  <li>Activate subscription --> Deactivate subscription</li>
+</ul>
+
+<h3>Strategy 2: Partial Reversal with Business Logic</h3>
+<p>The compensation may not be a simple inverse; it may involve business rules.</p>
+<ul>
+  <li>Applied discount code --> "Release" discount (but the code may have been time-limited)</li>
+  <li>Reserved seat on flight --> Cancel reservation (but cancellation fee may apply)</li>
+  <li>Sent welcome email --> Cannot "unsend" email; send a follow-up correction instead</li>
+</ul>
+
+<h3>Strategy 3: No Compensation Needed</h3>
+<p>Some operations don't need compensation because they have no reversible business impact.</p>
+<ul>
+  <li>Logging / auditing</li>
+  <li>Analytics events</li>
+  <li>Cache warming</li>
+</ul>
+
+<div class="callout yellow">
+  <strong>Design Principle:</strong> When designing a saga, ask for each step: "If this step succeeds but a later step fails, what operation would logically undo the business effect?" If there is no reasonable compensation, consider whether the step should be in the saga or if it should be deferred to after the saga completes.
+</div>
+
+<h2>Compensation Challenges</h2>
+
+<h3>1. Compensation Failure</h3>
+<p>The compensating transaction itself can fail. For example, the refund API might be down.</p>
+
+<div class="diagram">
+  <strong>Compensation Failure: Cascading Problem</strong>
+
+  [T3 fails]  -->  Compensate T2  -->  [C2 FAILS: Refund service down]
+                          |
+                          v
+                Retry C2 (exponential backoff)
+                          |
+                          v
+                [C2 still fails after max retries]
+                          |
+                          v
+                Record in Dead Letter Queue
+                Alert operations team
+                Manual intervention required
+</div>
+
+<div class="callout">
+  <strong>Mitigation Strategies:</strong>
+  <ul>
+    <li><strong>Retries with exponential backoff:</strong> Most transient failures resolve with retries</li>
+    <li><strong>Compensation as a saga itself:</strong> If C2 fails, compensate C2 with C2a (escalation saga)</li>
+    <li><strong>Dead Letter Queue:</strong> Persist failed compensations for manual or automated resolution</li>
+    <li><strong>Idempotent compensations:</strong> Ensure retries are safe (same effect if run multiple times)</li>
+    <li><strong>Time-based resolution:</strong> Auto-expire reservations that were not confirmed within a timeout</li>
+  </ul>
+</div>
+
+<h3>2. Observability of Compensations</h3>
+<p>You need to track compensation state across the saga:</p>
+<ul>
+  <li>Which steps completed successfully</li>
+  <li>Which compensations have been triggered</li>
+  <li>Which compensations are still pending or failed</li>
+</ul>
+
+<pre>
+CREATE TABLE saga_instance (
+    saga_id        UUID PRIMARY KEY,
+    saga_type      VARCHAR(255) NOT NULL,
+    status         VARCHAR(50) NOT NULL,   -- PENDING, COMPLETED, COMPENSATING, FAILED
+    current_step   INTEGER NOT NULL DEFAULT 0,
+    created_at     TIMESTAMP NOT NULL,
+    updated_at     TIMESTAMP NOT NULL
+);
+
+CREATE TABLE saga_step (
+    id              UUID PRIMARY KEY,
+    saga_id         UUID REFERENCES saga_instance(id),
+    step_number     INTEGER NOT NULL,
+    action          VARCHAR(255) NOT NULL,   -- e.g., "reserve_inventory"
+    status          VARCHAR(50) NOT NULL,   -- PENDING, COMPLETED, COMPENSATING, COMPENSATED, FAILED
+    compensation    VARCHAR(255),            -- e.g., "release_inventory"
+    executed_at     TIMESTAMP,
+    compensated_at  TIMESTAMP
+);
+</pre>
+
+<h3>3. Idempotent Compensations</h3>
+<p>Compensating transactions must be idempotent because:</p>
+<ul>
+  <li>The orchestrator may retry a failed compensation</li>
+  <li>Network issues may cause duplicate compensation messages</li>
+  <li>Recovery after a crash may re-execute a compensation</li>
+</ul>
+
+<div class="callout green">
+  <strong>Best Practice:</strong> Design compensating operations to be naturally idempotent. For example: "Set order status to cancelled" is idempotent (setting it again has no effect). "Refund $100" is NOT idempotent unless you track refund IDs. Always check if a compensation has already been applied before executing it.
+</div>
+
+<h3>4. Compensating External Services</h3>
+<p>When a saga step calls an external service (third-party API), compensation is harder:</p>
+<ul>
+  <li>External API may not support compensation (no "undo" endpoint)</li>
+  <li>External API may impose fees or rate limits on compensation</li>
+  <li>Time between operation and compensation may affect what reversal is possible</li>
+</ul>
+
+<div class="callout yellow">
+  <strong>Design Rule:</strong> For external services, design the saga so that the external call happens as late as possible. Move all internal operations before the external call. This minimizes the number of compensations needed when the external call fails.
+</div>
+
+<h2>Compensation vs Rollback: When to Use What</h2>
+
+<table>
+  <tr><th>Scenario</th><th>Use Case</th><th>Reason</th></tr>
+  <tr><td>Single database transaction</td><td>Database rollback</td><td>Fast, atomic, complete undo</td></tr>
+  <tr><td>Multiple services, same company</td><td>Saga + compensation</td><td>No cross-service transaction possible</td></tr>
+  <tr><td>Cross-company boundaries</td><td>Saga + compensation</td><td>No shared transaction coordinator</td></tr>
+  <tr><td>Long-running process</td><td>Saga + compensation</td><td>Cannot hold locks for duration</td></tr>
+  <tr><td>High-throughput system</td><td>Saga + compensation</td><td>Avoid cross-service lock contention</td></tr>
+</table>
+
+<h2>Real-World Example: Travel Booking Saga</h2>
+
+<div class="diagram">
+  <strong>Travel Booking with Compensations</strong>
+
+  Step      Forward                  Compensation
+  ────      ───────                  ────────────
+  T1        Book flight              Cancel flight reservation
+  T2        Book hotel               Cancel hotel reservation
+  T3        Rent car                 Cancel car rental
+  T4        Charge credit card       Refund credit card
+  T5        Send confirmation email  Send cancellation email
+
+  If T4 (payment) fails:
+    Compensate T3: Cancel car rental
+    Compensate T2: Cancel hotel reservation
+    Compensate T1: Cancel flight reservation
+    (T5 was never reached)
+
+  If T5 (email) fails:
+    Compensate T4: Refund credit card
+    Compensate T3: Cancel car rental
+    Compensate T2: Cancel hotel reservation
+    Compensate T1: Cancel flight reservation
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What is compensation? How does it differ from a database rollback?</li>
+  <li>Why must compensating transactions be idempotent?</li>
+  <li>What happens when a compensating transaction fails? How do you handle it?</li>
+  <li>How do you track compensation state across a saga?</li>
+  <li>Design a compensation strategy for an e-commerce order. What are the forward and reverse steps?</li>
+  <li>How do you handle compensation for external services that don't support "undo"?</li>
+  <li>What is a Dead Letter Queue and how does it relate to compensation?</li>
+  <li>How would you test that your compensation logic is correct?</li>
+  <li>When should you use compensation vs a traditional database rollback?</li>
+  <li>How do you handle the case where compensation partially reverses the state (e.g., cancellation fee)?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>For L5/L6/Staff interviews, skip:</strong>
+  <ul>
+    <li>Specific Saga framework internals (Temporal compensation handling, Axon saga events)</li>
+    <li>Formal compensation formalisms (Compensating CSP, Saga algebra)</li>
+    <li>Nested sagas and sub-saga compensation (unless asked about complex workflows)</li>
+    <li>Transaction token-based compensation models</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><em>Microservices Patterns</em> (Chris Richardson) -- Chapter 6: Saga Pattern, Section on compensation</li>
+    <li><em>Designing Data-Intensive Applications</em> (Martin Kleppmann) -- Chapter 7: Transactions (sagas and compensation)</li>
+    <li><em>Building Microservices</em> (Sam Newman, 2nd Ed) -- Chapter on managing failure with sagas</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Papers</div>
+  <ul>
+    <li>"Sagas" (Hector Garcia-Molina &amp; Kenneth Salem, 1987)</li>
+    <li>"Long-Lived Transactions (Using Sagas)" (Garcia-Molina &amp; Salem, ACM SIGMOD Record, 1987)</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Online</div>
+  <ul>
+    <li><a href="https://microservices.io/patterns/data/saga.html">Chris Richardson: Saga Pattern</a></li>
+    <li><a href="https://temporal.io/blog/why-temporal">Temporal.io: Reliable saga execution with compensation</a></li>
+    <li><a href="https://particular.net/blog/saga-compensation-and-retries">NServiceBus: Saga Compensation and Retries</a></li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="transactional-messaging.html">&larr; 9.2.3 Transactional Messaging</a>
+  <a href="../reliability/sla.html">10.1.1 SLA &rarr;</a>
+</div>
+
+</body>
+</html>

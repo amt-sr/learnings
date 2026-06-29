@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.4.3 Consistency</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="index.html">System Design</a> / <a href="index.html">3 Storage</a> / <a href="index.html">3.4 Transactions</a> / 3.4.3
+</div>
+
+<h1>3.4.3 Consistency</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<ul>
+  <li>Define ACID consistency as the preservation of database invariants and constraints</li>
+  <li>Understand that consistency is a shared responsibility between the database and the application</li>
+  <li>Clearly distinguish ACID consistency from distributed consistency (CAP theorem)</li>
+  <li>Explain the types of database constraints and how they enforce valid state transitions</li>
+  <li>Discuss invariants and why they are fundamental to correct system design</li>
+</ul>
+
+<h2>Definition</h2>
+<p><strong>ACID Consistency</strong> guarantees that a transaction takes the database from one <strong>valid state</strong> to another. A valid state is one that satisfies all defined rules, constraints, triggers, and invariants. Unlike the other three ACID properties, consistency is partially the <strong>application's responsibility</strong> -- the database can only enforce constraints that have been explicitly declared. The correctness of business logic and domain-specific invariants is the developer's job.</p>
+
+<div class="callout red">
+  <strong>Warning -- most common interview confusion:</strong> ACID Consistency is NOT the same as "read-your-writes consistency" or "strong consistency" in distributed systems (CAP theorem). ACID consistency is about maintaining integrity constraints and valid state transitions within a single database node. When someone says "our system is eventually consistent," they are talking about distributed replication consistency, NOT ACID consistency. These are completely different concepts.
+</div>
+
+<h2>ACID Consistency vs. Distributed Consistency</h2>
+
+<div class="diagram">
+  ACID CONSISTENCY                    DISTRIBUTED CONSISTENCY
+  ─────────────────                   ────────────────────────
+  What it means:                      What it means:
+  "Database constraints and           "Reads see the latest writes"
+   invariants are maintained           across replicas"
+
+  Scope: Single database node          Scope: Multiple replicas / nodes
+
+  Mechanism:                          Mechanism:
+  • Foreign keys                       • Synchronous replication
+  • Check constraints                  • Quorum reads/writes
+  • Triggers                           • Consensus protocols (Raft, Paxos)
+  • Application-level invariants       • Version vectors, timestamps
+
+  Example:                            Example:
+  Every order must have a              When you write a value,
+  valid user_id (FK constraint)       all replicas return that value
+                                       on subsequent reads
+
+  Enforced by:                        Enforced by:
+  Database + Application              Replication protocol
+
+  Violated when:                      Violated when:
+  A transaction breaks a              A replica is stale
+  declared rule                       (lag behind leader)
+</div>
+
+<table>
+  <tr><th>Aspect</th><th>ACID Consistency</th><th>Distributed Consistency</th></tr>
+  <tr><th>Domain</th><td>Transaction processing</td><td>Replicated state machines</td></tr>
+  <tr><th>Guarantee</th><td>Valid state transitions</td><td>Read-write ordering across nodes</td></tr>
+  <tr><th>Failure mode</th><td>Constraint violation rejected</td><td>Stale reads, split-brain</td></tr>
+  <tr><th>Theory</th><td>ACID properties (transaction theory)</td><td>CAP theorem, PACELC</td></tr>
+  <tr><th>Trade-off</th><td>More constraints = less flexibility</td><td>More consistency = less availability</td></tr>
+</table>
+
+<h2>Types of Database Constraints</h2>
+
+<h3>Declarative Constraints (Enforced by the Database)</h3>
+
+<table>
+  <tr><th>Constraint</th><th>What It Enforces</th><th>Example</th><th>Performance Cost</th></tr>
+  <tr><td>Primary Key</td><td>Uniqueness + non-null per row</td><td><code>user_id SERIAL PRIMARY KEY</code></td><td>Low (B-tree unique index lookup)</td></tr>
+  <tr><td>Unique</td><td>Column value uniqueness across table</td><td><code>UNIQUE (email)</code></td><td>Low (index enforcement)</td></tr>
+  <tr><td>Not Null</td><td>Column cannot be NULL</td><td><code>name VARCHAR NOT NULL</code></td><td>None (inline check)</td></tr>
+  <tr><td>Foreign Key</td><td>Referential integrity between tables</td><td><code>FOREIGN KEY (user_id) REFERENCES users(id)</code></td><td>Medium-high (cross-table index check on every write)</td></tr>
+  <tr><td>Check</td><td>Arbitrary boolean condition per row</td><td><code>CHECK (balance >= 0)</code></td><td>Low (expression evaluation per row)</td></tr>
+  <tr><td>Exclusion</td><td>Row-level exclusion constraints</td><td><code>EXCLUDE USING gist (room_id WITH =, time_range WITH &&)</code></td><td>High (GiST index operations)</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Performance impact of constraints:</strong> Foreign keys are the most expensive constraint in write-heavy workloads because every INSERT/UPDATE must verify the referenced row exists in the parent table. In sharded systems, foreign keys across shards are often dropped entirely and enforced at the application level. Instagram, for example, removed all foreign keys from their sharded PostgreSQL setup for this reason.
+</div>
+
+<h3>Application-Level Invariants</h3>
+<p>The database cannot enforce business logic that spans multiple tables or requires external validation. These are the application's responsibility:</p>
+
+<table>
+  <tr><th>Invariant</th><th>Description</th><th>Enforcement</th></tr>
+  <tr><td>Accounting balance</td><td>Total debits must equal total credits</td><td>Double-entry bookkeeping in application logic</td></tr>
+  <tr><td>Inventory non-negative</td><td>Cannot sell more items than available</td><td>Application check + database CHECK constraint</td></tr>
+  <tr><td>Rate limits</td><td>User cannot exceed API call quota</td><td>Application + Redis counter (not a DB constraint)</td></tr>
+  <tr><td>Business rules</td><td>Order must transition through valid states</td><td>State machine in application layer</td></tr>
+</table>
+
+<h2>How Constraints Are Enforced During Transactions</h2>
+
+<div class="diagram">
+  Transaction: INSERT order with user_id=42, total=150
+  ────────────────────────────────────────────────────
+
+  1. Application sends INSERT to database
+       │
+       ▼
+  2. Database checks NOT NULL constraints
+       │  ✓ All required fields present
+       ▼
+  3. Database checks PRIMARY KEY constraint
+       │  ✓ order_id is unique
+       ▼
+  4. Database checks UNIQUE constraints
+       │  ✓ No duplicate order reference
+       ▼
+  5. Database checks FOREIGN KEY constraint
+       │  → SELECT FROM users WHERE id = 42
+       │  ✓ User exists
+       ▼
+  6. Database checks CHECK constraints
+       │  ✓ total >= 0 (valid amount)
+       ▼
+  7. Database fires BEFORE triggers
+       │  ✓ Custom validation passes
+       ▼
+  8. Row written to WAL + buffer pool
+       │
+       ▼
+  9. Database fires AFTER triggers
+       │  ✓ Auditing, notifications, etc.
+       ▼
+  10. Transaction COMMIT
+       ✓ Database is in a new valid state
+
+  IF ANY CHECK FAILS at step 2-6:
+       → Statement or transaction ROLLED BACK
+       → Database remains in its previous valid state
+</div>
+
+<h2>Why ACID Consistency Matters</h2>
+<p>Without consistency enforcement, the database can enter states that violate business rules, leading to:</p>
+
+<ul>
+  <li><strong>Data corruption:</strong> Orphaned rows (order referencing a deleted user), negative balances, duplicate keys</li>
+  <li><strong>Application errors:</strong> Code assumes valid data but encounters impossible states, causing cascading failures</li>
+  <li><strong>Financial loss:</strong> In payment systems, inventory systems, and trading platforms, violated invariants directly translate to monetary losses</li>
+  <li><strong>Compliance violations:</strong> Regulatory requirements (SOC 2, PCI-DSS) often mandate data integrity controls</li>
+</ul>
+
+<div class="callout">
+  <strong>Key insight:</strong> ACID consistency is the property that makes databases trustworthy. Atomicity ensures all-or-nothing, durability ensures persistence, isolation ensures concurrent correctness -- but consistency ensures that the data itself is <em>meaningful</em>. A database can have perfect atomicity, durability, and isolation and still be useless if the data violates your business rules.
+</div>
+
+<h2>Consistency in Sharded and Distributed Databases</h2>
+<p>When you shard a database, maintaining ACID consistency across shards becomes challenging:</p>
+
+<ul>
+  <li><strong>Cross-shard foreign keys:</strong> Most sharded databases (Vitess, CockroachDB) do not support foreign keys across shards. The application must enforce referential integrity.</li>
+  <li><strong>Cross-shard unique constraints:</strong> Ensuring global uniqueness (e.g., username uniqueness) across shards requires coordination. Solutions include: global ID generation (Snowflake), a separate mapping table, or distributed locks.</li>
+  <li><strong>Distributed transactions:</strong> Spanner and CockroachDB provide cross-shard ACID transactions, but with higher latency than single-shard operations.</li>
+</ul>
+
+<div class="callout green">
+  <strong>Practical approach:</strong> Design your sharding key so that most operations stay within a single shard (entity-oriented sharding). This preserves ACID consistency for the majority of operations without cross-shard coordination. Cross-shard operations should be asynchronous (event-driven) where possible.
+</div>
+
+<h2>Invariants as a Design Tool</h2>
+<p>In system design, defining invariants early is one of the most powerful techniques:</p>
+
+<table>
+  <tr><th>System</th><th>Key Invariants</th></tr>
+  <tr><td>Banking</td><td>Sum of all account balances = total money in system (no money created/destroyed)</td></tr>
+  <tr><td>Inventory</td><td>Items sold <= items in stock at time of sale</td></tr>
+  <tr><td>Voting</td><td>Each user can vote at most once per election</td></tr>
+  <tr><td>Scheduling</td><td>No two events can book the same resource at the same time</td></tr>
+  <tr><td>Identity</td><td>Each email address maps to exactly one user account</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Interview tip:</strong> When asked to design a system, start by defining the invariants. For example, "In my payment system, the key invariant is that money is never created or destroyed -- every debit must have a corresponding credit." This demonstrates senior-level thinking: define correctness first, then design the system to maintain it.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What does the "C" in ACID stand for? How is it different from the "C" in CAP?</li>
+  <li>What types of constraints can a database enforce? Give examples.</li>
+  <li>Why is ACID consistency partially the application's responsibility?</li>
+  <li>How do foreign keys affect write performance? When would you disable them?</li>
+  <li>What happens to ACID consistency when you shard a database?</li>
+  <li>Define three invariants for a ride-sharing system. How would you enforce them?</li>
+  <li>Can you have ACID consistency without ACID isolation? Why or why not?</li>
+  <li>How does a distributed transaction maintain consistency across shards?</li>
+  <li>What is the difference between a check constraint and an application-level invariant?</li>
+  <li>A transaction passes all database constraints but violates a business rule. Is ACID consistency maintained?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>In an interview setting, skip:</strong>
+  <ul>
+    <li>CAP theorem deep-dives when discussing ACID consistency -- these are different concepts that are easily conflated</li>
+    <li>Detailed syntax for creating constraints in specific SQL dialects</li>
+    <li>Advanced constraint types like deferred constraints, partial indexes -- unless specifically asked</li>
+    <li>Data validation at the application layer (ORM validators, form validation) -- focus on database-level consistency</li>
+    <li>Distributed consistency models (causal, eventual, linearizable) -- these belong in a separate discussion about replication, not ACID consistency</li>
+  </ul>
+</div>
+
+<h2>Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ul>
+    <li>"Designing Data-Intensive Applications" (Martin Kleppmann) -- Chapter 7: Transactions, section on consistency and invariants</li>
+    <li>"Database System Concepts" (Silberschatz, Korth, Sudarshan) -- Chapter 6: Integrity Constraints</li>
+    <li>"Transaction Processing: Concepts and Techniques" (Gray &amp; Reuter) -- Discussion of consistency as the application's responsibility</li>
+    <li>PostgreSQL Documentation: Constraints -- Practical reference for all constraint types</li>
+    <li>Gregor Hohpe's "Enterprise Integration Patterns" -- Invariants and consistency in distributed systems</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="atomicity.html">&larr; 3.4.2 Atomicity</a>
+  <a href="isolation.html">Next: 3.4.4 Isolation &rarr;</a>
+</div>
+
+</body>
+</html>

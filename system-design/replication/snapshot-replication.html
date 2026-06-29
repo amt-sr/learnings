@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.5.3 Snapshot Replication - System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">4 Replication</a> / 4.5 Replication Internals / 4.5.3
+</div>
+
+<h1>Snapshot Replication</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand snapshot replication as a bulk data transfer mechanism for initial synchronization and periodic backups. Recognize why snapshots alone are insufficient for ongoing replication and how they combine with incremental change streams (WAL, binlog) for a complete replication strategy.</p>
+
+<h2>Definition</h2>
+<p><strong>Snapshot replication</strong> copies the entire database (or a subset of tables) from a source to a target as a complete, point-in-time image. The target receives a full copy of all data at a specific moment. This is fundamentally different from streaming replication -- instead of continuously sending incremental changes, snapshot replication transfers the entire dataset in one bulk operation.</p>
+
+<div class="callout">
+  <strong>Key idea:</strong> Snapshot replication is the "seed" step. You use it to bootstrap a new replica, then switch to WAL/binlog streaming for ongoing incremental replication. It is not a replacement for continuous replication -- it is the starting point.
+</div>
+
+<h2>How It Works</h2>
+
+<div class="diagram">
+  Phase 1: Snapshot (Initial Sync)
+  ─────────────────────────────────
+
+  Leader                              Follower
+  ┌──────────┐                       ┌──────────┐
+  │ Database │─── Full copy ─────────►│ Database │
+  │ (source) │   (all tables,        │ (target) │
+  │          │    all data)           │          │
+  └──────────┘                       └──────────┘
+       │                                  │
+       │  Options:                         │
+       │  1. mysqldump (logical backup)    │
+       │  2. pg_basebackup (physical)     │
+       │  3. Percona XtraBackup (physical) │
+       │  4. RDS snapshot copy             │
+       │                                  │
+
+  Phase 2: Streaming (Ongoing)
+  ─────────────────────────────────
+
+  Leader                              Follower
+  ┌──────────┐     WAL / Binlog      ┌──────────┐
+  │ Database │════ stream ═════════►│ Database │
+  │          │    (incremental)      │          │
+  └──────────┘                       └──────────┘
+
+  From the snapshot point forward,
+  only changes are streamed.
+</div>
+
+<h3>Snapshot Process</h3>
+<ol>
+  <li><strong>Consistent snapshot:</strong> The source takes a consistent point-in-time snapshot (using <code>FLUSH TABLES WITH READ LOCK</code> in MySQL or <code>pg_start_backup()</code> in PostgreSQL). This ensures all data is from the same moment.</li>
+  <li><strong>Copy data:</strong> The full dataset is transferred. Methods vary by database:
+    <ul>
+      <li><strong>Logical:</strong> <code>mysqldump</code>, <code>pg_dump</code> -- outputs SQL statements. Portable but slow for large databases.</li>
+      <li><strong>Physical:</strong> <code>pg_basebackup</code>, Percona XtraBackup, RDS snapshots -- copies data files directly. Fast but not portable across versions.</li>
+    </ul>
+  </li>
+  <li><strong>Record position:</strong> The binlog position (MySQL) or WAL LSN (PostgreSQL) at the time of the snapshot is recorded.</li>
+  <li><strong>Apply to target:</strong> The snapshot is loaded onto the follower.</li>
+  <li><strong>Start streaming:</strong> The follower begins streaming replication from the recorded position, picking up all changes that occurred during and after the snapshot.</li>
+</ol>
+
+<h2>Advantages</h2>
+
+<ul>
+  <li><strong>Simple and reliable:</strong> Full copy is conceptually straightforward. No incremental replay logic needed -- just copy files or dump SQL.</li>
+  <li><strong>Clean starting point:</strong> The follower has a complete, consistent copy of the leader's data at a known point in time.</li>
+  <li><strong>Version-agnostic (logical):</strong> Logical snapshots (SQL dumps) can be loaded into different database versions or even different database engines.</li>
+  <li><strong>No lag accumulation:</strong> Unlike streaming replication, there is no concept of "falling behind." The snapshot is either complete or not.</li>
+  <li><strong>Essential for disaster recovery:</strong> Regular snapshots provide recovery points. Combined with WAL/binlog, they enable point-in-time recovery.</li>
+</ul>
+
+<h2>Disadvantages</h2>
+
+<ul>
+  <li><strong>Expensive for large databases:</strong> Copying a 1TB database takes significant time and I/O bandwidth. The leader may be locked or I/O-bounded during the copy.</li>
+  <li><strong>Not suitable for frequent replication:</strong> Taking a full snapshot every minute is impractical. Snapshots are periodic (daily, weekly), not continuous.</li>
+  <li><strong>Stale data between snapshots:</strong> If using snapshots alone (without streaming), followers only receive updates at snapshot intervals. Data can be hours or days stale.</li>
+  <li><strong>Resource-intensive:</strong> Full copies consume network bandwidth, disk I/O, and CPU on both source and target. Production workloads may be impacted.</li>
+  <li><strong>Storage overhead:</strong> Each snapshot consumes full disk space on the target (or in backup storage).</li>
+</ul>
+
+<h2>Snapshot Methods by Database</h2>
+
+<table>
+  <tr>
+    <th>Method</th>
+    <th>Database</th>
+    <th>Type</th>
+    <th>Speed</th>
+    <th>Notes</th>
+  </tr>
+  <tr>
+    <td><code>mysqldump</code></td>
+    <td>MySQL</td>
+    <td>Logical (SQL)</td>
+    <td class="red">Slow</td>
+    <td>Single-threaded, locks tables by default. Use <code>--single-transaction</code> for InnoDB.</td>
+  </tr>
+  <tr>
+    <td>Percona XtraBackup</td>
+    <td>MySQL/MariaDB</td>
+    <td>Physical (files)</td>
+    <td class="green">Fast</td>
+    <td>Hot backup (no locks). Commerical features in Percona Server.</td>
+  </tr>
+  <tr>
+    <td><code>pg_dump</code></td>
+    <td>PostgreSQL</td>
+    <td>Logical (SQL)</td>
+    <td class="red">Slow</td>
+    <td>Use <code>-j</code> for parallel jobs. Good for small databases.</td>
+  </tr>
+  <tr>
+    <td><code>pg_basebackup</code></td>
+    <td>PostgreSQL</td>
+    <td>Physical (files)</td>
+    <td class="green">Fast</td>
+    <td>Standard tool for bootstrapping streaming replicas.</td>
+  </tr>
+  <tr>
+    <td>RDS Snapshot</td>
+    <td>AWS RDS</td>
+    <td>Physical (storage)</td>
+    <td class="green">Fast</td>
+    <td>Snapshots at storage level. Fast copy within same AZ/region.</td>
+  </tr>
+  <tr>
+    <td><code>pg_dumpall</code></td>
+    <td>PostgreSQL</td>
+    <td>Logical (SQL)</td>
+    <td class="red">Slow</td>
+    <td>Dumps all databases and global objects. For complete instance migration.</td>
+  </tr>
+</table>
+
+<h2>Snapshot + Streaming: The Complete Replication Strategy</h2>
+
+<p>Production replication almost always combines both approaches:</p>
+
+<ol>
+  <li><strong>Initial bootstrap:</strong> Take a snapshot and copy it to the new follower. Record the replication position at snapshot time.</li>
+  <li><strong>Streaming replication:</strong> The follower starts streaming from the recorded position. All changes that occurred during the snapshot copy are applied.</li>
+  <li><strong>Periodic snapshots:</strong> Regular snapshots are taken for backup and disaster recovery. If a follower falls too far behind to catch up via streaming, a fresh snapshot is taken.</li>
+</ol>
+
+<div class="callout green">
+  <strong>Design pattern:</strong> Snapshot = baseline. Streaming = delta. You always need both. Snapshot gets you to a starting point; streaming keeps you current. This is true for MySQL (mysqldump + binlog), PostgreSQL (pg_basebackup + WAL), and most other databases.
+</div>
+
+<h2>When Followers Fall Behind</h2>
+
+<p>If a follower falls too far behind (leader recycled WAL/binlog segments the follower needs), the follower cannot continue streaming and must re-sync:</p>
+<ol>
+  <li>Stop the follower.</li>
+  <li>Take a new snapshot from the leader.</li>
+  <li>Copy the snapshot to the follower.</li>
+  <li>Start streaming from the new snapshot's position.</li>
+</ol>
+
+<div class="callout yellow">
+  <strong>Interview Tip:</strong> When asked "how do you add a new replica to an existing system?", the answer is always snapshot first (initial sync), then streaming (ongoing sync). Mention both phases and explain why snapshots alone are insufficient.
+</div>
+
+<h2>Common Interview Questions</h2>
+
+<ul>
+  <li>"How would you create a new read replica for a 500GB MySQL database?" Answer: Take a consistent snapshot (e.g., Percona XtraBackup for minimal locking), record the binlog position, copy to the replica, configure replication starting from that binlog position, and let streaming replication handle ongoing changes.</li>
+  <li>"Why can't you use snapshots alone for replication?" Answer: Snapshots are expensive, infrequent, and produce stale data. For real-time replication, you need streaming (WAL/binlog) to propagate changes continuously between snapshots.</li>
+  <li>"What happens when a replica falls too far behind?" Answer: The leader may have recycled the WAL/binlog segments the replica needs. The replica must re-sync from a fresh snapshot.</li>
+  <li>"What is the difference between logical and physical snapshots?" Answer: Logical snapshots produce SQL statements (portable, slower). Physical snapshots copy raw data files (fast, not portable across versions). Physical is preferred for same-version replicas; logical for migrations.</li>
+</ul>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Avoid going deep into:</strong>
+  <ul>
+    <li><code>mysqldump</code> command-line flags and options. Mention <code>--single-transaction</code> as the key InnoDB flag; skip the rest.</li>
+    <li>Backup compression algorithms and encryption settings. The concept of taking backups is important; the implementation details are not.</li>
+    <li>Cloud-specific snapshot APIs (AWS <code>CreateDBSnapshot</code>, GCP snapshots). Mention cloud snapshots conceptually; skip the API calls.</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Reading Sources</div>
+  <ul>
+    <li><strong>MySQL 8.0 Reference Manual</strong> - "Backup and Recovery" and "Replication Implementation" for snapshot-based replica setup.</li>
+    <li><strong>PostgreSQL Documentation</strong> - "pg_basebackup" and "Continuous Archiving and Point-in-Time Recovery" chapters.</li>
+    <li><strong>Designing Data-Intensive Applications (Kleppmann)</strong> - Chapter 5 on replication initialization and snapshots.</li>
+    <li><strong>High Performance MySQL (4th Ed.)</strong> - Chapter 7 on backup strategies and replica provisioning.</li>
+    <li><strong>Percona XtraBackup Documentation</strong> - Physical backup methodology for MySQL.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="wal-shipping.html">&larr; 4.5.2 WAL Shipping</a>
+  <a href="logical-replication.html">4.5.4 Logical Replication &rarr;</a>
+</div>
+
+</body>
+</html>

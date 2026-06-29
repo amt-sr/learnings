@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.10.6 Time-Series Database</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#3">3 Storage</a> / <a href="../index.html#3.10">3.10 Database Models</a> / 3.10.6
+</div>
+
+<h1>Time-Series Database</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What a time-series database is: optimized for timestamped data with high write throughput</li>
+  <li>Data model: metric name + timestamp + value + tags/labels</li>
+  <li>Downsampling, retention policies, and rollups</li>
+  <li>Why general-purpose databases struggle with time-series workloads</li>
+</ul>
+
+<h2>Definition</h2>
+<p>A <strong>time-series database (TSDB) is optimized for storing and querying time-stamped data points, where data is always appended in chronological order and queries typically analyze ranges of time</strong>. Time-series data has unique characteristics: extremely high write volume (millions of data points per second), reads are almost always range-based (last hour, last day), old data is either aggregated (downsampled) or deleted (TTL), and recent data is hot while old data is cold.</p>
+
+<div class="diagram">  Time-Series Data Model
+
+  Each data point:
+  ┌─────────────────────────────────────────────────────────────┐
+  │  Metric:    cpu_usage                                        │
+  │  Timestamp: 2024-01-15T10:00:00Z                           │
+  │  Value:     75.2                                            │
+  │  Tags:      host=server-1, region=us-east, dc=us-east-1    │
+  └─────────────────────────────────────────────────────────────┘
+
+  Thousands of data points per second, per metric, per host:
+
+  cpu_usage {host=server-1, region=us-east}
+    10:00:00  → 75.2
+    10:00:01  → 76.1
+    10:00:02  → 74.8
+    10:00:03  → 77.3
+    ... (1 point per second, per host)
+
+  If you have 10,000 hosts × 100 metrics × 1 point/sec:
+  = 1,000,000 data points/second = 86.4 billion points/day
+
+  Query patterns:
+  - "Average CPU over the last 5 minutes for host=server-1"
+  - "P95 latency across all hosts in us-east for the last hour"
+  - "Alert if memory_usage > 90% for any host in last 10 minutes"</div>
+
+<h2>Data Model</h2>
+<table>
+  <tr><th>Component</th><th>Description</th><th>Example</th></tr>
+  <tr><td><strong>Metric name</strong></td><td>What is being measured</td><td><code>cpu_usage</code>, <code>request_latency</code></td></tr>
+  <tr><td><strong>Timestamp</strong></td><td>When the measurement was taken</td><td><code>2024-01-15T10:00:00Z</code></td></tr>
+  <tr><td><strong>Value</strong></td><td>The measurement (float64)</td><td><code>75.2</code>, <code>128</code></td></tr>
+  <tr><td><strong>Tags/Labels</strong></td><td>Key-value pairs for grouping and filtering</td><td><code>host=server-1</code>, <code>region=us-east</code></td></tr>
+</table>
+
+<pre>  InfluxDB Line Protocol:
+  cpu_usage,host=server-1,region=us-east value=75.2 1705312800000000000
+
+  Prometheus:
+  cpu_usage{host="server-1", region="us-east"} 75.2 1705312800
+
+  Each unique combination of metric + tags = a "time series"
+  10,000 hosts × 4 regions × 100 metrics = 4,000,000 unique time series
+  → this is why TSDBs optimize for cardinality management</div>
+
+<h2>Why Relational Databases Struggle</h2>
+<table>
+  <tr><th>Time-Series Requirement</th><th>Why <a href="relational-database.html">Relational DB</a> Struggles</th><th>TSDB Solution</th></tr>
+  <tr><td><strong>High write throughput</strong></td><td class="red">B+ tree inserts are random I/O. WAL overhead per insert.</td><td class="green">LSM tree or columnar append-only storage. Sequential writes.</td></tr>
+  <tr><td><strong>Range queries by time</strong></td><td class="yellow">Works but scans entire table range</td><td class="green">Data already partitioned by time. Single partition read.</td></tr>
+  <tr><td><strong>Automatic data expiry</strong></td><td class="red">Manual DELETE + VACUUM</td><td class="green">Built-in retention policies. Data auto-deleted after TTL.</td></tr>
+  <tr><td><strong>Downsampling/rollup</strong></td><td class="red">Manual materialized views, batch jobs</td><td class="green">Built-in continuous queries. Automatic rollups (1s → 1m → 1h → 1d).</td></tr>
+  <tr><td><strong>Compression</strong></td><td class="red">Per-row, limited savings</td><td class="green">Columnar + delta-of-delta encoding. 10-20x compression.</td></tr>
+  <tr><td><strong>Cardinality management</strong></td><td class="red">Index bloat with many tag combinations</td><td class="green">Optimized label indexing (inverted index)</td></tr>
+</table>
+
+<h2>Downsampling and Retention</h2>
+<div class="callout green">
+  <strong>Downsampling is the most important TSDB optimization.</strong> Raw data at 1-second granularity is only useful for a short window (hours/days). For longer time ranges, data is aggregated (averaged, min'd, max'd) into coarser granularity. This dramatically reduces storage while preserving analytical value.
+</div>
+
+<div class="diagram">  Data Lifecycle with Downsampling
+
+  Raw data (1-second intervals):
+  ┌───────────────────────────────────────────────────────┐
+  │ cpu_usage {host=server-1}:                            │
+  │   10:00:00 → 75.2, 10:00:01 → 76.1, 10:00:02 → 74.8 │
+  │   ... (86,400 points per day per host per metric)    │
+  │   Retention: 7 days                                   │
+  │   Storage: ~2 bytes/point × 86,400 = 173 KB/day/host  │
+  └───────────────────────────────────────────────────────┘
+          │ after 7 days, downsample to 1-minute
+          ▼
+  1-minute rollups:
+  ┌───────────────────────────────────────────────────────┐
+  │ cpu_usage {host=server-1}:                            │
+  │   10:00 → avg=75.3, min=74.1, max=76.8                │
+  │   ... (1,440 points per day per host per metric)       │
+  │   Retention: 30 days                                   │
+  │   Storage: 73% reduction                              │
+  └───────────────────────────────────────────────────────┘
+          │ after 30 days, downsample to 1-hour
+          ▼
+  1-hour rollups:
+  ┌───────────────────────────────────────────────────────┐
+  │ cpu_usage {host=server-1}:                            │
+  │   2024-01-15T10 → avg=74.8, min=71.2, max=78.1       │
+  │   ... (24 points per day)                              │
+  │   Retention: 1 year                                    │
+  │   Storage: 98% reduction vs raw                        │
+  └───────────────────────────────────────────────────────┘
+
+  Total storage savings: ~95% vs keeping all raw data forever</div>
+
+<h2>Time-Series Compression</h2>
+<p>TSDBs use specialized compression that exploits the nature of time-series data:</p>
+
+<table>
+  <tr><th>Technique</th><th>How It Works</th><th>Compression Ratio</th></tr>
+  <tr><td><strong>Delta-of-delta encoding</strong></td><td>Store the difference between consecutive timestamp deltas</td><td>~2-4x on timestamps</td></tr>
+  <tr><td><strong>XOR-based float compression</strong></td><td>Gorilla paper: store XOR of consecutive float values</td><td>~5-10x on values</td></tr>
+  <tr><td><strong>Columnar storage</strong></td><td>Store timestamps separately from values (better compression of similar data)</td><td>~2-3x</td></tr>
+  <tr><td><strong>Dictionary encoding</strong></td><td>Map repeated string tags to integers</td><td>~10-100x on tags</td></tr>
+</table>
+
+<div class="callout">
+  <strong>The Gorilla paper:</strong> Facebook's 2015 paper "Gorilla: A Fast, Scalable, In-Memory Time Series Database" introduced delta-of-delta timestamp encoding and XOR float compression. These techniques are now used by most TSDBs (InfluxDB, Prometheus, TimescaleDB). Know this paper's name for interviews.
+</div>
+
+<h2>Popular Time-Series Databases</h2>
+<table>
+  <tr><th>Database</th><th>Architecture</th><th>Best For</th></tr>
+  <tr><td><strong>Prometheus</strong></td><td>Pull-based scraping, in-memory + local disk, single node (federated for scale)</td><td>Monitoring, alerting, Kubernetes observability</td></tr>
+  <tr><td><strong>InfluxDB</strong></td><td>Custom storage engine (TSM — Time-Structured Merge tree, LSM variant)</td><td>IoT, application metrics, custom monitoring</td></tr>
+  <tr><td><strong>TimescaleDB</strong></td><td>PostgreSQL extension (hypertables — auto-partitioned by time)</td><td>Teams already using PostgreSQL, SQL access to time-series</td></tr>
+  <tr><td><strong>Amazon Timestream</strong></td><td>AWS managed, serverless, auto-scaling</td><td>IoT, DevOps, application telemetry on AWS</td></tr>
+</table>
+
+<h2>Prometheus vs InfluxDB</h2>
+<table>
+  <tr><th></th><th>Prometheus</th><th>InfluxDB</th></tr>
+  <tr><td><strong>Data collection</strong></td><td>Pull model (scrape endpoints)</td><td>Push model (client writes to DB)</td></tr>
+  <tr><td><strong>Query language</strong></td><td>PromQL (functional, designed for metrics)</td><td>InfluxQL / Flux (SQL-like)</td></tr>
+  <tr><td><strong>Storage</strong></td><td class="green">In-memory + local disk (fast queries)</td><td>Disk-based (TSM engine)</td></tr>
+  <tr><td><strong>Alerting</strong></td><td class="green">Built-in (Alertmanager)</td><td class="yellow">Kapacitor (separate component)</td></tr>
+  <tr><td><strong>Scaling</strong></td><td class="yellow">Single node (federation for multi-cluster)</td><td class="green">Clustering (InfluxDB Enterprise/Cloud)</td></tr>
+  <tr><td><strong>Ecosystem</strong></td><td class="green">Grafana, Kubernetes, exporters</td><td>Telegraf, Chronograf, Kapacitor (TICK stack)</td></tr>
+  <tr><td><strong>Best for</strong></td><td>Kubernetes monitoring, infrastructure metrics</td><td>Custom applications, IoT, long-term storage</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What is a time-series database and why not just use PostgreSQL?"</strong><br>TSDBs are optimized for time-stamped data with high write volume, range-based reads, automatic data expiry, and downsampling. PostgreSQL uses B+ trees (random I/O for inserts), requires manual cleanup for old data (no automatic TTL), and lacks built-in downsampling. A TSDB handles millions of points/second with built-in rollups and compression that reduces storage by 95%.</li>
+  <li><strong>"What is downsampling?"</strong><br>Reducing the granularity of data over time. Raw 1-second data is kept for a short window (hours/days), then aggregated into 1-minute averages for a longer window (weeks/months), then into 1-hour averages for years. This preserves analytical value while reducing storage by 95%+. Every TSDB provides this as a built-in feature.</li>
+  <li><strong>"How would you design a metrics collection system?"</strong><br>Collect metrics via push (agents) or pull (Prometheus scraping), write to a TSDB with retention policies (raw data: 7 days, 1-minute rollups: 30 days, 1-hour rollups: 1 year), query with range queries, visualize with Grafana, alert with Prometheus Alertmanager or equivalent. Consider cardinality limits to prevent explosion of time series from high-cardinality tags.</li>
+  <li><strong>"What is the cardinality problem?"</strong><br>Each unique combination of metric + tags creates a separate time series. High cardinality (e.g., tagging by user_id where millions of users exist) creates millions of time series, consuming massive memory and CPU for index maintenance. TSDBs can be brought down by cardinality explosions. Solution: limit tag values (use buckets instead of exact values), enforce cardinality limits, or move high-cardinality data to OLAP systems.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>OpenTSDB, Graphite internals (legacy systems)</li>
+    <li>TSM engine internals (InfluxDB's specific LSM variant)</li>
+    <li>PromQL syntax details</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Gorilla: A Fast, Scalable, In-Memory Time Series Database"</strong> — Facebook (2015)</li>
+    <li><strong>Prometheus documentation</strong> — prometheus.io/docs</li>
+    <li><strong>InfluxDB documentation: TSM Engine</strong> — docs.influxdata.com</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="graph-database.html">&larr; graph-database.html</a>
+  <a href="sql-vs-nosql.html">Next: sql-vs-nosql.html &rarr;</a>
+</div>
+
+</body>
+</html>

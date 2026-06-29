@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.4.4 WebSockets</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#2">2 Networking</a> / <a href="../index.html#2.4">2.4 APIs</a> / 2.4.4
+</div>
+
+<h1>WebSockets</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What WebSockets are and how full-duplex communication works</li>
+  <li>The HTTP upgrade handshake mechanism</li>
+  <li>WebSocket vs <a href="server-sent-events.html">SSE</a> vs HTTP polling trade-offs</li>
+  <li>Connection management at scale</li>
+</ul>
+
+<h2>Definition</h2>
+<p>WebSocket is a <strong>protocol providing full-duplex, bidirectional communication between client and server over a single TCP connection</strong>. Unlike HTTP's request-response model, once a WebSocket connection is established, either side can send messages at any time without the overhead of HTTP headers.</p>
+
+<h2>The Handshake</h2>
+<p>WebSocket connections start as an HTTP request that <strong>upgrades</strong> to the WebSocket protocol.</p>
+<div class="diagram">  Step 1: HTTP Upgrade Request (client → server)
+  ┌──────────────────────────────────────────────────────┐
+  │ GET /chat HTTP/1.1                                   │
+  │ Host: example.com                                     │
+  │ Upgrade: websocket                                    │
+  │ Connection: Upgrade                                   │
+  │ Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==         │
+  │ Sec-WebSocket-Version: 13                             │
+  └──────────────────────────────────────────────────────┘
+
+  Step 2: HTTP 101 Switching Protocols (server → client)
+  ┌──────────────────────────────────────────────────────┐
+  │ HTTP/1.1 101 Switching Protocols                      │
+  │ Upgrade: websocket                                    │
+  │ Connection: Upgrade                                   │
+  │ Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=  │
+  └──────────────────────────────────────────────────────┘
+
+  Step 3: WebSocket connection established
+  ┌────────┐          TCP connection          ┌────────┐
+  │ Client │◄═══════ full-duplex link ═══════►│ Server │
+  │        │   send frames anytime, both ways │        │
+  └────────┘                                  └────────┘</div>
+
+<p>After the handshake, the connection switches from HTTP to the WebSocket protocol. Messages are sent as lightweight <strong>frames</strong> (2-14 byte headers vs ~500-800 bytes for HTTP). The connection stays open until either side closes it.</p>
+
+<h2>WebSocket vs SSE vs HTTP Polling</h2>
+<table>
+  <tr><th></th><th>HTTP Polling</th><th><a href="server-sent-events.html">SSE</a></th><th>WebSocket</th></tr>
+  <tr><td>Direction</td><td>Client → Server (request)</td><td>Server → Client (push)</td><td class="green">Both directions</td></tr>
+  <tr><td>Communication</td><td class="red">Request-response only</td><td>Server push only</td><td class="green">Full-duplex</td></tr>
+  <tr><td>Transport</td><td>Standard HTTP</td><td>HTTP (text/event-stream)</td><td>WS protocol (upgraded from HTTP)</td></tr>
+  <tr><td>Connection</td><td>New per request</td><td>Long-lived HTTP</td><td class="green">Persistent TCP</td></tr>
+  <tr><td>Overhead</td><td class="red">High (full HTTP headers each time)</td><td>Moderate</td><td class="green">Low (2-14 byte frames)</td></tr>
+  <tr><td>Auto-reconnect</td><td>N/A (stateless)</td><td class="green">Built-in (browser)</td><td class="red">Manual implementation</td></tr>
+  <tr><td>Binary data</td><td class="green">Yes</td><td class="red">Text only</td><td class="green">Binary + text frames</td></tr>
+  <tr><td>Browser support</td><td class="green">Universal</td><td class="green">All modern (except IE)</td><td class="green">All modern</td></tr>
+  <tr><td>Proxy/firewall</td><td class="green">Works everywhere</td><td class="green">Works (HTTP)</td><td class="red">May be blocked</td></tr>
+  <tr><td>Scalability</td><td class="green">Stateless, easy</td><td>Good (one-way)</td><td class="red">Challenging (persistent state)</td></tr>
+  <tr><td>Latency</td><td class="red">High (polling interval)</td><td class="green">Low (push)</td><td class="green">Lowest (instant, both ways)</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Choosing the right technology:</strong> Use HTTP polling only for legacy compatibility. Use <a href="server-sent-events.html">SSE</a> for server-to-client push (notifications, live feeds) — simpler, auto-reconnects, works through proxies. Use WebSocket for true bidirectional communication (chat, multiplayer, collaborative editing) where the client also sends frequent messages.
+</div>
+
+<h2>Use Cases</h2>
+<h3>Chat and Messaging</h3>
+<div class="diagram">  Client A ──WebSocket──► Chat Server ◄──WebSocket── Client B
+                              │
+                        Message Broker (Kafka/Redis Pub-Sub)
+                              │
+                         Chat DB (MongoDB)
+
+  Flow:
+  1. Clients connect via WebSocket
+  2. Client A sends message → server
+  3. Server publishes to message broker
+  4. Server pushes to Client B via WebSocket
+  5. Server persists message to DB</div>
+
+<h3>Real-Time Dashboards</h3>
+<p>Stock prices, live sports scores, system metrics. Server pushes updates as they happen. WebSocket allows the client to also subscribe/unsubscribe to specific channels.</p>
+
+<h3>Collaborative Editing</h3>
+<p>Tools like Google Docs, Figma. Each keystroke/action is sent via WebSocket to an operational transform (OT) or CRDT server, which broadcasts to other collaborators.</p>
+
+<h2>Connection Management at Scale</h2>
+<p>Persistent WebSocket connections are the <strong>hardest part of scaling real-time systems</strong>. Each connection holds a TCP socket open on the server.</p>
+
+<div class="diagram">  Problem: 1M users = 1M open connections on one server
+
+  Solution: WebSocket connection layer + message broker
+
+  ┌──────┐  WS  ┌─────────┐         ┌──────────┐  WS  ┌──────┐
+  │ C1   │◄────►│ WS Srv 1│────────►│  Redis   │◄────►│ C500K│
+  │ C2   │◄────►│         │  PubSub │  Cluster  │◄────►│ C500K+1│
+  │ ...  │      │         │◄────────│          │      │ ...  │
+  │ C250K│◄────►│         │         └──────────┘      │ C1M  │
+  └──────┘      └─────────┘                              └──────┘
+
+  Key components:
+  1. Connection servers — hold WebSocket connections, lightweight
+  2. Pub/Sub broker (Redis, Kafka) — route messages between servers
+  3. Presence service — track who is online (Redis sorted sets)
+  4. Load balancer — sticky sessions or connection-aware routing</div>
+
+<h3>Scaling Challenges</h3>
+<table>
+  <tr><th>Challenge</th><th>Solution</th></tr>
+  <tr><td><strong>Millions of connections</strong></td><td>Multiple WebSocket servers behind a load balancer. Each server holds ~10K-100K connections.</td></tr>
+  <tr><td><strong>Cross-server messaging</strong></td><td>Redis Pub/Sub or Kafka to route messages between connection servers</td></tr>
+  <tr><td><strong>Connection failures</strong></td><td>Exponential backoff reconnect, message queue for offline delivery</td></tr>
+  <tr><td><strong>Load balancer timeouts</strong></td><td>Long timeout configs, TCP health checks (not HTTP), ALB with WebSocket support</td></tr>
+  <tr><td><strong>Memory per connection</strong></td><td>~10-50KB per connection — 1M connections = ~10-50GB. Use async/non-blocking I/O (Node.js, Go, Netty).</td></tr>
+  <tr><td><strong>State management</strong></td><td>Externalize connection state to Redis. Connection servers are stateless from a deploy perspective.</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Production tip:</strong> Use <a href="tcp.html">TCP</a> keep-alives and application-level heartbeats (ping/pong frames) to detect dead connections. Set heartbeat intervals to ~30s. Without heartbeats, half-open connections accumulate and consume resources. If a user's phone goes to sleep, the TCP connection may appear alive but be dead on one side.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"How does the WebSocket handshake work?"</strong><br>Client sends an HTTP GET request with <code>Upgrade: websocket</code> and <code>Connection: Upgrade</code> headers, plus a <code>Sec-WebSocket-Key</code>. Server responds with HTTP 101 Switching Protocols and a <code>Sec-WebSocket-Accept</code> hash. The TCP connection then switches from HTTP to the WebSocket protocol.</li>
+  <li><strong>"WebSocket vs HTTP polling vs SSE?"</strong><br>HTTP polling wastes bandwidth (repeated full HTTP requests). SSE is server-push only (good for notifications). WebSocket is bidirectional (good for chat, games). SSE auto-reconnects; WebSocket requires manual reconnection. See: <a href="server-sent-events.html">Server-Sent Events</a>.</li>
+  <li><strong>"How would you scale WebSocket connections to millions of users?"</strong><br>Horizontal scaling: multiple WebSocket servers behind a load balancer. Redis Pub/Sub (or Kafka) to route messages between servers so that a message from a user on Server A reaches a user on Server B. Connection servers hold only connections — all state is externalized. Use sticky sessions at the LB so reconnects go to the same server when possible.</li>
+  <li><strong>"How do you handle reconnection?"</strong><br>Client-side exponential backoff (1s, 2s, 4s, 8s, max 30s). Server-side: buffer messages for a short window (e.g., 30s) after disconnect. On reconnect, client sends last-seen sequence ID to catch up on missed messages.</li>
+  <li><strong>"What happens when a WebSocket server goes down?"</strong><br>All connections on that server are lost. Clients detect the close and reconnect (exponential backoff). Load balancer routes reconnected clients to a healthy server. Message queues buffer pending messages. For mission-critical systems, use a persistent message queue (Kafka) so no messages are lost during failover.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>WebSocket frame format details (opcode, masking, FIN bit) — know frames exist, not their binary structure</li>
+    <li>WebSocket compression (permessage-deflate) — mention it exists, skip implementation</li>
+    <li>WebSocket over HTTP/2 vs HTTP/1.1 debate — too niche</li>
+    <li>Socket.IO specific API — know it's a library built on WebSockets with fallbacks, not its API</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>RFC 6455 — The WebSocket Protocol</strong> — tools.ietf.org/html/rfc6455</li>
+    <li><strong>MDN — WebSocket API</strong> — developer.mozilla.org/en-US/docs/Web/API/WebSocket</li>
+    <li><strong>"Real-Time Web Technologies" comparison</strong> — mdn.github.io/comparison-of-connection-types</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="grpc.html">&larr; 2.4.3 gRPC</a>
+  <a href="server-sent-events.html">Next: 2.4.5 Server-Sent Events &rarr;</a>
+</div>
+
+</body>
+</html>

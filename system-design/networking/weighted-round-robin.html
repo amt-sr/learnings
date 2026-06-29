@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.7.8 Weighted Round Robin</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#2">2 Networking</a> / <a href="../index.html#2.7">2.7 Load Balancing</a> / 2.7.8
+</div>
+
+<h1>Weighted Round Robin</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>How weighted round robin extends <a href="round-robin.html">round robin</a> with server capacity weights</li>
+  <li>Weight assignment strategies and their trade-offs</li>
+  <li>The smooth weighted round robin algorithm (Nginx implementation)</li>
+  <li>When to use weighted round robin vs other algorithms</li>
+</ul>
+
+<h2>Definition</h2>
+<p><strong>Weighted round robin</strong> is a load balancing algorithm that distributes requests proportionally to each server's assigned weight. Servers with higher weights receive more requests, allowing you to account for differences in server capacity (CPU, memory, network) or to perform gradual traffic shifting (canary deployments).</p>
+
+<div class="diagram">  Problem with plain Round Robin:
+
+  Server A:  8 CPU, 32 GB RAM  (high capacity)
+  Server B:  4 CPU, 16 GB RAM  (low capacity)
+
+  Plain round robin:
+  A: ████████████  (50%)  ← Can handle more, underutilized
+  B: ████████████  (50%)  ← Weak server, overloaded
+
+
+  Weighted Round Robin (weight A=5, B=2):
+  Total weight = 7, so A gets 5/7 = 71%, B gets 2/7 = 29%
+
+  Request distribution (over 7 requests):
+  Req 1 ──▶ A
+  Req 2 ──▶ A
+  Req 3 ──▶ A
+  Req 4 ──▶ A
+  Req 5 ──▶ A
+  Req 6 ──▶ B
+  Req 7 ──▶ B
+
+  A: ████████████████████████  (71%)  ← Utilized properly
+  B: ████████████              (29%)  ← Not overloaded</div>
+
+<h2>Weight Assignment</h2>
+<table>
+  <tr><th>Strategy</th><th>How Weights Are Set</th><th>Example</th></tr>
+  <tr><td><strong>Static (manual)</strong></td><td>Admin sets weights based on known hardware specs</td><td>Production servers: weight=5, staging: weight=1</td></tr>
+  <tr><td><strong>Auto (dynamic)</strong></td><td>LB adjusts weights based on real-time metrics</td><td>CPU usage, response time, active connections</td></tr>
+  <tr><td><strong>Canary deployment</strong></td><td>New version gets low weight, gradually increased</td><td>V1: weight=9, V2: weight=1 → V2: weight=5 → V2: weight=10</td></tr>
+  <tr><td><strong>Geographic</strong></td><td>Nearby servers get higher weights (lower latency)</td><td>US-East: weight=5, EU: weight=2</td></tr>
+</table>
+
+<h2>Smooth Weighted Round Robin</h2>
+<p>The naive implementation (send all requests to A 5 times, then B 2 times) creates bursts. Nginx uses <strong>smooth weighted round robin</strong> to distribute requests evenly over time while maintaining the correct weight proportions.</p>
+
+<div class="diagram">  Naive weighted round robin (bursts):
+  A A A A A B B | A A A A A B B | A A A A A B B
+  └── 5 to A ──┘└ 2 to B┘
+  (A gets hammered for 5 requests, then idle for 2)
+
+  Smooth weighted round robin (even spread):
+  A B A A B A A | B A A B A A B | A A B A A B A
+  (Properly interleaved, no bursts)
+
+  Algorithm (Nginx):
+  ┌──────────────────────────────────────────┐
+  │  servers: A(weight=5), B(weight=1)      │
+  │                                           │
+  │  Before each selection:                  │
+  │    current_weight += effective_weight     │
+  │                                           │
+  │  Select server with highest current_weight│
+  │    selected.current_weight -= total_weight│
+  │                                           │
+  │  Step 1: cw(A)=0+5=5, cw(B)=0+1=1       │
+  │          Select A. cw(A)=5-6=-1          │
+  │  Step 2: cw(A)=-1+5=4, cw(B)=1+1=2      │
+  │          Select A. cw(A)=4-6=-2          │
+  │  Step 3: cw(A)=-2+5=3, cw(B)=2+1=3      │
+  │          Tie → Select A (or B).          │
+  │  ...                                       │
+  │  Over 6 requests: A gets 5, B gets 1     │
+  └──────────────────────────────────────────┘</div>
+
+<h2>Configuration Examples</h2>
+<pre># Nginx — weighted round robin
+upstream backend {
+    server 10.0.1.10:8080 weight=5;  # High-capacity server
+    server 10.0.1.11:8080 weight=3;  # Medium-capacity server
+    server 10.0.1.12:8080 weight=2;  # Low-capacity server
+}
+
+# Nginx — canary deployment
+upstream backend {
+    server 10.0.1.10:8080 weight=9;  # Current version (v1)
+    server 10.0.1.20:8080 weight=1;  # Canary (v2) — 10% traffic
+}
+
+# HAProxy — weighted round robin
+backend api_backend
+    balance roundrobin
+    server api1 10.0.1.10:8080 weight 5
+    server api2 10.0.1.11:8080 weight 3
+    server api3 10.0.1.12:8080 weight 2
+
+# AWS ALB — weighted target groups
+# Target Group A (v1): weight=9
+# Target Group B (v2): weight=1
+# 10% of traffic goes to v2 for canary testing</pre>
+
+<h2>Canary Deployments with Weighted Round Robin</h2>
+<p>One of the most practical uses of weighted round robin is canary deployments — gradually shifting traffic from an old version to a new version.</p>
+
+<div class="diagram">  Canary deployment progression:
+
+  Phase 1 (Day 1):           Phase 2 (Day 2):
+  V1: weight=95% ████████    V1: weight=80% ████████
+  V2: weight=5%  ██          V2: weight=20% ████
+
+  Phase 3 (Day 3):           Phase 4 (Day 4):
+  V1: weight=50% ████████    V1: weight=0%  (complete)
+  V2: weight=50% ████████    V2: weight=100% ████████
+
+  At each phase, monitor error rates and latency.
+  If V2 shows problems, shift weight back to V1 instantly.</div>
+
+<div class="callout yellow">
+  <strong>Pitfall:</strong> Weights are static unless you use dynamic configuration. In a canary deployment, you need automation (CI/CD pipeline, feature flag system) to gradually adjust weights based on health metrics. Manual weight adjustment is error-prone and slow.
+</div>
+
+<h2>Weighted Round Robin vs Other Algorithms</h2>
+<table>
+  <tr><th>Aspect</th><th><a href="round-robin.html">Round Robin</a></th><th><strong>Weighted Round Robin</strong></th><th><a href="least-connections.html">Least Connections</a></th></tr>
+  <tr><td><strong>Server capacity</strong></td><td class="red">Assumes equal</td><td class="green">Accounts for capacity</td><td>Partially (connection count)</td></tr>
+  <tr><td><strong>Distribution</strong></td><td>Equal (n/total)</td><td>Proportional to weight</td><td>Dynamic (fewest active)</td></tr>
+  <tr><td><strong>Canary support</strong></td><td class="red">No</td><td class="green">Yes (weight=1 for canary)</td><td class="red">No (not granular)</td></tr>
+  <tr><td><strong>Complexity</strong></td><td class="green">O(1)</td><td>O(n) or O(log n)</td><td>O(n) (scan all servers)</td></tr>
+  <tr><td><strong>Best for</strong></td><td>Homogeneous clusters</td><td>Mixed hardware, canary</td><td>Variable request duration</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What is weighted round robin and why would you use it?"</strong><br>Like round robin, but each server has a weight proportional to its capacity. A server with weight 5 gets twice as much traffic as one with weight 2. Use it when servers have different hardware specs or during canary deployments to shift traffic gradually to a new version.</li>
+  <li><strong>"How would you do a canary deployment with a load balancer?"</strong><br>Set the current version to a high weight (e.g., 95) and the new version to a low weight (e.g., 5). Monitor error rates, latency, and business metrics. Gradually shift weights toward the new version (95/5 → 80/20 → 50/50 → 100/0). If anything goes wrong, shift weight back to the old version instantly. This is much faster and safer than blue/green for gradual rollouts.</li>
+  <li><strong>"What is smooth weighted round robin?"</strong><br>The naive approach sends all requests to the high-weight server in a burst (A A A A A B B). Smooth weighted round robin (used by Nginx) interleaves requests (A B A A B A A) so each server receives requests evenly over time rather than in bursts. The algorithm uses current_weight and effective_weight to select the best server while maintaining the correct proportion.</li>
+  <li><strong>"How do you determine the right weights for each server?"</strong><br>Static: based on hardware specs (CPU cores, RAM, network bandwidth). Dynamic: auto-adjust based on real-time metrics like CPU usage, memory pressure, or request latency. In practice, start with static weights based on instance types and adjust based on observed performance metrics.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>Smooth weighted round robin mathematical proof</li>
+    <li>Dynamic weight adjustment algorithms (least loaded, adaptive)</li>
+    <li>Multi-level weighted round robin</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>Nginx Smooth Weighted Round Robin</strong> — github.com/phusion/nginx/commit/27e2b771</li>
+    <li><strong>HAProxy Load Balancing Documentation</strong> — cbonte.github.io/haproxy-dconv</li>
+    <li><strong>"Designing Data-Intensive Applications"</strong> — Martin Kleppmann (Load Balancing section)</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="round-robin.html">&larr; 2.7.7 Round Robin</a>
+  <a href="least-connections.html">Next: 2.7.9 Least Connections &rarr;</a>
+</div>
+
+</body>
+</html>

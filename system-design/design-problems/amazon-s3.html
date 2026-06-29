@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>15.18 Amazon S3 — System Design</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../">Handbook</a> / <a href="../">System Design</a> / 15. Design Problems / 15.18 Amazon S3</p>
+
+<h1>Amazon S3</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Design an object storage system similar to Amazon S3 that provides virtually unlimited storage, high durability, read-after-write consistency, versioning, and lifecycle management for arbitrary objects. The system must serve as a foundational storage layer for other applications (backup, analytics, CDN origin, application data).</p>
+
+<h2>Functional Requirements</h2>
+<ul>
+  <li>Store and retrieve arbitrary objects (0 bytes to 5TB) using a flat namespace (bucket + key)</li>
+  <li>Support read-after-write consistency for PUTs of new objects</li>
+  <li>Support object versioning — keep multiple versions of the same key</li>
+  <li>Support lifecycle policies: transition between storage tiers, expiration</li>
+  <li>Support range requests (read partial content)</li>
+  <li>Support conditional operations (ETag-based If-Match, If-None-Match)</li>
+  <li>Provide strong access control (bucket policies, IAM, pre-signed URLs)</li>
+</ul>
+
+<h2>Non-Functional Requirements</h2>
+<ul>
+  <li><strong>Durability:</strong> 99.999999999% (11 nines) — effectively zero data loss</li>
+  <li><strong>Availability:</strong> 99.99% for PUT operations, 99.9% for GET</li>
+  <li><strong>Scalability:</strong> unlimited number of objects, exabytes of storage</li>
+  <li><strong>Throughput:</strong> support 100K+ PUTs/sec, 1M+ GETs/sec per bucket</li>
+  <li><strong>Latency:</strong> GET latency &lt; 100ms p99 for cached objects</li>
+  <li><strong>Consistency:</strong> read-after-write for new objects, eventual for overwrites</li>
+</ul>
+
+<h3>Capacity Estimates</h3>
+<table>
+  <tr><th>Metric</th><th>Estimate</th><th>Notes</th></tr>
+  <tr><td>Total objects</td><td>100T (trillions)</td><td>Amazon-scale S3</td></tr>
+  <tr><td>Total storage</td><td>~350 PB</td><td>And growing</td></tr>
+  <tr><td>PUTs/sec</td><td>3.5M</td><td>Across all buckets</td></tr>
+  <tr><td>GETs/sec</td><td>100M+</td><td>Read-heavy</td></tr>
+  <tr><td>Object size distribution</td><td>Bimodal</td><td>80% small (&lt;100KB), 20% large (MB-GB)</td></tr>
+  <tr><td>Replication factor</td><td>Varies</td><td>3x for Standard, erasure coding for Glacier</td></tr>
+</table>
+
+<h2>API Design</h2>
+<pre>
+# Create bucket
+PUT    /{bucket}
+Resp:  200 OK (Location: /{bucket})
+
+# Upload object
+PUT    /{bucket}/{key}
+Body:  (object data)
+Headers: Content-Type: application/json, x-amz-storage-class: STANDARD
+Resp:  200 OK (ETag: "\"d41d8cd98f00b204e9800998ecf8427e\"")
+
+# Download object
+GET    /{bucket}/{key}
+Headers: Range: bytes=0-1023  (optional range request)
+Resp:  200 OK / 206 Partial Content
+
+# Head object (metadata only, no body)
+HEAD   /{bucket}/{key}
+Resp:  200 OK (Content-Length, Content-Type, ETag, Last-Modified, Version-Id)
+
+# Delete object
+DELETE /{bucket}/{key}
+Resp:  204 No Content
+
+# List objects (with prefix filter)
+GET    /{bucket}?prefix=photos/&max-keys=1000&marker=last_key
+Resp:  &lt;ListBucketResult&gt;...&lt;/ListBucketResult&gt;
+
+# Versioning operations
+PUT    /{bucket}?versioning  Body: &lt;VersioningConfiguration&gt;&lt;Status&gt;Enabled&lt;/Status&gt;...
+GET    /{bucket}/{key}?versionId=12345  (fetch specific version)
+</pre>
+
+<h2>High-Level Design</h2>
+<div class="diagram">
+                    ┌──────────────┐
+    Client ────────►│  Load Balancer │
+                    └──────┬───────┘
+                           │
+                    ┌──────▼───────┐
+                    │  Front-End    │
+                    │  Service      │
+                    │  (Auth, Rate  │
+                    │   Limit, Route)│
+                    └──────┬───────┘
+                           │
+              ┌────────────┴────────────┐
+              │                         │
+       ┌──────▼──────┐          ┌───────▼──────┐
+       │  Metadata    │          │   Storage     │
+       │  Service     │          │   Nodes      │
+       │              │          │              │
+       │  ┌──────────┐│          │  ┌─────────┐ │
+       │  │Metadata  ││          │  │ Data    │ │
+       │  │Index     ││          │  │ Nodes   │ │
+       │  │(DynamoDB- ││          │  │(1000s of│ │
+       │  │ like)    ││          │  │ disks)  │ │
+       │  └──────────┘│          │  └─────────┘ │
+       └─────────────┘          └──────────────┘
+                                    │
+                             ┌──────▼──────┐
+                             │ Placement   │
+                             │ Engine      │
+                             │ (consistent │
+                             │  hashing +  │
+                             │  replication)│
+                             └─────────────┘
+</div>
+
+<h2>Deep Dive: Flat Namespace Architecture</h2>
+<p>S3 uses a flat namespace: buckets are the top-level container, and objects are addressed by keys within a bucket. There are no real directories — the "/" in keys is just a naming convention.</p>
+
+<div class="callout">
+  <strong>Why flat namespace?</strong> Hierarchical filesystems have scaling limits (inode tables, directory locking). A flat namespace allows unlimited objects per bucket without structural bottlenecks. "Folders" are virtual — implemented as prefix-based queries (WHERE key LIKE 'photos/%').
+</div>
+
+<pre>
+# These are all independent flat objects in the same bucket:
+photos/2026/vacation.jpg
+photos/2026/birthday.jpg
+documents/report.pdf
+documents/notes.txt
+
+# "Listing the photos/2026/ folder" is actually:
+# SELECT key FROM objects WHERE bucket='mybucket' AND key LIKE 'photos/2026/%'
+# LIMIT 1000
+</pre>
+
+<h2>Deep Dive: Consistency Model</h2>
+<p>S3 provides strong read-after-write consistency for PUTs of new objects. For PUTs that overwrite existing objects, S3 provides eventual consistency (you might read the old version briefly after a write).</p>
+
+<div class="callout yellow">
+  <strong>Consistency details:</strong>
+  <ul>
+    <li><strong>New object PUT → GET:</strong> Strongly consistent. After a successful PUT of a new key, any GET immediately returns the new object.</li>
+    <li><strong>Overwrite PUT → GET:</strong> Eventually consistent. After overwriting an existing key, a GET might return the old version for a brief period (typically sub-second).</li>
+    <li><strong>DELETE → GET:</strong> Eventually consistent. A GET after DELETE might return the deleted object briefly.</li>
+    <li><strong>PUT → LIST:</strong> Eventually consistent. A new object might not appear in LIST immediately.</li>
+  </ul>
+</div>
+
+<h2>Deep Dive: Replication and Placement</h2>
+<p>Objects are replicated across multiple storage nodes in different availability zones.</p>
+
+<div class="diagram">
+  Object PUT flow:
+
+  Client ──► Front-End ──► Placement Engine
+                               │
+                    Determine replication targets
+                               │
+              ┌────────────────┼────────────────┐
+              ▼                ▼                ▼
+         Node A           Node B           Node C
+         (AZ-1a)          (AZ-1b)          (AZ-1c)
+         [Object data]    [Object data]    [Object data]
+
+  Write quorum: W=2 (acknowledge after 2 of 3 nodes confirm)
+  Read quorum:  R=1 (read from any 1 node, but prefer closest)
+  Consistency:  R + W > N → 2 + 1 > 3 (strong for new objects)
+
+  For overwrites: asynchronous replication (W=1, eventual consistency)
+  This explains the eventual consistency for overwrites.
+</div>
+
+<h2>Deep Dive: Object Versioning</h2>
+<p>When versioning is enabled, every PUT creates a new version. Every DELETE creates a delete marker (not actual deletion). Old versions are retained until explicitly removed or by lifecycle policy.</p>
+
+<pre>
+PUT    mybucket/photo.jpg  → Version 1 (2026-01-01)
+PUT    mybucket/photo.jpg  → Version 2 (2026-06-28) (overwrite)
+DELETE mybucket/photo.jpg  → Delete marker, Version 3
+
+# Listing all versions:
+GET    mybucket/photo.jpg?versions
+→ Version 3: Delete marker (2026-06-28)
+  Version 2: 2.5MB photo (2026-06-28)
+  Version 1: 1.2MB photo (2026-01-01)
+
+# Regular GET returns 404 (latest version is a delete marker)
+# GET ?versionId=1 returns the original photo
+</pre>
+
+<div class="callout">
+  <strong>Versioning cost:</strong> Every overwrite doubles the storage for that key. Use lifecycle policies to automatically expire old versions after N days or keep only the last M versions. This is critical for cost control in write-heavy workloads.
+</div>
+
+<h2>Deep Dive: Lifecycle Management</h2>
+<p>Automate storage optimization with lifecycle rules:</p>
+
+<table>
+  <tr><th>Rule</th><th>Transition</th><th>Cost Impact</th></tr>
+  <tr><td>Standard → IA</td><td>After 30 days, not accessed recently</td><td class="green">~60% cheaper than Standard</td></tr>
+  <tr><td>IA → Glacier</td><td>After 90 days, rarely accessed</td><td class="green">~75% cheaper than IA</td></tr>
+  <tr><td>Glacier → Glacier Deep Archive</td><td>After 1 year, archival only</td><td class="green">~50% cheaper than Glacier</td></tr>
+  <tr><td>Any → Delete</td><td>After 365 days (temporary data)</td><td>Free up storage</td></tr>
+  <tr><td>Non-current versions → Delete</td><td>After 30 days (keep 1 version)</td><td>Free up storage</td></tr>
+</table>
+
+<div class="callout green">
+  <strong>Intelligent tiering:</strong> Automatically move objects between access tiers based on access patterns. No lifecycle configuration needed — the system monitors access frequency and moves infrequently accessed objects to lower-cost tiers. Best for unpredictable workloads.
+</div>
+
+<h2>Deep Dive: Erasure Coding for Cold Storage</h2>
+<p>For Glacier-class storage, use erasure coding instead of replication for cost efficiency.</p>
+
+<pre>
+# Erasure coding (e.g., 12+4 Reed-Solomon):
+# Split object into 12 data chunks + 4 parity chunks
+# Store each chunk on a different node
+# Can reconstruct from any 12 of 16 chunks
+# Storage overhead: 16/12 = 1.33x (vs 3x for replication)
+# Durability: still 11 nines (with appropriate redundancy)
+
+Replication: 3x storage = 300 PB for 100 PB data
+Erasure coding: 1.33x = 133 PB for 100 PB data
+Savings: 167 PB (56% reduction in storage cost)
+</pre>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>How does S3 achieve 11 nines durability? <em>A: Replication across multiple failure domains (availability zones), continuous integrity checking with checksums, automated scrubbing that detects and repairs corruption, and quick recovery from failed nodes. The per-object durability of 99.999999999% means you lose 1 object per 100 billion objects stored per year on average.</em></li>
+  <li>How do you handle the metadata bottleneck for billions of objects? <em>A: Shard metadata by (bucket, key_prefix_hash) across many metadata nodes. Use a DynamoDB-like consistent hashing ring. Each metadata node handles a subset of keys. Metadata is relatively small (~1KB per object), so billions of objects = ~1TB metadata, easily sharded.</em></li>
+  <li>How does S3 handle multipart uploads for large objects? <em>A: Client uploads parts independently (each up to 5GB). The service stores each part as a separate object. On completion, S3 creates a manifest that references all parts. The object is assembled on read (logical concatenation) or physically if needed. Failed parts can be retried independently.</em></li>
+  <li>Why is S3 eventually consistent for overwrites? <em>A: For performance. Synchronous replication for overwrites would require all replica nodes to acknowledge the update before returning success, adding latency (especially for cross-region replication). Since most workloads create new objects (not overwrites), this trade-off is acceptable. S3 has been moving toward strong consistency over time.</em></li>
+  <li>How do you implement range requests efficiently? <em>A: The storage node stores objects as fixed-size chunks. For a range request, the node reads only the relevant chunks and returns them with a 206 Partial Content response. Combined with CDN support for Range headers, this enables efficient video streaming from S3.</em></li>
+</ul>
+
+<div class="callout red">
+  <strong>What to Skip:</strong>
+  <ul>
+    <li>Don't design the physical data center infrastructure</li>
+    <li>Don't implement the full IAM/access control system</li>
+    <li>Don't design cross-region replication in detail unless asked</li>
+    <li>Don't implement the event notification system (S3 events → Lambda)</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Papers</div>
+  <ul>
+    <li>"Dynamo: Amazon's Highly Available Key-value Store" — DeCandia et al. (S3's metadata layer)</li>
+    <li>"Amazon S3 Availability and Durability" — AWS (aws.amazon.com/s3)</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Articles</div>
+  <ul>
+    <li>Amazon S3 documentation: "Storage Classes" and "Lifecycle Management" (docs.aws.amazon.com/s3)</li>
+    <li>Amazon S3 documentation: "Strong Consistency" (aws.amazon.com/about-aws/whats-new/2020/12/)</li>
+    <li>All Things Distributed: "Lessons from the S3 Outage" (allthingsdistributed.com) — Werner Vogels on S3 design</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="youtube.html">&larr; Previous: YouTube</a>
+  <a href="api-gateway.html">Next: API Gateway &rarr;</a>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.1.4 Availability</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.8;
+    padding: 2rem;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:visited { color: #a371f7; }
+
+  .breadcrumb {
+    margin-bottom: 1.5rem;
+    font-size: 0.85rem;
+    color: #8b949e;
+  }
+  .breadcrumb a { color: #8b949e; }
+  .breadcrumb a:hover { color: #58a6ff; }
+
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta {
+    display: flex; gap: 1.5rem; flex-wrap: wrap;
+    margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e;
+  }
+
+  h2 {
+    font-size: 1.2rem; color: #f0f6fc;
+    margin: 2.5rem 0 0.75rem;
+    padding-bottom: 0.35rem;
+    border-bottom: 1px solid #21262d;
+  }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  h4 { font-size: 0.9rem; color: #c9d1d9; margin: 1rem 0 0.4rem; }
+  p { margin-bottom: 0.75rem; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+
+  .callout {
+    background: #161b22;
+    border-left: 3px solid #58a6ff;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0 1.5rem;
+    border-radius: 0 6px 6px 0;
+  }
+  .callout.red { border-left-color: #f85149; }
+  .callout.green { border-left-color: #3fb950; }
+  .callout.yellow { border-left-color: #d29922; }
+  .callout strong { color: #f0f6fc; }
+
+  pre {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+    margin: 1rem 0 1.5rem;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: #79c0ff;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0 1.5rem;
+    font-size: 0.9rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid #21262d;
+  }
+  th { color: #8b949e; font-weight: 600; }
+  td.red { color: #f85149; }
+  td.green { color: #3fb950; }
+
+  .source {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0 1.5rem;
+  }
+  .source-label {
+    font-size: 0.8rem; font-weight: 600;
+    color: #58a6ff; text-transform: uppercase;
+    letter-spacing: 0.5px; margin-bottom: 0.5rem;
+  }
+
+  .formula {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0 1.5rem;
+    text-align: center;
+    font-size: 1.1rem;
+    color: #79c0ff;
+  }
+  .formula small { display: block; text-align: left; color: #8b949e; font-size: 0.8rem; margin-top: 0.75rem; }
+
+  .diagram {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 1.25rem;
+    margin: 1rem 0 1.5rem;
+    font-family: monospace;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    white-space: pre;
+    color: #c9d1d9;
+  }
+
+  .nav {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #30363d;
+  }
+  .nav a {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    color: #c9d1d9;
+    font-size: 0.9rem;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#1">1 Fundamentals</a> / <a href="../index.html#1.1">1.1 System Design Basics</a> / 1.1.4
+</div>
+
+<h1>Availability</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<!-- Goal -->
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What availability means and how it's measured</li>
+  <li>The nines scale and what each level costs</li>
+  <li>How availability differs from reliability</li>
+  <li>Techniques to achieve high availability</li>
+  <li>How to calculate and reason about availability in interviews</li>
+</ul>
+
+<!-- Definition -->
+<h2>Definition</h2>
+<p>Availability is the <strong>proportion of time a system is operational and able to serve requests</strong> over a given period.</p>
+<div class="formula">
+  Availability = Uptime / (Uptime + Downtime)
+  <small>Expressed as a percentage or in "nines" (e.g., 99.99% = four nines)</small>
+</div>
+<div class="callout yellow">
+  <strong>Key insight:</strong> Availability does NOT guarantee performance. A system returning error pages in 5ms is "available" in the sense that it's responding — but it's not <em>functionally</em> available. Always clarify what "available" means in the context of the system.
+</div>
+
+<!-- The Nines -->
+<h2>The Nines Scale</h2>
+<p>This is the single most important table to memorize for interviews. Every interviewer expects you to know these numbers.</p>
+
+<table>
+  <tr>
+    <th>Availability</th>
+    <th>Nines</th>
+    <th>Downtime / Year</th>
+    <th>Downtime / Month</th>
+    <th>Downtime / Week</th>
+  </tr>
+  <tr>
+    <td>99%</td>
+    <td>Two</td>
+    <td class="red">3.65 days</td>
+    <td class="red">7.3 hours</td>
+    <td class="red">1.68 hours</td>
+  </tr>
+  <tr>
+    <td>99.9%</td>
+    <td>Three</td>
+    <td class="red">8.76 hours</td>
+    <td class="red">43.8 min</td>
+    <td class="red">10.1 min</td>
+  </tr>
+  <tr>
+    <td>99.99%</td>
+    <td>Four</td>
+    <td class="yellow">52.6 min</td>
+    <td class="yellow">4.38 min</td>
+    <td class="yellow">1.01 min</td>
+  </tr>
+  <tr>
+    <td>99.999%</td>
+    <td>Five</td>
+    <td class="green">5.26 min</td>
+    <td class="green">26.3 sec</td>
+    <td class="green">6.05 sec</td>
+  </tr>
+  <tr>
+    <td>99.9999%</td>
+    <td>Six</td>
+    <td class="green">31.5 sec</td>
+    <td class="green">2.63 sec</td>
+    <td class="green">0.6 sec</td>
+  </tr>
+</table>
+
+<div class="callout">
+  <strong>Interview tip:</strong> When given a design problem, the interviewer expects you to <em>ask</em> about the availability target. A good opening: <em>"What availability are we targeting — 99.9%, 99.99%?"</em> This immediately signals that you think in terms of SLAs.
+</div>
+
+<h3>What Each Level Means in Practice</h3>
+<table>
+  <tr><th>Nines</th><th>Typical System</th><th>What It Takes</th></tr>
+  <tr><td>99% (two)</td><td>Internal tools, blogs</td><td>Single server, basic monitoring</td></tr>
+  <tr><td>99.9% (three)</td><td>SaaS products, most APIs</td><td>Redundancy, load balancing, automated restarts</td></tr>
+  <tr><td>99.99% (four)</td><td>Payment systems, cloud services</td><td>Multi-AZ deployment, failover, circuit breakers</td></tr>
+  <tr><td>99.999% (five)</td><td>Core infra (DNS, auth)</td><td>Multi-region, zero-downtime deploys, chaos engineering</td></tr>
+  <tr><td>99.9999% (six)</td><td>Global financial exchanges, 911</td><td>Everything above + extreme redundancy, custom hardware</td></tr>
+</table>
+
+<!-- Availability vs Reliability -->
+<h2>Availability vs Reliability</h2>
+<p>Interviewers test whether you understand the difference. They are related but not the same.</p>
+<table>
+  <tr><th></th><th>Availability</th><th>Reliability</th></tr>
+  <tr><td>Measures</td><td>Is the system <em>up</em>?</td><td>Does the system <em>work correctly</em>?</td></tr>
+  <tr><td>Question</td><td>"Can I reach it?"</td><td>"Does it give the right answer?"</td></tr>
+  <tr><td>Failure mode</td><td>System is unreachable</td><td>System returns wrong data</td></tr>
+  <tr><td>Metric</td><td>Uptime percentage</td><td>MTBF / MTTR</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Example:</strong> A system can be 99.99% available but return stale data 50% of the time. It's up, but it's not reliable. Conversely, a system can be correct every time it responds but goes down frequently — reliable but not available.
+</div>
+
+<!-- Serial vs Parallel Availability -->
+<h2>Serial vs Parallel Availability</h2>
+<p>When a request flows through multiple components, overall availability depends on whether they are in series or parallel.</p>
+
+<h3>Serial (All must be up)</h3>
+<div class="diagram">Client → [Load Balancer] → [App Server] → [Database] → [Cache]
+
+If any component fails, the request fails.
+All components are in series.</div>
+<div class="formula">
+  A<sub>total</sub> = A<sub>1</sub> × A<sub>2</sub> × A<sub>3</sub> × ... × A<sub>n</sub>
+  <small>Serial availability is always LESS than any individual component.</small>
+</div>
+<pre>Example:  LB=99.99%  App=99.99%  DB=99.99%  Cache=99.99%
+
+A_total = 0.9999 × 0.9999 × 0.9999 × 0.9999
+        = 0.9999⁴
+        = 99.96%
+
+Four nines components → three nines system.
+Adding more components always reduces availability in series.</pre>
+
+<div class="callout red">
+  <strong>This is why microservices can reduce overall availability.</strong> Each extra service in the request path multiplies the failure probability. This is the "microservices tax."
+</div>
+
+<h3>Parallel (Any one is enough)</h3>
+<div class="diagram">Client → [Server A]
+             → [Server B]    (any one can serve)
+             → [Server C]</div>
+<div class="formula">
+  A<sub>total</sub> = 1 - (1 - A<sub>1</sub>) × (1 - A<sub>2</sub>) × ... × (1 - A<sub>n</sub>)
+  <small>Parallel availability is always MORE than any individual component.</small>
+</div>
+<pre>Example:  Each server = 99%
+
+A_total = 1 - (1 - 0.99)³
+        = 1 - 0.000001
+        = 99.9999%
+
+Three 99% servers → six nines.
+Redundancy is the main tool for achieving high availability.</pre>
+
+<!-- High Availability Techniques -->
+<h2>How to Achieve High Availability</h2>
+
+<h3>1. Redundancy</h3>
+<p>Remove single points of failure by having backups for every component.</p>
+<table>
+  <tr><th>Component</th><th>Redundancy Strategy</th></tr>
+  <tr><td>App Servers</td><td>Run multiple instances behind a <a href="../networking/reverse-proxy.html">load balancer</a></td></tr>
+  <tr><td>Database</td><td><a href="../replication/leader-follower.html">Primary + replicas</a></td></tr>
+  <tr><td>Cache</td><td><a href="../caching/redis-cluster.html">Redis Cluster</a> with replicas</td></tr>
+  <tr><td>API Gateway</td><td>Deploy across multiple AZs</td></tr>
+  <tr><td>Data Center</td><td>Multi-region deployment</td></tr>
+  <tr><td>DNS</td><td>Multiple DNS providers, low TTL</td></tr>
+</table>
+
+<h3>2. Failover</h3>
+<p>When a component fails, another takes over automatically.</p>
+<pre>Primary fails
+    ↓
+Detected by health check (seconds)
+    ↓
+Replica promoted to primary
+    ↓
+Traffic rerouted
+    ↓
+Total downtime: seconds, not hours</pre>
+<p><strong>Types:</strong></p>
+<ul>
+  <li><strong>Hot standby:</strong> Replica is always running and ready. Zero cold start. Higher cost.</li>
+  <li><strong>Warm standby:</strong> Replica is running but at reduced capacity. Takes seconds to scale up.</li>
+  <li><strong>Cold standby:</strong> Replica is off. Takes minutes to start. Cheapest, highest downtime.</li>
+</ul>
+
+<h3>3. Load Balancing</h3>
+<p>Distributes traffic across healthy instances. Detects and removes failed nodes.</p>
+<div class="diagram">          ┌→ Server A (healthy)
+Client → LB ─┼→ Server B (healthy)
+          └→ Server C (failed ✕)  ← LB stops sending traffic here</div>
+<p>Key behaviors:</p>
+<ul>
+  <li><a href="../networking/health-checks.html">Health checks</a> detect failures</li>
+  <li><a href="../networking/round-robin.html">Round Robin</a> or <a href="../networking/least-connections.html">Least Connections</a> distribute load</li>
+  <li><a href="../networking/sticky-sessions.html">Sticky sessions</a> for stateful services (though stateless is preferred)</li>
+</ul>
+
+<h3>4. Multi-Region / Multi-AZ</h3>
+<p>A single data center is a single point of failure. Deploy across Availability Zones and regions.</p>
+<div class="diagram">  Region: US-East
+  ├── AZ-1: App × 3, DB Primary
+  └── AZ-2: App × 3, DB Replica
+
+  Region: US-West
+  ├── AZ-1: App × 3, DB Replica (cross-region)
+  └── AZ-2: App × 3</div>
+<table>
+  <tr><th>Failure</th><th>Survives?</th><th>Strategy</th></tr>
+  <tr><td>Single server crash</td><td>Yes</td><td>Load balancer reroutes</td></tr>
+  <tr><td>Entire AZ goes down</td><td>Yes</td><td>Traffic shifts to other AZ</td></tr>
+  <tr><td>Entire region goes down</td><td>Yes</td><td>DNS routes to other region</td></tr>
+  <tr><td>Entire cloud provider fails</td><td>Yes</td><td>Multi-cloud (rare, expensive)</td></tr>
+</table>
+
+<h3>5. Graceful Degradation</h3>
+<p>When parts of the system fail, degrade functionality instead of going down entirely.</p>
+<pre>Normal:    Full search with filters, sorting, pagination
+Degraded:  Basic search, no filters (cache hit)
+Further:   "Search is temporarily unavailable" + cached popular results</pre>
+<p>Examples in real systems:</p>
+<ul>
+  <li>Netflix serves cached content when the recommendation engine is down</li>
+  <li>Instagram shows feed without stories when stories service fails</li>
+  <li>Amazon shows "Buy" button but disables recommendations during outages</li>
+</ul>
+
+<h3>6. Circuit Breaker</h3>
+<p>Stop cascading failures by failing fast when a dependency is down.</p>
+<pre>Normal flow:   App → Service B → Database
+               Service B starts failing
+                  ↓
+Circuit opens: App → Circuit Breaker → Immediate error/fallback
+                  ↓
+               No more requests hammering Service B
+                  ↓
+               Service B recovers
+                  ↓
+Circuit half-opens: Test one request
+                  ↓
+               If success → circuit closes, normal flow resumes</pre>
+<p>Related: <a href="../reliability/circuit-breaker.html">Circuit Breaker</a>, <a href="../reliability/bulkhead.html">Bulkhead</a></p>
+
+<h3>7. Rate Limiting and Backpressure</h3>
+<p>Prevent the system from being overwhelmed, which causes cascading failures and downtime.</p>
+<ul>
+  <li><a href="../reliability/token-bucket.html">Token Bucket</a> — burst-friendly, most common</li>
+  <li><a href="../reliability/leaky-bucket.html">Leaky Bucket</a> — steady rate</li>
+  <li><a href="../reliability/sliding-window.html">Sliding Window</a> — smoother limits</li>
+</ul>
+<p>Backpressure: When downstream is slow, upstream slows down too — instead of everyone crashing.</p>
+
+<h3>8. Zero-Downtime Deployments</h3>
+<p>Deployments should not cause availability dips.</p>
+<table>
+  <tr><th>Strategy</th><th>How</th></tr>
+  <tr><td>Blue-Green</td><td>Two identical environments. Switch traffic atomically.</td></tr>
+  <tr><td>Canary</td><td>Route small % of traffic to new version. Monitor, then roll out.</td></tr>
+  <tr><td>Rolling</td><td>Replace instances one at a time. Old ones drain connections first.</td></tr>
+</table>
+
+<!-- SLA, SLO, SLI -->
+<h2>SLA, SLO, SLI</h2>
+<p>These three terms come up constantly. Know them cold.</p>
+
+<table>
+  <tr>
+    <th>Term</th>
+    <th>Stands For</th>
+    <th>What It Is</th>
+    <th>Example</th>
+  </tr>
+  <tr>
+    <td><strong>SLI</strong></td>
+    <td>Service Level Indicator</td>
+    <td>The <em>metric</em> you measure</td>
+    <td>Request latency, error rate, throughput</td>
+  </tr>
+  <tr>
+    <td><strong>SLO</strong></td>
+    <td>Service Level Objective</td>
+    <td>The <em>target</em> you set for that metric</td>
+    <td>P99 latency &lt; 200ms, 99.9% availability</td>
+  </tr>
+  <tr>
+    <td><strong>SLA</strong></td>
+    <td>Service Level Agreement</td>
+    <td>The <em>contract</em> with consequences</td>
+    <td>"If uptime &lt; 99.9%, customer gets 10% credit"</td>
+  </tr>
+</table>
+
+<div class="diagram">  SLI:  "Our API returned 500 errors 0.05% of the time last month"
+         ↓
+  SLO:  "We target error rate below 0.1%"
+         ↓
+  SLA:  "If we exceed 0.1% error rate for a month, customers get service credits"</div>
+
+<div class="callout">
+  <strong>Google's rule of thumb:</strong> Set your SLO such that you're occasionally in danger of missing it. If you never come close to violating your SLO, it's set too loose and you're over-investing in reliability. The "error budget" (gap between SLO and current performance) tells you how much risk you can take with new releases.
+</div>
+
+<p>Detailed breakdown:</p>
+<ul>
+  <li><a href="../reliability/sla.html">SLA</a> — contracts and consequences</li>
+  <li><a href="../reliability/slo.html">SLO</a> — targets and error budgets</li>
+  <li><a href="../reliability/sli.html">SLI</a> — metrics and measurement</li>
+</ul>
+
+<!-- Calculating Availability -->
+<h2>Calculating System Availability</h2>
+<p>Interviewers sometimes ask you to estimate the availability of a proposed architecture.</p>
+
+<h3>Worked Example</h3>
+<pre>System: Load Balancer → App Server → Database
+
+Components:  LB: 99.99%,  App: 99.99%,  DB: 99.95%
+
+Serial:  0.9999 × 0.9999 × 0.9995 = 0.9993 = 99.93%
+
+If you add a redundant LB (parallel):
+  LB pair:  1 - (1 - 0.9999)² = 99.999999%
+
+Serial with redundant LB:
+  0.99999999 × 0.9999 × 0.9995 = 0.999499 ≈ 99.95%</pre>
+
+<h3>Impact of Replicas</h3>
+<pre>Database primary:  99.95%  (downtime: ~4.4 hrs/year)
+Add 1 replica:      Still 99.95%  (replica only helps reads)
+Add failover:      ~99.99%  (primary fails → replica takes over in seconds)
+
+Key point: Replicas alone don't improve write availability.
+Failover mechanism + replicas does.</pre>
+
+<!-- Common Interview Questions -->
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"How many nines of availability should we target?"</strong><br>Ask follow-up: What's the cost of downtime? What's the revenue impact? Then recommend. Most systems: 99.9% to 99.99%.</li>
+  <li><strong>"How would you design for 99.99% availability?"</strong><br>Walk through: redundancy, multi-AZ, automated failover, circuit breakers, monitoring, zero-downtime deploys.</li>
+  <li><strong>"What's the difference between SLA and SLO?"</strong><br>SLA is the contract with consequences. SLO is the internal target. SLI is what you measure.</li>
+  <li><strong>"How does adding more services affect availability?"</strong><br>Serial dependency: A_total = A₁ × A₂ × ... × Aₙ. More services = lower overall availability. This is the microservices trade-off.</li>
+  <li><strong>"How do you handle a regional outage?"</strong><br>Multi-region deployment, active-active or active-passive, DNS failover, data replication with conflict resolution.</li>
+  <li><strong>"What happens when your database goes down?"</strong><br>Read from replicas (stale reads acceptable?), circuit breaker on the app side, retry with backoff, failover to standby, graceful degradation.</li>
+</ul>
+
+<!-- Availability Killers -->
+<h2>Availability Killers</h2>
+<p>Be able to identify these in any design you propose.</p>
+
+<table>
+  <tr><th>Killer</th><th>Why It Kills Availability</th><th>Mitigation</th></tr>
+  <tr><td>Single points of failure</td><td>One component = one failure takes everything down</td><td>Redundancy everywhere</td></tr>
+  <tr><td>Cascading failures</td><td>One slow service overloads everything upstream</td><td><a href="../reliability/circuit-breaker.html">Circuit breakers</a>, timeouts, bulkheads</td></tr>
+  <tr><td> deployments</td><td>Bad release brings down production</td><td>Canary, blue-green, feature flags</td></tr>
+  <tr><td>Shared databases</td><td>One team's query impacts everyone</td><td>Database per service, rate limiting</td></tr>
+  <tr><td>Hard dependencies</td><td>If a non-critical service is down, everything fails</td><td><a href="../reliability/graceful-degradation.html">Graceful degradation</a>, fallbacks, cached responses</td></tr>
+  <tr><td>DNS failure</td><td>No one can reach your system at all</td><td>Multiple DNS providers, low TTL, anycast</td></tr>
+  <tr><td>Certificate expiry</td><td>TLS connections fail everywhere</td><td>Automated renewal (cert-manager, Let's Encrypt)</td></tr>
+  <tr><td>Resource exhaustion</td><td>No more connections, memory, disk</td><td>Monitoring, autoscaling, <a href="../reliability/rate-limiting.html">rate limiting</a></td></tr>
+</table>
+
+<!-- What to Skip -->
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>ITIL availability management processes</li>
+    <li>Detailed uptime monitoring tools (Nagios, Zabbix configs)</li>
+    <li>Formal availability calculation methodologies (FTA, FMEA)</li>
+    <li>Hardware-specific redundancy (RAID, dual power supplies)</li>
+  </ul>
+  <p>Focus on architectural patterns and interview reasoning, not ops tooling.</p>
+</div>
+
+<!-- References -->
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>Designing Data-Intensive Applications</strong> — Chapter 1 (Reliable, Scalable, Maintainable)</li>
+    <li><strong>Google SRE Book</strong> — Chapter 4 (Service Level Objectives) & Chapter 5 (Eliminating Toil)</li>
+    <li><strong>System Design Interview Vol. 1 (Alex Xu)</strong> — Rate Limiter & Designing a URL Shortener (availability reasoning)</li>
+    <li><strong>Site Reliability Engineering (Google)</strong> — <a href="https://sre.google/sre-book/table-of-contents/" target="_blank">sre.google</a></li>
+  </ol>
+</div>
+
+<div class="source">
+  <div class="source-label">Supplementary</div>
+  <ul>
+    <li><strong>AWS Well-Architected Framework</strong> — <a href="https://docs.aws.amazon.com/wellarchitected/latest/framework/welcome.html" target="_blank">Reliability Pillar</a></li>
+    <li><strong>Azure Architecture Center</strong> — <a href="https://learn.microsoft.com/azure/architecture/reliability/" target="_blank">Reliability patterns</a></li>
+  </ul>
+</div>
+
+<!-- Navigation -->
+<div class="nav">
+  <a href="scalability.html">&larr; 1.1.3 Scalability</a>
+  <a href="reliability.html">Next: 1.1.5 Reliability &rarr;</a>
+</div>
+
+</body>
+</html>

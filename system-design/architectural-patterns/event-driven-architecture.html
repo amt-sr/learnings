@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>13.1 — Event-Driven Architecture</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">Architectural Patterns</a> / 13.1 Event-Driven Architecture</div>
+<h1>Event-Driven Architecture</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the event-driven architectural style, the difference between events and commands, producers and consumers, event bus/broker patterns, and the trade-offs of asynchronous communication in distributed systems.</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>Event-driven architecture (EDA)</strong> is a pattern where services communicate by producing and consuming events rather than making direct synchronous calls. An event represents a fact that something happened ("OrderPlaced", "PaymentProcessed"). Services react to events asynchronously, enabling loose coupling and independent scaling.
+</div>
+
+<h2>Core Concepts</h2>
+<div class="diagram">
+  ┌──────────┐
+  │ Producer  │   publishes "OrderPlaced" event
+  └─────┬────┘
+        │
+        ▼
+  ┌───────────────────────────────┐
+  │       Event Bus / Broker       │
+  │   (Kafka, RabbitMQ, SQS,     │
+  │    EventBridge, SNS)           │
+  │                                │
+  │  Channels / Topics / Queues    │
+  └───┬───────┬───────┬───────────┘
+      │       │       │
+      ▼       ▼       ▼
+  ┌───────┐ ┌───────┐ ┌───────┐
+  │Consumer│ │Consumer│ │Consumer│
+  │:Inventory│ │:Notify │ │:Analytics│
+  │(update  │ │(send  │ │(update │
+  │ stock)  │ │ email)│ │ metrics)│
+  └────────┘ └───────┘ └─────────┘
+
+  Event: { type: "OrderPlaced", orderId: 123, userId: 456, timestamp: "..." }
+</div>
+
+<h2>Event vs Command</h2>
+<table>
+  <tr><th>Dimension</th><th>Event</th><th>Command</th></tr>
+  <tr><td>Semantics</td><td>"Something happened" (past tense)</td><td>"Do something" (imperative)</td></tr>
+  <tr><td>Example</td><td><code>OrderPlaced</code>, <code>UserRegistered</code></td><td><code>CreateOrder</code>, <code>SendEmail</code></td></tr>
+  <tr><td>Producer expectation</td><td>No expectation of response (fire-and-forget)</td><td>May expect a response or acknowledgment</td></tr>
+  <tr><td>Coupling</td><td class="green">Producer does not know about consumers</td><td class="red">Command sender knows (or expects) a handler</td></tr>
+  <tr><td>Failure handling</td><td>Consumer must handle failure independently</td><td>Sender handles failure directly</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Key insight:</strong> Events are facts. They describe what happened. Commands are requests. They ask for something to happen. In event-driven architecture, prefer events for state changes and commands for actions with expected outcomes.
+</div>
+
+<h2>Communication Patterns</h2>
+<h3>Point-to-Point (Queue)</h3>
+<div class="diagram">
+  Producer ──▶ Queue ──▶ Consumer A (competing consumers)
+                      ──▶ Consumer B (one message goes to ONE consumer)
+
+  Use case: Task distribution (email sending, image processing)
+  Tools: SQS, RabbitMQ queues, Kafka with consumer groups
+</div>
+
+<h3>Publish-Subscribe (Topic)</h3>
+<div class="diagram">
+  Producer ──▶ Topic ──▶ Consumer Group A (all get every message)
+                      ──▶ Consumer Group B (all get every message)
+                      ──▶ Consumer Group C (all get every message)
+
+  Use case: Event notification (OrderPlaced → inventory, shipping, analytics)
+  Tools: Kafka topics, SNS, RabbitMQ fanout exchange, Google Pub/Sub
+</div>
+
+<h2>Advantages and Disadvantages</h2>
+<table>
+  <tr><th>Advantage</th><th>Why It Matters</th></tr>
+  <tr><td class="green">Loose coupling</td><td>Producer does not know about consumers. Add new consumers without changing producer.</td></tr>
+  <tr><td class="green">Independent scaling</td><td>Producer and consumers scale independently based on their own load.</td></tr>
+  <tr><td class="green">Resilience</td><td>If a consumer is down, events accumulate in the queue/broker. No lost messages.</td></tr>
+  <tr><td class="green">Extensibility</td><td>Add new event consumers without touching existing services.</td></tr>
+  <tr><td class="green">Asynchronous processing</td><td>Producer does not wait for consumers. Lower latency for the caller.</td></tr>
+</table>
+
+<table>
+  <tr><th>Disadvantage</th><th>Why It Matters</th></tr>
+  <tr><td class="red">Eventual consistency</td><td>No immediate consistency. Consumers may be seconds/minutes behind.</td></tr>
+  <tr><td class="red">Complex error handling</td><td>Failed events need retry, dead letter queues, manual intervention.</td></tr>
+  <tr><td class="red">Observability challenge</td><td>Hard to trace event flow across multiple services.</td></tr>
+  <tr><td class="red">Event schema evolution</td><td>Changing event format breaks consumers. Need versioning strategy.</td></tr>
+  <tr><td class="red">Debugging difficulty</td><td>Hard to reproduce issues; event order and timing matter.</td></tr>
+  <tr><td class="red">Infrastructure overhead</td><td>Need a message broker (Kafka, RabbitMQ) adding operational complexity.</td></tr>
+</table>
+
+<h2>Choosing Between Sync and Async</h2>
+<div class="callout green">
+  <strong>Use synchronous (REST/gRPC) when:</strong> The caller needs an immediate result (e.g., "what is this user's balance?"), the operation is fast and critical, or you need strong consistency guarantees.
+</div>
+<div class="callout">
+  <strong>Use asynchronous (events) when:</strong> The operation takes a long time (email, video processing), the caller does not need an immediate result, multiple services need to react independently, or you want to decouple the producer from consumers.
+</div>
+
+<div class="callout green">
+  <strong>Interview tip:</strong> When designing a system, explicitly state your communication strategy. "For user-facing reads, I would use synchronous REST calls. For state-change operations like order placement, I would use events so that inventory, notification, and analytics services can react independently." This shows thoughtful architectural decision-making.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What is event-driven architecture and when would you use it?</li>
+  <li>What is the difference between an event and a command?</li>
+  <li>Compare point-to-point vs publish-subscribe messaging.</li>
+  <li>What are the trade-offs of event-driven architecture?</li>
+  <li>How do you handle failures in an event-driven system?</li>
+  <li>What is a dead letter queue and when do you need one?</li>
+  <li>How do you ensure exactly-once processing?</li>
+  <li>When would you choose synchronous over asynchronous communication?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid diving into:</strong> Kafka internals (partitions, ISR, ZooKeeper), RabbitMQ exchange types, or specific broker configurations. Focus on the architectural pattern and its trade-offs.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><strong>Designing Event-Driven Systems</strong> (Ben Stopford) — Event streaming patterns with Kafka</li>
+    <li><strong>Building Event-Driven Microservices</strong> (Jonas Bonér) — Axon framework and event patterns</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Patterns</div>
+  <ul>
+    <li><strong>"Event-Driven Architecture" — microservices.io</strong></li>
+    <li><strong>"Messaging Topologies" —.enterpriseintegrationpatterns.com</strong></li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="../cloud-architecture/service-mesh.html">&larr; Previous: Service Mesh</a>
+  <a href="cqrs.html">Next: CQRS &rarr;</a>
+</div>
+</body>
+</html>

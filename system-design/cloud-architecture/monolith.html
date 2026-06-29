@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>12.1.1 — Monolith Architecture</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">Cloud Architecture</a> / 12.1.1 Monolith</div>
+<h1>Monolith Architecture</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐</span>
+  <span>Interview Frequency: ★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the monolith architecture, its advantages and disadvantages, when it is the correct architectural choice, and how to evaluate it against microservices in an interview trade-off discussion.</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>Monolith</strong> is an architectural style where all application functionality (UI, business logic, data access) is deployed as a single deployable unit. The codebase may be well-structured internally with clear module boundaries, but it runs as one process on one server (or replicated behind a load balancer).
+</div>
+
+<p>A monolith is not necessarily a "big ball of mud." A well-structured monolith has clean internal boundaries, modular code, and a layered architecture. The key characteristic is single-unit deployment.</p>
+
+<h2>Architecture Diagram</h2>
+<div class="diagram">
+  ┌─────────────────────────────────────────────┐
+  │                 MONOLITH                      │
+  │                                               │
+  │  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
+  │  │   Auth    │  │  Orders   │  │  Users   │   │
+  │  │  Module   │  │  Module   │  │  Module  │   │
+  │  └────┬─────┘  └────┬─────┘  └────┬─────┘   │
+  │       │              │              │         │
+  │  ┌────┴──────────────┴──────────────┴────┐   │
+  │  │         Shared Data Access Layer       │   │
+  │  └────────────────────┬─────────────────┘   │
+  │                       │                     │
+  │  ┌────────────────────┴─────────────────┐   │
+  │  │         Shared Database Schema        │   │
+  │  └───────────────────────────────────────┘   │
+  │                                               │
+  └───────────────────┬───────────────────────────┘
+                      │
+              ┌───────┴───────┐
+              │   Database    │
+              │  (PostgreSQL) │
+              └───────────────┘
+
+  Deployed as single artifact:
+  - WAR, JAR, Docker image, binary
+  - Scales vertically or via identical copies behind LB
+</div>
+
+<h2>Pros and Cons</h2>
+<table>
+  <tr><th>Advantage</th><th>Why It Matters</th></tr>
+  <tr><td class="green">Simple to develop</td><td>IDE loads one project, no inter-service networking</td></tr>
+  <tr><td class="green">Easy to test</td><td>End-to-end testing is a single process startup</td></tr>
+  <tr><td class="green">Easy to deploy</td><td>One artifact to deploy, no orchestration needed</td></tr>
+  <tr><td class="green">No distributed complexity</td><td>No network latency, no distributed transactions, no eventual consistency</td></tr>
+  <tr><td class="green">Simple data model</td><td>Single database, ACID transactions across all modules</td></tr>
+  <tr><td class="green">Lower operational overhead</td><td>One process to monitor, one set of logs, one alerting pipeline</td></tr>
+  <tr><td class="green">Faster local development</td><td>No Docker Compose with 20 services; start one process</td></tr>
+</table>
+
+<table>
+  <tr><th>Disadvantage</th><th>Why It Matters</th></tr>
+  <tr><td class="red">Scaling limitations</td><td>Must scale entire application, not individual modules</td></tr>
+  <tr><td class="red">Deployment risk</td><td>Any code change redeploys the entire application</td></tr>
+  <tr><td class="red">Technology lock-in</td><td>Hard to use different languages/frameworks per module</td></tr>
+  <tr><td class="red">Organizational coupling</td><td>Large teams stepping on each other's code</td></tr>
+  <tr><td class="red">Code entropy</td><td>Without discipline, boundaries erode into spaghetti code</td></tr>
+  <tr><td class="red">Longer build times</td><td>Build/test cycle grows with codebase size</td></tr>
+</table>
+
+<h2>When Monolith Is the Right Choice</h2>
+<div class="callout green">
+  <strong>Start with a monolith until the pain of not having microservices exceeds the pain of having them.</strong> This is the consensus advice from experienced architects.
+</div>
+
+<ul>
+  <li><strong>Early-stage startup:</strong> Team is small (1-10 engineers), product is finding product-market fit, speed matters more than perfect architecture.</li>
+  <li><strong>Moderate traffic:</strong> System handles under 10K RPS. A monolith behind a load balancer can handle this easily.</li>
+  <li><strong>Tight domain coupling:</strong> When modules share a lot of data and business logic is deeply intertwined (e.g., checkout that touches inventory, payments, shipping).</li>
+  <li><strong>Small team:</strong> If you cannot assign 2+ engineers per service, you do not have enough people to own microservices.</li>
+  <li><strong>Regulatory/compliance:</strong> Single database simplifies audit trails and data governance.</li>
+  <li><strong>Performance-sensitive:</strong> In-process function calls are orders of magnitude faster than network calls.</li>
+</ul>
+
+<h2>Modular Monolith</h2>
+<p>The best of both worlds: maintain clean module boundaries within a single deployable unit. This makes future extraction to microservices possible.</p>
+
+<div class="diagram">
+  ┌──────────────────────────────────────────────┐
+  │            Modular Monolith                  │
+  │                                              │
+  │  ┌────────────┐  ┌────────────┐            │
+  │  │ Auth Bounded│  │ Order Bounded│           │
+  │  │   Context   │  │   Context    │          │
+  │  │ (own models, │  │ (own models, │          │
+  │  │  own API)   │  │  own API)   │           │
+  │  └──────┬──────┘  └──────┬──────┘           │
+  │         │                │                   │
+  │  ┌──────┴────────────────┴──────┐           │
+  │  │     Public API / Event Bus    │          │
+  │  │  (modules communicate here)   │          │
+  │  └───────────────────────────────┘           │
+  └──────────────────────────────────────────────┘
+
+  Key: Modules have STRICT internal boundaries.
+  Communication via well-defined APIs, not direct DB access.
+  Each module owns its data and exposes only interfaces.
+</div>
+
+<div class="callout yellow">
+  <strong>Interview tip:</strong> When asked "microservices or monolith?", do not give a blanket answer. Frame it as a trade-off: "I would start with a well-structured modular monolith and extract services when I have clear evidence of a specific module needing independent scaling, deployment, or technology." This demonstrates judgment over dogma.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>When would you choose a monolith over microservices?</li>
+  <li>What are the advantages of a monolith architecture?</li>
+  <li>How do you know when it is time to break a monolith into microservices?</li>
+  <li>What is a modular monolith and how is it different from a traditional monolith?</li>
+  <li>How do you scale a monolith?</li>
+  <li>What is the "monolith first" philosophy and do you agree with it?</li>
+  <li>How do you prevent a monolith from becoming a big ball of mud?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid diving into:</strong> Specific monolithic frameworks (Spring Boot, Django, Rails), code-level module patterns, or build tool configuration. Focus on the architectural trade-offs and decision criteria.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><strong>Building Microservices</strong> (Sam Newman, 2nd ed) — Chapter 1: Monolith vs microservices trade-offs</li>
+    <li><strong>Monolith to Microservices</strong> (Sam Newman) — Migration strategies and when to decompose</li>
+    <li><strong>Fundamentals of Software Architecture</strong> (Richards, Ford) — Chapter on architectural styles</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Articles</div>
+  <ul>
+    <li><strong>"Don't Start with Microservices"</strong> — thoughtworks.com/insights — Monolith-first approach</li>
+    <li><strong>"Choose Boring Technology"</strong> — muratdemirten.com — When simplicity wins</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="../observability/correlation-ids.html">&larr; Previous: Correlation IDs</a>
+  <a href="microservices.html">Next: Microservices &rarr;</a>
+</div>
+</body>
+</html>

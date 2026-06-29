@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.7.2 Write Quorum</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#5">5 Distributed Systems</a> / <a href="../index.html#5.7">5.7 Quorums</a> / 5.7.2
+</div>
+
+<h1>Write Quorum</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What a write quorum is and how it ensures data durability</li>
+  <li>The W + R > N rule and why it guarantees consistency</li>
+  <li>How write quorum size affects latency, durability, and availability</li>
+  <li>Real-world configurations in DynamoDB and Cassandra</li>
+</ul>
+
+<h2>Definition</h2>
+<p>A <strong>write quorum</strong> (W) specifies the minimum number of replicas that must acknowledge a write before it is considered successful. In a system with N replicas, a write must be stored on at least W nodes.</p>
+
+<div class="diagram">  Write Quorum (W=2, N=3):
+
+  Client writes "user:123 = Alice"
+       │
+       ├──▶ Replica A (ack ✓)
+       ├──▶ Replica B (ack ✓)  ← W=2 satisfied
+       └──▶ Replica C (may or may not receive)
+
+  Write succeeds after 2 acknowledgments.
+  Replica C may receive the write asynchronously.</div>
+
+<h2>W + R > N Rule</h2>
+<p>The fundamental quorum rule: if <strong>W + R > N</strong>, then every read is guaranteed to see the latest write. This is because the read set (R nodes) and write set (W nodes) must overlap in at least one node.</p>
+
+<div class="diagram">  W + R > N guarantees read sees latest write:
+
+  N=3, W=2, R=2  →  2 + 2 = 4 > 3 ✓
+  ┌─────────┬─────────┬─────────┐
+  │  Node A │  Node B │  Node C │
+  │  W: ✓   │  W: ✓   │         │
+  │  R: ✓   │  R: ✓   │         │
+  └─────────┴─────────┴─────────┘
+            ↑
+  Read from A or B → guaranteed to see latest write
+  (Both A and B have the data)
+
+  N=3, W=1, R=1  →  1 + 1 = 2 ≤ 3 ✗
+  ┌─────────┬─────────┬─────────┐
+  │  Node A │  Node B │  Node C │
+  │  W: ✓   │         │         │
+  │         │  R: ✓   │         │
+  └─────────┴─────────┴─────────┘
+  Read from B → might NOT see the write on A!
+  (B might have stale data)</div>
+
+<h2>Quorum Trade-offs</h2>
+<table>
+  <tr><th>Configuration</th><th>Consistency</th><th>Availability</th><th>Latency</th><th>Durability</th></tr>
+  <tr><td>W=N (write all)</td><td class="green">Strongest</td><td class="red">Lowest</td><td class="red">Highest</td><td class="green">Strongest</td></tr>
+  <tr><td>W=N/2+1 (majority)</td><td class="green">Strong</td><td>Moderate</td><td>Moderate</td><td class="green">Good</td></tr>
+  <tr><td>W=1 (write one)</td><td class="red">Weakest</td><td class="green">Highest</td><td class="green">Lowest</td><td class="red">Weakest</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Key trade-off:</strong> Higher W means stronger consistency and durability, but higher write latency (must wait for more replicas) and lower availability (more replicas must be up to accept writes). Lower W means faster writes and higher availability, but weaker consistency guarantees.
+</div>
+
+<h2>Common Configurations</h2>
+<pre># DynamoDB
+# Default: N=3 (implied), consistent reads use R=W=quorum
+PutItem  → W = quorum (2 of 3)
+GetItem  → R = quorum (2 of 3) for consistent reads
+GetItem  → R = 1 for eventual consistent reads (faster)
+
+# Cassandra
+# Write consistency levels
+WRITE  CL=QUORUM  → W = ceil(N/2) + 1
+WRITE  CL=ALL     → W = N (strongest, slowest)
+WRITE  CL=ONE     → W = 1 (fastest, weakest)
+WRITE  CL=LOCAL_QUORUM → W = ceil(rack_nodes/2) + 1</pre>
+
+<h2>Write Path in Quorum Systems</h2>
+<div class="diagram">  Client → Coordinator Node → N replicas
+
+  1. Client sends write to coordinator
+  2. Coordinator sends write to all N replicas
+  3. Wait for W acknowledgments
+  4. If W acks received → success
+  5. If timeout before W acks → write fails (unavailable)
+
+  Failed replicas receive write asynchronously
+  (via hinted handoff or anti-entropy)</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What is a write quorum?"</strong><br>The minimum number of replicas (W) that must acknowledge a write before it succeeds. Combined with read quorum (R), the rule W + R > N ensures every read sees at least one node with the latest write, guaranteeing strong consistency.</li>
+  <li><strong>"What happens if W=1?"</strong><br>Write succeeds after just one replica acknowledges. Fastest writes, highest availability (only 1 of N nodes needs to be up), but weakest consistency — a read from a different node may return stale data. Used when write performance matters more than immediate consistency.</li>
+  <li><strong>"How does W + R > N guarantee consistency?"</strong><br>If W replicas have the latest write and R replicas are read, W + R > N means R and W must overlap in at least one node. That overlapping node has the latest write, so the read will return the most recent data.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>Ephemeral quorum and quorum casts (academic variants)</li>
+    <li>Byzantine quorum systems (assume malicious nodes)</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Dynamo: Amazon's Highly Available Key-Value Store"</strong> — DeCandia et al. (quorum configuration)</li>
+    <li><strong>"Designing Data-Intensive Applications"</strong> — Martin Kleppmann (Chapter 5: Replication)</li>
+    <li><strong>Cassandra Documentation</strong> — Consistency Levels</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="read-quorum.html">&larr; 5.7.1 Read Quorum</a>
+  <a href="majority-quorum.html">Next: 5.7.3 Majority Quorum &rarr;</a>
+</div>
+
+</body>
+</html>

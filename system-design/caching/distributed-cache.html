@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.6.3 Distributed Cache</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">7 Caching</a> / <a href="index.html">7.6 Redis</a> / 7.6.3
+</div>
+
+<h1>Distributed Cache</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand distributed caching as a concept -- multiple cache nodes acting as a single logical cache layer. Know the key architectural decisions: topology (client-side sharding vs consistent hashing), cache warming strategies, invalidation challenges at scale, and trade-offs against local in-process caching. This topic bridges individual cache fundamentals into the system-level caching architecture that appears in design interviews.</p>
+
+<h2>Definition</h2>
+<p>A <strong>distributed cache</strong> is a cache layer spread across multiple nodes (machines/VMs/containers) that presents a single logical cache to client applications. Data is partitioned across nodes using a hashing or sharding scheme. Distributed caches provide aggregate memory capacity that exceeds any single machine, enabling horizontal scaling for high-throughput, low-latency access patterns.</p>
+
+<div class="callout">
+  <strong>Key insight:</strong> A distributed cache is fundamentally different from a local cache (in-process cache like Guava/Caffeine in Java). Local caches are fast (nanosecond latency, no network) but per-process with limited capacity. Distributed caches add network latency (microseconds to low milliseconds) but share state across all application instances, enabling cache coherence and much larger capacity.
+</div>
+
+<h2>Architecture Overview</h2>
+
+<div class="diagram">
+ Distributed Cache Architecture
+
+  App Server 1 ──┐       ┌─────────────────────────────────┐
+  App Server 2 ──┼── TCP ──→│  Client Library / Proxy         │
+  App Server 3 ──┘       │  (hash key → route to node)       │
+                         └───────────┬─────────────────────┘
+                                     │
+                    ┌────────────────┼────────────────┐
+                    │                │                │
+               ┌────▼────┐    ┌─────▼────┐    ┌────▼─────┐
+               │ Node 1  │    │  Node 2  │    │  Node 3  │
+               │ Cache   │    │  Cache   │    │  Cache   │
+               │ (Shard 1)│   │ (Shard 2)│    │ (Shard 3)│
+               └────┬────┘    └─────┬────┘    └────┬─────┘
+                    │               │               │
+                    └───────────────┴───────────────┘
+                            (network, shared pool)
+</div>
+
+<h2>Cache Topologies</h2>
+
+<h3>Client-Side Sharding</h3>
+<p>The application or client library knows about all cache nodes and hashes keys locally to determine the target node. No intermediate proxy is required.</p>
+<ul>
+  <li><strong>Memcached model:</strong> Client library uses ketama consistent hashing to map keys to nodes. Add/remove a node causes minimal remapping (only 1/N keys move on average).</li>
+  <li><strong>Redis Cluster model:</strong> Client library maintains a slot-to-node map and follows MOVED/ASK redirects.</li>
+</ul>
+
+<h3>Proxy-Based</h3>
+<p>A proxy layer sits between clients and cache nodes. Clients send all requests to the proxy; the proxy handles routing.</p>
+<ul>
+  <li><strong>Twemproxy (nutcracker):</strong> Stateless proxy, supports Memcached and Redis. Single point of failure unless fronted by a load balancer. No auto-discovery.</li>
+  <li><strong>Codis:</strong> Stateful proxy with Zookeeper/Etcd for coordination. Supports resharding. Largely superseded by Redis Cluster.</li>
+  <li><strong>Predixy:</strong> Multi-threaded proxy for Redis with Lua scripting support.</li>
+</ul>
+
+<table>
+  <tr><th>Aspect</th><th>Client-Side Sharding</th><th>Proxy-Based</th></tr>
+  <tr><td>Latency</td><td class="green">Lower (no proxy hop)</td><td class="red">Higher (extra hop)</td></tr>
+  <tr><td>Client complexity</td><td class="red">Higher (smart client lib)</td><td class="green">Lower (dumb client)</td></tr>
+  <tr><td>Failure handling</td><td>Client-managed</td><td>Proxy-managed</td></tr>
+  <tr><td>Resharding</td><td>Requires client config change</td><td>Proxy can handle transparently</td></tr>
+  <tr><td>Single point of failure</td><td class="green">None</td><td class="red">Proxy (unless HA)</td></tr>
+  <tr><td>Examples</td><td>Memcached client, Redis Cluster</td><td>Twemproxy, Codis, Envoy</td></tr>
+</table>
+
+<h3>Consistent Hashing</h3>
+<p>The standard algorithm for mapping keys to nodes in a distributed cache. Keys and nodes are both placed on a hash ring. Each key is assigned to the nearest node clockwise on the ring. Virtual nodes (vnodes) improve balance.</p>
+
+<div class="diagram">
+ Consistent Hash Ring (with virtual nodes)
+
+                    Node A.1
+                  ╱
+        Node B.2 ──●─── Node A.2
+        ╱                ╲
+  Node C.3                Node A.3
+      │                    │
+  Node C.1 ──●─── Node B.1 ──●─── Node C.2
+               │                │
+           key1(key1 maps to  key2(key2 maps to
+           Node B.1)           Node C.2)
+
+  Adding Node D:
+    Only keys in the range [D, next_node) remap
+    ~1/N keys move (not all keys)
+</div>
+
+<h2>Cache Warming</h2>
+<p>A cold distributed cache can cause a thundering herd to the database. Warming strategies:</p>
+
+<ul>
+  <li><strong>Lazy loading (cache-aside):</strong> Populate on first miss. Simple but causes cold-start storms.</li>
+  <li><strong>Write-through:</strong> Write to cache and DB simultaneously. Cache is always warm for write-heavy data, but increases write latency.</li>
+  <li><strong>Pre-warming (bootstrap):</strong> On deploy or restart, load hot keys from DB into cache before accepting traffic. Requires knowing which keys are hot.</li>
+  <li><strong>Background refresh:</strong> Async workers refresh keys with approaching TTLs before they expire, preventing cache misses entirely for hot data.</li>
+</ul>
+
+<div class="callout yellow">
+  <strong>Cache stampede:</strong> When a hot key expires, many concurrent requests simultaneously miss and all fetch from the database. Mitigations: request coalescing (only one request fetches, others wait), probabilistic early expiration (scatter TTL jitter so not all replicas expire at once), or mutex locks per key.
+</div>
+
+<h2>Cache Invalidation in Distributed Settings</h2>
+<p>Invalidation is the hardest part of distributed caching. The core challenge: when data changes in the source of truth, how do you ensure all cache nodes are updated or invalidated?</p>
+
+<table>
+  <tr><th>Strategy</th><th>Mechanism</th><th>Pros</th><th>Cons</th></tr>
+  <tr><td>TTL-based</td><td>Let entries expire naturally</td><td class="green">Simple, no coordination</td><td class="red">Stale until expiry</td></tr>
+  <tr><td>Active invalidation</td><td>Publisher writes invalidation event to a channel</td><td class="green">Near-immediate</td><td class="red">Adds coordination complexity</td></tr>
+  <tr><td>Write-through</td><td>Update cache on every DB write</td><td class="green">Always consistent</td><td class="red">Write amplification, higher latency</td></tr>
+  <tr><td>Versioned keys</td><td>Include data version in cache key</td><td class="green">No invalidation needed</td><td class="red">Old versions linger until TTL</td></tr>
+  <tr><td>Pub/Sub invalidation</td><td>Redis PUBSUB or Kafka event triggers delete</td><td class="green">Targeted, scalable</td><td class="red">Event delivery not guaranteed</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Golden rule:</strong> "There are only two hard things in Computer Science: cache invalidation and naming things." -- Phil Karlton. In a distributed cache, invalidation requires a coordination mechanism (pub/sub, message queue, or versioning). There is no free lunch -- you trade off between consistency, latency, and complexity.
+</div>
+
+<h2>Distributed Cache vs Local Cache</h2>
+<table>
+  <tr><th>Aspect</th><th>Local Cache (in-process)</th><th>Distributed Cache</th></tr>
+  <tr><td>Latency</td><td class="green">~100ns - 1us</td><td class="red">~1ms - 5ms (network)</td></tr>
+  <tr><td>Capacity</td><td>Limited by process memory</td><td class="green">Aggregate of all nodes</td></tr>
+  <tr><td>Shared state</td><td class="red">Per-process only</td><td class="green">Shared across all app instances</td></tr>
+  <tr><td>Coherence</td><td class="red">None (each process has its own copy)</td><td class="green">Single source of cached truth</td></tr>
+  <tr><td>GC pressure</td><td class="red">Yes (entries in JVM/CLR heap)</td><td class="green">None (separate process)</td></tr>
+  <tr><td>Failure isolation</td><td class="green">No network dependency</td><td class="red">Network partition = partial outage</td></tr>
+  <tr><td>Examples</td><td>Guava, Caffeine, Ehcache (local)</td><td>Redis, Memcached, Hazelcast</td></tr>
+</table>
+
+<div class="callout green">
+  <strong>Best practice -- use both:</strong> Most production systems use a <strong>two-tier cache</strong>: L1 is a small local cache (Caffeine/Guava) for ultra-hot keys with nanosecond latency and short TTL; L2 is a distributed cache (Redis/Memcached) for broader capacity and cross-instance coherence. The local cache absorbs the majority of reads for hot keys, reducing load on the distributed cache.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>How would you design a distributed caching layer for a social-media feed system?</li>
+  <li>Explain consistent hashing. What happens when a node is added or removed?</li>
+  <li>Compare client-side sharding vs proxy-based caching. When would you choose each?</li>
+  <li>How do you handle cache invalidation across multiple cache nodes?</li>
+  <li>What is cache stampede and how do you prevent it?</li>
+  <li>Compare local cache vs distributed cache. When would you use both in a two-tier setup?</li>
+  <li>How would you warm a distributed cache after a cold start or deployment?</li>
+  <li>What happens to your distributed cache during a network partition? How do you maintain availability?</li>
+  <li>How do you handle hot keys that overwhelm a single shard?</li>
+  <li>Design a cache invalidation strategy for a system where data can be updated by multiple services.</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Skip in interviews:</strong>
+  <ul>
+    <li>Hazecast/Ignite multi-tiered caching internals unless the design specifically calls for an embedded distributed data grid.</li>
+    <li>Memcached slab allocator rebalancing algorithms -- state the concept (slabs with per-slab LRU) and move on.</li>
+    <li>Consistent hashing jump-consistent-hash variant unless the interviewer specifically asks about alternatives to the ring-based approach.</li>
+    <li>Proxy implementations (Envoy filters, mcrouter) unless designing a custom proxy layer is part of the question.</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Primary</div>
+  <ul>
+    <li><a href="https://redis.io/docs/manual/scaling/">Redis Cluster Tutorial</a> -- native distributed caching with Redis</li>
+    <li><a href="https://memcached.org/wiki/NewOverview">Memcached Overview</a> -- the original distributed cache architecture</li>
+    <li><a href="https://en.wikipedia.org/wiki/Consistent_hashing">Wikipedia: Consistent Hashing</a> -- foundational algorithm for distributed cache key routing</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Supplementary</div>
+  <ul>
+    <li><a href="https://www.amitkaps.com/blog/caching-strategies-and-how-to-choose-the-right-one/">Caching Strategies and How to Choose the Right One</a> -- practical guide to cache-aside, write-through, write-behind, and refresh-ahead</li>
+    <li><a href="https://instagram-engineering.com/dispatching-cache-invalidation-at-instagram-4147ef3e9f1c">Instagram: Cache Invalidation at Scale</a> -- real-world distributed cache invalidation patterns</li>
+    <li><a href="https://engineering.fb.com/2021/09/02/core-data/redis-at-scale/">Redis at Scale at Facebook/Meta</a> -- production distributed Redis deployment patterns</li>
+    <li><a href="https://martin.kleppmann.com/">Designing Data-Intensive Applications, Ch. 8</a> (Martin Kleppmann) -- distributed systems perspective on caching and replication</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="redis-cluster.html">&larr; 7.6.2 Redis Cluster</a>
+  <a href="../messaging/queue.html">8.1.1 Queue &rarr;</a>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.6.1 Redis Basics</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">7 Caching</a> / <a href="index.html">7.6 Redis</a> / 7.6.1
+</div>
+
+<h1>Redis Basics</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Master the fundamentals of Redis as an in-memory data structure store. Know its core data types, persistence options, threading model, and common use cases inside a larger system design. Redis appears in nearly every FAANG system design interview as either the primary cache or a supporting component.</p>
+
+<h2>Definition</h2>
+<p><strong>Redis (Remote Dictionary Server)</strong> is an open-source, in-memory data structure store. It supports key-value operations on multiple data types (strings, hashes, lists, sets, sorted sets), provides optional persistence to disk, and can serve as a database, cache, message broker, or session store. It operates as a single-threaded event loop processing commands sequentially over TCP.</p>
+
+<div class="callout">
+  <strong>Key insight:</strong> Redis is not just a cache -- it is a versatile in-memory data structure server. While commonly used as a cache (cache-aside, write-through), its rich data types make it suitable for leaderboards (sorted sets), pub/sub messaging, rate limiting, distributed locks, and more. The single-threaded model is a deliberate architectural choice, not a limitation.
+</div>
+
+<h2>Core Data Types</h2>
+<table>
+  <tr><th>Type</th><th>Description</th><th>Common Commands</th><th>Use Case</th></tr>
+  <tr><td><strong>String</strong></td><td>Binary-safe byte sequence (max 512 MB)</td><td>GET, SET, INCR, DECR, SETNX</td><td>Cached API responses, counters, distributed locks</td></tr>
+  <tr><td><strong>Hash</strong></td><td>Map of field-value pairs</td><td>HGET, HSET, HMGET, HGETALL</td><td>Object caching (user profile), session data</td></tr>
+  <tr><td><strong>List</strong></td><td>Linked list of strings, ordered by insertion</td><td>LPUSH, RPUSH, LPOP, RPOP, LRANGE</td><td>Message queues, activity feeds, recent items</td></tr>
+  <tr><td><strong>Set</strong></td><td>Unordered collection of unique strings</td><td>SADD, SREM, SMEMBERS, SISMEMBER, SUNION</td><td>Tagging, unique tracking, mutual friends</td></tr>
+  <tr><td><strong>Sorted Set</strong></td><td>Set with a floating-point score per member</td><td>ZADD, ZRANGE, ZRANK, ZREM, ZSCORE</td><td>Leaderboards, rate limiting, priority queues</td></tr>
+</table>
+
+<h3>Common Command Patterns</h3>
+<pre>
+# Cache-aside pattern
+GET user:1001                          # miss → fetch from DB
+SET user:1001 '{"name":"Alice"}' EX 3600  # cache with 1h TTL
+
+# Atomic counter
+INCR page:views:article:42
+
+# Distributed lock (SETNX)
+SET lock:resource:1 "uuid" NX EX 10   # acquire (10s TTL)
+
+# Sorted set leaderboard
+ZADD leaderboard 9500 "player_1"
+ZADD leaderboard 8700 "player_2"
+ZREVRANGE leaderboard 0 9 WITHSCORES   # top 10
+
+# Hash for object caching
+HSET user:1001 name "Alice" age 30
+HGET user:1001 name
+</pre>
+
+<h2>Single-Threaded Model</h2>
+<p>Redis processes all commands on a single main thread using an I/O multiplexing event loop (epoll/kqueue). This design eliminates concurrency bugs (no locks needed) and avoids context-switching overhead.</p>
+
+<div class="diagram">
+ Redis Single-Threaded Architecture
+
+  Client 1 ──┐
+  Client 2 ──┤         ┌──────────────────────────┐
+  Client 3 ──┼── TCP ──│  I/O Multiplexer (epoll) │
+  Client N ──┘         │         │                │
+                       │   Event Loop (single)    │
+                       │         │                │
+                       │  ┌──────▼──────┐         │
+                       │  │  Command    │         │
+                       │  │  Processor  │         │
+                       │  └──────┬──────┘         │
+                       │         │                │
+                       │  ┌──────▼──────┐         │
+                       │  │  In-Memory  │         │
+                       │  │  Data Store │         │
+                       │  └─────────────┘         │
+                       └──────────────────────────┘
+</div>
+
+<div class="callout yellow">
+  <strong>Why single-threaded?</strong> Redis operations are CPU-bound only on data-type-level operations (hashing, sorting). Memory access is the real bottleneck, and a single thread maximizes L1/L2 cache hit rates. Context switching between threads would degrade memory locality. For I/O, the event loop handles thousands of concurrent connections efficiently.
+</div>
+
+<div class="callout green">
+  <strong>Background I/O threads:</strong> Redis 6.0+ uses separate threads for I/O (reading from sockets, writing to sockets) and for <code>fsync</code> / <code>unlink</code> (file deletion). The command execution itself remains single-threaded. This improves network throughput (up to 2x) without sacrificing simplicity.
+</div>
+
+<h2>Persistence</h2>
+<p>Redis offers two persistence mechanisms, often used together:</p>
+
+<table>
+  <tr><th>Method</th><th>RDB (Redis Database)</th><th>AOF (Append Only File)</th></tr>
+  <tr><td>What</td><td>Point-in-time snapshot of entire dataset</td><td>Sequential log of every write command</td></tr>
+  <tr><td>Format</td><td>Binary, compact</td><td>Text (Redis protocol commands)</td></tr>
+  <tr><td>Performance impact</td><td class="green">Fork-based, minimal disruption</td><td class="red">Continuous writes to disk</td></tr>
+  <tr><td>Recovery speed</td><td class="green">Fast (load binary dump)</td><td class="red">Slower (replay all commands)</td></tr>
+  <tr><td>Data safety</td><td class="red">Can lose data between snapshots</td><td class="green">Configurable (always, every sec, never)</td></tr>
+  <tr><td>File size</td><td class="green">Compact</td><td class="red">Grows over time (rewrite compacts)</td></tr>
+</table>
+
+<pre>
+# RDB configuration
+save 900 1          # snapshot after 900s if >= 1 write
+save 300 10         # snapshot after 300s if >= 10 writes
+save 60 10000       # snapshot after 60s if >= 10000 writes
+
+# AOF configuration
+appendonly yes
+appendfsync everysec   # fsync once per second (default for AOF)
+</pre>
+
+<h2>Common Use Cases</h2>
+
+<h3>Caching (Cache-Aside)</h3>
+<p>Most common use case. Application checks Redis first, falls back to database on miss, and writes back to Redis. TTLs ensure eventual consistency.</p>
+
+<h3>Session Store</h3>
+<p>Store user session data with automatic TTL expiration. Hashes work well for multi-field session objects. On logout, simply delete the key.</p>
+
+<h3>Rate Limiting</h3>
+<p>Use INCR with TTL (sliding window via sorted sets or Lua scripts). Common patterns: fixed-window counters, sliding-window logs, token bucket.</p>
+
+<pre>
+# Simple fixed-window rate limiter (Lua for atomicity)
+EVAL "
+  local key = KEYS[1]
+  local limit = tonumber(ARGV[1])
+  local window = tonumber(ARGV[2])
+  local current = redis.call('INCR', key)
+  if current == 1 then
+    redis.call('EXPIRE', key, window)
+  end
+  if current > limit then
+    return 0  -- rejected
+  end
+  return 1  -- allowed
+" 1 rate_limit:user:42 100 60
+</pre>
+
+<h3>Leaderboards</h3>
+<p>Sorted sets with scores as the ranking metric. O(log N) insert/update, O(log N + M) range queries for top-M players.</p>
+
+<h3>Publish/Subscribe</h3>
+<p>Real-time messaging between services. Producers publish to channels; subscribers receive messages. Note: messages are not persisted -- if no subscriber is listening, the message is lost.</p>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What data types does Redis support? When would you use a sorted set vs a list?</li>
+  <li>Why is Redis single-threaded? What are the benefits and limitations?</li>
+  <li>Explain the difference between RDB and AOF persistence. Which would you choose for a session store vs an analytics cache?</li>
+  <li>How would you implement rate limiting with Redis? What are the edge cases?</li>
+  <li>Design a leaderboard system using Redis. How does it scale?</li>
+  <li>How does Redis handle eviction when memory is full? What are the different policies?</li>
+  <li>What is the difference between Redis and Memcached? When would you choose one over the other?</li>
+  <li>How would you implement a distributed lock with Redis? What happens if the lock holder crashes?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Skip in interviews:</strong>
+  <ul>
+    <li>Redis Modules internals (RediSearch, RedisJSON, RedisGraph) unless the design specifically calls for them. Mention their existence, don't explain internals.</li>
+    <li>Low-level details of the I/O multiplexer implementation (epoll vs kqueue specifics).</li>
+    <li>RDB file format binary layout or AOF rewrite internals.</li>
+    <li>Redis Sentinel deep internals -- state the concept (auto-failover) and move on unless asked.</li>
+    <li>Exact byte-level encoding of Redis protocol (RESP).</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Primary</div>
+  <ul>
+    <li><a href="https://redis.io/docs/about/">Redis Documentation</a> -- official docs, data types, commands, and architecture overview</li>
+    <li><a href="https://redis.io/docs/manual/persistence/">Redis Persistence</a> -- RDB and AOF configuration and trade-offs</li>
+    <li><a href="https://redis.io/docs/management/optimization/threading/">Redis Threading Model</a> -- single-threaded execution, I/O threading</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Supplementary</div>
+  <ul>
+    <li><a href="https://martin.kleppmann.com/">Designing Data-Intensive Applications, Ch. 8</a> (Martin Kleppmann) -- broader context on in-memory stores and replication</li>
+    <li><a href="https://www.alibabacloud.com/blog/how-does-single-threaded-redis-process-100000-concurrent-requests_594745">How Single-Threaded Redis Handles 100K Concurrent Requests</a> -- Alibaba Cloud deep dive on the event loop</li>
+    <li><a href="https://engineering.fb.com/2021/09/02/core-data/redis-at-scale/">Redis at Scale at Facebook/Meta</a> -- production deployment patterns at scale</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="fifo.html">&larr; 7.5.3 FIFO</a>
+  <a href="redis-cluster.html">7.6.2 Redis Cluster &rarr;</a>
+</div>
+
+</body>
+</html>

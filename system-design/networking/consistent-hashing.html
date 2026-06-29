@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.7.10 Consistent Hashing</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#2">2 Networking</a> / <a href="../index.html#2.7">2.7 Load Balancing</a> / 2.7.10
+</div>
+
+<h1>Consistent Hashing</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What consistent hashing is and how it solves the redistribution problem</li>
+  <li>The hash ring data structure and how lookups work</li>
+  <li>Why consistent hashing minimizes key remapping when servers change</li>
+  <li>Virtual nodes and how they improve distribution uniformity</li>
+  <li>Applications in load balancing, caching, and distributed databases</li>
+</ul>
+
+<h2>The Problem with Modular Hashing</h2>
+<p>With naive modular hashing, adding or removing a server causes <strong>massive redistribution</strong> of keys:</p>
+
+<div class="diagram">  Modular hashing: server = hash(key) % N
+
+  3 servers (N=3):
+  key "alice"   → hash=7  % 3 = 1 → Server B
+  key "bob"     → hash=14 % 3 = 2 → Server C
+  key "carol"   → hash=21 % 3 = 0 → Server A
+  key "dave"    → hash=35 % 3 = 2 → Server C
+  key "eve"     → hash=42 % 3 = 0 → Server A
+
+  Now add Server D (N=4) — EVERY key is rehashed:
+  key "alice"   → hash=7  % 4 = 3 → Server D  ← MOVED!
+  key "bob"     → hash=14 % 4 = 2 → Server C  ← stays
+  key "carol"   → hash=21 % 4 = 1 → Server B  ← MOVED!
+  key "dave"    → hash=35 % 4 = 3 → Server D  ← MOVED!
+  key "eve"     → hash=42 % 4 = 2 → Server C  ← MOVED!
+
+  4 out of 5 keys moved — 80% redistribution!
+  For a million keys, this means 800K cache misses
+  and 800K database queries at once → thundering herd.</div>
+
+<h2>Consistent Hashing Solution</h2>
+<p><strong>Consistent hashing</strong> maps both keys and servers onto the same hash ring (a circular hash space, typically 0 to 2^32-1). A key is assigned to the server that is the <strong>first server clockwise</strong> from the key's hash position on the ring.</p>
+
+<div class="diagram">  Consistent Hashing — The Hash Ring:
+
+                   0
+               ╭───────╮
+          C  /           \  key=bob
+            │             │
+          D │             │ B
+            │             │
+          A  \           /  key=alice
+               ╰───────╯
+                 2^32
+
+  Servers on the ring (hashed by server name/IP):
+  Server A → position 1200
+  Server B → position 3600
+  Server C → position 6800
+  Server D → position 9200
+
+  Key lookup (key → hash → walk clockwise to first server):
+  key "alice" → hash=1500  → walk CW → Server B (3600)
+  key "bob"   → hash=2500  → walk CW → Server B (3600)
+  key "carol" → hash=7200  → walk CW → Server D (9200)
+  key "dave"  → hash=300   → walk CW → Server A (1200)</div>
+
+<h2>Minimal Redistribution</h2>
+<p>The key property: when you add or remove a server, <strong>only keys in the affected range are remapped</strong>. All other keys stay on their current server.</p>
+
+<div class="diagram">  Adding Server D to existing ring (A, B, C):
+
+  Before (3 servers):
+  0 ──▶ A ──▶ B ──▶ C ──▶ (wrap to A)
+
+  Keys: alice→B, bob→B, carol→C, dave→A
+
+  After adding D between B and C:
+  0 ──▶ A ──▶ B ──▶ D ──▶ C ──▶ (wrap to A)
+
+  Keys: alice→B (unchanged), bob→B (unchanged),
+        carol→D (MOVED from C),    dave→A (unchanged)
+
+  Only 1 out of 4 keys moved — 25% redistribution
+  (expected: 1/N = 1/4 = 25%)
+
+  Removing Server D:
+  carol moves to C (next clockwise)
+  All other keys unchanged.
+  Only 1 key affected again.</div>
+
+<div class="callout green">
+  <strong>Key insight:</strong> When a server is added or removed, consistent hashing only redistributes keys that were assigned to (or would be assigned to) that server. The expected fraction of keys that move is <strong>1/N</strong> where N is the number of servers. With modular hashing, nearly <strong>all</strong> keys move.
+</div>
+
+<h2>Virtual Nodes (VNodes)</h2>
+<p>With few servers, consistent hashing can produce <strong>uneven distribution</strong> — one server might "own" a large portion of the ring by chance. Virtual nodes solve this by placing each physical server at multiple positions on the ring.</p>
+
+<div class="diagram">  Without virtual nodes (uneven):
+  Ring: A──────B──────────────────C──────
+        A owns 20%, B owns 55%, C owns 25%  ← B overloaded!
+
+  With virtual nodes (100 per server):
+  Ring: A a A a A b B b B b b B c C c C c A a A b B c C ...
+        A owns ~33%, B owns ~33%, C owns ~33%  ← Even!
+
+  Each physical server maps to 100-200 virtual positions.
+  Key "alice" → hash → finds VNode "A-47" → physical Server A
+
+  More virtual nodes = more uniform distribution
+  Typical: 100-200 virtual nodes per physical server
+  Trade-off: more vnodes = more memory for the ring</div>
+
+<table>
+  <tr><th>VNodes per Server</th><th>Distribution Variance</th><th>Memory Overhead</th></tr>
+  <tr><td>1 (no vnodes)</td><td class="red">High (can be very uneven)</td><td class="green">Minimal</td></tr>
+  <tr><td>10</td><td>Moderate</td><td>Low</td></tr>
+  <tr><td class="green">100-200</td><td class="green">Low (near-uniform)</td><td>Low (few KB per server)</td></tr>
+  <tr><td>1000</td><td>Very low</td><td class="red">Higher (diminishing returns)</td></tr>
+</table>
+
+<h2>Use Cases</h2>
+
+<h3>Load Balancing</h3>
+<p>Consistent hashing for load balancing routes a specific key (user ID, session ID) to the same server every time. This provides a form of session affinity without cookies, and is useful when the server caches user-specific data.</p>
+
+<pre># Example: Route user to same server based on user ID
+# hash(user_id) → position on ring → nearest server
+
+user_id=12345 → hash → Server A (this user always goes to A)
+user_id=67890 → hash → Server B (this user always goes to B)
+
+# Benefits:
+# - Server A can cache user 12345's data locally
+# - No need for shared session store
+# - Adding/removing servers only affects 1/N of users</pre>
+
+<h3>Distributed Caching</h3>
+<p>Memcached, DynamoDB, Cassandra all use consistent hashing to determine which node stores a particular key. This minimizes data movement when nodes are added or removed.</p>
+
+<h3>Distributed Databases</h3>
+<p>Cassandra uses consistent hashing for data partitioning. Each node owns a range of tokens on the ring. Data is partitioned by partition key hash.</p>
+
+<h2>Implementation</h2>
+<pre># Python — consistent hashing with virtual nodes
+import hashlib
+import bisect
+
+class ConsistentHash:
+    def __init__(self, servers, vnodes=100):
+        self.ring = {}           # position → server
+        self.sorted_keys = []    # sorted positions
+        for server in servers:
+            for i in range(vnodes):
+                key = f"{server}:{i}"
+                pos = self._hash(key)
+                self.ring[pos] = server
+                bisect.insort(self.sorted_keys, pos)
+
+    def _hash(self, key):
+        return int(hashlib.md5(key.encode()).hexdigest(), 16)
+
+    def get_server(self, key):
+        pos = self._hash(key)
+        # Binary search for first position >= pos
+        idx = bisect.bisect_left(self.sorted_keys, pos)
+        if idx == len(self.sorted_keys):
+            idx = 0  # wrap around
+        return self.ring[self.sorted_keys[idx]]
+
+# Usage
+ch = ConsistentHash(["A", "B", "C"], vnodes=100)
+print(ch.get_server("user:123"))  # Always returns same server
+print(ch.get_server("user:123"))  # Same server, regardless of pool changes</pre>
+
+<h2>Consistent Hashing vs Other Algorithms</h2>
+<table>
+  <tr><th>Algorithm</th><th>Key Property</th><th>Redistribution on Scale</th></tr>
+  <tr><td><a href="round-robin.html"><strong>Round Robin</strong></a></td><td>Sequential rotation</td><td class="red">Full reshuffle</td></tr>
+  <tr><td><a href="weighted-round-robin.html"><strong>Weighted RR</strong></a></td><td>Capacity-weighted</td><td class="red">Full reshuffle</td></tr>
+  <tr><td><a href="least-connections.html"><strong>Least Conn</strong></a></td><td>Dynamic, fewest active</td><td class="red">Full reshuffle</td></tr>
+  <tr><td class="green"><strong>Consistent Hashing</strong></td><td class="green">Same key → same server</td><td class="green">Only 1/N keys move</td></tr>
+</table>
+
+<h2>Drawbacks</h2>
+<ul>
+  <li><strong>Uneven distribution without virtual nodes</strong> — A server might own a disproportionately large or small range of the ring</li>
+  <li><strong>Slower lookups than round robin</strong> — O(log n) binary search vs O(1) counter increment (still very fast in practice)</li>
+  <li><strong>Less dynamic</strong> — Doesn't consider server load; a hot key can overload one server even if others are idle</li>
+  <li><strong>Server failures</strong> — When a server fails, all its keys are redistributed to the next clockwise server, which can temporarily double that server's load</li>
+</ul>
+
+<div class="callout yellow">
+  <strong>Load balancing vs data partitioning:</strong> In interviews, consistent hashing comes up in both contexts. For <strong>load balancing</strong>, it's used to route specific clients to specific servers (e.g., user-based affinity). For <strong>data partitioning</strong> (caching, databases), it's used to determine where to store each key. Understand both use cases — they are the same underlying mechanism applied to different problems.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What is consistent hashing?"</strong><br>A hashing scheme where both keys and servers are mapped onto a circular hash ring. A key is assigned to the first server encountered walking clockwise from the key's position. The key benefit: adding or removing a server only redistributes 1/N of keys (where N = total servers), compared to nearly all keys with modular hashing.</li>
+  <li><strong>"Why is consistent hashing better than modular hashing?"</strong><br>Modular hashing (hash(key) % N) redistributes nearly all keys when N changes. This causes cache stampedes and thundering herd problems. Consistent hashing only moves keys in the affected range — roughly 1/N keys per server change. This makes it practical for dynamic clusters where servers join and leave.</li>
+  <li><strong>"What are virtual nodes and why do you need them?"</strong><br>Virtual nodes (vnodes) place each physical server at multiple positions on the hash ring. Without vnodes, a server might by chance own a very large or very small portion of the ring, causing uneven load. With 100-200 vnodes per server, distribution becomes nearly uniform. Each vnode is a copy of the same physical server at a different ring position.</li>
+  <li><strong>"What happens when a server fails in consistent hashing?"</strong><br>All keys that were assigned to the failed server are remapped to the next server clockwise on the ring. That next server temporarily receives double traffic. This can be problematic if the ring has few servers. Solutions: use more virtual nodes, use replicas (store each key on multiple servers), or have the LB temporarily spread the failed server's load across multiple healthy servers.</li>
+  <li><strong>"Where is consistent hashing used in real systems?"</strong><br>DynamoDB and Cassandra use it for data partitioning. Memcached clients use it for cache key distribution. Nginx and Envoy use it for upstream load balancing with session affinity. CDN edge nodes use it for content caching. Discord, Telegram, and Slack use it for mapping users to connection servers.</li>
+  <li><strong>"How would you implement consistent hashing?"</strong><br>Hash each server name (with vnode suffix) using MD5 or SHA-256, map to a 32-bit or 64-bit space. Store positions in a sorted array. For lookup, hash the key and binary search for the nearest server position clockwise. O(log n) lookup, O(n) ring construction. Use 100-200 vnodes per physical server for uniform distribution.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>Specific hash function internals (MD5 vs SHA-256 for ring positions)</li>
+    <li>Bounded-load consistent hashing (academic variant)</li>
+    <li>Rendezvous hashing (HRW — different algorithm, sometimes confused with consistent hashing)</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Consistent Hashing and Random Trees"</strong> — David Karger et al. (1997, original paper)</li>
+    <li><strong>"Designing Data-Intensive Applications"</strong> — Martin Kleppmann (Chapter 5: Replication, Partitioning section)</li>
+    <li><strong>"Dynamo: Amazon's Highly Available Key-Value Store"</strong> — DeCandia et al. (consistent hashing in production)</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="least-connections.html">&larr; 2.7.9 Least Connections</a>
+  <a href="../storage/hdd.html">Next: 3.1.1 HDD &rarr;</a>
+</div>
+
+</body>
+</html>

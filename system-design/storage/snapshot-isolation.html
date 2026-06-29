@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.5.5 Snapshot Isolation</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb"><a href="#">System Design</a> / <a href="#">3 Storage</a> / <a href="#">3.5 Isolation Levels</a> / 3.5.5</div>
+
+<h1>Snapshot Isolation</h1>
+
+<div class="meta">
+  <span>Difficulty ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand snapshot isolation as a practical concurrency model: how it provides consistent reads without locking, where it fits in the isolation spectrum, and what anomalies it still allows.</p>
+
+<h2>Definition</h2>
+<p><strong>Snapshot Isolation (SI)</strong> is a concurrency control model where every transaction reads from a <strong>consistent snapshot</strong> of the database taken at the transaction's start time. The transaction sees only the effects of transactions that committed before it began. Concurrent writes from other transactions are invisible until they commit, at which point the commit protocol detects conflicts and aborts one of the conflicting transactions.</p>
+
+<div class="callout">
+  <strong>Key guarantee:</strong> A transaction under snapshot isolation always sees a consistent state as of a single point in time. No dirty reads, no non-repeatable reads, and no phantom reads -- from that transaction's perspective, the database is frozen.
+</div>
+
+<h2>How MVCC Implements Snapshot Isolation</h2>
+<p>Snapshot isolation is implemented via <strong>Multiversion Concurrency Control (MVCC)</strong>. Each row is stored with multiple versions tagged by transaction IDs. When a transaction begins, it captures a snapshot of all in-progress and committed transaction IDs. Every subsequent read consults the version chain and returns only the version that was committed before the snapshot time.</p>
+
+<div class="diagram">Transaction Timeline and Version Visibility
+─────────────────────────────────────────────────────────────────
+
+  Time ──────────────────────────────────────────────────────────►
+
+  Tx A:  |── BEGIN (xid=100) ────────── READ ──────────── COMMIT (t=8)
+  Tx B:         |── BEGIN (xid=101) ── READ ─── WRITE ── COMMIT (t=12)
+  Tx C:                    |── BEGIN (snapshot at t=5) ── READ ──────|
+
+  Version Chain for row (id=42):
+  ┌──────────┬───────────┬──────────────┬───────────────────────────┐
+  │ Version  │ Value      │ Created By   │ Visible To Tx C?         │
+  ├──────────┼───────────┼──────────────┼───────────────────────────┤
+  │ v3 (t=8) │ balance=200│ Tx A (xid=100)│ NO  (after snapshot)     │
+  │ v2 (t=3) │ balance=150│ system init   │ YES (before snapshot)     │
+  │ v1 (t=1) │ balance=100│ system init   │ YES (before snapshot)     │
+  └──────────┴───────────┴──────────────┴───────────────────────────┘
+
+  Tx C sees balance=150 because its snapshot is taken at t=5,
+  before Tx A committed at t=8.</div>
+
+<h2>What Snapshot Isolation Prevents</h2>
+
+<table>
+  <tr>
+    <th>Anomaly</th>
+    <th>Prevented by SI?</th>
+    <th>Why</th>
+  </tr>
+  <tr>
+    <td><a href="dirty-read.html">Dirty Read</a></td>
+    <td class="green">Yes</td>
+    <td>Only committed versions are visible in the snapshot</td>
+  </tr>
+  <tr>
+    <td><a href="non-repeatable-read.html">Non-Repeatable Read</a></td>
+    <td class="green">Yes</td>
+    <td>Snapshot is frozen at transaction start; re-reading yields same data</td>
+  </tr>
+  <tr>
+    <td><a href="phantom-read.html">Phantom Read</a></td>
+    <td class="green">Yes</td>
+    <td>Snapshot consistency applies to entire predicate; new rows are invisible</td>
+  </tr>
+  <tr>
+    <td>Write Skew</td>
+    <td class="red">No</td>
+    <td>Two transactions read overlapping data, write to disjoint rows -- no conflict detected</td>
+  </tr>
+</table>
+
+<h2>Write Skew: The Anomaly SI Does Not Prevent</h2>
+<p>Write skew is the primary anomaly that snapshot isolation does <strong>not</strong> prevent. It occurs when two transactions read the same data, make decisions based on that data, and then write to <strong>different</strong> rows. Because the writes target disjoint rows, the first-committer-wins check does not flag a conflict.</p>
+
+<div class="diagram">Write Skew Example: Hospital On-Call Doctors
+─────────────────────────────────────────────────────────────────
+
+  Business rule: At least one doctor must be on call at all times.
+
+  doctors table:
+  ┌────┬────────┬─────────┐
+  │ id │ name   │ on_call │
+  ├────┼────────┼─────────┤
+  │ 1  │ Alice  │ true    │
+  │ 2  │ Bob    │ true    │
+  └────┴────────┴─────────┘
+
+  Time ──────────────────────────────────────────────────────────►
+
+  Tx A (Alice):                           Tx B (Bob):
+  BEGIN                                   BEGIN
+  SELECT * FROM doctors                   SELECT * FROM doctors
+    → sees both on_call=true                 → sees both on_call=true
+  "Bob is on call, safe to go off"        "Alice is on call, safe to go off"
+  UPDATE doctors SET on_call=false         UPDATE doctors SET on_call=false
+    WHERE id=1                               WHERE id=2
+  COMMIT (succeeds)                       COMMIT (succeeds)
+
+  Result: BOTH doctors off call -- invariant violated!
+  SI did NOT detect a conflict because Tx A wrote row 1
+  and Tx B wrote row 2 (disjoint writes).</div>
+
+<div class="callout yellow">
+  <strong>Interview tip:</strong> Write skew is a favorite follow-up question. Know how to prevent it: serializable isolation, SELECT FOR UPDATE on the rows read, or an explicit constraint (e.g., a CHECK constraint with a partial index).
+</div>
+
+<h2>Conflict Detection: First-Committer-Wins</h2>
+<p>Snapshot isolation uses an <strong>optimistic</strong> approach to conflict detection. When a transaction attempts to commit, the database checks whether any row it modified was also modified (and committed) by another transaction that started after our snapshot. If so, our transaction is aborted with a serialization failure.</p>
+
+<pre>-- PostgreSQL conflict abort
+BEGIN ISOLATION LEVEL REPEATABLE READ;
+SELECT balance FROM accounts WHERE id = 42;   -- reads 500
+-- Meanwhile: another tx commits UPDATE accounts SET balance=600 WHERE id=42
+UPDATE accounts SET balance = 500 - 100 WHERE id = 42;
+-- ERROR: could not serialize access due to concurrent update
+COMMIT;
+-- Application must retry the entire transaction</pre>
+
+<h2>Snapshot Isolation vs. Repeatable Read</h2>
+
+<table>
+  <tr>
+    <th>Aspect</th>
+    <th>Snapshot Isolation</th>
+    <th>Repeatable Read (SQL Standard)</th>
+  </tr>
+  <tr>
+    <td>Dirty Read</td>
+    <td class="green">Prevented</td>
+    <td class="green">Prevented</td>
+  </tr>
+  <tr>
+    <td>Non-Repeatable Read</td>
+    <td class="green">Prevented</td>
+    <td class="green">Prevented</td>
+  </tr>
+  <tr>
+    <td>Phantom Read</td>
+    <td class="green">Prevented</td>
+    <td class="red">Allowed (SQL standard)</td>
+  </tr>
+  <tr>
+    <td>Write Skew</td>
+    <td class="red">Allowed</td>
+    <td class="red">Allowed</td>
+  </tr>
+  <tr>
+    <td>Implementation</td>
+    <td>MVCC (version chains)</td>
+    <td>Locking (shared locks held to end of tx) or MVCC</td>
+  </tr>
+  <tr>
+    <td>Blocking behavior</td>
+    <td>Readers never block writers</td>
+    <td>Readers may block writers (in locking impl)</td>
+  </tr>
+</table>
+
+<div class="callout">
+  <strong>Note:</strong> PostgreSQL's REPEATABLE READ is actually implemented as snapshot isolation internally. In PostgreSQL, Repeatable Read and Snapshot Isolation are effectively the same thing, both preventing phantom reads. MySQL's InnoDB REPEATABLE READ is also implemented with MVCC but uses next-key locking to prevent phantoms -- so MySQL's implementation is strictly stronger than standard SI for range queries.
+</div>
+
+<h2>PostgreSQL and Snapshot Isolation</h2>
+<p>PostgreSQL uses snapshot isolation as its default concurrency control for REPEATABLE READ and READ COMMITTED (the latter takes a new snapshot for each statement, not each transaction). The internal implementation:</p>
+
+<ul>
+  <li>Each transaction gets an <strong>xid</strong> (transaction ID) at BEGIN</li>
+  <li>Each row version stores <strong>xmin</strong> (creating transaction) and <strong>xmax</strong> (deleting transaction)</li>
+  <li>A snapshot records the <strong>xmin horizon</strong> -- the set of in-progress and committed transactions at snapshot time</li>
+  <li>Visibility test: a row version is visible if its xmin is committed and &lt;= the snapshot's xmin horizon, and its xmax is either not set or refers to an uncommitted/in-snapshot transaction</li>
+</ul>
+
+<pre>-- PostgreSQL: inspecting transaction IDs
+SELECT xmin, xmax, cmin, cmax, * FROM accounts WHERE id = 42;
+
+-- Force REPEATABLE READ (snapshot isolation in Postgres)
+BEGIN ISOLATION LEVEL REPEATABLE READ;
+SELECT balance FROM accounts WHERE id = 42;  -- consistent snapshot
+-- other concurrent commits are invisible here
+COMMIT;</pre>
+
+<div class="callout green">
+  <strong>Why SI is popular:</strong> Readers never block writers and writers never block readers. This provides excellent throughput for read-heavy workloads (the norm in most applications) while still giving strong consistency guarantees for single-entity operations.
+</div>
+
+<h2>Common Interview Questions</h2>
+
+<ol>
+  <li>What is snapshot isolation and how does it differ from serializable isolation?</li>
+  <li>Explain write skew and why snapshot isolation does not prevent it. How would you fix it?</li>
+  <li>How does MVCC implement snapshot isolation? Describe the version visibility check.</li>
+  <li>What happens when two transactions under snapshot isolation try to update the same row?</li>
+  <li>Why does PostgreSQL use snapshot isolation as the foundation for its isolation levels?</li>
+  <li>Compare snapshot isolation to two-phase locking for read-heavy workloads. What are the tradeoffs?</li>
+  <li>How does a retry loop work when a snapshot isolation transaction is aborted?</li>
+  <li>Is PostgreSQL's REPEATABLE READ the same as the SQL standard's REPEATABLE READ?</li>
+</ol>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Depth to avoid in interviews:</strong>
+  <ul>
+    <li>Internal details of PostgreSQL's CLOG (commit log) and subtrans/slru structures</li>
+    <li>The exact predicate locking implementation in SSI (Serializable Snapshot Isolation internals)</li>
+    <li>Comparison with Oracle's SCN-based snapshot implementation specifics</li>
+    <li>Free space map and vacuum interactions unless directly relevant to long-running snapshots</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Sources</div>
+  <ul>
+    <li><a href="#">Designing Data-Intensive Applications</a> -- Chapter 7, "Isolation Levels and Anomalies" (Kleppmann)</li>
+    <li><a href="#">PostgreSQL Documentation</a> -- Chapter 13, "Concurrency Control": MVCC and snapshot visibility rules</li>
+    <li><a href="#">"A Critique of ANSI SQL Isolation Levels"</a> -- Berenson et al. (1995): defines snapshot isolation and write skew formally</li>
+    <li><a href="#">"Serializable Snapshot Isolation in PostgreSQL"</a> -- Ports &amp; Grittner (2012): how PG implements serializable SI on top of snapshot isolation</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="serializable.html">&larr; 3.5.4 Serializable</a>
+  <a href="dirty-read.html">Next: 3.6.1 Dirty Read &rarr;</a>
+</div>
+
+</body>
+</html>

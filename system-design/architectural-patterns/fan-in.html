@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>13.6 — Fan-In</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../../index.html">System Design</a> / <a href="index.html">Architectural Patterns</a> / 13.6 Fan-In</div>
+<h1>Fan-In</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the fan-in pattern where a single service or process aggregates results from multiple sources, the techniques for parallel aggregation, handling partial failures, and the relationship to scatter-gather.</p>
+
+<h2>Definition</h2>
+<div class="callout">
+  <strong>Fan-in</strong> is a pattern where a service collects and aggregates results from multiple upstream services or data sources into a single unified response. It is the counterpart to fan-out: after scattering requests to multiple services, you fan-in the responses to form a complete answer.
+</div>
+
+<p>Fan-in is inherent in most microservices architectures. When an API Gateway or BFF (Backend for Frontend) needs data from 3-5 downstream services, it fans out requests and fans in the responses to compose the final result.</p>
+
+<h2>Architecture</h2>
+<div class="diagram">
+  Fan-In: Aggregate results from multiple services
+
+  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+  │ User Service │ │ Order Service │ │ Wallet Service│
+  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘
+         │                 │                  │
+         └────────────────┐ │ ┌────────────────┘
+                          ▼ ▼ ▼
+                 ┌──────────────────┐
+                 │  Aggregator /     │
+                 │  Fan-In Service   │
+                 │                   │
+                 │  1. Collect all   │
+                 │     responses    │
+                 │  2. Merge into   │
+                 │     single view   │
+                 │  3. Return to     │
+                 │     client         │
+                 └────────┬─────────┘
+                          │
+                          ▼
+                 ┌──────────────────┐
+                 │  Unified Response │
+                 │  { user, orders,  │
+                 │    wallet_balance}│
+                 └──────────────────┘
+</div>
+
+<h2>Aggregation Strategies</h2>
+<table>
+  <tr><th>Strategy</th><th>Description</th><th>Use Case</th></tr>
+  <tr><td><strong>Wait for all</strong></td><td>Block until all responses arrive, then merge</td><td>All data needed to render the page</td></tr>
+  <tr><td><strong>Wait with timeout</strong></td><td>Block until timeout, merge whatever arrived</td><td>Degraded UX preferred over errors</td></tr>
+  <tr><td><strong>Return on first</strong></td><td>Return as soon as the fastest responder replies</td><td>Latency-sensitive, approximate results OK</td></tr>
+  <tr><td><strong>Partial results</strong></td><td>Return partial data if some services fail</td><td>Graceful degradation</td></tr>
+  <tr><td><strong>Cached fallback</strong></td><td>Use cached data when a service is slow/down</td><td>High availability required</td></tr>
+</table>
+
+<h2>Parallel Execution for Low Latency</h2>
+<div class="diagram">
+  SEQUENTIAL (slow): 150ms + 200ms + 80ms = 430ms total
+
+  Aggregator → User Service (150ms) → Order Service (200ms) → Wallet (80ms)
+  │                                                   │
+  └───────────────────── 430ms ─────────────────────────┘
+
+  PARALLEL (fast): max(150ms, 200ms, 80ms) = 200ms total
+
+  Aggregator → User Service (150ms) ─────┐
+              → Order Service (200ms) ─────┤── 200ms total
+              → Wallet Service (80ms) ────┤
+  ┌──────────────────────────────────────┘
+
+  Implementation (Go-style):
+  go fetchUser()      → channel
+  go fetchOrders()    → channel
+  go fetchWallet()    → channel
+  select { all done } → merge & return
+</div>
+
+<div class="callout yellow">
+  <strong>Latency optimization:</strong> Always execute fan-in requests in parallel, not sequentially. The total latency equals the slowest response, not the sum. This is the most common interview optimization for APIs that aggregate data from multiple services.
+</div>
+
+<h2>Handling Partial Failures</h2>
+<p>When some upstream services fail, the aggregator must decide how to handle the incomplete response.</p>
+<ul>
+  <li><strong>Fail the entire request:</strong> If any dependency fails, return 500. Simple but poor UX.</li>
+  <li><strong>Return partial data:</strong> Return what is available with null/default for failed services. Client can handle gracefully.</li>
+  <li><strong>Cached fallback:</strong> Serve stale cached data when the live service is unavailable. Maintains UX at the cost of staleness.</li>
+  <li><strong>Circuit breaker + fallback:</strong> If a service is consistently failing, short-circuit and use fallback without waiting for timeout.</li>
+</ul>
+
+<div class="callout green">
+  <strong>Interview tip:</strong> "When aggregating from 5 services, I would execute all requests in parallel with individual timeouts. If one service is slow, I would return the data from the other 4 services plus cached data for the slow service, rather than making the user wait for all 5."
+</div>
+
+<h2>Common Interview Questions</h2>
+<ol>
+  <li>What is fan-in and how does it relate to fan-out?</li>
+  <li>How would you aggregate data from multiple services with minimal latency?</li>
+  <li>What happens when one upstream service is slow?</li>
+  <li>How do you handle partial failures in a fan-in aggregation?</li>
+  <li>Compare sequential vs parallel fan-in.</li>
+  <li>What is the relationship between fan-in and the BFF pattern?</li>
+</ol>
+
+<h2>What to Skip</h2>
+<div class="callout red">
+  <strong>Avoid diving into:</strong> Specific language concurrency primitives (goroutines, async/await syntax), or specific RPC framework call patterns. Focus on the architectural pattern, parallel execution, and failure handling strategies.
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Books</div>
+  <ul>
+    <li><strong>Designing Data-Intensive Applications</strong> (Kleppmann) — Chapter 5: "Replication" discusses scatter-gather</li>
+    <li><strong>Software Architecture: The Hard Parts</strong> (Ford et al.) — Aggregation patterns</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Patterns</div>
+  <ul>
+    <li><strong>"API Gateway Aggregation"</strong> — Microsoft Azure Architecture Center</li>
+    <li><strong>"Backend for Frontend Pattern"</strong> — Sam Newman — ThoughtWorks</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="fan-out.html">&larr; Previous: Fan-Out on Write</a>
+  <a href="scatter-gather.html">Next: Scatter-Gather &rarr;</a>
+</div>
+</body>
+</html>

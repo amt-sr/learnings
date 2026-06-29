@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.4.1 Cache Stampede (Dogpiling) — System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb"><a href="../../../">System Design</a> / <a href="../">7 Caching</a> / <a href="#">7.4 Cache Problems</a> / 7.4.1</div>
+
+<h1>7.4.1 Cache Stampede (Dogpiling)</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐☆</span>
+  <span>Interview Frequency: ★★★★★</span>
+</div>
+
+<div class="callout green">
+  <strong>Goal:</strong> Understand the cache stampede problem — when a popular cache entry expires and many concurrent requests simultaneously hit the database. Learn the three main solutions (mutex/lock, probabilistic early expiration, background refresh) and when to apply each.
+</div>
+
+<h2>Definition</h2>
+
+<p>A Cache Stampede (also called <strong>thundering herd</strong> or <strong>dogpiling</strong>) occurs when a highly popular cache key expires and a large number of concurrent requests all detect the cache miss simultaneously. Every request independently queries the database to repopulate the cache, causing a sudden and massive spike in database load that can overwhelm the origin system.</p>
+
+<h2>The Problem Visualized</h2>
+
+<div class="diagram">
+  Requests:      R1   R2   R3   R4   R5   R6   R7   R8   R9  R10
+                    │    │    │    │    │    │    │    │    │    │
+  Cache:          [ENTRY EXPIRES]
+                    │
+  DB Queries:      ▼    ▼    ▼    ▼    ▼    ▼    ▼    ▼    ▼    ▼
+                  ┌───────────────────────────────────────────────┐
+                  │         DATABASE GETS 10 QUERIES AT ONCE      │
+                  │         (should have been 1)                   │
+                  └───────────────────────────────────────────────┘
+                    │
+  Cache:            ▼ (repopulated 10 times with same data)
+
+  Expected:         Only R1 queries DB; R2-R10 get cache hit
+
+  Actual:           All 10 requests hit DB because they all
+                    see cache miss before R1 finishes populating
+</div>
+
+<div class="diagram">
+  Timeline:
+  ──────────────────────────────────────────────────────────────>
+
+  Cache: [data] ──────[EXPIRED]──────────────────[data]
+                               │                    ▲
+  DB:                    ┌─────┼────────────────────┘
+                         │     │
+  R1: ────────────── MISS ──── DB QUERY ──── SET CACHE ────
+  R2: ────────────── MISS ──── DB QUERY ──── SET CACHE ──── (redundant!)
+  R3: ────────────── MISS ──── DB QUERY ──── SET CACHE ──── (redundant!)
+  R4: ────────────── MISS ──── DB QUERY ──── SET CACHE ──── (redundant!)
+  ...
+  R10:────────────── MISS ──── DB QUERY ──── SET CACHE ──── (redundant!)
+
+  All 10 requests see cache MISS because they check before R1 finishes SET.
+  Each independently queries DB and writes the same data to cache.
+</div>
+
+<h2>Impact</h2>
+
+<table>
+  <tr><th>Impact</th><th>Severity</th></tr>
+  <tr><td>Database CPU/IO spike</td><td class="red">Critical — can cause cascading failures</td></tr>
+  <tr><td>Increased latency for all requests</td><td class="red">High — DB under pressure, all queries slow down</td></tr>
+  <tr><td>Connection pool exhaustion</td><td class="red">High — too many concurrent DB connections</td></tr>
+  <tr><td>Wasted compute — identical queries</td><td>Medium — N identical queries instead of 1</td></tr>
+  <tr><td>Cache thrashing — repeated overwrites</td><td>Low — same data written N times</td></tr>
+</table>
+
+<h2>Solutions</h2>
+
+<h3>Solution 1: Mutex / Lock (Request Coalescing)</h3>
+
+<p>When a request finds a cache miss, it acquires a distributed lock before querying the database. Other requests that find the same cache miss either wait for the lock or return a stale value.</p>
+
+<div class="diagram">
+  R1: Cache MISS → Acquire lock → DB query → SET cache → Release lock
+  R2: Cache MISS → Lock taken → Wait (or return stale) → Cache HIT
+  R3: Cache MISS → Lock taken → Wait (or return stale) → Cache HIT
+  ...
+
+  Only ONE request hits the database at a time.
+</div>
+
+<pre>
+# Pseudocode — Mutex Lock approach
+function getUser(userId):
+    cacheKey = "user:" + userId
+    lockKey = "lock:" + userId
+
+    data = cache.get(cacheKey)
+    if data is not null:
+        return data
+
+    # Try to acquire a lock (with short timeout)
+    lock = cache.set(lockKey, "locked", NX=True, EX=3)
+    if lock:
+        try:
+            # Double-check cache (another process may have populated it)
+            data = cache.get(cacheKey)
+            if data is null:
+                data = db.query("SELECT * FROM users WHERE id = ?", userId)
+                cache.set(cacheKey, data, TTL=3600)
+            return data
+        finally:
+            cache.delete(lockKey)
+    else:
+        # Lock not acquired — another request is fetching.
+        # Option A: Return stale data if available
+        staleData = cache.get(cacheKey + ":stale")
+        if staleData:
+            return staleData
+
+        # Option B: Wait and retry (short sleep + recheck)
+        sleep(0.1)
+        data = cache.get(cacheKey)
+        if data:
+            return data
+
+        # Option C: Return error / fallback
+        raise ServiceUnavailable("Cache is being refreshed")
+</pre>
+
+<div class="callout">
+  <strong>Pros:</strong> Guarantees only one DB query. <strong>Cons:</strong> Adds latency for waiting requests, lock management complexity, risk of deadlock if lock holder crashes (mitigate with lock TTL).
+</div>
+
+<h3>Solution 2: Probabilistic Early Expiration</h3>
+
+<p>Add randomness to the TTL so that the cache entry expires <em>before</em> the official TTL, preventing simultaneous expiration. When a request finds an "early expired" entry, it triggers a background refresh while still serving the (slightly stale) data.</p>
+
+<pre>
+# Pseudocode — Probabilistic Early Expiration
+function getUser(userId):
+    cacheKey = "user:" + userId
+    data, expiry = cache.getWithExpiry(cacheKey)
+
+    if data is not null:
+        # If within 10% of TTL expiry, probabilistically refresh
+        timeRemaining = expiry - now()
+        if timeRemaining < (originalTTL * 0.1):
+            if random() < 0.1:    # 10% chance of triggering refresh
+                asyncRefresh(userId)  # Background refresh
+        return data               # Serve data (possibly slightly stale)
+
+    # Full cache miss — must wait for DB
+    data = db.query("SELECT * FROM users WHERE id = ?", userId)
+    cache.set(cacheKey, data, TTL=3600)
+    return data
+</pre>
+
+<div class="callout">
+  <strong>Pros:</strong> No coordination overhead, no locks, simple to implement. <strong>Cons:</strong> Stale data served during refresh window, probabilistic (not deterministic — some stampedes may still occur).
+</div>
+
+<h3>Solution 3: Background Refresh (Asynchronous Revalidation)</h3>
+
+<p>Use a background process that proactively refreshes cache entries <em>before</em> they expire. The cache never actually expires from the user's perspective — the background job keeps it warm.</p>
+
+<div class="diagram">
+  Background Worker:                    Application:
+       │                                      │
+       │ Scan cache for entries                │
+       │ expiring in next N minutes            │
+       │                                      │
+       │ For each expiring entry:              │
+       │   1. Read from DB                     │
+       │   2. Update cache with new data       │
+       │   3. Reset TTL                        │
+       │                                      │
+       │  (cache never expires from the        │
+       │   application's point of view)        │
+       │                                      │
+       │                                      │ All requests get
+       │                                      │ cache HIT
+</div>
+
+<pre>
+# Background refresh pseudocode
+def refreshWorker():
+    while true:
+        # Find keys expiring in the next 5 minutes
+        expiringKeys = cache.scanExpiringKeys(before=300)
+
+        for key in expiringKeys:
+            data = db.query(keyToQuery(key))
+            cache.set(key, data, TTL=3600)
+
+        sleep(30)  # Run every 30 seconds
+</pre>
+
+<div class="callout">
+  <strong>Pros:</strong> Zero stampede risk — cache never expires for application requests. <strong>Cons:</strong> Background infrastructure, refreshes data even when it has not changed (wasted DB queries), must handle the full key space.
+</div>
+
+<h2>Comparison of Solutions</h2>
+
+<table>
+  <tr><th>Solution</th><th>DB Queries</th><th>User Latency</th><th>Complexity</th><th>Best For</th></tr>
+  <tr><td>Mutex / Lock</td><td>Exactly 1</td><td>Wait or stale fallback</td><td>Medium</td><td>Expensive DB queries, strict DB protection</td></tr>
+  <tr><td>Probabilistic Expiration</td><td>~1 (probabilistic)</td><td>Fast (serve stale)</td><td class="green">Low</td><td>General-purpose, high-traffic systems</td></tr>
+  <tr><td>Background Refresh</td><td>N (all expiring keys)</td><td class="green">Fastest (always hit)</td><td>High</td><td>Predictable hot key sets, latency-critical systems</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+
+<ul>
+  <li>What is a cache stampede? Why is it dangerous?</li>
+  <li>Explain three solutions to the cache stampede problem. Which do you prefer and why?</li>
+  <li>How would you implement request coalescing using a distributed lock?</li>
+  <li>What is probabilistic early expiration? How does it reduce stampede risk?</li>
+  <li>How does background refresh prevent cache stampede? What are its downsides?</li>
+  <li>Design a system to prevent cache stampede for a trending video on YouTube.</li>
+</ul>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>For a system design interview, skip:</strong>
+  <ul>
+    <li>Specific Redis SET NX EX implementation details (just explain the concept).</li>
+    <li>Distributed lock algorithms (Redlock debate) — just mention using a lock with TTL.</li>
+    <li>Kernel-level thundering herd problems (epoll vs. select) — different domain.</li>
+    <li>Exact probability calculations for early expiration (just explain the concept).</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+
+<div class="source">
+  <div class="source-label">Books &amp; Papers</div>
+  <ul>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em> — Chapter 5: Replication</li>
+    <li>Alex Xu, <em>System Design Interview Vol. 1</em> — Chapter 8: Design a News Feed System</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Online Resources</div>
+  <ul>
+    <li>Redis: Distributed Locking — <a href="https://redis.io/docs/manual/patterns/distributed-locks/">redis.io/docs/manual/patterns/distributed-locks</a></li>
+    <li>Instagram: Cache Stampede Prevention — <a href="https://instagram-engineering.com/">instagram-engineering.com</a></li>
+    <li>Stack Overflow: Preventing Cache Stampedes — <a href="https://stackoverflow.com/questions/12754058/preventing-cache-stampede">stackoverflow.com</a></li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="ttl.html">← 7.3.3 TTL</a>
+  <a href="cache-penetration.html">7.4.2 Cache Penetration →</a>
+</div>
+
+</body>
+</html>

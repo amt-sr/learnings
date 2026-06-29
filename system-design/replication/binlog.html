@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.5.1 Binlog - System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">4 Replication</a> / 4.5 Replication Internals / 4.5.1
+</div>
+
+<h1>Binlog (Binary Log)</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the MySQL binary log as the foundational mechanism for replication and change data capture. Know the three replication formats, how followers use the binlog to replay changes, and the broader use cases including CDC and point-in-time recovery.</p>
+
+<h2>Definition</h2>
+<p>The <strong>binary log (binlog)</strong> is a sequential log file that records all data modification events in a MySQL server. Every INSERT, UPDATE, DELETE, DDL operation, and (depending on format) the actual SQL statements are written to the binlog. The binlog is the single source of truth for replication: followers connect to the leader, request binlog events from a specific position, and replay them locally to maintain an identical copy of the data.</p>
+
+<div class="callout">
+  <strong>Key idea:</strong> The binlog decouples write execution from replication. The leader writes to its storage engine and to the binlog. Followers read the binlog independently and apply changes asynchronously. This is the foundation of MySQL's leader-follower replication.
+</div>
+
+<h2>Binlog Architecture</h2>
+
+<div class="diagram">
+  Client                                 Follower
+    │                                      │
+    ▼                                      │
+  ┌──────────┐      ┌──────────┐          │
+  │  MySQL   │      │ Binlog   │          │
+  │  Server  │─────►│ (file)   │          │
+  │ (Leader) │      └────┬─────┘          │
+  │          │           │                │
+  │ ┌──────┐ │           │ binlog dump   │
+  │ │InnoDB│ │           │ thread        │
+  │ │ Data │ │           ▼                │
+  │ │Files │ │     ┌──────────────┐   ┌────┴─────┐
+  │ └──────┘ │     │ Binlog      ├──►│ Relay Log │
+  └──────────┘     │ Events      │   │ on Follower│
+                   │ ( sequential│   └────┬─────┘
+                   │  records)   │        │
+                   └──────────────┘        ▼
+                                      ┌──────────┐
+                                      │ Apply to │
+                                      │ Follower │
+                                      │ Data     │
+                                      └──────────┘
+
+  1. Client writes to leader.
+  2. Leader writes to InnoDB AND binlog.
+  3. Follower connects, requests binlog from a position.
+  4. Leader streams binlog events to follower.
+  5. Follower writes events to relay log, then applies them.
+</div>
+
+<h2>Replication Formats</h2>
+
+<table>
+  <tr>
+    <th>Format</th>
+    <th>What's Logged</th>
+    <th>Pros</th>
+    <th>Cons</th>
+  </tr>
+  <tr>
+    <td><strong>STATEMENT</strong></td>
+    <td>Original SQL statement (e.g., <code>UPDATE users SET age = 25 WHERE id = 7</code>)</td>
+    <td>Compact, human-readable, logs less data for batch operations</td>
+    <td class="red">Non-deterministic functions (NOW(), UUID()) produce different results on follower. Requires row-level locking for safety.</td>
+  </tr>
+  <tr>
+    <td><strong>ROW</strong></td>
+    <td>Changed row data (e.g., before/after images of affected rows)</td>
+    <td class="green">Deterministic by design. Handles non-deterministic functions correctly. Safe for all operations.</td>
+    <td class="red">Verbose for bulk operations (e.g., <code>DELETE FROM users WHERE active = 0</code> logs every deleted row).</td>
+  </tr>
+  <tr>
+    <td><strong>MIXED</strong></td>
+    <td>Statement by default, switches to row for non-deterministic statements</td>
+    <td>Best of both worlds: compact for safe statements, safe for non-deterministic ones</td>
+    <td class="red">Behavior can be surprising. Difficult to predict which format a given statement uses.</td>
+  </tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Production recommendation:</strong> ROW format is the default in MySQL 8.0 and is recommended for all production use. The determinism guarantee eliminates entire classes of replication bugs. Disk space for binlog is cheap; data inconsistency is not.
+</div>
+
+<h2>Binlog Position and GTID</h2>
+
+<h3>Binlog Position (Classic)</h3>
+<p>Each binlog event is identified by a pair: <strong>(binlog file, offset)</strong>. For example, <code>mysql-bin.000142:4521</code> means position 4521 in file 142. Followers track their position and resume from there after reconnection.</p>
+
+<h3>GTID (Global Transaction Identifier)</h3>
+<p>Introduced in MySQL 5.6, GTIDs provide a globally unique identifier for every transaction: <code>server_uuid:sequence_number</code> (e.g., <code>3E11FA47-71CA-11E1-9E33-C80AA9429562:23</code>).</p>
+
+<ul>
+  <li><strong>Simplified failover:</strong> When promoting a follower to leader, the new leader already knows which GTIDs have been applied. No need to calculate binlog file:position offsets.</li>
+  <li><strong>Multi-source replication:</strong> Each source server's GTIDs are tracked separately, making it easy to replicate from multiple sources.</li>
+  <li><strong>Circular replication safety:</strong> GTIDs make it trivial to detect and skip transactions that originated from the current server.</li>
+</ul>
+
+<h2>How Followers Use the Binlog</h2>
+
+<ol>
+  <li><strong>Connect:</strong> Follower opens a connection to the leader and sends a <code>COM_BINLOG_DUMP</code> (or GTID-based) request.</li>
+  <li><strong>Receive:</strong> Leader streams binlog events to the follower in order.</li>
+  <li><strong>Relay Log:</strong> Follower writes received events to its local <strong>relay log</strong> (a local copy of the leader's binlog).</li>
+  <li><strong>Apply:</strong> A separate SQL thread reads the relay log and applies each event to the follower's data files.</li>
+  <li><strong>Track Position:</strong> Follower records the last applied position/GTID. On restart, replication resumes from this point.</li>
+</ol>
+
+<div class="callout">
+  <strong>Two threads on the follower:</strong> The IO thread manages the network connection and writes to the relay log. The SQL thread reads the relay log and applies changes. This separation allows the follower to receive events faster than it can apply them (decoupling network I/O from apply throughput).
+</div>
+
+<h2>Use Cases Beyond Replication</h2>
+
+<h3>Change Data Capture (CDC)</h3>
+<p>Tools like Debezium, Maxwell, and Canal read the binlog and publish row-level changes to Kafka or other streaming systems. This enables downstream consumers (analytics pipelines, search indexes, caches) to react to data changes in real time.</p>
+
+<div class="diagram">
+  MySQL Leader
+      │
+      ▼
+  ┌──────────┐     ┌──────────────┐     ┌───────────────────┐
+  │ Binlog   │────►│ Debezium /   │────►│ Kafka / Stream    │────► Search Index
+  │          │     │ Maxwell      │     │ (change events)   │────► Cache Invalidation
+  └──────────┘     └──────────────┘     └───────────────────┘────► Analytics Pipeline
+                                                                        └────► Microservices
+</div>
+
+<h3>Point-in-Time Recovery (PITR)</h3>
+<p>By replaying binlog events from a full backup to a specific timestamp, you can restore the database to any point in time. This is critical for recovering from accidental data deletion or corruption.</p>
+
+<h3>Audit and Compliance</h3>
+<p>The binlog provides a complete, ordered record of all data changes. It can be used for forensic analysis, compliance auditing, and understanding what changed and when.</p>
+
+<h2>Binlog Lifecycle</h2>
+
+<ul>
+  <li><strong>Rotation:</strong> When a binlog file reaches <code>max_binlog_size</code> (default 1GB), MySQL creates a new file and increments the sequence number.</li>
+  <li><strong>Purging:</strong> Old binlog files are automatically purged based on <code>expire_logs_days</code> (MySQL 5.7) or <code>binlog_expire_logs_seconds</code> (MySQL 8.0). Default is 30 days.</li>
+  <li><strong>Retention:</strong> For CDC or PITR, you may want longer retention. Set expiration accordingly, but monitor disk usage.</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+
+<ul>
+  <li>"What is the MySQL binlog?" Answer: A sequential log that records all data modification events. Followers connect to the leader, request binlog events, and replay them locally to maintain a replica.</li>
+  <li>"What are the three binlog formats?" Answer: STATEMENT (logs SQL), ROW (logs changed row data), MIXED (statement by default, row for non-deterministic statements). ROW is the recommended format for production.</li>
+  <li>"What is GTID and why is it important?" Answer: Global Transaction Identifier provides a unique ID for every transaction. It simplifies failover, enables multi-source replication tracking, and prevents circular replication loops.</li>
+  <li>"How would you build a real-time data pipeline from MySQL?" Answer: Use CDC tools like Debezium to read the binlog, publish change events to Kafka, and consume them in downstream services (search index updates, cache invalidation, analytics).</li>
+  <li>"What is the difference between binlog and redo log?" Answer: The redo log (InnoDB) is for crash recovery -- it ensures durability of committed transactions. The binlog is for replication and PITR -- it allows other servers to replay the same changes. Both are written during a commit (two-phase commit).</li>
+</ul>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Avoid going deep into:</strong>
+  <ul>
+    <li>Binlog file format internals (magic number, checksum algorithm, event header byte layout). The interviewer wants the concept, not the binary specification.</li>
+    <li><code>mysqlbinlog</code> command-line options and output format. Know that binlogs can be inspected with this tool; skip the flags.</li>
+    <li>Two-phase commit internals between InnoDB redo log and binlog. Mention the concept briefly (both must be consistent); skip the prepare/commit protocol details.</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Reading Sources</div>
+  <ul>
+    <li><strong>MySQL 8.0 Reference Manual</strong> - "The Binary Log" and "Replication Implementation" chapters.</li>
+    <li><strong>High Performance MySQL (4th Ed.)</strong> - Chapter 7, detailed coverage of binlog formats, GTID, and replication internals.</li>
+    <li><strong>Designing Data-Intensive Applications (Kleppmann)</strong> - Chapter 5 on replication and Chapter 11 on change data capture.</li>
+    <li><strong>Debezium Documentation</strong> - MySQL connector architecture for CDC use cases.</li>
+    <li><strong>Understanding MySQL Internals (Pachev)</strong> - Deep dive into binlog event structure and replication protocol.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="cascading-replication.html">&larr; 4.4.4 Cascading Replication</a>
+  <a href="wal-shipping.html">4.5.2 WAL Shipping &rarr;</a>
+</div>
+
+</body>
+</html>

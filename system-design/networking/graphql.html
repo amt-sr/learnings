@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.4.2 GraphQL</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#2">2 Networking</a> / <a href="../index.html#2.4">2.4 APIs</a> / 2.4.2
+</div>
+
+<h1>GraphQL</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What GraphQL is and how queries, mutations, and subscriptions work</li>
+  <li>Schema-first design and the resolver pattern</li>
+  <li>The N+1 problem and DataLoader solution</li>
+  <li>When to choose GraphQL over <a href="rest.html">REST</a> or <a href="grpc.html">gRPC</a></li>
+</ul>
+
+<h2>Definition</h2>
+<p>GraphQL is a <strong>query language for APIs and a runtime for executing those queries</strong>. Clients request exactly the data they need — no more, no less. Unlike REST's multiple fixed endpoints, GraphQL exposes a <strong>single endpoint</strong> with a typed schema that describes all available data and relationships.</p>
+
+<h2>Core Operations</h2>
+<div class="diagram">  Three operation types:
+
+  QUERY — read data (like GET)
+  ┌──────────────────────────────────────────────────────┐
+  │ query {                                              │
+  │   user(id: "123") {                                  │
+  │     name                                            │
+  │     email                                           │
+  │     posts(first: 5) {                               │
+  │       title                                         │
+  │       comments { author { name } }                  │
+  │     }                                               │
+  │   }                                                 │
+  │ }                                                   │
+  └──────────────────────────────────────────────────────┘
+
+  MUTATION — write data (like POST/PUT/DELETE)
+  ┌──────────────────────────────────────────────────────┐
+  │ mutation {                                          │
+  │   createPost(input: { title: "Hello", userId: 123 })│
+  │     { post { id, title } }                          │
+  │ }                                                   │
+  └──────────────────────────────────────────────────────┘
+
+  SUBSCRIPTION — real-time data (like WebSocket)
+  ┌──────────────────────────────────────────────────────┐
+  │ subscription {                                      │
+  │   onNewPost { id, title, author { name } }          │
+  │ }                                                   │
+  └──────────────────────────────────────────────────────┘</div>
+
+<h2>Schema-First Design</h2>
+<p>The schema is the contract between client and server. It defines types, fields, and relationships. Both sides agree on the schema first, then implement independently.</p>
+<pre>type User {
+  id: ID!
+  name: String!
+  email: String!
+  posts: [Post!]!
+}
+
+type Post {
+  id: ID!
+  title: String!
+  author: User!
+  comments: [Comment!]!
+}
+
+type Query {
+  user(id: ID!): User
+  users(filter: UserFilter): [User!]!
+  post(id: ID!): Post
+}
+
+type Mutation {
+  createPost(input: CreatePostInput!): Post!
+  updatePost(id: ID!, input: UpdatePostInput!): Post!
+}
+
+type Subscription {
+  onNewPost: Post!
+  onUserUpdated(id: ID!): User!
+}</pre>
+
+<h3>Resolvers</h3>
+<p>Resolvers are functions that <strong>resolve the actual data for each field</strong> in the schema. For each field, GraphQL calls its resolver to fetch the data.</p>
+<pre>const resolvers = {
+  Query: {
+    user: (parent, { id }, context) => context.db.users.findById(id),
+  },
+  User: {
+    posts: (parent, args, context) =>
+      context.db.posts.findByAuthorId(parent.id),
+    // This causes the N+1 problem if called per-user!
+  },
+  Post: {
+    comments: (parent, args, context) =>
+      context.db.comments.findByPostId(parent.id),
+  },
+};</pre>
+
+<h2>N+1 Problem and DataLoader</h2>
+<p>The N+1 problem is the <strong>most common GraphQL performance pitfall</strong>. When resolving nested fields, a naive implementation fires one query per parent record.</p>
+<pre>Request: { users(first: 100) { posts { title } } }
+
+Naive resolvers execute:
+  1 query → SELECT * FROM users LIMIT 100       (returns 100 users)
+  100 queries → SELECT * FROM posts WHERE user_id = ?  (one per user!)
+  = 101 total queries
+
+With DataLoader:
+  1 query → SELECT * FROM users LIMIT 100
+  1 query → SELECT * FROM posts WHERE user_id IN (1,2,3,...,100)
+  = 2 total queries</pre>
+
+<div class="callout green">
+  <strong>DataLoader</strong> batches and deduplicates database calls within a single GraphQL request tick. It collects all IDs for a given field, executes a single batched query, then distributes results back to individual resolvers.
+</div>
+<pre>const userLoader = new DataLoader(async (ids) => {
+  const users = await db.users.findAll({ where: { id: ids } });
+  return ids.map(id => users.find(u => u.id === id));
+});
+
+const resolvers = {
+  User: {
+    posts: (user, args, context) =>
+      context.postLoader.loadMany(user.postIds),
+  },
+};</pre>
+
+<h2>GraphQL vs REST</h2>
+<table>
+  <tr><th></th><th>REST</th><th>GraphQL</th></tr>
+  <tr><td>Endpoints</td><td>Multiple (/users, /posts, /comments)</td><td>Single (/graphql)</td></tr>
+  <tr><td>Data fetching</td><td>Fixed shape per endpoint</td><td class="green">Client specifies exact fields</td></tr>
+  <tr><td>Over-fetching</td><td class="red">Returns full resource</td><td class="green">Only requested fields</td></tr>
+  <tr><td>Under-fetching</td><td class="red">Multiple round trips</td><td class="green">Single query for nested data</td></tr>
+  <tr><td>Caching</td><td class="green">HTTP caching (ETag, Cache-Control)</td><td class="red">Requires custom caching layer</td></tr>
+  <tr><td>Versioning</td><td>URL path (/v1/, /v2/)</td><td>Evolving schema (add fields, deprecate)</td></tr>
+  <tr><td>Error handling</td><td class="green">HTTP status codes (404, 500, etc.)</td><td>Always 200; errors in response body</td></tr>
+  <tr><td>File uploads</td><td class="green">Native multipart/form-data</td><td>Complex (multipart request spec)</td></tr>
+  <tr><td>Security</td><td class="green">Rate limit per endpoint</td><td class="red">Query depth/complexity limiting needed</td></tr>
+  <tr><td>Tooling</td><td class="green">OpenAPI / Swagger</td><td class="green">Introspection, GraphiQL</td></tr>
+  <tr><td>Best for</td><td>CRUD, public APIs, simple apps</td><td>Complex frontends, mobile apps</td></tr>
+</table>
+
+<h2>When to Use GraphQL vs REST vs gRPC</h2>
+<div class="callout yellow">
+  <strong>Decision framework:</strong>
+  <ul>
+    <li><strong>REST</strong>: Public APIs, simple CRUD, when HTTP caching matters, small teams. Fastest to get started.</li>
+    <li><strong>GraphQL</strong>: Frontend-heavy apps with complex data needs, mobile apps reducing round trips, when multiple clients need different data shapes. See <a href="rest.html">REST</a>.</li>
+    <li><strong>gRPC</strong>: Internal microservice-to-service communication, polyglot environments, when latency and throughput are critical. See <a href="grpc.html">gRPC</a>.</li>
+    <li><strong>Hybrid</strong>: Use gRPC between services, GraphQL as the BFF (Backend for Frontend), and REST for third-party integrations.</li>
+  </ul>
+</div>
+
+<h3>Production Examples</h3>
+<ul>
+  <li><strong>GitHub</strong> — migrated REST API v3 to GraphQL (v4) for flexible data access</li>
+  <li><strong>Shopify</strong> — GraphQL Storefront API for custom storefronts</li>
+  <li><strong>Twitter/X</strong> — uses GraphQL internally for frontend data layer</li>
+  <li><strong>Facebook</strong> — invented GraphQL in 2012 for mobile app performance</li>
+</ul>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What is GraphQL and how does it differ from REST?"</strong><br>GraphQL is a query language with a single endpoint where clients specify exactly what data they need. REST uses multiple endpoints with fixed response shapes. GraphQL solves over-fetching and under-fetching but sacrifices native HTTP caching.</li>
+  <li><strong>"Explain the N+1 problem in GraphQL."</strong><br>When resolving nested fields (e.g., users with posts), a naive resolver fires one DB query per parent record — 100 users = 101 queries. Solved with DataLoader, which batches all IDs into a single query within one request tick.</li>
+  <li><strong>"How do you secure a GraphQL API?"</strong><br>Authentication via token in HTTP header (same as REST). Authorization in resolvers per field. Rate limiting based on query complexity/depth (not just request count). Use persisted queries to prevent arbitrary query execution.</li>
+  <li><strong>"When would you NOT use GraphQL?"</strong><br>Simple CRUD APIs with few resources. When HTTP caching is critical. When your team lacks GraphQL expertise. For binary data or file uploads. When the API is consumed by simple scripts (cURL, webhooks).</li>
+  <li><strong>"How does GraphQL handle real-time data?"</strong><br>Subscriptions use <a href="websockets.html">WebSockets</a> under the hood. The client subscribes to events, and the server pushes updates. Implementations: Apollo, graphql-ws, or AWS AppSync.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>GraphQL SDL advanced features (directives, union types, input types) — know they exist, not their syntax</li>
+    <li>Federation / Apollo Federation details — mention the concept of schema stitching, not implementation</li>
+    <li>Relay client spec — historical, rarely used in interviews</li>
+    <li>Specific library APIs (Apollo Client details, URQL, etc.)</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>graphql.org — Official Documentation</strong> — graphql.org/learn</li>
+    <li><strong>"How to GraphQL" — Fullstack tutorial</strong> — howtographql.com</li>
+    <li><strong>GitHub GraphQL API documentation</strong> — docs.github.com/en/graphql</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="rest.html">&larr; 2.4.1 REST</a>
+  <a href="grpc.html">Next: 2.4.3 gRPC &rarr;</a>
+</div>
+
+</body>
+</html>

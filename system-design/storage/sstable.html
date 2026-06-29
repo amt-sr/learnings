@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.9.4 SSTable</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#3">3 Storage</a> / <a href="../index.html#3.9">3.9 Storage Engines</a> / 3.9.4
+</div>
+
+<h1>SSTable</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What a Sorted String Table (SSTable) is and how it's structured on disk</li>
+  <li>The internal format: data blocks, index blocks, bloom filter, footer</li>
+  <li>How SSTables enable efficient reads via sparse indexing</li>
+  <li>How SSTables accumulate in <a href="lsm-tree.html">LSM tree</a> levels</li>
+</ul>
+
+<h2>Definition</h2>
+<p>A <strong>SSTable (Sorted String Table) is an immutable, sorted file on disk that stores an ordered sequence of key-value pairs</strong>. It is the persistent storage format produced when a <a href="memtable.html">memtable</a> is flushed from memory in an LSM tree. Once written, an SSTable is never modified — it is only read, merged with other SSTables during <a href="compaction.html">compaction</a>, or deleted.</p>
+
+<div class="diagram">  SSTable Internal Structure (on disk)
+
+  ┌─────────────────────────────────────────────────────────────┐
+  │  Data Block 1      │  Data Block 2      │  ...  │ Block N │
+  │  (sorted key-value │  (sorted key-value│       │         │
+  │   pairs, ~4KB each)│   pairs)           │       │         │
+  └─────────────────────────────────────────────────────────────┘
+         │                    │                       │
+         ▼                    ▼                       ▼
+  ┌─────────────────────────────────────────────────────────────┐
+  │                    Index Block (Sparse)                      │
+  │                                                             │
+  │  Block 1 offset, Block 2 offset, ... Block N offset         │
+  │  First key in each block → allows binary search to find     │
+  │  the correct block, then scan within the block.              │
+  └─────────────────────────────────────────────────────────────┘
+         │
+         ▼
+  ┌─────────────────────────────────────────────────────────────┐
+  │                    Bloom Filter                             │
+  │                                                             │
+  │  Probabilistic filter: "Does this SSTable contain key K?"    │
+  │  If NO → definitely not here, skip this SSTable             │
+  │  If YES  → maybe here, check the index block                 │
+  └─────────────────────────────────────────────────────────────┘
+         │
+         ▼
+  ┌─────────────────────────────────────────────────────────────┐
+  │                    Footer (fixed size)                       │
+  │                                                             │
+  │  Index block offset, Bloom filter offset, magic number      │
+  │  Read last → navigate to index and bloom filter             │
+  └─────────────────────────────────────────────────────────────┘</div>
+
+<h2>SSTable Read Path</h2>
+<pre>  GET(key = "user:42")
+
+  1. Read footer (last bytes of file) → get bloom filter offset
+  2. Read bloom filter → "Does this SSTable contain user:42?"
+     - NO  → skip this file entirely (saved a disk read!)
+     - YES → continue
+  3. Read index block → binary search for the block containing "user:42"
+     - Find: Block 7 contains keys from "user:40" to "user:49"
+  4. Read Block 7 from disk → scan for "user:42"
+  5. Return value (or "not found")
+
+  Disk reads per SSTable check:
+  - Bloom filter miss: 1 read (footer + bloom, often cached in memory)
+  - Bloom filter hit:  2-3 reads (footer + bloom + index + data block)</pre>
+
+<h2>Key Properties</h2>
+<table>
+  <tr><th>Property</th><th>Detail</th></tr>
+  <tr><td><strong>Immutable</strong></td><td>Once written, never modified. New versions of keys go into newer SSTables. Old SSTables are cleaned up by <a href="compaction.html">compaction</a>.</td></tr>
+  <tr><td><strong>Sorted</strong></td><td>Keys are in sorted order within each SSTable. Enables binary search, range scans, and efficient merge operations.</td></tr>
+  <tr><td><strong>Append-only creation</strong></td><td>Created by a single sequential write when a memtable flushes. Very efficient disk I/O.</td></tr>
+  <tr><td><strong>Self-contained</strong></td><td>Each SSTable has its own index and bloom filter. No external metadata needed for reads.</td></tr>
+  <tr><td><strong>Compressible</strong></td><td>Sorted data compresses extremely well (high redundancy in keys with shared prefixes). Compression ratios of 5-10x are common.</td></tr>
+</table>
+
+<h2>SSTable Levels in LSM Tree</h2>
+<div class="diagram">  SSTables accumulate in tiers (levels). Each level is 10x larger.
+
+  Level 0:  SSTables from memtable flushes (not merge-compacted)
+            May have overlapping key ranges
+            Size: ~100 MB, up to 4-10 files
+            Files: [sst_001] [sst_002] [sst_003]
+
+  Level 1:  Result of compacting Level 0 files
+            Non-overlapping key ranges within this level
+            Size: ~1 GB (10x L0)
+            Files: [sst_010] [sst_011] [sst_012]
+
+  Level 2:  Result of compacting Level 1 files
+            Non-overlapping key ranges
+            Size: ~10 GB
+            Files: [sst_020] [sst_021] ... [sst_030]
+
+  Level 3:  Size: ~100 GB
+  Level 4:  Size: ~1 TB
+  Level 5:  Size: ~10 TB (typical max for RocksDB)
+  Level 6:  Size: ~100 TB (Cassandra, HBase)
+
+  Key property: Within L1+, SSTables have non-overlapping key ranges.
+  A key exists in at most one SSTable per level (L1+).</div>
+
+<h2>Compression in SSTables</h2>
+<div class="callout green">
+  <strong>Compression is a major SSTable advantage over B+ tree pages.</strong> Since SSTables are sorted and immutable, they compress extremely well. B+ tree pages are updated in-place and must support random access, limiting compression options.
+</div>
+
+<table>
+  <tr><th>Compression</th><th>Ratio</th><th>Speed</th><th>Used By</th></tr>
+  <tr><td><strong>LZ4</strong></td><td>~2-3x</td><td class="green">Very fast</td><td>RocksDB (default), Cassandra</td></tr>
+  <tr><td><strong>ZSTD</strong></td><td class="green">~3-5x</td><td>Fast (good balance)</td><td>RocksDB, ScyllaDB</td></tr>
+  <tr><td><strong>Snappy</strong></td><td>~2x</td><td class="green">Very fast</td><td>Older LevelDB, HBase</td></tr>
+  <tr><td><strong>Gzip</strong></td><td class="green">~5-10x</td><td class="red">Slow</td><td>Archival, cold storage</td></tr>
+</table>
+
+<h2>SSTable File Formats in Practice</h2>
+<table>
+  <tr><th>Database</th><th>Format</th><th>Notes</th></tr>
+  <tr><td><strong>RocksDB/LevelDB</strong></td><td>Block-based table</td><td>4-64 KB data blocks, block cache for hot blocks</td></tr>
+  <tr><td><strong>Cassandra</strong></td><td>BigTable-style SSTable</td><td>Partition index, bloom filter, data file. Supports wide rows.</td></tr>
+  <tr><td><strong>HBase</strong></td><td>HFile</td><td>Based on Hadoop's SequenceFile. Supports cell-level TTL.</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What is an SSTable?"</strong><br>An immutable, sorted file on disk that stores key-value pairs. It's the persistent storage format in LSM tree engines, created when a memtable is flushed from memory. Once written, it's never modified — only read, merged during compaction, or deleted.</li>
+  <li><strong>"How does a read work against an SSTable?"</strong><br>First check the bloom filter (in memory, cached) — if the key might exist, binary search the index block to find the right data block, then read that block from disk and scan for the key. Most lookups touch only 1-2 disk blocks.</li>
+  <li><strong>"Why are SSTables immutable?"</strong><br>Immutability eliminates in-place updates, avoiding random I/O and write-ahead logging for data files. It simplifies concurrency (no locks needed for reads), enables efficient compression, and makes file management simple (create, read, delete — no complex update logic).</li>
+  <li><strong>"What's the difference between Level 0 and Level 1+ SSTables?"</strong><br>Level 0 SSTables come directly from memtable flushes and may have overlapping key ranges. Reads against L0 may need to check multiple files. Level 1+ SSTables are the result of compaction and have non-overlapping key ranges within each level — so a read against L1+ checks at most one SSTable per level.</li>
+</ul>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Designing Data-Intensive Applications" — Chapter 3</strong> (Kleppmann) — SSTables and LSM trees</li>
+    <li><strong>LevelDB documentation: Table Format</strong> — leveldb.googlecode.com</li>
+    <li><strong>RocksDB Wiki: SST Files</strong> — rocksdb.org</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="memtable.html">&larr; memtable.html</a>
+  <a href="bloom-filter.html">Next: bloom-filter.html &rarr;</a>
+</div>
+
+</body>
+</html>

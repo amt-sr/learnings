@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.5.5 Physical Replication - System Design Study Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">4 Replication</a> / 4.5 Replication Internals / 4.5.5
+</div>
+
+<h1>Physical Replication</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★☆☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand physical replication as the lowest-level replication approach that copies disk block and WAL byte changes directly. Know why it produces faster replication than logical, the constraints it imposes (same version, same architecture), and when to choose physical over logical replication.</p>
+
+<h2>Definition</h2>
+<p><strong>Physical replication</strong> copies data at the storage level -- the exact disk block modifications recorded in the Write-Ahead Log (WAL) are shipped to the follower and applied identically. The follower is a <strong>bit-for-bit physical clone</strong> of the leader. Every page, every index, every system catalog entry is reproduced exactly as it exists on the leader. There is no interpretation, decoding, or transformation of the data -- the bytes are copied as-is.</p>
+
+<div class="callout">
+  <strong>Key idea:</strong> Physical replication is the fastest and simplest form of replication because it bypasses the SQL layer entirely. The follower does not parse statements, decode row changes, or execute queries. It simply writes bytes to the same disk locations as the leader. The tradeoff is zero flexibility -- the follower must be identical to the leader in version and architecture.
+</div>
+
+<h2>Architecture Diagram</h2>
+
+<div class="diagram">
+  Leader (Primary)
+  ┌────────────────────────────────────────────────┐
+  │                                                │
+  │  Shared Buffers ──► WAL Buffer                 │
+  │       │                │                        │
+  │       ▼                ▼                        │
+  │  Data Files (pages)   WAL Files (physical)      │
+  │  ┌──────────────┐    ┌──────────────────────┐   │
+  │  │ Page 0: AA.. │    │ LSN 0/100: modify    │   │
+  │  │ Page 1: BB.. │    │   page 3, offset 42  │   │
+  │  │ Page 2: CC.. │    │ LSN 0/200: modify    │   │
+  │  │ Page 3: DD.. │◄───┤   page 3, offset 88  │   │
+  │  │ Page 4: EE.. │    │ LSN 0/300: insert    │   │
+  │  └──────────────┘    │   new page at end    │   │
+  │                       └──────────┬───────────┘   │
+  └──────────────────────────────────┼──────────────┘
+                                     │
+                          WAL Streaming
+                          (raw bytes, no decoding)
+                                     │
+                                     ▼
+  Follower (Standby)
+  ┌────────────────────────────────────────────────┐
+  │                                                │
+  │  WAL Receiver ──► Write WAL locally            │
+  │       │                                        │
+  │       ▼                                        │
+  │  Startup Process ──► Apply WAL to Data Files   │
+  │       │                                        │
+  │       ▼                                        │
+  │  Data Files (identical pages)                 │
+  │  ┌──────────────┐                             │
+  │  │ Page 0: AA.. │   (exact same bytes)        │
+  │  │ Page 1: BB.. │                             │
+  │  │ Page 2: CC.. │                             │
+  │  │ Page 3: DD.. │   (same modifications)      │
+  │  │ Page 4: EE.. │                             │
+  │  └──────────────┘                             │
+  │                                                │
+  └────────────────────────────────────────────────┘
+
+  Physical replication = copy bytes, not meaning.
+  The follower is an exact block-level clone.
+</div>
+
+<h2>How It Works</h2>
+
+<h3>1. WAL Generation</h3>
+<ol>
+  <li>A client modifies data on the leader (INSERT, UPDATE, DELETE).</li>
+  <li>PostgreSQL modifies pages in the shared buffer pool.</li>
+  <li>Before confirming the transaction, the physical page modifications are written to the WAL as byte-level records (page ID, offset, before/after image of changed bytes).</li>
+</ol>
+
+<h3>2. WAL Streaming</h3>
+<ol>
+  <li>The follower's <strong>wal receiver</strong> connects to the leader's <strong>wal sender</strong>.</li>
+  <li>The wal sender streams raw WAL records (bytes) to the follower over TCP.</li>
+  <li>The follower writes the WAL records to its own WAL files.</li>
+</ol>
+
+<h3>3. WAL Replay</h3>
+<ol>
+  <li>The follower's <strong>startup process</strong> reads WAL records and applies the same physical modifications to its own data files.</li>
+  <li>The same page, at the same offset, gets the same bytes written to it.</li>
+  <li>The result is a disk-level identical copy of the leader.</li>
+</ol>
+
+<h2>Advantages</h2>
+
+<ul>
+  <li><strong>Maximum performance:</strong> No decoding overhead. WAL bytes are copied and applied directly. This is the fastest replication method available.</li>
+  <li><strong>Zero data interpretation:</strong> The follower does not need to understand SQL, table schemas, or data types. It just writes bytes. This eliminates entire categories of replication bugs related to type casting, character set conversion, or function evaluation.</li>
+  <li><strong>Complete database replication:</strong> Everything is replicated -- all tables, all indexes, all system catalogs, all sequences. Nothing is left out. No need to configure which tables to replicate.</li>
+  <li><strong>DDL replicated automatically:</strong> Schema changes (CREATE TABLE, ALTER TABLE, CREATE INDEX) are WAL operations and are replicated identically to the follower.</li>
+  <li><strong>Simplicity:</strong> No publication/subscription configuration, no table-level filtering, no conflict resolution logic. The follower is a passive clone.</li>
+  <li><strong>Failover readiness:</strong> Since the follower is an exact physical copy, promoting it to leader is straightforward. No schema drift, no missing sequences, no partial tables.</li>
+</ul>
+
+<h2>Limitations</h2>
+
+<ul>
+  <li><strong>Same major version required:</strong> The follower must run the exact same PostgreSQL major version. WAL format can change between major versions. Upgrading requires a logical dump/restore.</li>
+  <li><strong>Same architecture required:</strong> Physical replication does not work across different CPU architectures (e.g., x86 to ARM) or different operating systems. The disk layout must be binary-compatible.</li>
+  <li><strong>All-or-nothing replication:</strong> You cannot replicate a subset of tables. Physical replication copies the entire database cluster. If you only need one table replicated, use logical replication instead.</li>
+  <li><strong>Cannot serve different workloads easily:</strong> Since indexes are replicated identically, you cannot optimize the follower with different indexes (e.g., analytics-optimized indexes vs OLTP indexes).</li>
+  <li><strong>Follower cannot accept writes:</strong> In standard streaming replication, the follower is read-only. It cannot diverge from the leader by accepting its own writes.</li>
+  <li><strong>Larger replication volume:</strong> Physical WAL can be larger than logical change events for the same logical change, because WAL includes index maintenance, page-level overhead, and full page images during checkpoints.</li>
+</ul>
+
+<h2>Logical vs Physical Replication Comparison</h2>
+
+<table>
+  <tr>
+    <th>Property</th>
+    <th>Physical Replication</th>
+    <th>Logical Replication</th>
+  </tr>
+  <tr>
+    <td><strong>What is copied</strong></td>
+    <td>Disk block/WAL bytes</td>
+    <td>Row-level change events</td>
+  </tr>
+  <tr>
+    <td><strong>Performance</strong></td>
+    <td class="green">Fastest (no decoding)</td>
+    <td class="red">Slower (decoding + apply)</td>
+  </tr>
+  <tr>
+    <td><strong>Version compatibility</strong></td>
+    <td class="red">Same major version only</td>
+    <td class="green">Cross-version possible</td>
+  </tr>
+  <tr>
+    <td><strong>Architecture compatibility</strong></td>
+    <td class="red">Same architecture required</td>
+    <td class="green">Cross-architecture possible</td>
+  </tr>
+  <tr>
+    <td><strong>Partial replication</strong></td>
+    <td class="red">All-or-nothing (entire cluster)</td>
+    <td class="green">Table-level granularity</td>
+  </tr>
+  <tr>
+    <td><strong>DDL replication</strong></td>
+    <td class="green">Automatic (via WAL)</td>
+    <td class="red">Manual (not replicated)</td>
+  </tr>
+  <tr>
+    <td><strong>Sequence replication</strong></td>
+    <td class="green">Automatic</td>
+    <td class="red">Not replicated</td>
+  </tr>
+  <tr>
+    <td><strong>Follower writes</strong></td>
+    <td class="red">No (read-only standby)</td>
+    <td>Possible (with conflict handling)</td>
+  </tr>
+  <tr>
+    <td><strong>Failover simplicity</strong></td>
+    <td class="green">Simple (exact clone)</td>
+    <td class="red">Complex (schema drift risk)</td>
+  </tr>
+  <tr>
+    <td><strong>CDC use case</strong></td>
+    <td class="red">Not suitable (raw bytes)</td>
+    <td class="green">Ideal (row events)</td>
+  </tr>
+  <tr>
+    <td><strong>Index flexibility</strong></td>
+    <td class="red">Identical to leader</td>
+    <td class="green">Can differ on subscriber</td>
+  </tr>
+</table>
+
+<h2>When to Choose Physical Replication</h2>
+
+<table>
+  <tr>
+    <th>Scenario</th>
+    <th>Recommendation</th>
+  </tr>
+  <tr>
+    <td>High-availability failover replica</td>
+    <td class="green">Physical (exact clone, fast failover)</td>
+  </tr>
+  <tr>
+    <td>Read replica for OLTP queries</td>
+    <td class="green">Physical (fast, simple, complete)</td>
+  </tr>
+  <tr>
+    <td>Cross-version upgrade replication</td>
+    <td class="red">Logical (version-independent)</td>
+  </tr>
+  <tr>
+    <td>Replicating specific tables to another service</td>
+    <td class="red">Logical (partial replication)</td>
+  </tr>
+  <tr>
+    <td>CDC pipeline to Kafka/Elasticsearch</td>
+    <td class="red">Logical (row-level events)</td>
+  </tr>
+  <tr>
+    <td>Disaster recovery standby</td>
+    <td class="green">Physical (complete, fast, simple)</td>
+  </tr>
+  <tr>
+    <td>Analytics replica with different indexes</td>
+    <td class="red">Logical (index flexibility)</td>
+  </tr>
+</table>
+
+<h2>Physical Replication in Other Databases</h2>
+
+<p>The concept of physical replication extends beyond PostgreSQL:</p>
+
+<ul>
+  <li><strong>Oracle Data Guard:</strong> Ships redo log (Oracle's equivalent of WAL) to standby databases. Physical standby is an exact block-level copy.</li>
+  <li><strong>MySQL Group Replication / InnoDB Cluster:</strong> Uses a combination of binlog-based logical replication. Not strictly physical, but similar concepts.</li>
+  <li><strong>Cassandra:</strong> Uses SSTable-based replication (shipping sorted string tables), which is closer to physical replication than logical.</li>
+  <li><strong>MongoDB replica sets:</strong> Ships oplog entries (similar to logical row changes), not physical block copies.</li>
+</ul>
+
+<div class="callout yellow">
+  <strong>Interview Tip:</strong> When asked "how would you set up a PostgreSQL HA pair?", the answer is physical replication (streaming) for the standby, plus synchronous commit for zero data loss on failover. Physical replication gives you the fastest replication and simplest failover. When asked "how would you replicate specific tables to a data warehouse?", switch to logical replication for its partial replication capability.
+</div>
+
+<h2>Common Interview Questions</h2>
+
+<ul>
+  <li>"What is physical replication?" Answer: Replication that copies disk block/WAL byte changes directly from leader to follower, producing an exact physical clone. No SQL decoding, no row-level interpretation -- just raw byte copying.</li>
+  <li>"What are the tradeoffs of physical vs logical replication?" Answer: Physical is faster and simpler (exact clone, automatic DDL replication) but inflexible (same version required, all-or-nothing replication). Logical is slower but flexible (cross-version, partial table replication, CDC use cases).</li>
+  <li>"Can I use physical replication to upgrade PostgreSQL?" Answer: No. Physical replication requires the same major version. For upgrades, use logical replication (pg_dump/pg_restore) or pg_upgrade. Mention that logical replication can help bridge versions during a rolling upgrade.</li>
+  <li>"How does physical replication handle DDL changes?" Answer: Automatically. DDL changes generate WAL records just like DML. Physical replication applies them identically. Logical replication does not replicate DDL.</li>
+  <li>"What is the right replication strategy for a PostgreSQL HA pair?" Answer: Physical streaming replication with synchronous commit. This provides the fastest replication, automatic failover (exact clone), and zero data loss if the follower confirms WAL writes before the leader commits.</li>
+</ul>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Avoid going deep into:</strong>
+  <ul>
+    <li>WAL record internal format (XLogRecord, xl_heap_insert, page image compression). Understand the concept of physical byte copying; skip the binary layout.</li>
+    <li><code>pg_basebackup</code> implementation details and tar mode vs plain mode. Know that it takes a physical backup; skip the internals.</li>
+    <li>Full page writes during checkpoints and their impact on WAL volume. Mention the concept briefly; skip the mechanism.</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Reading Sources</div>
+  <ul>
+    <li><strong>PostgreSQL Documentation</strong> - "Streaming Replication" (Chapter 26) and "Write-Ahead Logging" (Chapter 29).</li>
+    <li><strong>Designing Data-Intensive Applications (Kleppmann)</strong> - Chapter 5, sections on single-leader replication and replication implementation details.</li>
+    <li><strong>PostgreSQL Replication (Husain, Sikder)</strong> - Comprehensive coverage of physical vs logical replication tradeoffs.</li>
+    <li><strong>The Internals of PostgreSQL</strong> - InterDB documentation on WAL internals and physical replication.</li>
+    <li><strong>PostgreSQL HA with Patroni</strong> - How physical replication is used in production HA architectures.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="logical-replication.html">&larr; 4.5.4 Logical Replication</a>
+  <a href="replica-lag.html">4.6.1 Replica Lag &rarr;</a>
+</div>
+
+</body>
+</html>

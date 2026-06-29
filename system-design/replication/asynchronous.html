@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.3.2 Asynchronous Replication</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../../index.html">System Design</a> / <a href="../index.html">4 Replication</a> / <a href="why-replication.html">4.3 Replication Types</a> / 4.3.2
+</div>
+
+<h1>4.3.2 Asynchronous Replication</h1>
+
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand the most commonly used replication mode in production systems. Know how asynchronous replication works (leader does not wait for followers), why it is the default for most databases, the data loss risk on leader failure, and the replica lag implications that follow.</p>
+
+<h2>Definition</h2>
+
+<div class="callout">
+  <strong>Asynchronous replication</strong> means the leader writes data locally and immediately acknowledges the client's write request, without waiting for followers to receive or persist the data. The leader sends replication data to followers in the background, at its own pace. There is no guarantee that followers are up-to-date.
+</div>
+
+<p>This is the <strong>default replication mode</strong> for most database systems because it provides the best write performance. The tradeoff is that followers may lag behind the leader, and if the leader fails, any unreplicated writes are permanently lost.</p>
+
+<h2>How It Works</h2>
+
+<div class="diagram">
+  Asynchronous Replication: Write Flow
+  ──────────────────────────────────────
+
+  Client
+   │
+   │  WRITE: INSERT INTO orders (id, amount) VALUES (99, 250)
+   │
+   ▼
+  ┌──────────────────────────────────────────────────────┐
+  │                    LEADER                             │
+  │                                                      │
+  │  1. Receive write request                             │
+  │  2. Write to local WAL (disk I/O)                    │
+  │  3. IMMEDIATELY ACK client ✓  (no wait for follower) │
+  │  4. Append to replication log                        │
+  │  5. Send replication data to followers (background)    │
+  │                                                      │
+  └──────────────┬──────────────────┬────────────────────┘
+                 │                  │
+                 │ (background)     │ (background)
+                 ▼                  ▼
+  ┌──────────────────────┐  ┌──────────────────────┐
+  │     FOLLOWER A       │  │     FOLLOWER B       │
+  │                      │  │                      │
+  │  Receives replication│  │  Receives replication│
+  │  data from leader    │  │  data from leader    │
+  │  Apply to WAL        │  │  Apply to WAL        │
+  │  ...                 │  │  ...                 │
+  │  Eventually catches  │  │  Eventually catches  │
+  │  up to leader state   │  │  up to leader state   │
+  └──────────────────────┘  └──────────────────────┘
+
+  Client ACK time: ~2ms (local disk write only)
+  Replication to followers: ~5-15ms later (in background)
+</div>
+
+<h2>Replica Lag and Its Consequences</h2>
+
+<p>The defining characteristic of asynchronous replication is <strong>replica lag</strong>: the gap between the leader's state and a follower's state at any point in time.</p>
+
+<div class="diagram">
+  Replica Lag Timeline
+  ────────────────────
+
+  Leader WAL:    [w1][w2][w3][w4][w5][w6][w7][w8]
+                   │   │   │   │   │   │   │   │
+  Time (ms):      0   5  10  15  20  25  30  35
+
+  Follower A:     [w1][w2][w3][w4][w5][w6][w7][w8]  (lag: 0ms)
+                       apply delay: 5ms, fully caught up
+
+  Follower B:     [w1][w2][w3][w4][w5]              (lag: 20ms)
+                                   │   currently at w5
+                                   leader is at w8
+
+  At t=35ms:
+    Leader has: w1, w2, w3, w4, w5, w6, w7, w8
+    Follower A has: w1, w2, w3, w4, w5, w6, w7, w8  (up-to-date)
+    Follower B has: w1, w2, w3, w4, w5              (20ms behind)
+</div>
+
+<h3>Types of Lag</h3>
+
+<table>
+  <tr><th>Type</th><th>Description</th><th>Typical Cause</th></tr>
+  <tr><td><strong>Replication lag</strong></td><td>Followers are behind in applying the write-ahead log</td><td>Network latency, slow follower disk, high follower load</td></tr>
+  <tr><td><strong>Read-your-writes inconsistency</strong></td><td>Client writes to leader, reads from follower, gets stale data</td><td>Write not yet replicated to the follower that serves the read</td></tr>
+  <tr><td><strong>Monotonic read violation</strong></td><td>Client reads value v2, then reads from a different follower and gets v1</td><td>Reading from followers at different replication positions</td></tr>
+  <tr><td><strong>Consistent prefix violation</strong></td><td>Client sees a sequence of writes out of order across reads</td><td>Followers applying writes in different order than the leader</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Interview Tip:</strong> When designing with async replication, always proactively discuss replica lag as a design concern. Interviewers expect you to identify this risk and propose mitigations (read from leader after writes, session affinity, track replication position, use causal consistency).
+</div>
+
+<h2>Data Loss on Leader Failure</h2>
+
+<p>The most serious risk of asynchronous replication is <strong>permanent data loss</strong> when the leader fails.</p>
+
+<div class="diagram">
+  Data Loss Scenario
+  ──────────────────
+
+  Leader WAL:    [w1][w2][w3][w4][w5] 💥 CRASH
+                   │   │   │   │   │
+  Follower:       [w1][w2][w3]
+                             │
+                             └── Follower received w1-w3 before crash
+                                 w4 and w5 were ONLY on the leader
+
+  After failover:
+    Follower becomes new leader
+    w4 and w5 are PERMANENTLY LOST
+    Client thought these writes succeeded (got ACKs)
+    But data was never replicated
+</div>
+
+<div class="callout red">
+  <strong>Data Loss Window:</strong> The amount of data at risk is equal to the replication lag at the time of failure. If the follower was 100ms behind, you lose up to 100ms of writes. If it was 10 seconds behind, you lose up to 10 seconds of writes. This window is unbounded in pathological cases (follower completely disconnected).
+</div>
+
+<h2>Why Asynchronous Replication Is the Default</h2>
+
+<p>Despite the data loss risk, asynchronous replication is the default for most databases for practical reasons:</p>
+
+<ul>
+  <li><strong>Write performance:</strong> Writes complete in the time it takes to write to local disk (~1-5ms). No network round trip to followers.</li>
+  <li><strong>Write throughput:</strong> The leader can pipeline writes aggressively without waiting for sync ACKs.</li>
+  <li><strong>Geographic flexibility:</strong> Followers can be in remote data centers without adding latency to every write.</li>
+  <li><strong>Availability:</strong> Writes succeed even when followers are temporarily down or slow.</li>
+  <li><strong>Tolerance for lag:</strong> Most applications tolerate brief replica lag (social media feeds, analytics, logging).</li>
+</ul>
+
+<div class="callout green">
+  <strong>Interview Insight:</strong> Many interviewees say "we need synchronous replication for data safety." A more nuanced answer is: "We use asynchronous replication as the default for performance, but we can configure synchronous replication for critical data paths like payments and authentication. We also use monitoring on replica lag and alert if it exceeds our threshold."
+</div>
+
+<h2>Mitigating the Risks</h2>
+
+<table>
+  <tr><th>Risk</th><th>Mitigation</th><th>Implementation</th></tr>
+  <tr><td>Data loss on crash</td><td>Semi-synchronous replication</td><td>Wait for at least one follower ACK (see 4.3.3)</td></tr>
+  <tr><td>Stale reads</td><td>Route reads to leader after writes</td><td>Session-sticky reads, or track replication position</td></tr>
+  <tr><td>Excessive lag</td><td>Monitor and alert on lag</td><td>Track seconds_behind_master (MySQL) or replication lag metrics</td></tr>
+  <tr><td>Long-running transactions</td><td>Break large writes into smaller batches</td><td>Reduces the replication payload per batch</td></tr>
+  <tr><td>Read-after-write consistency</td><td>Client remembers last write timestamp</td><td>Compare follower position with client's last write</td></tr>
+</table>
+
+<h2>Real-World Examples</h2>
+
+<table>
+  <tr><th>System</th><th>Default Mode</th><th>Lag Mechanism</th><th>Notes</th></tr>
+  <tr><td><strong>MySQL</strong></td><td>Asynchronous (binlog)</td><td>Seconds_Behind_Master metric</td><td>Most common production setup; semi-sync available as plugin</td></tr>
+  <tr><td><strong>MongoDB</strong></td><td>Asynchronous (oplog)</td><td>Replication lag dashboard</td><td>Write concern can require ack from N members (sync-like)</td></tr>
+  <tr><td><strong>Redis</strong></td><td>Asynchronous</td><td>SYNC/PSYNC with master_repl_offset</td><td>Redis Cluster uses async replication by default</td></tr>
+  <tr><td><strong>Kafka</strong></td><td>Asynchronous (ISR-based)</td><td>Lag in bytes per partition</td><td>acks=all is effectively sync (wait for ISR)</td></tr>
+  <tr><td><strong>PostgreSQL</strong></td><td>Asynchronous (streaming replication)</td><td>pg_stat_replication view</td><td>Can be upgraded to synchronous via configuration</td></tr>
+</table>
+
+<h2>Common Interview Questions</h2>
+
+<ol>
+  <li><strong>"Explain asynchronous replication and its tradeoffs."</strong><br>
+  Answer: "In asynchronous replication, the leader writes data locally and immediately acknowledges the client without waiting for followers. Followers receive replication data in the background. The main advantage is low write latency and high throughput -- the client only waits for the leader's local disk write. The tradeoff is replica lag: followers may be behind the leader, causing stale reads. More critically, if the leader crashes, any unreplicated writes are permanently lost. This is the default mode for MySQL, MongoDB, and most production databases because the performance benefits outweigh the data loss risk for most use cases."</li>
+
+  <li><strong>"What is replica lag and how do you handle it?"</strong><br>
+  Answer: "Replica lag is the delay between a write being committed on the leader and being applied on a follower. It manifests as several consistency issues: stale reads where clients see old data, monotonic read violations where time appears to go backwards, and read-after-write inconsistencies. Mitigations include: (1) Reading from the leader after writes for critical consistency. (2) Using session affinity so a client always reads from the same replica. (3) Monitoring lag with alerts when it exceeds a threshold. (4) Breaking large transactions into smaller batches to reduce the replication payload."</li>
+
+  <li><strong>"What happens to unreplicated writes when the leader fails?"</strong><br>
+  Answer: "Unreplicated writes are permanently lost. The client received an ACK for those writes (from the leader), but the data never made it to any follower. When the follower is promoted to leader, those writes do not exist. This is a silent data loss scenario -- the client believes the write succeeded. Mitigations include: semi-synchronous replication (wait for at least one follower), writing to a durable queue before the database, and using application-level idempotency so clients can safely retry after failover."</li>
+</ol>
+
+<h2>What to Skip</h2>
+
+<div class="callout red">
+  <strong>Do not go deep into:</strong>
+  <ul>
+    <li>MySQL binlog internals (statement vs. row format details, GTID internals).</li>
+    <li>MongoDB oplog implementation (oplog entry format, batching logic).</li>
+    <li>Network-level replication transport (TCP buffer management, compression).</li>
+    <li>Follower I/O scheduling for applying replication logs.</li>
+    <li>Specific monitoring tool configurations (Prometheus exporters, Grafana dashboards).</li>
+  </ul>
+</div>
+
+<div class="source">
+  <div class="source-label">Reading Sources</div>
+  <ul>
+    <li>Martin Kleppmann, <em>Designing Data-Intensive Applications</em>, Chapter 5, Section "Synchronous vs. Asynchronous Replication" and "Problems with Replication Lag".</li>
+    <li>MySQL Reference Manual, <em>Replication Implementation</em> -- for understanding MySQL's default async replication behavior.</li>
+    <li>MongoDB Documentation, <em>Replica Set Data Synchronization</em> -- for understanding how MongoDB applies oplog entries asynchronously.</li>
+    <li>High Performance MySQL (O'Reilly), Chapter "Replication" -- covers practical aspects of monitoring and managing replica lag.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="synchronous.html">&larr; 4.3.1 Synchronous</a>
+  <a href="semi-synchronous.html">4.3.3 Semi Synchronous &rarr;</a>
+</div>
+
+</body>
+</html>

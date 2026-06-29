@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>15.14 Dropbox — System Design</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<p class="breadcrumb"><a href="../../">Handbook</a> / <a href="../">System Design</a> / 15. Design Problems / 15.14 Dropbox</p>
+
+<h1>Dropbox</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐⭐</span>
+  <span>Interview Frequency: ★★★★</span>
+</div>
+
+<h2>Goal</h2>
+<p>Design a file synchronization service similar to Dropbox that keeps files across multiple devices in sync. The system must efficiently detect changes, transfer only modified portions of files (delta sync), handle conflict resolution when multiple devices edit the same file simultaneously, and provide offline support with reconnection sync.</p>
+
+<h2>Functional Requirements</h2>
+<ul>
+  <li>Automatically sync files between user's devices (desktop, mobile, web)</li>
+  <li>Efficiently detect local file changes (new, modified, deleted)</li>
+  <li>Transfer only changed blocks (delta sync) for modified files</li>
+  <li>Handle conflict resolution when the same file is modified on multiple devices</li>
+  <li>Support offline editing with sync on reconnection</li>
+  <li>Provide file versioning and restore capabilities</li>
+  <li>Share files and folders with other users</li>
+</ul>
+
+<h2>Non-Functional Requirements</h2>
+<ul>
+  <li><strong>Bandwidth efficiency:</strong> transfer only changed data, not entire files</li>
+  <li><strong>Low latency:</strong> sync notification within seconds of a change</li>
+  <li><strong>Scalability:</strong> 500M+ users, 500B+ files</li>
+  <li><strong>Storage efficiency:</strong> deduplication (across users and within user history)</li>
+  <li><strong>Reliability:</strong> no data loss, sync eventual consistency</li>
+</ul>
+
+<h3>Capacity Estimates</h3>
+<table>
+  <tr><th>Metric</th><th>Estimate</th><th>Notes</th></tr>
+  <tr><td>Total users</td><td>500M</td><td></td></tr>
+  <tr><td>Average files per user</td><td>1K</td><td></td></tr>
+  <tr><td>Average file size</td><td>100 KB</td><td>Bimodal: many small docs, few large videos</td></tr>
+  <tr><td>Total stored data</td><td>~100 PB</td><td>With deduplication: ~50 PB</td></tr>
+  <tr><td>Active users</td><td>50M DAU</td><td>Each with 2-3 devices</td></tr>
+  <tr><td>Sync operations/day</td><td>10B</td><td>50M users * ~200 sync events/day</td></tr>
+  <tr><td>Block size</td><td>4 MB</td><td>For delta sync</td></tr>
+</table>
+
+<h2>API Design</h2>
+<pre>
+# Report local changes to server
+POST   /api/v1/sync/changes
+Body:  { "cursor": "cursor_abc", "changes": [
+          { "path": "/docs/report.docx", "type": "modified", "version": 5, "size": 5242880 },
+          { "path": "/photos/img.jpg", "type": "created", "version": 1, "size": 3145728 },
+          { "path": "/old/file.txt", "type": "deleted", "version": 3 }
+        ]}
+Resp:  { "cursor": "cursor_def", "upload_required": [
+          { "path": "/docs/report.docx", "blocks_to_upload": [2, 5] }
+        ]}
+
+# Upload blocks (delta sync)
+PUT    /api/v1/blocks/{block_hash}
+Body:  (block content)
+Resp:  { "stored": true }  # or { "already_exists": true } if deduped
+
+# Download changes from server
+POST   /api/v1/sync/changes?cursor=cursor_def
+Resp:  { "cursor": "cursor_ghi", "changes": [
+          { "path": "/docs/report.docx", "version": 6, "blocks_changed": [3, 7] }
+        ]}
+
+# Download specific blocks
+GET    /api/v1/blocks/{block_hash}
+Resp:  HTTP 200 (block content)
+</pre>
+
+<h2>High-Level Design</h2>
+<div class="diagram">
+  Device A            Device B            Server
+  ┌────────┐         ┌────────┐        ┌──────────────┐
+  │Local FS │         │Local FS │        │              │
+  │        │         │        │        │  Metadata    │
+  │ Watcher│         │ Watcher│        │  Service     │
+  └───┬────┘         └───┬────┘        │  (user files,│
+      │                  │             │   versions,   │
+      │ file changed     │             │   cursors)    │
+      │                  │             └──────┬───────┘
+      ▼                  ▼                    │
+  ┌────────┐         ┌────────┐              │
+  │Sync    │         │Sync    │              │
+  │Client  │         │Client  │              │
+  │(detect │         │(detect │              │
+  │ change)│         │ change)│              │
+  └───┬────┘         └───┬────┘              │
+      │                  │                    │
+      │  upload blocks   │   download changes │
+      │──────────────────┼───────────────────►│
+      │                  │                    │
+      │◄─────────────────┼───────────────────│
+      │  download changes│  upload blocks     │
+      │                  │                    │
+                    ┌────▼─────┐
+                    │ Block    │
+                    │ Storage  │
+                    │ (S3/CAS) │
+                    └──────────┘
+</div>
+
+<h2>Deep Dive: Change Detection</h2>
+<p>Each device must detect local file changes efficiently:</p>
+
+<table>
+  <tr><th>Approach</th><th>How it Works</th><th>Pros</th><th>Cons</th></tr>
+  <tr><td>Filesystem events (inotify/FSEvents)</td><td>OS notifies on file change</td><td class="green">Immediate, efficient</td><td>Event loss during sleep, platform-dependent</td></tr>
+  <tr><td>Periodic scan</td><td>Scan all files, compare against metadata DB</td><td class="green">Reliable, cross-platform</td><td class="red">CPU-intensive for large directories</td></tr>
+  <tr><td>Hybrid</td><td>Use events for real-time + periodic scan as fallback</td><td class="green">Best of both</td><td>Complex</td></tr>
+</table>
+
+<div class="callout green">
+  <strong>Recommended: Hybrid approach.</strong> Use OS filesystem events (inotify on Linux, FSEvents on macOS, ReadDirectoryChangesW on Windows) for real-time change detection. Run a periodic full-scan as a fallback every few minutes to catch missed events (e.g., during sleep, network disconnect, or event queue overflow).
+</div>
+
+<h2>Deep Dive: Delta Sync</h2>
+<p>Instead of uploading entire files, only upload changed blocks.</p>
+
+<pre>
+# Step 1: Client hashes local file blocks
+File: report.docx (20MB, split into 4MB blocks)
+  Block 1: SHA256=a1b2c3 (unchanged)
+  Block 2: SHA256=d4e5f6 (CHANGED)
+  Block 3: SHA256=g7h8i9 (unchanged)
+  Block 4: SHA256=j0k1l2 (unchanged)
+  Block 5: SHA256=m3n4o5 (NEW - file grew)
+
+# Step 2: Client sends block hashes to server
+# Step 3: Server responds with missing blocks
+  Missing blocks: [d4e5f6, m3n4o5]  (server doesn't have these)
+
+# Step 4: Client uploads only the 2 missing blocks (8MB instead of 20MB)
+# Bandwidth savings: 60%
+</pre>
+
+<div class="callout">
+  <strong>Rolling checksum (rsync algorithm):</strong> For smaller files, use a rolling checksum approach. Divide the file into variable-sized blocks based on content boundaries (not fixed offsets). This allows efficient sync even when data is inserted in the middle of a file (blocks after the insertion are shifted but remain intact).
+</div>
+
+<h2>Deep Dive: Conflict Resolution</h2>
+<p>When the same file is modified on two devices simultaneously:</p>
+
+<ol>
+  <li>Both devices upload their changes (different block sets).</li>
+  <li>Server detects that the base version has diverged (both devices edited version N, creating versions N+1a and N+1b).</li>
+  <li>Server creates a "conflicted copy" — the file from the second device is saved as <code>report (Device B's conflicted copy 2026-06-28).docx</code>.</li>
+  <li>Both devices download the conflict copy and notify the user.</li>
+</ol>
+
+<div class="callout yellow">
+  <strong>Alternative: Operational Transform (OT)</strong> for text documents. Instead of file-level conflict copies, use character-level merge (similar to Google Docs). This is more complex but provides a better user experience for text files. For binary files (images, videos, PDFs), conflict copies are the only viable approach.
+</div>
+
+<h2>Deep Dive: Notification Service</h2>
+<p>When a device uploads changes, other connected devices must be notified promptly.</p>
+
+<div class="diagram">
+  Device A uploads change
+       │
+       ▼
+  Notification Service
+  (per-user channels)
+       │
+       ├──► WebSocket to Device B → "File changed, sync now"
+       ├──► WebSocket to Device C → "File changed, sync now"
+       └──► Push notification to Device D (mobile, offline) → "Sync on next open"
+</div>
+
+<ul>
+  <li>Use WebSocket for devices currently connected.</li>
+  <li>Use push notifications (APNs/FCM) for mobile devices that are offline.</li>
+  <li>Per-user notification channels (Redis Pub/Sub partitioned by user_id).</li>
+  <li>If all devices are offline, they will discover changes on next connection via the cursor mechanism.</li>
+</ul>
+
+<h2>Deep Dive: Metadata Model</h2>
+<table>
+  <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+  <tr><td>user_id</td><td>BIGINT</td><td>Owner</td></tr>
+  <tr><td>path</td><td>VARCHAR(1024)</td><td>Full file path</td></tr>
+  <tr><td>version</td><td>BIGINT</td><td>Monotonically increasing version number</td></tr>
+  <tr><td>size</td><td>BIGINT</td><td>Current file size</td></tr>
+  <tr><td>block_hashes</td><td>JSONB</td><td>Ordered list of block hashes</td></tr>
+  <tr><td>is_deleted</td><td>BOOLEAN</td><td>Soft delete</td></tr>
+  <tr><td>modified_at</td><td>TIMESTAMP</td><td>Last modification time</td></tr>
+  <tr><td>cursor</td><td>BIGINT</td><td>Per-user sync cursor (monotonic)</td></tr>
+</table>
+
+<div class="callout">
+  <strong>Cursor-based sync:</strong> Each user has a monotonically increasing cursor. When a device requests changes, it sends its last cursor. The server returns all changes with a cursor greater than the client's. This ensures the device receives all changes, even if it was offline for an extended period.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li>How does delta sync handle small changes in large files? <em>A: Fixed-block approach (4MB blocks) may waste bandwidth for small changes within a block. The rolling checksum (rsync) approach splits on content boundaries, so small insertions only affect the block where they occur.</em></li>
+  <li>How do you handle large directories with millions of files? <em>A: Batch sync: process changes in batches with pagination. Use efficient filesystem APIs (readdir with stat). Consider hierarchical sync (sync subdirectories independently) to parallelize and limit per-operation scope.</em></li>
+  <li>How do you handle selective sync (not all files on all devices)? <em>A: Allow users to choose which folders to sync per device. The metadata service tracks per-device sync preferences. Devices only receive change notifications for their subscribed paths.</em></li>
+  <li>How do you handle initial sync for a new device? <em>A: Download file metadata first (fast, small). Then download file contents on demand or in background, prioritizing recently accessed files. Show a "syncing" indicator for files not yet downloaded.</em></li>
+  <li>What happens if the user is offline and modifies many files? <em>A: All changes are recorded locally. On reconnection, the sync client uploads all changes sequentially. Use the cursor mechanism to discover server-side changes made during the offline period and merge.</em></li>
+  <li>How do you prevent unauthorized access to files? <em>A: End-to-end encryption (user holds the key). Server stores encrypted blocks but cannot decrypt. Metadata is encrypted per-user. Sharing requires re-encrypting with the recipient's key.</em></li>
+</ul>
+
+<div class="callout red">
+  <strong>What to Skip:</strong>
+  <ul>
+    <li>Don't design end-to-end encryption in detail unless asked</li>
+    <li>Don't design the file sharing/collaboration workflow — focus on sync</li>
+    <li>Don't design the mobile app UI or desktop app architecture</li>
+    <li>Don't implement filesystem watcher internals — describe the interface</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Papers</div>
+  <ul>
+    <li>"The rsync Algorithm" — Andrew Tridgell (samba.org/ftp/rsync/tech_report)</li>
+    <li>"Differential Sync" — Neil Fraser (neil.fraser.name/writing/sync)</li>
+  </ul>
+</div>
+<div class="source">
+  <div class="source-label">Articles</div>
+  <ul>
+    <li>Dropbox Engineering: "How Dropbox Efficiently Stores and Syncs Files" (dropbox.tech)</li>
+    <li>Dropbox: "Architecture of Dropbox" (dropbox.com/tech-talks)</li>
+    <li>ByteByteGo: "Design Dropbox" (bytebytego.com)</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="file-storage.html">&larr; Previous: File Storage</a>
+  <a href="google-docs.html">Next: Google Docs &rarr;</a>
+</div>
+
+</body>
+</html>

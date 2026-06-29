@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.1.6 Durability</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .formula { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; text-align: center; font-size: 1.1rem; color: #79c0ff; }
+  .formula small { display: block; text-align: left; color: #8b949e; font-size: 0.8rem; margin-top: 0.75rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#1">1 Fundamentals</a> / <a href="../index.html#1.1">1.1 System Design Basics</a> / 1.1.6
+</div>
+
+<h1>Durability</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐☆☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What durability means and how it differs from reliability and availability</li>
+  <li>How databases guarantee durability through WAL and fsync</li>
+  <li>How replication and backups provide durability</li>
+  <li>RPO and RTO — how they connect to durability guarantees</li>
+  <li>How cloud systems achieve extreme durability (e.g., S3's 11 nines)</li>
+</ul>
+
+<h2>Definition</h2>
+<p>Durability is the <strong>property that guarantees data, once committed, will survive any subsequent failures</strong>.</p>
+
+<div class="callout yellow">
+  <strong>Intuitive definition:</strong> Once the system tells you "write successful," that data is permanent. Even if the server crashes, the data center burns down, or the disk fails — the data is recoverable.
+</div>
+
+<div class="callout">
+  <strong>Analogy:</strong> Writing in pen (durable) vs pencil (not durable). A pencil mark can be erased by a sneeze. Pen ink survives until the paper itself is destroyed.
+</div>
+
+<h2>Why Durability Matters</h2>
+<p>Data loss is one of the most catastrophic failures a system can experience.</p>
+<div class="callout red">
+  <strong>Real incidents:</strong>
+  <ul>
+    <li><strong>GitLab (2017):</strong> Admin accidentally deleted production database. Lost 6 hours of data because backups were not properly maintained.</li>
+    <li><strong>Stripe (2023):</strong> Corrupted database backup led to irrecoverable transaction history.</li>
+    <li><strong>AWS us-east-1 (2011):</strong> EBS failure caused hours of data loss for Netflix and others.</li>
+  </ul>
+</div>
+
+<h2>Durability vs Reliability vs Availability</h2>
+<table>
+  <tr><th></th><th>Durability</th><th>Reliability</th><th>Availability</th></tr>
+  <tr><td>Protects</td><td>Your data</td><td>System correctness</td><td>System reachability</td></tr>
+  <tr><td>Question</td><td>"Will my data survive?"</td><td>"Does it work correctly?"</td><td>"Can I reach it?"</td></tr>
+  <tr><td>Lost when missing</td><td>Data</td><td>User trust</td><td>Users</td></tr>
+  <tr><td>Mechanism</td><td>WAL, replication, backups</td><td>Redundancy, testing, monitoring</td><td>Failover, load balancing</td></tr>
+</table>
+
+<h2>How Databases Achieve Durability</h2>
+<p>Durability is not magic — it requires specific mechanisms at every stage of the write path.</p>
+
+<div class="diagram">  Client sends write request
+       ↓
+  Database receives and processes in memory
+       ↓
+  Write to Write-Ahead Log (WAL)  ← THIS is the durability step
+       ↓
+  fsync() — force OS to flush WAL to disk  ← Confirms durability
+       ↓
+  Write acknowledged to client
+       ↓
+  Later: Write data to main storage (lazy)
+       ↓
+  WAL can be replayed on crash recovery</div>
+
+<h3>Write-Ahead Log (WAL)</h3>
+<p>The fundamental durability mechanism. The database writes a log entry <strong>before</strong> modifying the actual data pages.</p>
+<pre>Rule: Write the log FIRST, then write the data.
+
+On crash recovery:
+  1. Read the WAL from the last checkpoint
+  2. Re-apply all committed transactions
+  3. Undo any uncommitted transactions (using undo log)
+  4. Database is now consistent</pre>
+<div class="callout">
+  <strong>Why WAL works:</strong> Sequential appends to a log file are fast (no seek overhead). The log is small and always fits in the OS page cache. fsync forces it to disk. On crash, only un-fsynced data is lost — which is just the last few milliseconds.
+</div>
+
+<p>See also: <a href="../storage/write-ahead-log.html">Write-Ahead Log</a>, <a href="../storage/redo-log.html">Redo Log</a>, <a href="../storage/undo-log.html">Undo Log</a></p>
+
+<h2>Replication for Durability</h2>
+<p>Having copies of data on other machines provides durability against machine-level failures.</p>
+<table>
+  <tr><th></th><th>Synchronous</th><th>Asynchronous</th></tr>
+  <tr><td>Durability</td><td class="green">Maximum — data confirmed on replica before ack</td><td class="yellow">Good but not perfect — unreplicated data at risk</td></tr>
+  <tr><td>Write latency</td><td class="red">Higher (waits for replica)</td><td class="green">Lower (local ack)</td></tr>
+  <tr><td>RPO</td><td>Zero</td><td class="red">Non-zero (seconds to minutes of data at risk)</td></tr>
+  <tr><td>Availability</td><td class="red">Lower (replica failure blocks writes)</td><td class="green">Higher</td></tr>
+</table>
+
+<div class="callout yellow">
+  <strong>Key insight:</strong> Synchronous replication trades write latency and availability for zero data loss. Asynchronous replication trades some data loss for lower latency. This is the fundamental durability trade-off.
+</div>
+
+<h2>Backup Strategies</h2>
+<table>
+  <tr><th>Type</th><th>What</th><th>Speed</th><th>Storage</th></tr>
+  <tr><td>Full backup</td><td>Complete copy of all data</td><td>Slow</td><td>High</td></tr>
+  <tr><td>Incremental</td><td>Only data changed since last backup</td><td>Fast</td><td>Low</td></tr>
+  <tr><td>Differential</td><td>Changes since last FULL backup</td><td>Medium</td><td>Medium</td></tr>
+</table>
+
+<div class="callout red">
+  <strong>Critical rule:</strong> A backup that has never been tested for restore is NOT a backup. It is a false sense of security. Regularly verify backups by restoring to a test environment.
+</div>
+
+<h2>RPO and RTO</h2>
+<table>
+  <tr><th>Metric</th><th>Stands For</th><th>Question</th><th>Example</th></tr>
+  <tr><td><strong>RPO</strong></td><td>Recovery Point Objective</td><td>"How much data can we afford to lose?"</td><td>5 minutes, 1 hour, 24 hours</td></tr>
+  <tr><td><strong>RTO</strong></td><td>Recovery Time Objective</td><td>"How long can we be down?"</td><td>30 seconds, 1 hour, 4 hours</td></tr>
+</table>
+
+<pre>RPO = 0 (zero data loss):
+  → Synchronous replication + frequent WAL backups
+  → Cost: Higher latency, lower write throughput
+
+RPO = 5 minutes:
+  → Asynchronous replication with 5-second lag + WAL
+  → Acceptable for most systems
+
+RPO = 24 hours:
+  → Daily backups sufficient
+  → Acceptable for analytics, logs, non-critical data</pre>
+
+<h2>Durability in Cloud Systems</h2>
+<table>
+  <tr><th>System</th><th>Durability</th><th>How</th></tr>
+  <tr><td><strong>AWS S3</strong></td><td class="green">99.999999999% (11 nines)</td><td>Erasure coding across 3+ AZs, continuous integrity checks</td></tr>
+  <tr><td><strong>AWS DynamoDB</strong></td><td class="green">99.999999999% (11 nines)</td><td>Synchronous replication across 3 AZs</td></tr>
+  <tr><td><strong>AWS EBS</strong></td><td class="green">99.8%–99.999%</td><td>Replicated within AZ, snapshots for cross-AZ</td></tr>
+  <tr><td><strong>PostgreSQL</strong></td><td class="yellow">99.99%+ (with replication + WAL)</td><td>WAL + streaming replication + pg_basebackup</td></tr>
+  <tr><td><strong>MySQL</strong></td><td class="yellow">99.99%+ (with replication + binlog)</td><td>Binary log + semi-sync/async replication + mysqldump</td></tr>
+  <tr><td><strong>Redis</strong></td><td class="red">Lower (in-memory by default)</td><td>AOF persistence, RDB snapshots — but trade-offs with latency</td></tr>
+  <tr><td><strong>Cassandra</strong></td><td class="green">Very high (tunable)</td><td>Replication factor, commitlog, compaction</td></tr>
+  <tr><td><strong>MongoDB</strong></td><td class="yellow">High (with replica sets + journal)</td><td>Oplog, journal, replica sets with write concern majority</td></tr>
+</table>
+
+<div class="callout">
+  <strong>S3's 11 nines explained:</strong> With 11 nines of durability, if you store 10,000 objects, you would expect to lose one object every 10 million years. This is achieved through erasure coding: data is split into chunks with redundancy, stored across multiple facilities, and continuously verified.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"How does a database guarantee durability on a write?"</strong><br>Write to WAL first, fsync to disk, then ack. If crash occurs before ack, the WAL is replayed to restore the committed transaction. Data pages are written lazily after the ack.</li>
+  <li><strong>"What's the difference between sync and async replication?"</strong><br>Sync: primary waits for replica ack before confirming write (zero data loss, higher latency). Async: primary acks immediately, replica catches up later (potential data loss, lower latency).</li>
+  <li><strong>"What is RPO and how do you achieve RPO=0?"</strong><br>RPO is how much data you can afford to lose. RPO=0 requires synchronous replication — every write is confirmed on at least one replica before acknowledging to the client.</li>
+  <li><strong>"How does S3 achieve 11 nines of durability?"</strong><br>Erasure coding (data split into chunks with parity across multiple AZs), continuous integrity verification, automatic repair of degraded chunks.</li>
+  <li><strong>"What's the durability of Redis?"</strong><br>By default, Redis is in-memory with no durability — data lost on restart. AOF (Append Only File) provides durability with some latency cost. RDB snapshots provide point-in-time recovery.</li>
+</ul>
+
+<div class="callout red">
+  <h3>What to Skip</h3>
+  <ul>
+    <li>Hardware RAID configurations and details</li>
+    <li>Tape backup systems and enterprise backup software</li>
+    <li>Specific cloud provider pricing for backup storage</li>
+  </ul>
+</div>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>Designing Data-Intensive Applications</strong> — Chapter 3 (Storage and Retrieval), Chapter 5 (Replication)</li>
+    <li><strong>PostgreSQL Documentation</strong> — WAL, Write-Ahead Logging, Continuous Archiving</li>
+  </ol>
+</div>
+<div class="source">
+  <div class="source-label">Supplementary</div>
+  <ul>
+    <li><strong>AWS S3 Durability</strong> — <a href="https://aws.amazon.com/s3/faqs/" target="_blank">aws.amazon.com/s3</a></li>
+    <li><strong>MySQL Binary Log</strong> — <a href="https://dev.mysql.com/doc/refman/8.0/en/binary-log.html" target="_blank">dev.mysql.com</a></li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="reliability.html">&larr; 1.1.5 Reliability</a>
+  <a href="fault-tolerance.html">Next: 1.1.7 Fault Tolerance &rarr;</a>
+</div>
+
+</body>
+</html>

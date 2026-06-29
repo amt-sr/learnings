@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.9.3 Memtable</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.8; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  .meta { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 2rem; font-size: 0.85rem; color: #8b949e; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2.5rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.red { border-left-color: #f85149; } .callout.green { border-left-color: #3fb950; } .callout.yellow { border-left-color: #d29922; } .callout strong { color: #f0f6fc; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.6; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; } td.red { color: #f85149; } td.green { color: #3fb950; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .diagram { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; font-family: monospace; font-size: 0.85rem; line-height: 1.5; white-space: pre; color: #c9d1d9; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb">
+  <a href="../index.html">System Design</a> / <a href="../index.html#3">3 Storage</a> / <a href="../index.html#3.9">3.9 Storage Engines</a> / 3.9.3
+</div>
+
+<h1>Memtable</h1>
+<div class="meta">
+  <span>Difficulty: ⭐⭐⭐☆☆</span>
+  <span>Interview Frequency: ★★★★☆</span>
+</div>
+
+<h2>Goal</h2>
+<p>Understand:</p>
+<ul>
+  <li>What a memtable is and its role in the <a href="lsm-tree.html">LSM tree</a> write path</li>
+  <li>Why memtables must be sorted data structures</li>
+  <li>Skip lists vs red-black trees vs other sorted structures</li>
+  <li>The memtable flush cycle and memory management</li>
+</ul>
+
+<h2>Definition</h2>
+<p>A <strong>memtable is an in-memory, sorted data structure that serves as the write buffer in an LSM tree</strong>. All incoming writes are first inserted into the memtable. When it reaches a configurable size threshold, the memtable is flushed to disk as an immutable <a href="sstable.html">SSTable</a>, and a new empty memtable takes its place.</p>
+
+<div class="diagram">  Memtable Lifecycle in an LSM Tree
+
+  Client Writes:     PUT("a", 1)  PUT("c", 3)  PUT("b", 2)  PUT("d", 4)
+                            │          │          │          │
+                            ▼          ▼          ▼          ▼
+  ┌─────────────────────────────────────────────────────────────────┐
+  │                        WAL (disk)                                │
+  │  [put a=1] [put c=3] [put b=2] [put d=4]  (sequential append)  │
+  └─────────────────────────────┬───────────────────────────────────┘
+                                │ replay on crash recovery
+  ┌─────────────────────────────▼───────────────────────────────────┐
+  │                    ACTIVE Memtable (memory)                      │
+  │         Skip List / Red-Black Tree / AVL Tree                   │
+  │                                                                 │
+  │   "a" → 1    "b" → 2    "c" → 3    "d" → 4  (sorted order)    │
+  │                                                                 │
+  │   Size: 42 MB / 128 MB threshold                                │
+  └─────────────────────────────┬───────────────────────────────────┘
+                                │ threshold reached
+                                ▼
+  ┌─────────────────────────────────────────────────────────────────┐
+  │                    Flush to SSTable (disk)                       │
+  │  data_000004.db:  a=1, b=2, c=3, d=4  (sorted, immutable)      │
+  └─────────────────────────────────────────────────────────────────┘
+
+  New empty memtable takes over. Old memtable becomes "immutable memtable"
+  until flush completes, then is discarded.</div>
+
+<h2>Why Memtables Must Be Sorted</h2>
+<p>The memtable is sorted by key so that when it's flushed to disk, the resulting <a href="sstable.html">SSTable</a> is already sorted. Sorted SSTables are essential because:</p>
+<ul>
+  <li><strong>Binary search</strong> — sorted keys enable O(log n) lookup within an SSTable using a sparse index</li>
+  <li><strong>Merge during compaction</strong> — merging sorted files is O(n), much faster than sorting unsorted files O(n log n)</li>
+  <li><strong>Bloom filter efficiency</strong> — sorted data allows building compact bloom filters</li>
+  <li><strong>Range queries</strong> — sorted data supports efficient range scans</li>
+</ul>
+
+<h2>Data Structures Used for Memtables</h2>
+<table>
+  <tr><th>Structure</th><th>Insert</th><th>Lookup</th><th>Range Scan</th><th>Used By</th></tr>
+  <tr><td><strong> Skip List</strong></td><td class="green">O(log n) expected</td><td class="green">O(log n) expected</td><td class="green">O(k) sequential</td><td>LevelDB, RocksDB, Cassandra</td></tr>
+  <tr><td><strong>Red-Black Tree</strong></td><td>O(log n)</td><td>O(log n)</td><td class="yellow">O(k + log n)</td><td>HBase, InnoDB (adaptive hash)</td></tr>
+  <tr><td><strong>AVL Tree</strong></td><td>O(log n)</td><td class="green">O(log n)</td><td class="yellow">O(k + log n)</td><td>Less common in DBs</td></tr>
+  <tr><td><strong>Cartesian Tree</strong></td><td class="green">O(1) amortized</td><td>O(log n)</td><td class="red">Poor</td><td>Niche / experimental</td></tr>
+</table>
+
+<h3>Why Skip Lists Dominate</h3>
+<div class="callout green">
+  <strong>Skip lists are the most popular choice</strong> (used by LevelDB, RocksDB, Cassandra) because they offer the same asymptotic performance as balanced BSTs but are simpler to implement, faster in practice due to lower constant factors, and support concurrent operations more easily.
+</div>
+
+<div class="diagram">  Skip List Example — searching for key "d":
+
+  Level 3:  [a] ————————————————————————————————→ [h] ———→ NIL
+  Level 2:  [a] ——————→ [c] ————————————→ [g] ———→ [h] ———→ NIL
+  Level 1:  [a] ——→ [b] ——→ [c] ——→ [d] ——→ [g] ——→ [h] → NIL
+  Level 0:  [a] → [b] → [c] → [d] → [e] → [f] → [g] → [h] → NIL
+
+  Search path:  a → c → d (found in 3 steps)
+  Time: O(log n) expected, same as balanced BST
+
+  Advantages over red-black tree:
+  - Simpler implementation (no rotations, no rebalancing)
+  - Better cache locality (pointers go forward, not up/down)
+  - Easy concurrent insertion (lock individual nodes, not whole tree)
+  - Lower constant factor in practice</div>
+
+<h2>Memtable Operations</h2>
+<table>
+  <tr><th>Operation</th><th>How It Works</th><th>Complexity</th></tr>
+  <tr><td><strong>Put(key, value)</strong></td><td>Insert/update key-value in sorted structure. If key exists, overwrite (newer value wins).</td><td class="green">O(log n)</td></tr>
+  <tr><td><strong>Get(key)</strong></td><td>Binary search in sorted structure. Return value or "not found".</td><td class="green">O(log n)</td></tr>
+  <tr><td><strong>Delete(key)</strong></td><td>Insert a <a href="tombstones.html">tombstone</a> (special delete marker). Actual removal happens during compaction.</td><td class="green">O(log n)</td></tr>
+  <tr><td><strong>Flush</strong></td><td>Write entire memtable to disk as sorted SSTable. Sequential write — very fast.</td><td class="green">O(n)</td></tr>
+</table>
+
+<h2>Active vs Immutable Memtable</h2>
+<div class="diagram">  Dual Memtable Pattern (used by RocksDB, Cassandra)
+
+  ┌────────────────────────────┐     ┌────────────────────────────┐
+  │    ACTIVE Memtable         │     │   IMMUTABLE Memtable       │
+  │    (receiving writes)      │     │   (being flushed to disk)   │
+  │                            │     │                            │
+  │    Accepts: PUT, GET, DEL  │     │    Read-only                │
+  │    Size: growing...        │     │    Sorted, complete         │
+  └────────────────────────────┘     └────────────┬───────────────┘
+                                                    │
+                                                    ▼
+                                      ┌────────────────────────────┐
+                                      │    SSTable on disk         │
+                                      │    (immutable file)       │
+                                      └────────────────────────────┘
+
+  Flow:
+  1. Writes go to active memtable
+  2. When active reaches size limit:
+     a. Active becomes immutable
+     b. New empty active memtable is created
+     c. Background thread flushes immutable memtable to SSTable
+  3. Reads check: active memtable → immutable memtable → SSTables
+
+  Why dual? — No write blocking during flush. Clients continue
+  writing to the new active memtable while the old one flushes.</div>
+
+<h2>Memory Sizing</h2>
+<pre>Typical memtable sizes:
+
+  RocksDB:     64 MB - 256 MB    (write_buffer_size)
+  Cassandra:   determined by memtable_allocation_type
+               - on_heap:    limited by JVM heap
+               - off_heap:   256 MB - 1 GB (recommended for large datasets)
+  LevelDB:     4 MB (hardcoded, small)
+
+  Tuning considerations:
+  - Larger memtable  → fewer flushes → fewer SSTables → less compaction
+  - Larger memtable  → more memory used → higher recovery time (WAL replay)
+  - Smaller memtable → more flushes → more L0 SSTables → read amplification
+
+  Production recommendation: 128 MB is a good starting point.
+  Adjust based on write throughput vs memory budget.</pre>
+
+<div class="callout yellow">
+  <strong>Crash recovery:</strong> If the process crashes, the memtable is lost (it's in-memory). The WAL is replayed to reconstruct the memtable state. This is why the WAL exists — it provides durability for data that hasn't been flushed to an SSTable yet.
+</div>
+
+<h2>Common Interview Questions</h2>
+<ul>
+  <li><strong>"What is a memtable and why is it needed?"</strong><br>A memtable is the in-memory write buffer in an LSM tree. It absorbs writes at memory speed, keeping them sorted so they can be efficiently flushed to disk as sorted SSTables. Without it, every write would need to go directly to disk, killing throughput.</li>
+  <li><strong>"Why use a skip list instead of a red-black tree for the memtable?"</strong><br>Skip lists have the same O(log n) complexity but are simpler to implement, have better cache locality (forward pointers), and support concurrent operations more easily (lock individual nodes during insert). In practice, skip lists are often faster due to lower constant factors.</li>
+  <li><strong>"What happens when the memtable fills up?"</strong><br>The active memtable becomes immutable (read-only). A new empty active memtable is created to continue accepting writes. A background thread writes the immutable memtable to disk as a sorted SSTable (sequential write). Once flush completes, the immutable memtable is discarded. During this time, reads must check both the active memtable and the immutable memtable before checking SSTables.</li>
+  <li><strong>"How does crash recovery work with memtables?"</strong><br>The WAL (Write-Ahead Log) records all writes in order on disk. On crash, the memtable is empty (it's in-memory). The WAL is replayed: each write operation is re-applied to rebuild the memtable state. This is why writes are first appended to the WAL before modifying the memtable.</li>
+</ul>
+
+<h2>Reading Sources</h2>
+<div class="source">
+  <div class="source-label">Must Read</div>
+  <ol>
+    <li><strong>"Designing Data-Intensive Applications" — Chapter 3</strong> (Kleppmann)</li>
+    <li><strong>LevelDB source code</strong> — db/memtable.cc and db/skiplist.h</li>
+    <li><strong>RocksDB Wiki: MemTable</strong> — rocksdb.org/wiki/MemTable</li>
+  </ol>
+</div>
+
+<div class="nav">
+  <a href="lsm-tree.html">&larr; lsm-tree.html</a>
+  <a href="sstable.html">Next: sstable.html &rarr;</a>
+</div>
+
+</body>
+</html>
