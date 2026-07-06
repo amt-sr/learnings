@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Handover Procedures — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#4">4 Telecom &amp; 5G/4G Networking</a> / 4G LTE Concepts / 4.3.4</div>
+<div class="meta"><span class="tag medium">Medium</span></div>
+<h1>Handover Procedures</h1>
+
+<p>Handover is the process of transferring a UE's connection from one cell to another. In LTE, handover is network-controlled (the eNodeB decides based on UE measurement reports). There are intra-LTE handovers (same RAN) and inter-RAT handovers (different radio technology, e.g., LTE to 3G).</p>
+
+<h2>Handover Types</h2>
+
+<table>
+  <tr><th>Type</th><th>Scope</th><th>Interface Used</th><th>Latency</th></tr>
+  <tr><td>Intra-eNodeB</td><td>Same eNodeB, different cell/sector</td><td>Internal</td><td>&lt; 50 ms</td></tr>
+  <tr><td>Intra-LTE X2</td><td>Different eNodeBs</td><td>X2 interface</td><td>50-100 ms</td></tr>
+  <tr><td>Intra-LTE S1</td><td>Different eNodeBs, no X2</td><td>S1 interface</td><td>100-200 ms</td></tr>
+  <tr><td>Inter-RAT (LTE->3G)</td><td>CDMA/UTRAN to LTE</td><td>S1 + legacy interfaces</td><td>200-500 ms</td></tr>
+</table>
+
+<h2>X2-Based Handover (LTE)</h2>
+
+<pre>
+  UE          Source eNodeB         Target eNodeB         MME
+  |                |                      |                |
+  | Measurement    |                      |                |
+  | Report ------->|                      |                |
+  |                |                      |                |
+  |                |-- Handover Req ----->|                |
+  |                |   (X2AP)             |                |
+  |                |                      |                |
+  |                |&lt;- Handover Ack ------|                |
+  |                |   (X2AP + target)    |                |
+  |                |                      |                |
+  |&lt; RRC Reconfig |                      |                |
+  |   (HO cmd) ----|                      |                |
+  |                |                      |                |
+  | RACH + RRC     |                      |                |
+  | Reconfig Cmpl  |                      |                |
+  | -------------&gt;|                      |                |
+  |                | SN Status Transfer --&gt;|                |
+  |                |   (PDCP SN info)      |                |
+  |                |                      |                |
+  |   Data        | Data Forwarding ----&gt;|                |
+  |   continues --&gt;| (GTP-U to target)    |                |
+  |                |                      |                |
+  |                |&lt;- UE Context Rel ----|                |
+  |                |   (after UE confirmed)|                |
+  |                |                      |                |
+  |                | Path Switch ----&gt;    |                |
+  |                | (S1-U to MME)        |                |
+</pre>
+
+<h2>Handover Phases</h2>
+
+<h3>1. Preparation Phase</h3>
+<ul>
+  <li>UE sends Measurement Report (RSRP/RSRQ of neighbor cells)</li>
+  <li>Source eNodeB evaluates A3 event (neighbor becomes better than serving + offset)</li>
+  <li>Source sends X2 Handover Request to target eNodeB with UE context</li>
+  <li>Target reserves resources, replies with Handover Ack (target RRC config)</li>
+</ul>
+
+<h3>2. Execution Phase</h3>
+<ul>
+  <li>Source sends RRC Connection Reconfiguration with mobility control info</li>
+  <li>UE synchronizes to target cell via RACH</li>
+  <li>UE sends RRC Reconfiguration Complete to target</li>
+  <li>Source forwards buffered PDCP SDUs to target via X2-U</li>
+</ul>
+
+<h3>3. Completion Phase</h3>
+<ul>
+  <li>Target sends Path Switch Request via S1 to MME</li>
+  <li>MME updates S1-U path (S-GW switches DL tunnel to target)</li>
+  <li>Source releases UE context after timeout or UE Context Release</li>
+</ul>
+
+<div class="callout warning">
+  <p><strong>Packet loss:</strong> During X2 handover, some packets may be lost during the gap between the UE disconnecting from source and connecting to target. PDCP handles duplicate detection and reordering. For seamless handover, the中断时间 target must be &lt; 50ms for voice (VoLTE) to maintain quality.</p>
+</div>
+
+<h2>5G Handover Differences</h2>
+
+<table>
+  <tr><th>Aspect</th><th>LTE</th><th>5G NR</th></tr>
+  <tr><td>Interface</td><td>X2 (eNB to eNB)</td><td>Xn (gNB to gNB) or NG (gNB to AMF)</td></tr>
+  <tr><td>Condition</td><td>A3 event only</td><td>A3 + conditional handover (CHO)</td></tr>
+  <tr><td>CHO</td><td>Not supported</td><td>UE pre-configures multiple targets</td></tr>
+  <tr><td>State at HO</td><td>RRC_CONNECTED -> RRC_CONNECTED</td><td>RRC_CONNECTED, or INACTIVE resume</td></tr>
+  <tr><td>DAPS</td><td>Not supported</td><td>Dual Active Protocol Stack (seamless)</td></tr>
+  <tr><td>Data forwarding</td><td>X2-U GTP tunnels</td><td>Xn-U GTP tunnels + early forwarding</td></tr>
+</table>
+
+<div class="callout green">
+  <p><strong>Conditional Handover (CHO):</strong> In 5G, the source gNB can pre-configure the UE with multiple candidate target cells. The UE executes handover autonomously when conditions are met, reducing preparation latency to near-zero for the actual switch.</p>
+</div>
+
+<h2>C++ Handover State Machine</h2>
+
+<pre>
+#include &lt;cstdint&gt;
+
+enum class HoState : uint8_t {
+    IDLE,
+    PREPARATION,
+    EXECUTION,
+    COMPLETION,
+    CANCELLED
+};
+
+enum class HoType : uint8_t {
+    INTRA_ENB,       // Same eNodeB
+    X2_BASED,        // X2 inter-eNodeB
+    S1_BASED,        // S1 inter-eNodeB (no X2)
+    INTER_RAT        // LTE to/from 3G/2G
+};
+
+struct HandoverContext {
+    uint32_t ue_id;
+    uint32_t source_cell_id;
+    uint32_t target_cell_id;
+    HoType   ho_type;
+    HoState  state;
+    uint32_t ho_id;
+    bool     rrc_sent;
+    bool     data_forwarding_active;
+};
+
+// Handover manager at source eNodeB
+class HandoverManager {
+public:
+    // Initiate handover based on measurement report
+    void initiateHandover(uint32_t ue_id,
+                           uint32_t target_cell_id) {
+        auto&amp; ctx = ho_contexts_[ue_id];
+        ctx.ue_id = ue_id;
+        ctx.target_cell_id = target_cell_id;
+        ctx.state = HoState::PREPARATION;
+
+        // Determine handover type
+        if (isSameEnb(ctx.source_cell_id, target_cell_id)) {
+            ctx.ho_type = HoType::INTRA_ENB;
+        } else if (hasX2Interface(target_cell_id)) {
+            ctx.ho_type = HoType::X2_BASED;
+        } else {
+            ctx.ho_type = HoType::S1_BASED;
+        }
+
+        // Send handover request to target
+        if (ctx.ho_type == HoType::X2_BASED) {
+            sendX2HandoverRequest(ctx);
+        } else if (ctx.ho_type == HoType::S1_BASED) {
+            sendS1HandoverRequest(ctx);
+        }
+    }
+
+    void onHandoverAck(uint32_t ue_id) {
+        auto it = ho_contexts_.find(ue_id);
+        if (it == ho_contexts_.end()) return;
+
+        auto&amp; ctx = it->second;
+        ctx.state = HoState::EXECUTION;
+
+        // Forward buffered data to target
+        startDataForwarding(ctx);
+
+        // Send RRC HO command to UE
+        sendRrcHandoverCommand(ue_id);
+        ctx.rrc_sent = true;
+    }
+
+    void onRrcHandoverComplete(uint32_t ue_id) {
+        auto it = ho_contexts_.find(ue_id);
+        if (it == ho_contexts_.end()) return;
+        it->second.state = HoState::COMPLETION;
+    }
+
+    void cancelHandover(uint32_t ue_id) {
+        auto it = ho_contexts_.find(ue_id);
+        if (it == ho_contexts_.end()) return;
+        it->second.state = HoState::CANCELLED;
+    }
+
+private:
+    std::unordered_map&lt;uint32_t, HandoverContext&gt; ho_contexts_;
+
+    bool isSameEnb(uint32_t src, uint32_t tgt) { return false; }
+    bool hasX2Interface(uint32_t cell_id) { return true; }
+    void sendX2HandoverRequest(HandoverContext&amp;) {}
+    void sendS1HandoverRequest(HandoverContext&amp;) {}
+    void startDataForwarding(HandoverContext&amp;) {}
+    void sendRrcHandoverCommand(uint32_t) {}
+};
+</pre>
+
+<h2>Cross-References</h2>
+
+<ul>
+  <li><a href="x2-ng-x-interface.html">X2/NG/Xn Interface</a> -- Interface protocols for handover signaling.</li>
+  <li><a href="rrc-layer.html">RRC Layer</a> -- RRC reconfiguration carries HO command.</li>
+  <li><a href="mac-layer.html">MAC Layer</a> -- RACH procedure at target cell.</li>
+</ul>
+
+<div class="nav"><a href="lte-protocol-stack.html">&larr; LTE Protocol Stack</a><a href="real-time-processing.html">Real-Time Processing &rarr;</a></div>
+</body>
+</html>

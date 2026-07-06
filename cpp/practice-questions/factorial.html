@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Factorial — C++ Practice</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.easy { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  .question { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; }
+  .question h3 { color: #f0f6fc; margin-top: 0; }
+  .solution-toggle { cursor: pointer; user-select: none; }
+  .solution-toggle h3 { color: #3fb950; display: inline; }
+  .solution-content { display: none; margin-top: 1rem; }
+  .solution-content.visible { display: block; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+  .topics-covered { margin-bottom: 1rem; font-size: 0.85rem; color: #8b949e; }
+  .topics-covered a { color: #8b949e; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#5">5 Practice</a> / Easy Questions</div>
+<div class="meta"><span class="tag easy">Easy</span></div>
+<h1>Calculate Factorial</h1>
+
+<div class="topics-covered">
+  <strong>Topics Covered:</strong>
+  <a href="../functions.html">Functions</a>,
+  <a href="../recursion.html">Recursion</a>,
+  <a href="../templates.html">Templates</a>
+</div>
+
+<div class="question">
+  <h3>Problem Statement</h3>
+  <p>Write functions to calculate the factorial of a non-negative integer <code>n</code>. Provide both iterative and recursive implementations.</p>
+  <p><strong>Definition:</strong> <code>n! = n * (n-1) * (n-2) * ... * 1</code>, with <code>0! = 1</code>.</p>
+  <p><strong>Examples:</strong></p>
+  <ul>
+    <li><code>5! = 120</code></li>
+    <li><code>0! = 1</code></li>
+    <li><code>10! = 3,628,800</code></li>
+    <li><code>20! = 2,432,902,008,176,640,000</code></li>
+  </ul>
+</div>
+
+<div class="callout warning">
+  <p><strong>Important Constraints:</strong></p>
+  <ul>
+    <li>Factorial grows extremely fast. <code>20!</code> is the largest factorial that fits in a 64-bit unsigned integer.</li>
+    <li>Handle invalid input: negative numbers.</li>
+    <li>Discuss the trade-offs between iterative and recursive approaches.</li>
+  </ul>
+</div>
+
+<h2>Iterative Solution</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution1')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution1">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;stdexcept&gt;
+#include &lt;string&gt;
+#include &lt;cstdint&gt;
+
+uint64_t factorialIterative(int n) {
+    if (n &lt; 0) {
+        throw std::invalid_argument("Factorial is not defined for negative numbers");
+    }
+
+    uint64_t result = 1;
+    for (int i = 2; i &lt;= n; ++i) {
+        result *= static_cast&lt;uint64_t&gt;(i);
+    }
+    return result;
+}
+
+int main() {
+    std::cout &lt;&lt; "0!  = " &lt;&lt; factorialIterative(0) &lt;&lt; "\n";   // 1
+    std::cout &lt;&lt; "1!  = " &lt;&lt; factorialIterative(1) &lt;&lt; "\n";   // 1
+    std::cout &lt;&lt; "5!  = " &lt;&lt; factorialIterative(5) &lt;&lt; "\n";   // 120
+    std::cout &lt;&lt; "10! = " &lt;&lt; factorialIterative(10) &lt;&lt; "\n";  // 3628800
+    std::cout &lt;&lt; "20! = " &lt;&lt; factorialIterative(20) &lt;&lt; "\n";  // 2432902008176640000
+
+    try {
+        factorialIterative(-1);
+    } catch (const std::invalid_argument&amp; e) {
+        std::cout &lt;&lt; "Error: " &lt;&lt; e.what() &lt;&lt; "\n";
+    }
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li>We start with <code>result = 1</code> (since 0! = 1) and multiply from 2 to n.</li>
+      <li>We use <code>uint64_t</code> to maximize the range before overflow (supports up to 20!).</li>
+      <li>Negative input throws <code>std::invalid_argument</code>.</li>
+      <li>The loop starts at 2, not 1, because multiplying by 1 is a no-op (minor optimization).</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Recursive Solution</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution2')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution2">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;stdexcept&gt;
+#include &lt;cstdint&gt;
+
+uint64_t factorialRecursive(int n) {
+    if (n &lt; 0) {
+        throw std::invalid_argument("Factorial is not defined for negative numbers");
+    }
+    if (n &lt;= 1) {
+        return 1;  // Base case: 0! = 1! = 1
+    }
+    return static_cast&lt;uint64_t&gt;(n) * factorialRecursive(n - 1);
+}
+
+// Tail-recursive version (compiler may optimize to avoid stack growth)
+uint64_t factorialTailRecursive(int n, uint64_t accumulator = 1) {
+    if (n &lt; 0) {
+        throw std::invalid_argument("Factorial is not defined for negative numbers");
+    }
+    if (n &lt;= 1) {
+        return accumulator;  // Return accumulated result
+    }
+    return factorialTailRecursive(n - 1, n * accumulator);
+}
+
+int main() {
+    std::cout &lt;&lt; "5! (recursive) = " &lt;&lt; factorialRecursive(5) &lt;&lt; "\n";  // 120
+    std::cout &lt;&lt; "5! (tail-rec)  = " &lt;&lt; factorialTailRecursive(5) &lt;&lt; "\n";  // 120
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li>The recursive version directly mirrors the mathematical definition: <code>n! = n * (n-1)!</code>.</li>
+      <li>Base case: <code>n &lt;= 1</code> returns 1.</li>
+      <li>The <strong>tail-recursive</strong> version carries an accumulator so that the recursive call is the very last operation. Compilers (like GCC/Clang with <code>-O2</code>) can optimize tail recursion into a loop, eliminating stack growth.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Compile-Time Factorial (Bonus)</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution3')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution3">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;cstdint&gt;
+
+// Compile-time using constexpr (C++11)
+constexpr uint64_t factorialConstexpr(int n) {
+    return (n &lt;= 1) ? 1 : static_cast&lt;uint64_t&gt;(n) * factorialConstexpr(n - 1);
+}
+
+// Compile-time using template metaprogramming (C++98 compatible)
+template&lt;int N&gt;
+struct Factorial {
+    static constexpr uint64_t value = static_cast&lt;uint64_t&gt;(N) * Factorial&lt;N - 1&gt;::value;
+};
+
+template&lt;&gt;
+struct Factorial&lt;0&gt; {
+    static constexpr uint64_t value = 1;
+};
+
+int main() {
+    // Evaluated at compile time
+    constexpr auto f5 = factorialConstexpr(5);
+    constexpr auto f10 = Factorial&lt;10&gt;::value;
+
+    static_assert(factorialConstexpr(5) == 120, "5! should be 120");
+    static_assert(Factorial&lt;7&gt;::value == 5040, "7! should be 5040");
+
+    std::cout &lt;&lt; "5!  (constexpr) = " &lt;&lt; f5 &lt;&lt; "\n";   // 120
+    std::cout &lt;&lt; "10! (template)  = " &lt;&lt; f10 &lt;&lt; "\n";   // 3628800
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><code>constexpr</code> functions can be evaluated at compile time if all arguments are compile-time constants.</li>
+      <li>Template metaprogramming uses recursive template instantiation. The specialization <code>Factorial&lt;0&gt;</code> provides the base case.</li>
+      <li><code>static_assert</code> verifies the result at compile time &mdash; if the factorial is wrong, the program will not compile.</li>
+      <li>In C++14 and later, <code>constexpr</code> functions can have loops, making them as expressive as runtime code.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout green">
+  <p><strong>Complexity Analysis:</strong></p>
+  <table>
+    <tr><th>Approach</th><th>Time</th><th>Space</th><th>Notes</th></tr>
+    <tr><td>Iterative</td><td>O(n)</td><td>O(1)</td><td>Best for runtime use</td></tr>
+    <tr><td>Recursive</td><td>O(n)</td><td>O(n)</td><td>Stack depth = n</td></tr>
+    <tr><td>Tail Recursive</td><td>O(n)</td><td>O(1)*</td><td>*After compiler optimization</td></tr>
+    <tr><td>Compile-time</td><td>O(n)</td><td>O(1)</td><td>Zero runtime cost</td></tr>
+  </table>
+</div>
+
+<h2>Follow-up Questions</h2>
+
+<div class="question">
+  <h3>Variations to Try</h3>
+  <ol>
+    <li><strong>Big integer factorial:</strong> Use <code>std::vector&lt;uint32_t&gt;</code> or a string-based representation to compute factorials beyond 20! (e.g., 100!).</li>
+    <li><strong>Number of trailing zeros:</strong> Count the number of trailing zeros in n! without computing the factorial itself (hint: count factors of 5).</li>
+    <li><strong>Approximate factorial:</strong> Use Stirling's approximation: <code>n! ~ sqrt(2*pi*n) * (n/e)^n</code>.</li>
+    <li><strong>Factorial using <code>std::accumulate</code>:</strong> Show how to compute factorial using <code>std::accumulate</code> with a custom multiplier functor.</li>
+  </ol>
+</div>
+
+<div class="callout">
+  <p><strong>Key Takeaways:</strong></p>
+  <ul>
+    <li>Factorial is the simplest recursive problem &mdash; it demonstrates the pattern of a base case and recursive case.</li>
+    <li>The iterative version is preferred for runtime use: no stack overflow risk, lower overhead.</li>
+    <li>Compile-time computation with <code>constexpr</code> or template metaprogramming has zero runtime cost and catches errors at compile time.</li>
+    <li>Be aware of integer overflow limits: <code>uint64_t</code> handles up to 20!. For larger values, you need a big integer library.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="swap-numbers.html">&larr; Swap Numbers</a>
+  <a href="array-sum.html">Array Sum &rarr;</a>
+</div>
+<script>
+function toggleSolution(id) {
+  document.getElementById(id).classList.toggle('visible');
+}
+</script>
+</body>
+</html>

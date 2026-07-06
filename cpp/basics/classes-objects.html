@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Classes &amp; Objects — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; }
+  .breadcrumb a { color: #8b949e; }
+  .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; }
+  .callout.red { border-left-color: #f85149; }
+  .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; }
+  th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#1">1 Basics</a> / <a href="../index.html#1">1.2 Object-Oriented Programming</a> / 1.2.1 Classes &amp; Objects</div>
+<div class="meta"><span class="tag basic">BASIC</span></div>
+<h1>1.2.1 Classes &amp; Objects</h1>
+
+<p>A <strong>class</strong> is a user-defined type that bundles data (member variables) and behavior (member functions) into a single unit. An <strong>object</strong> is an instance of a class. Classes are the foundation of object-oriented programming in C++ and enable <a href="encapsulation-abstraction.html">encapsulation</a>, <a href="inheritance.html">inheritance</a>, and <a href="polymorphism.html">polymorphism</a>.</p>
+
+<h2>Class Definition Syntax</h2>
+
+<p>A class is defined using the <code>class</code> keyword followed by the class name and a body enclosed in braces. By default, all members of a <code>class</code> are <code>private</code>. A semicolon must follow the closing brace:</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+class Person {
+private:                  // only accessible within the class
+    std::string name;
+    int age;
+
+public:                   // accessible from outside the class
+    // Constructor (initializes the object)
+    Person(const std::string&amp; n, int a) : name(n), age(a) {}
+
+    // Member function (method)
+    void greet() const {
+        std::cout &lt;&lt; "Hi, I'm " &lt;&lt; name
+                  &lt;&lt; " and I'm " &lt;&lt; age &lt;&lt; " years old." &lt;&lt; std::endl;
+    }
+
+    // Getter
+    int get_age() const { return age; }
+
+    // Setter
+    void set_age(int a) {
+        if (a &gt;= 0) {
+            age = a;
+        }
+    }
+};  // <-- semicolon is required
+</pre>
+
+<h2>Access Specifiers</h2>
+
+<p>C++ provides three access specifiers to control visibility of class members:</p>
+
+<table>
+  <tr><th>Specifier</th><th>Access from class</th><th>Access from derived</th><th>Access from outside</th></tr>
+  <tr><td><code>public</code></td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+  <tr><td><code>protected</code></td><td>Yes</td><td>Yes</td><td>No</td></tr>
+  <tr><td><code>private</code></td><td>Yes</td><td>No</td><td>No</td></tr>
+</table>
+
+<div class="callout">
+  <p><strong>Default access:</strong> Members of a <code>class</code> are <code>private</code> by default. Members of a <code>struct</code> are <code>public</code> by default. In all other ways, <code>class</code> and <code>struct</code> are equivalent in C++.</p>
+</div>
+
+<h2>Creating Objects</h2>
+
+<p>Once a class is defined, you create objects (instances) of that class:</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+int main() {
+    // Create objects using the constructor
+    Person alice{"Alice", 30};
+    Person bob{"Bob", 25};
+
+    // Call member functions using the dot operator
+    alice.greet();   // Hi, I'm Alice and I'm 30 years old.
+    bob.greet();     // Hi, I'm Bob and I'm 25 years old.
+
+    // Use setters and getters
+    alice.set_age(31);
+    std::cout &lt;&lt; "Alice is now " &lt;&lt; alice.get_age() &lt;&lt; std::endl;
+
+    // Create a pointer to an object
+    Person* ptr = &amp;alice;
+    ptr-&gt;greet();  // use arrow operator with pointers
+
+    // Create a reference to an object
+    Person&amp; ref = bob;
+    ref.greet();   // use dot operator with references
+
+    return 0;
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Tip:</strong> Use the <code>.</code> (dot) operator to access members through objects and references. Use the <code>-&gt;</code> (arrow) operator to access members through pointers.</p>
+</div>
+
+<h2>Member Variables and Member Functions</h2>
+
+<p>Member variables (also called fields or attributes) hold the state of an object. Member functions (also called methods) define the behavior. Member functions defined inside the class body are implicitly <code>inline</code>:</p>
+
+<pre>
+class Rectangle {
+private:
+    double width;
+    double height;
+
+public:
+    Rectangle(double w, double h) : width(w), height(h) {}
+
+    // Defined inside the class (implicitly inline)
+    double area() const {
+        return width * height;
+    }
+
+    // Defined outside the class (needs Rectangle:: scope)
+    double perimeter() const;
+};
+
+// Member function defined outside the class
+double Rectangle::perimeter() const {
+    return 2.0 * (width + height);
+}
+</pre>
+
+<h2>The this Pointer</h2>
+
+<p>Inside every non-static member function, the keyword <code>this</code> is an implicit pointer to the object on which the function was called. It is used to disambiguate between member variables and parameters with the same name:</p>
+
+<pre>
+class Account {
+private:
+    double balance;
+
+public:
+    // Without 'this': parameter name must differ from member
+    Account(double initial_balance) : balance(initial_balance) {}
+
+    // With 'this': parameter can have the same name
+    void deposit(double balance) {
+        this-&gt;balance += balance;
+        // 'this-&gt;balance' = member variable
+        // 'balance'       = parameter
+    }
+
+    void display() const {
+        std::cout &lt;&lt; "Balance: $" &lt;&lt; this-&gt;balance &lt;&lt; std::endl;
+    }
+
+    // Returning *this enables method chaining
+    Account&amp; set_balance(double b) {
+        balance = b;
+        return *this;  // return reference to the current object
+    }
+};
+
+int main() {
+    Account acc{1000.0};
+    acc.deposit(500.0);
+    acc.display();  // Balance: $1500
+
+    // Method chaining
+    acc.set_balance(2000.0).deposit(300.0);
+    acc.display();  // Balance: $2300
+
+    return 0;
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>Warning:</strong> In a <code>const</code> member function, <code>this</code> has type <code>const ClassName*</code> &mdash; you cannot modify members through it. This enforces the promise that a <code>const</code> method does not change the object's state.</p>
+</div>
+
+<h2>Complete Example</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;cmath&gt;
+
+class Circle {
+private:
+    double radius;
+
+public:
+    Circle(double r) : radius(r) {
+        if (radius &lt;= 0) radius = 1.0;
+    }
+
+    double area() const { return 3.14159265 * radius * radius; }
+    double circumference() const { return 2.0 * 3.14159265 * radius; }
+
+    void scale(double factor) {
+        if (factor &gt; 0) radius *= factor;
+    }
+
+    // Accessor
+    double get_radius() const { return radius; }
+
+    // Mutator with validation
+    void set_radius(double r) {
+        if (r &gt; 0) radius = r;
+    }
+
+    void print() const {
+        std::cout &lt;&lt; "Circle(r=" &lt;&lt; radius
+                  &lt;&lt; ", area=" &lt;&lt; area()
+                  &lt;&lt; ", circ=" &lt;&lt; circumference()
+                  &lt;&lt; ")" &lt;&lt; std::endl;
+    }
+};
+
+int main() {
+    Circle c{5.0};
+    c.print();        // Circle(r=5, area=78.5398, circ=31.4159)
+
+    c.scale(2.0);
+    c.print();        // Circle(r=10, area=314.159, circ=62.8319)
+
+    return 0;
+}
+</pre>
+
+<div class="callout">
+  <p><strong>Next Steps:</strong> Learn how objects are initialized and destroyed in <a href="constructors-destructors.html">Constructors &amp; Destructors</a>, which covers default, parameterized, and copy constructors as well as destructors.</p>
+</div>
+
+<div class="nav">
+  <a href="references.html">&larr; References</a>
+  <a href="constructors-destructors.html">Constructors &amp; Destructors &rarr;</a>
+</div>
+</body>
+</html>

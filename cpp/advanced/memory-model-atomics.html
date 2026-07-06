@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memory Model &amp; Atomics — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / Memory Model &amp; Atomics</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>Memory Model &amp; Atomics</h1>
+
+<p>The C++ memory model defines how threads interact through shared memory. It specifies the guarantees the compiler and hardware must provide about the visibility and ordering of memory operations. <code>std::atomic</code> is the language primitive that enables lock-free communication between threads without data races.</p>
+
+<div class="callout warning">
+<p><strong>Critical distinction:</strong> A <em>data race</em> (two threads accessing the same non-atomic variable, at least one writing, without synchronization) is <strong>undefined behavior</strong>. An <em>race condition</em> (logic bug from unexpected interleaving) is a logic error but not UB. Atomics prevent data races; they do not automatically prevent race conditions. See <a href="undefined-behavior.html">Undefined Behavior</a> for more details.</p>
+</div>
+
+<h2>std::atomic Basics</h2>
+
+<pre>
+#include &lt;atomic&gt;
+#include &lt;thread&gt;
+#include &lt;iostream&gt;
+
+std::atomic&lt;int&gt; counter{0};
+
+void increment(int times) {
+    for (int i = 0; i &lt; times; ++i) {
+        counter.fetch_add(1, std::memory_order_relaxed);
+        // equivalent: counter++; (uses memory_order_seq_cst by default)
+    }
+}
+
+int main() {
+    constexpr int N = 1'000'000;
+    std::thread t1(increment, N);
+    std::thread t2(increment, N);
+    t1.join();
+    t2.join();
+    std::cout &lt;&lt; "Counter = " &lt;&lt; counter.load() &lt;&lt; "\n";
+    // Always prints 2000000 — no data race
+}
+</pre>
+
+<h2>Memory Orders</h2>
+
+<p>Memory orders control the synchronization guarantees between threads. Each level provides stronger guarantees at the cost of potentially more expensive instructions:</p>
+
+<table>
+<tr><th>Memory Order</th><th>Guarantee</th><th>Cost</th><th>Use Case</th></tr>
+<tr><td><code>memory_order_relaxed</code></td><td>No ordering — only atomicity</td><td>Cheapest</td><td>Counters, statistics</td></tr>
+<tr><td><code>memory_order_acquire</code></td><td>Prevents subsequent reads/writes from reordering before this load</td><td>Moderate</td><td>Reading shared state</td></tr>
+<tr><td><code>memory_order_release</code></td><td>Prevents prior reads/writes from reordering after this store</td><td>Moderate</td><td>Publishing shared state</td></tr>
+<tr><td><code>memory_order_acq_rel</code></td><td>Both acquire and release semantics</td><td>Expensive</td><td>Read-modify-write ops</td></tr>
+<tr><td><code>memory_order_seq_cst</code></td><td>Total order across all threads (default)</td><td>Most expensive</td><td>General purpose</td></tr>
+</table>
+
+<h3>Acquire-Release Pattern</h3>
+
+<pre>
+#include &lt;atomic&gt;
+#include &lt;thread&gt;
+#include &lt;iostream&gt;
+#include &lt;cassert&gt;
+
+std::atomic&lt;bool&gt; ready{false};
+int payload = 0;
+
+void producer() {
+    payload = 42;                          // (1) ordinary write
+    ready.store(true,                      // (2) release store
+                 std::memory_order_release);
+    // (1) is guaranteed to be visible before (2) to any thread
+    // that synchronizes via this release store
+}
+
+void consumer() {
+    while (!ready.load(std::memory_order_acquire)) {
+        // spin until ready
+    }
+    // acquire load synchronizes with release store
+    // guaranteeing payload == 42 is visible here
+    assert(payload == 42);
+    std::cout &lt;&lt; "Payload: " &lt;&lt; payload &lt;&lt; "\n";
+}
+
+int main() {
+    std::thread t1(producer);
+    std::thread t2(consumer);
+    t1.join();
+    t2.join();
+}
+</pre>
+
+<h3>Relaxed Ordering — When It Is Safe</h3>
+
+<pre>
+#include &lt;atomic&gt;
+#include &lt;thread&gt;
+#include &lt;vector&gt;
+#include &lt;iostream&gt;
+
+// Relaxed is fine for independent counters — no ordering needed
+std::atomic&lt;std::uint64_t&gt; packets_received{0};
+std::atomic&lt;std::uint64_t&gt; packets_sent{0};
+
+void process_packets(int id) {
+    for (int i = 0; i &lt; 1000; ++i) {
+        packets_received.fetch_add(1, std::memory_order_relaxed);
+        // ... do work ...
+        packets_sent.fetch_add(1, std::memory_order_relaxed);
+    }
+}
+
+int main() {
+    std::vector&lt;std::thread&gt; threads;
+    for (int i = 0; i &lt; 8; ++i) {
+        threads.emplace_back(process_packets, i);
+    }
+    for (auto&amp; t : threads) t.join();
+    std::cout &lt;&lt; "Sent: " &lt;&lt; packets_sent.load() &lt;&lt; "\n";
+    std::cout &lt;&lt; "Received: " &lt;&lt; packets_received.load() &lt;&lt; "\n";
+}
+</pre>
+
+<div class="callout red">
+<p><strong>Warning:</strong> Never use relaxed ordering when one thread's read of a variable depends on another thread's write of a <em>different</em> variable. The relaxed thread may see the variables updated in the wrong order.</p>
+</div>
+
+<h2>Atomic Types and Operations</h2>
+
+<table>
+<tr><th>Operation</th><th>Method</th><th>Description</th></tr>
+<tr><td>Load</td><td><code>.load(order)</code></td><td>Read the current value</td></tr>
+<tr><td>Store</td><td><code>.store(val, order)</code></td><td>Write a new value</td></tr>
+<tr><td>Exchange</td><td><code>.exchange(val, order)</code></td><td>Atomically replace and return old</td></tr>
+<tr><td>CAS</td><td><code>.compare_exchange_weak/strong(...)</code></td><td>Conditional atomic update</td></tr>
+<tr><td>Fetch</td><td><code>.fetch_add/sub/and/or/xor(val, order)</code></td><td>Atomic read-modify-write</td></tr>
+<tr><td>Notify</td><td><code>.notify_one/all()</code></td><td>Wake threads waiting on this atomic (C++20)</td></tr>
+<tr><td>Wait</td><td><code>.wait(old_val, order)</code></td><td>Block until value changes (C++20)</td></tr>
+</table>
+
+<h2>C++20 Atomic Wait/Notify</h2>
+
+<pre>
+#include &lt;atomic&gt;
+#include &lt;thread&gt;
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+
+std::atomic&lt;int&gt; signal{0};
+
+void waiter(int id) {
+    int expected = 0;
+    signal.wait(expected, std::memory_order_acquire);
+    std::cout &lt;&lt; "Thread " &lt;&lt; id &lt;&lt; " woke up! Signal = "
+              &lt;&lt; signal.load() &lt;&lt; "\n";
+}
+
+void notifier() {
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    signal.store(1, std::memory_order_release);
+    signal.notify_all();  // wake all waiting threads
+}
+
+int main() {
+    std::vector&lt;std::thread&gt; threads;
+    for (int i = 0; i &lt; 4; ++i) {
+        threads.emplace_back(waiter, i);
+    }
+    threads.emplace_back(notifier);
+    for (auto&amp; t : threads) t.join();
+}
+</pre>
+
+<h2>Telecom Relevance</h2>
+
+<p>In telecom software, atomics are used for lock-free statistics (packet counters, throughput meters), state flags (connection status, thread lifecycle), and notification between threads in a pipeline architecture. A 5G base station processes millions of packets per second — using the wrong memory order can cause subtle data races that only manifest under load on specific hardware architectures.</p>
+
+<div class="callout green">
+<p><strong>Rule of thumb:</strong> Start with <code>seq_cst</code> (the default). Only optimize to relaxed or acquire/release after profiling shows the atomic operations are a bottleneck and you can prove the weaker ordering is correct for your specific access pattern.</p>
+</div>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="lock-free-programming.html">Lock-Free Programming</a> (CAS-based algorithms), <a href="producer-consumer-pattern.html">Producer-Consumer Pattern</a> (thread synchronization), <a href="cache-oriented-programming.html">Cache-Oriented Programming</a> (hardware memory hierarchy), <a href="undefined-behavior.html">Undefined Behavior</a> (data races).</p>
+</div>
+
+<div class="nav"><a href="modules.html">&larr; Modules</a><a href="lock-free-programming.html">Lock-Free Programming &rarr;</a></div>
+</body>
+</html>

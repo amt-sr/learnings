@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memory Leak Detection — C++ Practice</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.easy { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  .question { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; }
+  .question h3 { color: #f0f6fc; margin-top: 0; }
+  .solution-toggle { cursor: pointer; user-select: none; }
+  .solution-toggle h3 { color: #3fb950; display: inline; }
+  .solution-content { display: none; margin-top: 1rem; }
+  .solution-content.visible { display: block; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+  .topics-covered { margin-bottom: 1rem; font-size: 0.85rem; color: #8b949e; }
+  .topics-covered a { color: #8b949e; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#5">5 Practice</a> / Medium Questions</div>
+<div class="meta"><span class="tag medium">Medium</span></div>
+<h1>Find and Fix Memory Leaks</h1>
+
+<div class="topics-covered">
+  <strong>Topics Covered:</strong>
+  <a href="../memory-management.html">Memory Management</a>,
+  <a href="../smart-pointers.html">Smart Pointers</a>,
+  <a href="../raii.html">RAII</a>
+</div>
+
+<div class="question">
+  <h3>Problem Statement</h3>
+  <p>Below are several code snippets containing common memory leak patterns. For each snippet:</p>
+  <ol>
+    <li>Identify the leak.</li>
+    <li>Explain why it occurs.</li>
+    <li>Fix it using proper C++ techniques (smart pointers, RAII, etc.).</li>
+  </ol>
+  <p>Also demonstrate how to use <strong>Valgrind</strong> and <strong>AddressSanitizer</strong> to detect leaks at runtime.</p>
+</div>
+
+<h2>Leak 1: Exception in Constructor</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution1')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution1">
+    <pre>
+// LEAKY CODE:
+class Buffer {
+public:
+    Buffer(std::size_t size) : size_(size), data_(new int[size]) {
+        // If process() throws, data_ is never freed
+        process();
+    }
+    ~Buffer() { delete[] data_; }
+private:
+    void process() { throw std::runtime_error("Init failed"); }
+    std::size_t size_;
+    int* data_;
+};
+
+// FIXED CODE:
+class BufferFixed {
+public:
+    BufferFixed(std::size_t size)
+        : data_(std::make_unique&lt;int[]&gt;(size)), size_(size) {
+        // If process() throws, unique_ptr cleans up automatically
+        process();
+    }
+private:
+    void process() { throw std::runtime_error("Init failed"); }
+    std::unique_ptr&lt;int[]&gt; data_;
+    std::size_t size_;
+};
+
+// Alternative: use std::vector instead of raw array
+class BufferVector {
+public:
+    BufferVector(std::size_t size) : data_(size), size_(size) {
+        process();  // vector cleans up on throw
+    }
+private:
+    void process() { throw std::runtime_error("Init failed"); }
+    std::vector&lt;int&gt; data_;
+    std::size_t size_;
+};
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li>In the leaky version, if <code>process()</code> throws, the destructor is <em>never called</em> (the object was never fully constructed). The raw <code>new int[size]</code> allocation is leaked.</li>
+      <li>With <code>unique_ptr</code> or <code>vector</code>, the member's destructor runs during stack unwinding, freeing the memory even if the constructor throws.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Leak 2: Copy Semantics with Raw Pointers</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution2')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution2">
+    <pre>
+// LEAKY CODE: Shallow copy causes double-free
+class StringHolder {
+public:
+    StringHolder(const char* s) {
+        data_ = new char[strlen(s) + 1];
+        strcpy(data_, s);
+    }
+    ~StringHolder() { delete[] data_; }  // DOUBLE FREE on copy!
+
+private:
+    char* data_;
+    // Default copy constructor copies the pointer, not the string
+};
+
+// FIXED: Rule of Three
+class StringHolderFixed {
+public:
+    StringHolderFixed(const char* s) {
+        std::size_t len = strlen(s) + 1;
+        data_ = new char[len];
+        strcpy(data_, s);
+    }
+
+    ~StringHolderFixed() { delete[] data_; }
+
+    // Custom copy constructor (deep copy)
+    StringHolderFixed(const StringHolderFixed&amp; other) {
+        data_ = new char[strlen(other.data_) + 1];
+        strcpy(data_, other.data_);
+    }
+
+    // Custom copy assignment
+    StringHolderFixed&amp; operator=(const StringHolderFixed&amp; other) {
+        if (this != &amp;other) {
+            char* newData = new char[strlen(other.data_) + 1];
+            strcpy(newData, other.data_);
+            delete[] data_;
+            data_ = newData;
+        }
+        return *this;
+    }
+private:
+    char* data_;
+};
+
+// BEST FIX: Use std::string (no manual memory management)
+class StringHolderBest {
+    std::string data_;
+public:
+    explicit StringHolderBest(const char* s) : data_(s) {}
+    // Copy, move, destruction all handled by std::string
+};
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li>The leaky version has a compiler-generated copy constructor that does a <strong>shallow copy</strong> (copies the pointer). When both copies are destroyed, <code>delete[]</code> is called twice on the same address.</li>
+      <li>The Rule of Three (or Rule of Five) states: if you define a destructor, copy constructor, or copy assignment, you should define all three.</li>
+      <li>The best fix is to use <code>std::string</code>, which handles all memory management internally.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Leak 3: Container of Raw Pointers</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution3')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution3">
+    <pre>
+// LEAKY CODE:
+void processData() {
+    std::vector&lt;Widget*&gt; widgets;
+    for (int i = 0; i &lt; 10; ++i) {
+        widgets.push_back(new Widget(i));
+    }
+    // If we return early or throw, all Widgets leak
+    // Even on normal exit, vector destructor doesn't delete pointers
+}
+
+// FIX 1: Manual cleanup (error-prone)
+void processDataManual() {
+    std::vector&lt;Widget*&gt; widgets;
+    try {
+        for (int i = 0; i &lt; 10; ++i) {
+            widgets.push_back(new Widget(i));
+        }
+        // ... use widgets ...
+    } catch (...) {
+        for (auto* w : widgets) delete w;
+        throw;
+    }
+    for (auto* w : widgets) delete w;
+}
+
+// FIX 2: unique_ptr (recommended)
+void processDataSmart() {
+    std::vector&lt;std::unique_ptr&lt;Widget&gt;&gt; widgets;
+    for (int i = 0; i &lt; 10; ++i) {
+        widgets.push_back(std::make_unique&lt;Widget&gt;(i));
+    }
+    // All Widgets freed when vector is destroyed,
+    // even on early return or exception
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li>A <code>vector&lt;T*&gt;</code> only frees the pointer values, not the objects they point to.</li>
+      <li>Manual cleanup is verbose and error-prone: you must remember to delete in every exit path (normal, exception, early return).</li>
+      <li><code>vector&lt;unique_ptr&lt;T&gt;&gt;</code> is self-cleaning: the vector destructor destroys each <code>unique_ptr</code>, which deletes the object.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Detection Tools</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution4')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution4">
+    <pre>
+// Compile with AddressSanitizer (GCC/Clang):
+// g++ -g -fsanitize=address -fno-omit-frame-pointer leak_demo.cpp
+
+#include &lt;cstdlib&gt;
+
+void createLeak() {
+    int* leak = new int[100];
+    leak[0] = 42;
+    // Missing: delete[] leak;
+}
+
+int main() {
+    createLeak();
+
+    // AddressSanitizer will report:
+    // ==12345== ERROR: LeakSanitizer: detected memory leaks
+    // ==12345== Direct leak of 400 byte(s) in 1 object(s)
+    // ==12345==     #0 0x... in operator new[]
+    // ==12345==     #1 0x... in createLeak()
+
+    return 0;
+}
+
+/*
+Valgrind usage (Linux/macOS):
+  Compile:  g++ -g leak_demo.cpp
+  Run:      valgrind --leak-check=full --show-leak-kinds=all ./a.out
+
+Valgrind output:
+  ==12345== HEAP SUMMARY:
+  ==12345==     in use at exit: 400 bytes in 1 blocks
+  ==12345==   total heap usage: 1 allocs, 0 frees, 400 bytes allocated
+  ==12345==
+  ==12345== 400 bytes in 1 blocks are definitely lost in loss record 1 of 1
+  ==12345==    at 0x...: operator new[](unsigned long)
+  ==12345==    by 0x...: createLeak()
+  ==12345==
+  ==12345== LEAK SUMMARY:
+  ==12345==    definitely lost: 400 bytes in 1 blocks
+  ==12345==    indirectly lost: 0 bytes in 0 blocks
+  ==12345==    possibly lost: 0 bytes in 0 blocks
+*/
+    </pre>
+  </div>
+</div>
+
+<div class="callout green">
+  <p><strong>Tool Comparison:</strong></p>
+  <table>
+    <tr><th>Tool</th><th>Platform</th><th>Pros</th><th>Cons</th></tr>
+    <tr><td>AddressSanitizer</td><td>All (GCC/Clang)</td><td>Fast (2x slowdown), detects use-after-free too</td><td>Runtime overhead</td></tr>
+    <tr><td>Valgrind</td><td>Linux/macOS</td><td>No recompilation needed, detailed reports</td><td>Slow (20-50x)</td></tr>
+    <tr><td>Visual Studio Debugger</td><td>Windows</td><td>Integrated, heap snapshots</td><td>Windows only</td></tr>
+    <tr><td>LeakSanitizer</td><td>All (GCC/Clang)</td><td>Detects leaks at exit, part of ASan</td><td>Only reports at exit</td></tr>
+  </table>
+</div>
+
+<h2>Follow-up Questions</h2>
+
+<div class="question">
+  <h3>Variations to Try</h3>
+  <ol>
+    <li><strong>Circular reference leak:</strong> Create two objects with <code>shared_ptr</code> pointing to each other. Show that they are never freed, then fix with <code>weak_ptr</code>.</li>
+    <li><strong>Virtual destructor leak:</strong> Show what happens when you <code>delete</code> a derived class object through a base class pointer that has no virtual destructor.</li>
+    <li><strong>Custom leak tracker:</strong> Implement a simple allocation tracker by overloading <code>operator new</code> and <code>operator delete</code> to log all allocations and detect mismatches.</li>
+    <li><strong>RAII wrapper:</strong> Create a generic <code>ScopeGuard</code> class that executes a cleanup function when it goes out of scope.</li>
+  </ol>
+</div>
+
+<div class="callout">
+  <p><strong>Key Takeaways:</strong></p>
+  <ul>
+    <li>The golden rule: <strong>every <code>new</code> must have a matching <code>delete</code></strong>. Better yet, avoid <code>new</code>/<code>delete</code> entirely.</li>
+    <li>Use <code>std::unique_ptr</code>, <code>std::shared_ptr</code>, <code>std::vector</code>, and <code>std::string</code> for automatic memory management.</li>
+    <li>The Rule of Five (or Rule of Zero) prevents leaks from copy/move semantics.</li>
+    <li>Always run your code through AddressSanitizer or Valgrind during testing.</li>
+    <li>Exceptions are the most common trigger for leaks: ensure RAII cleans up during stack unwinding.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="observer-pattern.html">&larr; Observer Pattern</a>
+  <a href="custom-allocator.html">Custom Allocator &rarr;</a>
+</div>
+<script>
+function toggleSolution(id) {
+  document.getElementById(id).classList.toggle('visible');
+}
+</script>
+</body>
+</html>

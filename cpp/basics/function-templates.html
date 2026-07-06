@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Function Templates — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; }
+  .breadcrumb a { color: #8b949e; }
+  .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; }
+  .callout.red { border-left-color: #f85149; }
+  .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; }
+  th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#1">1 Basics</a> / 1.4.1 Function Templates</div>
+<div class="meta"><span class="tag basic">BASIC</span></div>
+<h1>1.4.1 Function Templates</h1>
+
+<p>Function templates allow you to write a single function definition that works with multiple data types. Instead of writing separate <code>max(int, int)</code>, <code>max(double, double)</code>, and <code>max(string, string)</code>, you write one <code>max(T, T)</code> template and the compiler generates the concrete versions for you.</p>
+
+<h2>Template Syntax</h2>
+
+<p>A function template begins with the <code>template</code> keyword followed by a type parameter list in angle brackets. The type parameter (commonly named <code>T</code>) acts as a placeholder for any type.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+// Basic function template
+template &lt;typename T&gt;
+T max_val(T a, T b) {
+    return (a &gt; b) ? a : b;
+}
+
+int main() {
+    // Compiler generates: max_val&lt;int&gt;(int, int)
+    std::cout &lt;&lt; max_val(3, 7) &lt;&lt; std::endl;         // 7
+
+    // Compiler generates: max_val&lt;double&gt;(double, double)
+    std::cout &lt;&lt; max_val(3.14, 2.71) &lt;&lt; std::endl;   // 3.14
+
+    // Compiler generates: max_val&lt;std::string&gt;(string, string)
+    std::cout &lt;&lt; max_val(std::string{"apple"},
+                          std::string{"banana"}) &lt;&lt; std::endl;  // banana
+
+    return 0;
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Tip:</strong> Both <code>typename</code> and <code>class</code> are interchangeable in template parameter declarations. <code>template&lt;typename T&gt;</code> and <code>template&lt;class T&gt;</code> mean the same thing. Modern C++ style prefers <code>typename</code> as it is more descriptive.</p>
+</div>
+
+<h2>Multiple Type Parameters</h2>
+
+<p>Templates can have multiple type parameters. Each type is independent, and you can use them in any combination.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+// Two independent type parameters
+template &lt;typename T, typename U&gt;
+void print_pair(T first, U second) {
+    std::cout &lt;&lt; "(" &lt;&lt; first &lt;&lt; ", " &lt;&lt; second &lt;&lt; ")" &lt;&lt; std::endl;
+}
+
+// Template with a return type that differs from parameters
+template &lt;typename T, typename U&gt;
+auto add(T a, U b) -&gt; decltype(a + b) {
+    return a + b;
+}
+
+int main() {
+    print_pair(42, 3.14);              // (42, 3.14)  int + double
+    print_pair("hello", 100);          // (hello, 100) const char* + int
+    print_pair(3.14, std::string{"pi"}); // (3.14, pi)  double + string
+
+    // C++14: auto return type deduction (no trailing return needed)
+    std::cout &lt;&lt; add(3, 4.5) &lt;&lt; std::endl;      // 7.5
+    std::cout &lt;&lt; add(1.5, 2) &lt;&lt; std::endl;      // 3.5
+
+    return 0;
+}
+</pre>
+
+<h2>Type Deduction</h2>
+
+<p>The compiler deduces template arguments from the types of the function arguments. In most cases you do not need to specify the type explicitly.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+template &lt;typename T&gt;
+T multiply(T a, T b) {
+    return a * b;
+}
+
+int main() {
+    // Implicit deduction (compiler figures out T from arguments)
+    std::cout &lt;&lt; multiply(3, 4) &lt;&lt; std::endl;         // 12 (T = int)
+    std::cout &lt;&lt; multiply(2.5, 4.0) &lt;&lt; std::endl;     // 10 (T = double)
+
+    // Explicit specification (override deduction)
+    std::cout &lt;&lt; multiply&lt;double&gt;(3, 4) &lt;&lt; std::endl; // 12.0 (T = double)
+
+    // Error: type ambiguity (int vs double)
+    // multiply(3, 4.5);  // Compiler cannot deduce single T
+
+    // Fix: explicit specification
+    std::cout &lt;&lt; multiply&lt;double&gt;(3, 4.5) &lt;&lt; std::endl; // 13.5
+
+    return 0;
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>Note:</strong> Type deduction requires all uses of a type parameter to deduce to the same type. <code>multiply(3, 4.5)</code> fails because <code>3</code> deduces <code>T=int</code> but <code>4.5</code> deduces <code>T=double</code>. Use explicit specification or two separate type parameters to resolve this.</p>
+</div>
+
+<h2>Practical Examples</h2>
+
+<h3>Generic swap</h3>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+template &lt;typename T&gt;
+void my_swap(T&amp; a, T&amp; b) {
+    T temp = a;
+    a = b;
+    b = temp;
+}
+
+int main() {
+    int x = 10, y = 20;
+    my_swap(x, y);
+    std::cout &lt;&lt; "x=" &lt;&lt; x &lt;&lt; ", y=" &lt;&lt; y &lt;&lt; std::endl;  // x=20, y=10
+
+    double a = 1.1, b = 2.2;
+    my_swap(a, b);
+    std::cout &lt;&lt; "a=" &lt;&lt; a &lt;&lt; ", b=" &lt;&lt; b &lt;&lt; std::endl;  // a=2.2, b=1.1
+
+    std::string s1 = "hello", s2 = "world";
+    my_swap(s1, s2);
+    std::cout &lt;&lt; "s1=" &lt;&lt; s1 &lt;&lt; ", s2=" &lt;&lt; s2 &lt;&lt; std::endl;
+
+    return 0;
+}
+</pre>
+
+<h3>Generic print function</h3>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+
+// Print any single value
+template &lt;typename T&gt;
+void print(const T&amp; value) {
+    std::cout &lt;&lt; value &lt;&lt; std::endl;
+}
+
+// Print a vector of any type
+template &lt;typename T&gt;
+void print_vector(const std::vector&lt;T&gt;&amp; vec) {
+    std::cout &lt;&lt; "[";
+    for (size_t i = 0; i &lt; vec.size(); ++i) {
+        std::cout &lt;&lt; vec[i];
+        if (i + 1 &lt; vec.size()) std::cout &lt;&lt; ", ";
+    }
+    std::cout &lt;&lt; "]" &lt;&lt; std::endl;
+}
+
+int main() {
+    print(42);
+    print(3.14);
+    print("hello");
+
+    std::vector&lt;int&gt; nums = {1, 2, 3, 4, 5};
+    print_vector(nums);  // [1, 2, 3, 4, 5]
+
+    std::vector&lt;std::string&gt; words = {"foo", "bar", "baz"};
+    print_vector(words);  // [foo, bar, baz]
+
+    return 0;
+}
+</pre>
+
+<h2>Template Specialization (Overview)</h2>
+
+<p>Sometimes a template needs special behavior for a specific type. <strong>Template specialization</strong> lets you provide a custom implementation for particular types. This is covered in depth in <a href="../intermediate/template-specialization.html">Template Specialization</a>.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;cstring&gt;
+
+// Generic template
+template &lt;typename T&gt;
+T max_val(T a, T b) {
+    return (a &gt; b) ? a : b;
+}
+
+// Full specialization for const char* (C-style strings)
+template &lt;&gt;
+const char* max_val&lt;const char*&gt;(const char* a, const char* b) {
+    return (strcmp(a, b) &gt; 0) ? a : b;
+}
+
+int main() {
+    std::cout &lt;&lt; max_val(10, 20) &lt;&lt; std::endl;        // 20 (generic)
+    std::cout &lt;&lt; max_val("apple", "banana") &lt;&lt; std::endl; // banana (specialized)
+    return 0;
+}
+</pre>
+
+<div class="callout">
+  <p><strong>Deep dive:</strong> <a href="../intermediate/template-specialization.html">Template Specialization</a> covers full and partial specialization, <a href="../intermediate/variadic-templates.html">Variadic Templates</a> covers templates with a variable number of type parameters, and <a href="../advanced/concepts.html">Concepts</a> (C++20) adds constraints to template parameters.</p>
+</div>
+
+<h2>How Templates Work</h2>
+
+<p>Templates are not functions &mdash; they are <strong>recipes</strong> for generating functions. The compiler creates a concrete function (an <strong>instantiation</strong>) for each unique set of type arguments used in your code. This happens at compile time, so there is zero runtime overhead.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+template &lt;typename T&gt;
+T square(T x) {
+    return x * x;
+}
+
+int main() {
+    // Compiler generates: int square&lt;int&gt;(int x) { return x * x; }
+    int a = square(5);
+
+    // Compiler generates: double square&lt;double&gt;(double x) { return x * x; }
+    double b = square(3.14);
+
+    // Compiler reuses the int instantiation (same type)
+    int c = square(10);
+
+    std::cout &lt;&lt; a &lt;&lt; " " &lt;&lt; b &lt;&lt; " " &lt;&lt; c &lt;&lt; std::endl;
+    return 0;
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Tip:</strong> Templates are header-only &mdash; the full definition must be visible where the template is used (typically in a .h file). The compiler needs to see the definition to instantiate the template. Unlike regular functions, you cannot separate the declaration into a .h and definition into a .cpp.</p>
+</div>
+
+<h2>Related Topics</h2>
+
+<ul>
+  <li><a href="variables-data-types.html">Variables &amp; Data Types</a> &mdash; The types that templates operate on</li>
+  <li><a href="functions.html">Functions</a> &mdash; Non-template function fundamentals</li>
+  <li><a href="class-templates.html">Class Templates</a> &mdash; Templates applied to classes</li>
+  <li><a href="../intermediate/template-specialization.html">Template Specialization</a> &mdash; Custom behavior for specific types</li>
+  <li><a href="../intermediate/variadic-templates.html">Variadic Templates</a> &mdash; Templates with variable number of parameters</li>
+  <li><a href="../advanced/concepts.html">Concepts</a> &mdash; Constraining template parameters (C++20)</li>
+</ul>
+
+<div class="nav">
+  <a href="memory-layout.html">&larr; Memory Layout</a>
+  <a href="class-templates.html">Class Templates &rarr;</a>
+</div>
+</body>
+</html>

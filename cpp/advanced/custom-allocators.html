@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Custom Allocators — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / Custom Allocators</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>Custom Allocators</h1>
+
+<p>C++ allows you to replace the default <code>operator new</code> / <code>malloc</code> allocator used by STL containers with your own. Custom allocators are essential for performance-critical systems like telecom stacks where deterministic allocation, cache locality, and avoiding fragmentation are critical requirements. This topic builds on <a href="lock-free-programming.html">Lock-Free Programming</a> patterns and leads into <a href="placement-new-memory-pools.html">Placement New &amp; Memory Pools</a>.</p>
+
+<h2>The Allocator Protocol</h2>
+
+<p>An STL-compatible allocator must implement the following interface. Since C++11, allocators are stateless by default and do not need to be propagated on copy:</p>
+
+<pre>
+#include &lt;memory&gt;
+#include &lt;cstddef&gt;
+#include &lt;cstdint&gt;
+#include &lt;new&gt;
+
+// Minimum allocator interface (C++11+)
+template&lt;typename T&gt;
+class TrackingAllocator {
+public:
+    using value_type = T;
+    using pointer = T*;
+    using size_type = std::size_t;
+    using difference_type = std::ptrdiff_t;
+
+    // Rebind: allows containers to get allocator for different type
+    template&lt;typename U&gt;
+    struct rebind {
+        using other = TrackingAllocator&lt;U&gt;;
+    };
+
+    TrackingAllocator() noexcept = default;
+
+    template&lt;typename U&gt;
+    TrackingAllocator(const TrackingAllocator&lt;U&gt;&amp;) noexcept {}
+
+    T* allocate(std::size_t n) {
+        std::cout &lt;&lt; "Allocating " &lt;&lt; n * sizeof(T) &lt;&lt; " bytes\n";
+        return static_cast&lt;T*&gt;(::operator new(n * sizeof(T)));
+    }
+
+    void deallocate(T* p, std::size_t n) noexcept {
+        std::cout &lt;&lt; "Deallocating " &lt;&lt; n * sizeof(T) &lt;&lt; " bytes\n";
+        ::operator delete(p);
+    }
+
+    // C++11: propagate_on_container_copy_assignment etc.
+    using propagate_on_container_copy_assignment = std::true_type;
+    using propagate_on_container_move_assignment = std::true_type;
+    using propagate_on_container_swap = std::true_type;
+    using is_always_equal = std::false_type;
+};
+
+// Equality operators (required by STL containers)
+template&lt;typename T, typename U&gt;
+bool operator==(const TrackingAllocator&lt;T&gt;&amp;, const TrackingAllocator&lt;U&gt;&amp;) noexcept {
+    return true;
+}
+
+template&lt;typename T, typename U&gt;
+bool operator!=(const TrackingAllocator&lt;T&gt;&amp; a, const TrackingAllocator&lt;U&gt;&amp; b) noexcept {
+    return !(a == b);
+}
+</pre>
+
+<h3>Using Custom Allocators with STL Containers</h3>
+
+<pre>
+#include &lt;vector&gt;
+#include &lt;map&gt;
+#include &lt;string&gt;
+
+// All allocations for this vector go through TrackingAllocator
+std::vector&lt;int, TrackingAllocator&lt;int&gt;&gt; tracked_vec;
+
+// Map with tracking allocator
+std::map&lt;std::string, int, std::less&lt;&gt;,
+         TrackingAllocator&lt;std::pair&lt;const std::string, int&gt;&gt;&gt; tracked_map;
+
+int main() {
+    tracked_vec.push_back(1);  // Allocating 4 bytes
+    tracked_vec.push_back(2);  // Allocating 8 bytes (reallocated)
+    tracked_vec.reserve(10);   // Allocating 40 bytes
+}
+</pre>
+
+<h2>Pool Allocator</h2>
+
+<p>A pool allocator pre-allocates a fixed block of memory and distributes fixed-size chunks from it. Eliminates per-object allocation overhead and fragmentation:</p>
+
+<pre>
+template&lt;typename T, std::size_t BlockSize = 4096&gt;
+class PoolAllocator {
+    struct Block {
+        alignas(std::max_align_t) char data[BlockSize];
+        Block* next = nullptr;
+    };
+
+    struct FreeNode {
+        FreeNode* next = nullptr;
+    };
+
+    Block* blocks_ = nullptr;
+    FreeNode* free_list_ = nullptr;
+    std::size_t objects_per_block_ = BlockSize / sizeof(T);
+
+    void allocate_block() {
+        Block* new_block = new Block();
+        new_block-&gt;next = blocks_;
+        blocks_ = new_block;
+
+        // Add all chunks in the new block to the free list
+        auto raw = reinterpret_cast&lt;FreeNode*&gt;(new_block-&gt;data);
+        for (std::size_t i = 0; i &lt; objects_per_block_; ++i) {
+            auto node = reinterpret_cast&lt;FreeNode*&gt;(
+                reinterpret_cast&lt;char*&gt;(raw) + i * sizeof(T));
+            node-&gt;next = free_list_;
+            free_list_ = node;
+        }
+    }
+
+public:
+    using value_type = T;
+    using propagate_on_container_copy_assignment = std::true_type;
+    using is_always_equal = std::false_type;
+
+    template&lt;typename U&gt; struct rebind { using other = PoolAllocator&lt;U, BlockSize&gt;; };
+
+    PoolAllocator() noexcept = default;
+
+    template&lt;typename U&gt;
+    PoolAllocator(const PoolAllocator&lt;U, BlockSize&gt;&amp;) noexcept {}
+
+    T* allocate(std::size_t n) {
+        if (n != 1) {
+            throw std::bad_alloc{};  // pool only supports single-object alloc
+        }
+        if (!free_list_) {
+            allocate_block();
+        }
+        FreeNode* node = free_list_;
+        free_list_ = node-&gt;next;
+        return reinterpret_cast&lt;T*&gt;(node);
+    }
+
+    void deallocate(T* p, std::size_t n) noexcept {
+        if (n != 1) return;
+        auto node = reinterpret_cast&lt;FreeNode*&gt;(p);
+        node-&gt;next = free_list_;
+        free_list_ = node;
+    }
+
+    ~PoolAllocator() {
+        while (blocks_) {
+            Block* next = blocks_-&gt;next;
+            delete blocks_;
+            blocks_ = next;
+        }
+    }
+};
+
+// Equality: pool allocators are unequal (each has its own pool)
+template&lt;typename T1, std::size_t B1, typename T2, std::size_t B2&gt;
+bool operator==(const PoolAllocator&lt;T1, B1&gt;&amp;, const PoolAllocator&lt;T2, B2&gt;&amp;) { return false; }
+template&lt;typename T1, std::size_t B1, typename T2, std::size_t B2&gt;
+bool operator!=(const PoolAllocator&lt;T1, B1&gt;&amp; a, const PoolAllocator&lt;T2, B2&gt;&amp; b) { return !(a == b); }
+
+// Usage: pool-allocated list of packets
+struct Packet {
+    std::uint8_t data[1500];
+    std::size_t length = 0;
+};
+
+std::list&lt;Packet, PoolAllocator&lt;Packet, 65536&gt;&gt; packet_pool;
+</pre>
+
+<h2>Arena Allocator (Stack-Based)</h2>
+
+<p>An arena allocator allocates from a pre-allocated buffer with a simple bump pointer. Deallocation is done in bulk (destroy the entire arena). Ideal for per-frame or per-transaction allocations:</p>
+
+<pre>
+class ArenaAllocator {
+public:
+    static constexpr std::size_t kDefaultSize = 1 &lt;&lt; 20;  // 1 MB
+
+    explicit ArenaAllocator(std::size_t size = kDefaultSize) {
+        buffer_ = static_cast&lt;char*&gt;(std::aligned_alloc(
+            alignof(std::max_align_t), size));
+        capacity_ = size;
+        offset_ = 0;
+    }
+
+    ~ArenaAllocator() { std::free(buffer_); }
+
+    // Non-copyable, non-movable
+    ArenaAllocator(const ArenaAllocator&amp;) = delete;
+    ArenaAllocator&amp; operator=(const ArenaAllocator&amp;) = delete;
+
+    void* allocate(std::size_t size, std::size_t alignment = alignof(std::max_align_t)) {
+        std::size_t aligned_offset = (offset_ + alignment - 1) &amp; ~(alignment - 1);
+        if (aligned_offset + size &gt; capacity_) {
+            throw std::bad_alloc{};
+        }
+        void* ptr = buffer_ + aligned_offset;
+        offset_ = aligned_offset + size;
+        return ptr;
+    }
+
+    // Reset: destroy all objects and reset offset
+    // Callers must manually destruct objects first
+    void reset() { offset_ = 0; }
+
+    std::size_t used() const noexcept { return offset_; }
+    std::size_t available() const noexcept { return capacity_ - offset_; }
+
+    // STL-compatible wrapper
+    template&lt;typename T&gt;
+    class Allocator {
+        ArenaAllocator* arena_;
+    public:
+        using value_type = T;
+        template&lt;typename U&gt; struct rebind { using other = Allocator&lt;U&gt;; };
+
+        explicit Allocator(ArenaAllocator* arena) noexcept : arena_(arena) {}
+        template&lt;typename U&gt;
+        Allocator(const Allocator&lt;U&gt;&amp; other) noexcept : arena_(other.arena_) {}
+
+        T* allocate(std::size_t n) {
+            return static_cast&lt;T*&gt;(arena_-&gt;allocate(n * sizeof(T), alignof(T)));
+        }
+        void deallocate(T*, std::size_t) noexcept {
+            // Arena deallocates everything at once — no individual free
+        }
+    };
+
+private:
+    char* buffer_ = nullptr;
+    std::size_t capacity_ = 0;
+    std::size_t offset_ = 0;
+};
+</pre>
+
+<h2>Monotonic Allocator for Telecom Buffers</h2>
+
+<pre>
+#include &lt;vector&gt;
+
+// Per-packet processing arena — reset after each packet
+class PacketProcessingArena {
+    static constexpr std::size_t kArenaSize = 64 * 1024;  // 64 KB
+
+    alignas(std::max_align_t) char buffer_[kArenaSize];
+    std::size_t offset_ = 0;
+
+public:
+    void* allocate(std::size_t size, std::size_t align = alignof(std::max_align_t)) {
+        std::size_t aligned = (offset_ + align - 1) &amp; ~(align - 1);
+        if (aligned + size &gt; kArenaSize) throw std::bad_alloc{};
+        void* ptr = buffer_ + aligned;
+        offset_ = aligned + size;
+        return ptr;
+    }
+
+    void reset() { offset_ = 0; }
+
+    template&lt;typename T, typename... Args&gt;
+    T&amp; create(Args&amp;&amp;... args) {
+        void* mem = allocate(sizeof(T), alignof(T));
+        return *new (mem) T(std::forward&lt;Args&gt;(args)...);
+    }
+
+    // Destroy all created objects in reverse order (if needed)
+    template&lt;typename Destructor&gt;
+    void destroy_all(Destructor dtor) {
+        // Requires tracking allocated objects — simplified version:
+        // In practice, use a stack of destructors
+    }
+};
+
+// Usage in packet processing pipeline
+void process_packet(const std::uint8_t* data, std::size_t len) {
+    thread_local PacketProcessingArena arena;
+    arena.reset();  // fresh arena per packet
+
+    auto&amp; header = arena.create&lt;PacketHeader&gt;();
+    auto&amp; payload = arena.create&lt;PayloadBuffer&gt;(len);
+
+    // Parse, process, forward — no individual deletes needed
+}
+</pre>
+
+<h2>Telecom Relevance</h2>
+
+<p>Telecom stacks allocate millions of small objects (protocol headers, message buffers, UE contexts) per second. A pool allocator for fixed-size objects eliminates fragmentation. An arena allocator for per-packet processing provides zero-cost deallocation. Both are critical for meeting latency and throughput requirements in 5G systems.</p>
+
+<div class="callout green">
+<p><strong>Best practice:</strong> Profile your allocation patterns before choosing a strategy. Pool allocators win for uniform-size objects. Arena allocators win for per-frame/per-transaction bulk allocation. The default allocator is fine for everything else.</p>
+</div>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="placement-new-memory-pools.html">Placement New &amp; Memory Pools</a> (manual object construction), <a href="lock-free-programming.html">Lock-Free Programming</a> (lock-free allocation), <a href="cache-oriented-programming.html">Cache-Oriented Programming</a> (allocation and cache effects), <a href="undefined-behavior.html">Undefined Behavior</a> (misaligned alloc).</p>
+</div>
+
+<div class="nav"><a href="lock-free-programming.html">&larr; Lock-Free Programming</a><a href="placement-new-memory-pools.html">Placement New &amp; Memory Pools &rarr;</a></div>
+</body>
+</html>

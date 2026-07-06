@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MAC Layer — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#4">4 Telecom &amp; 5G/4G</a> / MAC Layer</div>
+<div class="meta"><span class="tag advanced">Advanced</span></div>
+<h1>MAC Layer</h1>
+
+<p>The MAC (Medium Access Control) layer in 5G NR handles scheduling, HARQ retransmission, logical channel multiplexing, and random access. It is the most critical layer for radio resource management and operates within strict timing constraints (sub-millisecond for TTI processing).</p>
+
+<h2>MAC Functions Overview</h2>
+
+<pre>
+  +---------------------------------------------------+
+  |                   MAC Entity                       |
+  |                                                   |
+  |  +-----------+  +-----------+  +---------------+  |
+  |  | Scheduler |  |   HARQ    |  | Random Access |  |
+  |  | (DL/UL)   |  | (8 procs)|  | (PRACH/RAR)   |  |
+  |  +-----+-----+  +-----+-----+  +-------+-------+  |
+  |        |              |               |           |
+  |  +-----+--------------+---------------+-----+     |
+  |  |          Logical Channel Prioritization (LCP)  |  |
+  |  +-----+--------------------------------------+     |
+  |        |                                             |
+  |  +-----+-----+                                     |
+  |  | MAC PDU  |  Multiplex: MAC subheaders + SDUs    |
+  |  | Assembler |  + MAC CEs (BSR, PHR, C-RNTI)      |
+  |  +-----------+                                     |
+  +---------------------------------------------------+
+        |
+        |  TB (Transport Block) to PHY
+        v
+  +-----------+
+  |   PHY     |
+  +-----------+
+</pre>
+
+<h2>MAC PDU Format</h2>
+
+<pre>
+  MAC PDU:
+  +------+---+---+------+---+---+---+---+------+---+---+------+
+  | SubH | SDU1 | SubH | SDU2 | SubH | CE | Pad |    |     |     |
+  +------+-------+------+-------+------+-----+-----+----+-----+-----+
+  |  R   | R/F  | L  |  MAC SDU (RLC PDU)                    |
+  |  R   | R/F  | L  |  MAC CE  (BSR, PHR, C-RNTI...)       |
+  |  R   | R/F  | L  |  Padding                               |
+
+  R  = Reserved bit (1)
+  F  = Format bit: 0=1-byte length, 1=2-byte length
+  L  = Length of MAC SDU or MAC CE
+</pre>
+
+<h2>C++ MAC Scheduler</h2>
+
+<pre>
+#include &lt;vector&gt;
+#include &lt;queue&gt;
+#include &lt;algorithm&gt;
+#include &lt;memory&gt;
+#include &lt;cstdint&gt;
+#include &lt;cmath&gt;
+
+// UE context for scheduler
+struct UeContext {
+    uint32_t ue_id;
+    uint16_t rnti;
+    uint8_t  cqi;             // Channel Quality Indicator (0-15)
+    uint32_t buffer_dl;      // DL buffer size (bytes)
+    uint32_t buffer_ul;      // UL buffer status (bytes)
+    uint8_t  priority;       // QoS priority
+    uint32_t mcs_table_idx;  // MCS table index
+    uint32_t avg_throughput; // Past throughput (for PF scheduling)
+    uint32_t prb_usage;       // PRBs allocated last TTI
+    bool     is_retx;         // HARQ retransmission pending
+    uint8_t  harq_pid;        // HARQ process ID for retx
+};
+
+// Scheduling decision for one UE
+struct SchedDecision {
+    uint32_t ue_id;
+    uint16_t rnti;
+    uint16_t start_rb;       // Start PRB index
+    uint16_t n_rbs;          // Number of PRBs allocated
+    uint8_t  start_symbol;    // Start OFDM symbol
+    uint8_t  n_symbols;       // Number of symbols
+    uint8_t  mcs;             // MCS index
+    uint8_t  harq_id;         // HARQ process ID
+    uint8_t  ndi;             // New Data Indicator
+    uint8_t  rv;              // Redundancy Version
+    uint32_t tb_size;         // Transport block size
+};
+
+// Proportional Fair scheduler (most common commercial scheduler)
+class PfScheduler {
+public:
+    void addUe(const UeContext&amp; ue) {
+        ues_[ue.ue_id] = ue;
+    }
+
+    void removeUe(uint32_t ue_id) {
+        ues_.erase(ue_id);
+    }
+
+    // Schedule DL for one TTI
+    void scheduleDl(uint32_t available_prbs, uint32_t tti_duration_us,
+                    std::vector&lt;SchedDecision&gt;&amp; decisions) {
+        decisions.clear();
+        uint32_t remaining_prbs = available_prbs;
+
+        // Sort UEs by priority metric (proportional fair)
+        std::vector&lt;UeContext*&gt; sorted_ues;
+        for (auto&amp; [id, ue] : ues_) {
+            if (ue.buffer_dl &gt; 0 || ue.is_retx) {
+                sorted_ues.push_back(&amp;ue);
+            }
+        }
+
+        // Calculate PF metric: CQI-based rate / average throughput
+        std::sort(sorted_ues.begin(), sorted_ues.end(),
+            [](const UeContext* a, const UeContext* b) {
+                double metric_a = estimateRate(a-&gt;cqi) /
+                                  std::max(1.0, (double)a-&gt;avg_throughput);
+                double metric_b = estimateRate(b-&gt;cqi) /
+                                  std::max(1.0, (double)b-&gt;avg_throughput);
+                return metric_a &gt; metric_b;
+            });
+
+        for (auto* ue : sorted_ues) {
+            if (remaining_prbs == 0) break;
+
+            // Estimate PRBs needed
+            uint16_t n_rbs = estimateRequiredPrbs(
+                ue-&gt;buffer_dl, ue-&gt;cqi, remaining_prbs);
+
+            uint8_t mcs = cqiToMcs(ue-&gt;cqi);
+            uint32_t tb_size = getTbs(mcs, n_rbs);
+
+            SchedDecision dec{};
+            dec.ue_id = ue-&gt;ue_id;
+            dec.rnti = ue-&gt;rnti;
+            dec.start_rb = available_prbs - remaining_prbs;
+            dec.n_rbs = n_rbs;
+            dec.start_symbol = 0;
+            dec.n_symbols = (ue-&gt;is_retx) ? 14 : 12;
+            dec.mcs = mcs;
+            dec.harq_id = selectHarqProcess(ue);
+            dec.ndi = ue-&gt;is_retx ? 0 : 1;
+            dec.rv = ue-&gt;is_retx ? getRv(ue-&gt;harq_pid) : 0;
+            dec.tb_size = tb_size;
+
+            decisions.push_back(dec);
+            remaining_prbs -= n_rbs;
+        }
+    }
+
+private:
+    std::unordered_map&lt;uint32_t, UeContext&gt; ues_;
+
+    // CQI to estimated rate (bits per PRB per symbol)
+    static double estimateRate(uint8_t cqi) {
+        // Approximate mapping
+        // CQI 1-15 maps to spectral efficiency 0.15-5.55
+        return 0.15 * pow(1.48, cqi);
+    }
+
+    static uint8_t cqiToMsc(uint8_t cqi) {
+        // Simplified CQI-to-MCS mapping (Table 5.2.2.1-2)
+        return std::min(cqi + 4, (uint8_t)28);
+    }
+
+    static uint16_t estimateRequiredPrbs(uint32_t buffer_bytes,
+                                          uint8_t cqi,
+                                          uint32_t max_prbs) {
+        double rate = estimateRate(cqi) * 12;  // bits per PRB
+        uint32_t prbs_needed = (buffer_bytes * 8) / rate + 1;
+        return std::min(static_cast&lt;uint16_t&gt;(prbs_needed),
+                       static_cast&lt;uint16_t&gt;(max_prbs));
+    }
+
+    static uint8_t cqiToMcs(uint8_t cqi) {
+        return std::min(cqi + 4, (uint8_t)28);
+    }
+
+    static uint32_t getTbs(uint8_t mcs, uint16_t n_prbs) {
+        // Simplified TBS calculation
+        // Real implementation uses TS 38.214 Table 5.1.3.1-1
+        return n_prbs * 12 * (mcs &gt; 16 ? 6 : 4);
+    }
+
+    static uint8_t selectHarqProcess(const UeContext* ue) {
+        static uint8_t round_robin = 0;
+        return (round_robin++ % 8);
+    }
+
+    static uint8_t getRv(uint8_t harq_pid) {
+        static const uint8_t rv_seq[] = {0, 2, 3, 1};
+        static uint8_t rv_idx = 0;
+        return rv_seq[rv_idx++ % 4];
+    }
+};
+</pre>
+
+<h2>HARQ Process Management</h2>
+
+<pre>
+// HARQ entity: manages 8 parallel HARQ processes
+class HarqEntity {
+public:
+    static constexpr uint8_t NUM_PROCESSES = 8;
+
+    enum class HarqState : uint8_t {
+        IDLE,
+        WAITING_ACK,
+        RETRANSMITTING,
+        NACK_RECEIVED
+    };
+
+    struct HarqProcess {
+        HarqState state = HarqState::IDLE;
+        uint8_t   rv = 0;            // Redundancy version
+        uint8_t   retx_count = 0;   // Retransmission count
+        uint32_t  tb_size = 0;
+        uint16_t  n_rbs = 0;
+        uint8_t   mcs = 0;
+    };
+
+    HarqProcess&amp; getProcess(uint8_t pid) { return processes_[pid]; }
+
+    // Find next available process for new transmission
+    std::optional&lt;uint8_t&gt; findFreeProcess() const {
+        for (uint8_t i = 0; i &lt; NUM_PROCESSES; ++i) {
+            if (processes_[i].state == HarqState::IDLE) return i;
+        }
+        return std::nullopt;
+    }
+
+    // Process ACK/NACK from UE
+    void onAckNack(uint8_t pid, bool ack) {
+        if (pid &gt;= NUM_PROCESSES) return;
+        if (ack) {
+            processes_[pid].state = HarqState::IDLE;
+            processes_[pid].retx_count = 0;
+        } else {
+            processes_[pid].retx_count++;
+            if (processes_[pid].retx_count &lt;= max_retx_) {
+                processes_[pid].rv = getNextRv(processes_[pid].retx_count);
+                processes_[pid].state = HarqState::RETRANSMITTING;
+            } else {
+                // Max retransmissions reached, discard
+                processes_[pid].state = HarqState::IDLE;
+            }
+        }
+    }
+
+private:
+    std::array&lt;HarqProcess, NUM_PROCESSES&gt; processes_{};
+    static constexpr uint8_t max_retx_ = 3;
+
+    static uint8_t getNextRv(uint8_t retx_count) {
+        static const uint8_t rv_seq[] = {0, 2, 3, 1};
+        return rv_seq[retx_count % 4];
+    }
+};
+</pre>
+
+<h2>MAC Control Element Types</h2>
+
+<table>
+  <tr><th>MAC CE</th><th>LCID</th><th>Purpose</th></tr>
+  <tr><td>CCCH (48-bit)</td><td>0</td><td>Random access response</td></tr>
+  <tr><td>Short BSR</td><td>62</td><td>Buffer status (1-4 LCGs)</td></tr>
+  <tr><td>Long BSR</td><td>63</td><td>Buffer status (1-4 LCGs, 8-bit each)</td></tr>
+  <tr><td>PHR</td><td>64</td><td>Power Headroom Report</td></tr>
+  <tr><td>C-RNTI</td><td>57</td><td>Contention Resolution</td></tr>
+  <tr><td>Timing Advance</td><td>58</td><td>UL timing adjustment</td></tr>
+  <tr><td>SPS Config</td><td>59</td><td>Configurable UL/DL assignment</td></tr>
+</table>
+
+<h2>Cross-References</h2>
+
+<ul>
+  <li><a href="phy-layer.html">PHY Layer</a> -- MAC provides transport blocks to PHY for encoding/transmission.</li>
+  <li><a href="rlc-layer.html">RLC Layer</a> -- MAC SDUs are RLC PDUs (after RLC processing).</li>
+  <li><a href="real-time-processing.html">Real-Time Processing</a> -- MAC scheduling must complete within ~1 ms TTI.</li>
+  <li><a href="memory-pools-telecom.html">Memory Pools</a> -- Pre-allocated MAC PDU buffers for deterministic allocation.</li>
+  <li><a href="bit-level-operations.html">Bit Operations</a> -- MAC subheader parsing uses bit-field manipulation.</li>
+</ul>
+
+<div class="nav"><a href="phy-layer.html">&larr; PHY Layer</a><a href="rlc-layer.html">RLC Layer &rarr;</a></div>
+</body>
+</html>

@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NAS Layer — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#4">4 Telecom &amp; 5G/4G Networking</a> / Protocol Stack / 4.2.7</div>
+<div class="meta"><span class="tag medium">Medium</span></div>
+<h1>NAS Layer</h1>
+
+<p>NAS (Non-Access Stratum) is the highest protocol layer in the 5G/LTE signaling stack, managing signaling between the UE and the Core Network (AMF/MME) that passes transparently through the RAN (gNB/eNodeB). NAS messages handle registration, authentication, security mode setup, and session management.</p>
+
+<h2>NAS vs Access Stratum (AS)</h2>
+
+<table>
+  <tr><th>Aspect</th><th>NAS (Non-Access Stratum)</th><th>AS (Access Stratum)</th></tr>
+  <tr><td>Endpoints</td><td>UE <-> Core Network (AMF/MME)</td><td>UE <-> RAN (gNB/eNodeB)</td></tr>
+  <tr><td>Protocols</td><td>NAS (MM, SM), SIP</td><td>RRC, PDCP, RLC, MAC, PHY</td></tr>
+  <tr><td>Transport</td><td>Carried inside RRC (AS)</td><td>Radio bearers (SRB/NR)</td></tr>
+  <tr><td>Scope</td><td>Registration, authentication, PDU sessions</td><td>Radio connection, handover, measurements</td></tr>
+  <tr><td>Survives handover?</td><td>Yes (core network context persists)</td><td>No (re-established at target)</td></tr>
+</table>
+
+<div class="callout">
+  <p><strong>Key concept:</strong> NAS messages are opaque to the gNB. The RAN transports them as payload without inspecting contents (except for initial NAS during RRC Setup). This is why NAS is called "Non-Access Stratum" -- it bypasses access layer processing.</p>
+</div>
+
+<h2>NAS Message Protocol</h2>
+
+<pre>
+  NAS Message Structure:
+  +------+------------+-------+---------+
+  | EPD  | Protocol   | Security Header / Plain
+  | 0.5B | Disc. (1B) | Message Type (1B)
+  +------+------------+-------+---------+
+
+  Extended Protocol Discriminator (EPD):
+  0x7E = Mobility Management (5G MM / 5GS)
+  0x7A = Session Management (5G SM / 5GS)
+  0x7B = Mobility Management (4G EMM / EPS)
+  0x2E = Session Management (4G ESM / EPS)
+
+  MM Message Types (5GS):
+  0x41 = Registration Request
+  0x42 = Registration Accept
+  0x43 = Registration Complete
+  0x44 = Registration Reject
+  0x56 = Authentication Request
+  0x57 = Authentication Response
+  0x5E = Security Mode Command
+  0x5F = Security Mode Complete
+  0x47 = Deregistration Request
+  0x4B = Deregistration Accept
+
+  SM Message Types (5GS):
+  0xC1 = PDU Session Establishment Request
+  0xC2 = PDU Session Establishment Accept
+  0xC3 = PDU Session Establishment Reject
+  0xC6 = PDU Session Release Request
+  0xD0 = PDU Session Modification Command
+</pre>
+
+<h2>5G Registration Procedure</h2>
+
+<pre>
+  UE                    gNB                    AMF
+  |                     |                      |
+  |-- RRC Setup Req --->|                      |
+  |                     |-- NGAP Initial UE --|
+  |                     |   Message (NAS) ---->|
+  |                     |                      |
+  |-- Registration Req -|--- (via RRC) ------->|
+  |   (plain NAS)       |                      |
+  |                     |                      |-- Auth Request
+  |                     |                      |-- (NAS)
+  |<-- Auth Challenge --|--- (via RRC) ---------|
+  |                     |                      |
+  |-- Auth Response ----|-- (via RRC) -------->|
+  |                     |                      |
+  |                     |                      |-- Security Mode Cmd
+  |<-- Security Mode ---|-- (via RRC) ---------|
+  |                     |                      |
+  |-- Security Complete |                      |
+  |-- Registration Cmpl |                      |
+  |                     |                      |
+  |-- PDU Sess Req -----|                      |
+  |                     |                      |
+  |                     |<-- PDU Sess Accept ---|
+  |<-- PDU Sess Accept -|                      |
+</pre>
+
+<h2>C++ NAS Message Parser</h2>
+
+<pre>
+#include &lt;cstdint&gt;
+#include &lt;cstring&gt;
+#include &lt;string&gt;
+#include &lt;optional&gt;
+#include &lt;array&gt;
+
+// NAS protocol discriminator
+enum class NasProtocol : uint8_t {
+    MM_5GS     = 0x7E,
+    SM_5GS     = 0x7A,
+    MM_EPS     = 0x7B,
+    SM_EPS     = 0x2E
+};
+
+// NAS MM message types (5G)
+enum class NasMmType : uint8_t {
+    REG_REQUEST           = 0x41,
+    REG_ACCEPT            = 0x42,
+    REG_COMPLETE          = 0x43,
+    REG_REJECT            = 0x44,
+    DEREG_REQUEST         = 0x47,
+    AUTH_REQUEST          = 0x56,
+    AUTH_RESPONSE         = 0x57,
+    AUTH_REJECT           = 0x58,
+    AUTH_FAILURE           = 0x5D,
+    SECURITY_MODE_CMD     = 0x5E,
+    SECURITY_MODE_COMPLETE = 0x5F,
+    IDENTITY_REQUEST       = 0x5B,
+    IDENTITY_RESPONSE      = 0x5C
+};
+
+// Parsed NAS message header
+struct NasMessageHeader {
+    bool               security_header;  // Has security header?
+    uint8_t            epd;              // Extended protocol discriminator
+    uint8_t            security_type;    // Security header type (if present)
+    uint8_t            message_type;
+    NasProtocol        protocol;
+};
+
+// NAS message parser
+class NasMessageParser {
+public:
+    // Parse NAS message header from buffer
+    std::optional&lt;NasMessageHeader&gt; parseHeader(
+            const uint8_t* data, size_t len) {
+        if (len &lt; 2) return std::nullopt;
+
+        NasMessageHeader hdr{};
+        hdr.epd = data[0];
+
+        // Check if security header is present
+        // Plain NAS: EPD is the protocol discriminator directly
+        // Security-protected NAS: first byte is security header type
+        if (isSecurityProtected(data[0])) {
+            hdr.security_header = true;
+            hdr.security_type = data[0];
+            hdr.epd = data[1];
+            hdr.message_type = data[2];
+            if (len &lt; 3) return std::nullopt;
+        } else {
+            hdr.security_header = false;
+            hdr.message_type = data[1];
+        }
+
+        hdr.protocol = static_cast&lt;NasProtocol&gt;(hdr.epd);
+        return hdr;
+    }
+
+    // Extract 5G-GUTI from Registration Request
+    bool extract5gGuti(const uint8_t* msg, size_t len,
+                        uint8_t (&amp;guti)[12]) {
+        // Skip header, find Mobile Identity IE (type 0x77)
+        size_t offset = 2;  // Skip EPD + message type
+        while (offset &lt; len) {
+            uint8_t ie_type = msg[offset];
+            if (ie_type == 0x77) {  // 5G-GUTI type
+                // TLV: type(1) + length(1) + value(N)
+                uint8_t ie_len = msg[offset + 1];
+                if (ie_len &gt;= 12 &amp;&amp; offset + 2 + 12 &lt;= len) {
+                    memcpy(guti, msg + offset + 3, 12);
+                    return true;
+                }
+            }
+            uint8_t ie_len = msg[offset + 1];
+            offset += 2 + ie_len;
+        }
+        return false;
+    }
+
+    // Get message type name for logging
+    static const char* mmTypeName(uint8_t type) {
+        switch (static_cast&lt;NasMmType&gt;(type)) {
+            case NasMmType::REG_REQUEST:
+                return "Registration Request";
+            case NasMmType::REG_ACCEPT:
+                return "Registration Accept";
+            case NasMmType::AUTH_REQUEST:
+                return "Authentication Request";
+            case NasMmType::AUTH_RESPONSE:
+                return "Authentication Response";
+            case NasMmType::SECURITY_MODE_CMD:
+                return "Security Mode Command";
+            case NasMmType::SECURITY_MODE_COMPLETE:
+                return "Security Mode Complete";
+            default:
+                return "Unknown";
+        }
+    }
+
+private:
+    bool isSecurityProtected(uint8_t first_byte) {
+        return (first_byte &gt;= 0x00 &amp;&amp; first_byte &lt;= 0x0F);
+    }
+};
+</pre>
+
+<h2>Security Considerations</h2>
+
+<div class="callout red">
+  <p><strong>Security:</strong> Before security mode is activated, NAS messages are sent in plain text. After security mode command/complete exchange, all subsequent NAS messages are ciphered and integrity-protected. The keys (KNASenc, KNASint) are derived from KAMF using the selected algorithm (NEA/NIA). This is why the registration procedure is critical -- it establishes the security context.</p>
+</div>
+
+<h2>Cross-References</h2>
+
+<ul>
+  <li><a href="rrc-layer.html">RRC Layer</a> -- NAS messages are transported inside RRC.</li>
+  <li><a href="5g-ran-overview.html">5G RAN Overview</a> -- NAS transparent pass-through via NGAP.</li>
+  <li><a href="lte-architecture.html">LTE Architecture</a> -- NAS in 4G (EMM/ESM) vs 5G (MM/SM).</li>
+</ul>
+
+<div class="nav"><a href="sdap-layer.html">&larr; SDAP Layer</a><a href="lte-architecture.html">LTE Architecture &rarr;</a></div>
+</body>
+</html>

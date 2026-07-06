@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Type Erasure — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / Type Erasure</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>Type Erasure</h1>
+
+<p>Type erasure decouples the interface from the concrete type, allowing objects of different types to be stored in the same container and manipulated through a common interface — all without requiring a common base class or virtual functions. It provides value semantics (copyable, movable) unlike raw pointers to base classes.</p>
+
+<div class="callout">
+<p><strong>Contrast with <a href="crtp.html">CRTP</a>:</strong> CRTP requires the concrete type to be known at compile time. Type erasure defers the concrete type selection to runtime while maintaining value semantics.</p>
+</div>
+
+<h2>std::any</h2>
+
+<p><code>std::any</code> (C++17) is the simplest form of type erasure — it can hold any copyable type and you retrieve values with <code>std::any_cast</code>:</p>
+
+<pre>
+#include &lt;any&gt;
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+
+int main() {
+    std::any value = 42;                // holds an int
+    std::cout &lt;&lt; std::any_cast&lt;int&gt;(value) &lt;&lt; "\n";  // 42
+
+    value = std::string("hello");       // now holds a string
+    std::cout &lt;&lt; std::any_cast&lt;std::string&gt;(value) &lt;&lt; "\n";  // hello
+
+    // Wrong cast: throws std::bad_any_cast
+    try {
+        auto x = std::any_cast&lt;double&gt;(value);
+    } catch (const std::bad_any_cast&amp; e) {
+        std::cout &lt;&lt; "Bad cast: " &lt;&lt; e.what() &lt;&lt; "\n";
+    }
+
+    // Check type before casting
+    if (value.type() == typeid(std::string)) {
+        std::cout &lt;&lt; "It's a string!\n";
+    }
+
+    // Container of mixed types
+    std::vector&lt;std::any&gt; mixed = {1, "text"s, 3.14, true};
+}
+</pre>
+
+<div class="callout warning">
+<p><strong>std::any limitations:</strong> No interface — you can only store and retrieve. Type safety is checked at runtime via <code>any_cast</code>. Heap allocation for large objects. For a typed interface, build a custom type-erased wrapper.</p>
+</div>
+
+<h2>Custom Type-Erased Wrapper</h2>
+
+<pre>
+#include &lt;memory&gt;
+#include &lt;utility&gt;
+#include &lt;string&gt;
+#include &lt;iostream&gt;
+#include &lt;functional&gt;
+
+// Type-erased callable wrapper (similar to std::function)
+class AnyCallback {
+    struct ICallable {
+        virtual ~ICallable() = default;
+        virtual void invoke() = 0;
+        virtual std::unique_ptr&lt;ICallable&gt; clone() const = 0;
+    };
+
+    template&lt;typename F&gt;
+    struct CallableImpl : ICallable {
+        F func;
+        explicit CallableImpl(F f) : func(std::move(f)) {}
+
+        void invoke() override { func(); }
+
+        std::unique_ptr&lt;ICallable&gt; clone() const override {
+            return std::make_unique&lt;CallableImpl&lt;F&gt;&gt;(func);
+        }
+    };
+
+    std::unique_ptr&lt;ICallable&gt; impl_;
+
+public:
+    AnyCallback() = default;
+
+    template&lt;typename F&gt;
+    explicit AnyCallback(F f)
+        : impl_(std::make_unique&lt;CallableImpl&lt;std::decay_t&lt;F&gt;&gt;&gt;(std::move(f))) {}
+
+    // Copyable
+    AnyCallback(const AnyCallback&amp; other)
+        : impl_(other.impl_ ? other.impl_-&gt;clone() : nullptr) {}
+
+    AnyCallback&amp; operator=(const AnyCallback&amp; other) {
+        if (this != &amp;other) {
+            impl_ = other.impl_ ? other.impl_-&gt;clone() : nullptr;
+        }
+        return *this;
+    }
+
+    // Movable
+    AnyCallback(AnyCallback&amp;&amp;) noexcept = default;
+    AnyCallback&amp; operator=(AnyCallback&amp;&amp;) noexcept = default;
+
+    void operator()() {
+        if (impl_) impl_-&gt;invoke();
+    }
+
+    explicit operator bool() const { return impl_ != nullptr; }
+};
+
+// Usage: heterogeneous container of callbacks
+int main() {
+    std::vector&lt;AnyCallback&gt; callbacks;
+
+    callbacks.emplace_back([]() { std::cout &lt;&lt; "Lambda callback\n"; });
+    callbacks.emplace_back([]() { std::cout &lt;&lt; "Another callback\n"; });
+
+    // Store a function pointer
+    void (*func_ptr)() = []() { std::cout &lt;&lt; "Function pointer\n"; };
+    callbacks.emplace_back(func_ptr);
+
+    for (auto&amp; cb : callbacks) {
+        cb();
+    }
+}
+</pre>
+
+<h2>Type-Erased Message Handler</h2>
+
+<pre>
+#include &lt;memory&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+#include &lt;iostream&gt;
+
+// A type-erased message handler: any handler can be stored
+// and invoked with a string message
+class MessageHandler {
+    struct IHandler {
+        virtual ~IHandler() = default;
+        virtual void handle(const std::string&amp; msg) = 0;
+        virtual std::string name() const = 0;
+        virtual std::unique_ptr&lt;IHandler&gt; clone() const = 0;
+    };
+
+    template&lt;typename H&gt;
+    struct HandlerImpl : IHandler {
+        H handler;
+        explicit HandlerImpl(H h) : handler(std::move(h)) {}
+
+        void handle(const std::string&amp; msg) override { handler.handle(msg); }
+        std::string name() const override { return handler.name(); }
+        std::unique_ptr&lt;IHandler&gt; clone() const override {
+            return std::make_unique&lt;HandlerImpl&lt;H&gt;&gt;(handler);
+        }
+    };
+
+    std::unique_ptr&lt;IHandler&gt; impl_;
+
+public:
+    template&lt;typename H&gt;
+    explicit MessageHandler(H h)
+        : impl_(std::make_unique&lt;HandlerImpl&lt;std::decay_t&lt;H&gt;&gt;&gt;(std::move(h))) {}
+
+    MessageHandler(const MessageHandler&amp; other)
+        : impl_(other.impl_ ? other.impl_-&gt;clone() : nullptr) {}
+    MessageHandler&amp; operator=(const MessageHandler&amp;) = delete;
+    MessageHandler(MessageHandler&amp;&amp;) noexcept = default;
+    MessageHandler&amp; operator=(MessageHandler&amp;&amp;) = default;
+
+    void handle(const std::string&amp; msg) { impl_-&gt;handle(msg); }
+    std::string name() const { return impl_-&gt;name(); }
+};
+
+// Different handler types — no common base class required
+class RrcHandler {
+public:
+    void handle(const std::string&amp; msg) {
+        std::cout &lt;&lt; "[RRC] " &lt;&lt; msg &lt;&lt; "\n";
+    }
+    std::string name() const { return "RRC"; }
+};
+
+class NgapHandler {
+public:
+    void handle(const std::string&amp; msg) {
+        std::cout &lt;&lt; "[NGAP] " &lt;&lt; msg &lt;&lt; "\n";
+    }
+    std::string name() const { return "NGAP"; }
+};
+
+int main() {
+    // Heterogeneous container — no common base class needed
+    std::vector&lt;MessageHandler&gt; handlers;
+    handlers.emplace_back(RrcHandler{});
+    handlers.emplace_back(NgapHandler{});
+    handlers.emplace_back([](const std::string&amp; msg) {
+        std::cout &lt;&lt; "[LAMBDA] " &lt;&lt; msg &lt;&lt; "\n";
+    });
+
+    for (auto&amp; h : handlers) {
+        std::cout &lt;&lt; "Dispatching to " &lt;&lt; h.name() &lt;&lt; ": ";
+        h.handle("UE Setup Request");
+    }
+}
+</pre>
+
+<h2>Type Erasure Techniques Comparison</h2>
+
+<table>
+<tr><th>Technique</th><th>Interface</th><th>Value Semantics</th><th>Header</th></tr>
+<tr><td><code>std::any</code></td><td>None (store/retrieve)</td><td>Copyable</td><td><code>&lt;any&gt;</code></td></tr>
+<tr><td><code>std::function</code></td><td>Callable</td><td>Copyable</td><td><code>&lt;functional&gt;</code></td></tr>
+<tr><td><code>std::variant</code></td><td>Visit-based</td><td>Copyable</td><td><code>&lt;variant&gt;</code></td></tr>
+<tr><td>Custom wrapper</td><td>Any custom interface</td><td>Copyable/Movable</td><td>Your own</td></tr>
+<tr><td>Virtual dispatch</td><td>Virtual interface</td><td>Pointer only</td><td>Your own</td></tr>
+</table>
+
+<h2>Telecom Relevance</h2>
+
+<p>Type erasure enables a protocol stack to register handlers for different message types without requiring a common base class. A timer manager can accept any callable, a metrics collector can store any type of metric source, and a message dispatcher can route to handlers of unrelated types — all with type safety and value semantics.</p>
+
+<div class="callout green">
+<p><strong>When to prefer type erasure over virtual dispatch:</strong> When you need value semantics (copyable objects), when types don't share a common base, or when you want to hide implementation details behind a clean interface. When performance is critical and types share a common base, virtual dispatch or <a href="crtp.html">CRTP</a> may be more efficient.</p>
+</div>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="crtp.html">CRTP</a> (static polymorphism), <a href="strategy-pattern.html">Strategy Pattern</a> (runtime behavior selection), <a href="concepts.html">C++20 Concepts</a> (compile-time constraints), <a href="observer-pattern.html">Observer Pattern</a> (callback registration), <a href="compile-time-computation.html">Compile-Time Computation</a>.</p>
+</div>
+
+<div class="nav"><a href="crtp.html">&larr; CRTP</a><a href="compile-time-computation.html">Compile-Time Computation &rarr;</a></div>
+</body>
+</html>

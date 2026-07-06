@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SFINAE — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / <a href="../index.html#2.3">2.3 Templates Advanced</a> / 2.3.3 SFINAE</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>SFINAE</h1>
+
+<p><strong>SFINAE</strong> stands for <em>Substitution Failure Is Not An Error</em>. It is a C++ rule that says: if substituting template arguments into a function signature causes a failure (such as referencing a nonexistent type member), the compiler silently discards that overload rather than producing a compilation error. This enables conditional compilation based on type properties.</p>
+
+<h2>How SFINAE Works</h2>
+
+<p>During <strong>overload resolution</strong>, the compiler tries each candidate function template by substituting the deduced types. If substitution produces an invalid type or expression, that candidate is removed from the overload set instead of causing an error -- as long as the failure occurs in the <em>immediate context</em> of the substitution.</p>
+
+<div class="callout">
+  <p><strong>Key distinction:</strong> Errors in the <em>immediate context</em> of substitution are SFINAE (ignored). Errors in the <em>function body</em> or <em>instantiation of nested templates</em> are hard errors (compilation fails). The boundary between "immediate context" and "outside" is subtle and compiler-dependent.</p>
+</div>
+
+<h2>enable_if</h2>
+
+<p><code>std::enable_if</code> is the primary SFINAE tool. It enables a function overload only when a boolean condition is true.</p>
+
+<pre>
+#include &lt;type_traits&gt;
+#include &lt;iostream&gt;
+
+// Only enabled for integral types
+template&lt;typename T&gt;
+typename std::enable_if&lt;std::is_integral_v&lt;T&gt;, T&gt;::type
+process(T value) {
+    std::cout &lt;&lt; "Integral path: " &lt;&lt; value * 2 &lt;&lt; "\n";
+    return value * 2;
+}
+
+// Only enabled for floating-point types
+template&lt;typename T&gt;
+typename std::enable_if&lt;std::is_floating_point_v&lt;T&gt;, T&gt;::type
+process(T value) {
+    std::cout &lt;&lt; "Floating point path: " &lt;&lt; value + 0.5 &lt;&lt; "\n";
+    return value + 0.5;
+}
+
+void enable_if_demo() {
+    process(10);      // Integral path: 20
+    process(3.14);     // Floating point path: 3.64
+    // process("hi");  // ERROR: no matching overload (neither enabled)
+}
+</pre>
+
+<h3>enable_if Syntax Variants</h3>
+
+<pre>
+// Variant 1: Return type (shown above)
+template&lt;typename T&gt;
+std::enable_if_t&lt;std::is_integral_v&lt;T&gt;, T&gt; foo(T v) { ... }
+
+// Variant 2: Non-type template parameter (cleaner)
+template&lt;typename T, std::enable_if_t&lt;std::is_integral_v&lt;T&gt;, int&gt; = 0&gt;
+T foo(T v) { ... }
+
+// Variant 3: Function parameter (less common)
+template&lt;typename T&gt;
+T foo(T v, std::enable_if_t&lt;std::is_integral_v&lt;T&gt;&gt;* = nullptr) { ... }
+</pre>
+
+<div class="callout green">
+  <p><strong>Prefer variant 2</strong> (non-type template parameter) because it keeps the return type clean and works with auto return type deduction.</p>
+</div>
+
+<h2>SFINAE with Type Traits</h2>
+
+<p>SFINAE combined with type traits allows powerful compile-time type dispatching.</p>
+
+<pre>
+#include &lt;type_traits&gt;
+#include &lt;vector&gt;
+#include &lt;string&gt;
+#include &lt;iostream&gt;
+
+// Generic: print size for containers with .size()
+template&lt;typename T&gt;
+std::enable_if_t&lt;
+    std::is_same_v&lt;
+        decltype(std::declval&lt;T&gt;().size()),
+        decltype(std::declval&lt;T&gt;().size())
+    &gt;,
+    void
+&gt;
+print_size(const T&amp; container) {
+    std::cout &lt;&lt; "Container size: " &lt;&lt; container.size() &lt;&lt; "\n";
+}
+
+// Fallback: print size of arithmetic types
+template&lt;typename T&gt;
+std::enable_if_t&lt;std::is_arithmetic_v&lt;T&gt;, void&gt;
+print_size(T value) {
+    std::cout &lt;&lt; "Value: " &lt;&lt; value &lt;&lt; "\n";
+}
+
+void sfinae_dispatch_demo() {
+    print_size(std::vector&lt;int&gt;{1, 2, 3});  // Container size: 3
+    print_size(42);                            // Value: 42
+    print_size(3.14);                          // Value: 3.14
+}
+</pre>
+
+<h2>Detecting Member Functions with SFINAE</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+// SFINAE detector: does T have a .begin() and .end() method?
+template&lt;typename T, typename = void&gt;
+struct has_begin_end : std::false_type {};
+
+template&lt;typename T&gt;
+struct has_begin_end&lt;T,
+    std::void_t&lt;
+        decltype(std::declval&lt;T&gt;().begin()),
+        decltype(std::declval&lt;T&gt;().end())
+    &gt;
+&gt; : std::true_type {};
+
+void detector_demo() {
+    std::cout &lt;&lt; "vector has begin/end: "
+              &lt;&lt; has_begin_end&lt;std::vector&lt;int&gt;&gt;::value &lt;&lt; "\n";  // 1
+    std::cout &lt;&lt; "int has begin/end: "
+              &lt;&lt; has_begin_end&lt;int&gt;::value &lt;&lt; "\n";               // 0
+    std::cout &lt;&lt; "string has begin/end: "
+              &lt;&lt; has_begin_end&lt;std::string&gt;::value &lt;&lt; "\n";        // 1
+}
+</pre>
+
+<h2>SFINAE vs Concepts (C++20)</h2>
+
+<table>
+  <tr><th>Aspect</th><th>SFINAE (enable_if)</th><th>Concepts (C++20)</th></tr>
+  <tr><td>Readability</td><td>Poor -- boilerplate heavy</td><td>Excellent -- self-documenting</td></tr>
+  <tr><td>Error messages</td><td>Cryptic</td><td>Clear, targeted</td></tr>
+  <tr><td>Overhead</td><td>None at runtime</td><td>None at runtime</td></tr>
+  <tr><td>Reuse</td><td>Must repeat enable_if</td><td>Define once, use everywhere</td></tr>
+  <tr><td>C++ version</td><td>C++11 and later</td><td>C++20 and later</td></tr>
+</table>
+
+<div class="callout warning">
+  <p><strong>Modern recommendation:</strong> If you are using C++20, prefer <a href="../advanced/concepts.html">concepts</a> over SFINAE. SFINAE is still important to understand because (1) it appears in legacy code, (2) the C++ standard library uses it internally, and (3) concepts are partially implemented using SFINAE-like mechanisms under the hood.</p>
+</div>
+
+<h2>Common SFINAE Pitfalls</h2>
+
+<div class="callout red">
+  <p><strong>Ambiguous overloads:</strong> When two <code>enable_if</code> conditions overlap (e.g., <code>is_integral</code> and <code>is_arithmetic</code>), the compiler cannot choose and produces an ambiguity error. Make conditions mutually exclusive.</p>
+</div>
+
+<pre>
+// BAD: overlapping conditions
+template&lt;typename T, std::enable_if_t&lt;std::is_arithmetic_v&lt;T&gt;, int&gt; = 0&gt;
+void foo(T v) { }  // matches int, double, float, char
+
+template&lt;typename T, std::enable_if_t&lt;std::is_integral_v&lt;T&gt;, int&gt; = 0&gt;
+void foo(T v) { }  // also matches int, char -- AMBIGUOUS!
+
+// GOOD: make mutually exclusive
+template&lt;typename T, std::enable_if_t&lt;std::is_integral_v&lt;T&gt; &amp;&amp; !std::is_same_v&lt;T, bool&gt;, int&gt; = 0&gt;
+void foo(T v) { }  // integers except bool
+
+template&lt;typename T, std::enable_if_t&lt;std::is_floating_point_v&lt;T&gt;, int&gt; = 0&gt;
+void foo(T v) { }  // floating point only
+</pre>
+
+<p>SFINAE is a powerful metaprogramming technique used extensively with <a href="template-specialization.html">template specialization</a> and <a href="type-traits.html">type traits</a>. In C++20, <a href="../advanced/concepts.html">concepts</a> provide a cleaner alternative for the same use cases.</p>
+
+<div class="nav"><a href="variadic-templates.html">&larr; Variadic Templates</a><a href="type-traits.html">Type Traits &rarr;</a></div>
+</body>
+</html>

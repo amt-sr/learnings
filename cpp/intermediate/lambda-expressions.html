@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lambda Expressions — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / Lambda Expressions</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>Lambda Expressions</h1>
+
+<p>Lambda expressions (introduced in C++11 and enhanced in C++14, C++17, and C++20) allow you to define anonymous function objects inline. They are one of the most transformative features of modern C++, enabling cleaner code with <a href="stl-algorithms.html">STL algorithms</a>, callbacks, and custom comparators.</p>
+
+<h2>Lambda Syntax</h2>
+
+<pre>
+[capture](parameters) -&gt; return_type { body }
+
+// Components:
+//   capture   — what variables from the enclosing scope to access
+//   parameters— function arguments
+//   return_type— (optional) trailing return type; auto-deduced if omitted
+//   body      — function body
+</pre>
+
+<h2>Basic Examples</h2>
+
+<pre>
+#include &lt;algorithm&gt;
+#include &lt;vector&gt;
+#include &lt;iostream&gt;
+
+void lambda_basics() {
+    std::vector&lt;int&gt; nums = {5, 2, 8, 1, 9, 3, 7, 4, 6};
+
+    // Simple lambda: sort descending
+    std::sort(nums.begin(), nums.end(), [](int a, int b) {
+        return a &gt; b;
+    });
+
+    // Lambda with auto return type
+    auto print = [](const std::vector&lt;int&gt;&amp; v) {
+        for (int x : v) std::cout &lt;&lt; x &lt;&lt; " ";
+        std::cout &lt;&lt; "\n";
+    };
+    print(nums);  // 9 8 7 6 5 4 3 2 1
+
+    // Lambda as a predicate
+    int threshold = 5;
+    auto count = std::count_if(nums.begin(), nums.end(),
+        [threshold](int x) { return x &gt; threshold; });
+    std::cout &lt;&lt; "Values &gt; 5: " &lt;&lt; count &lt;&lt; "\n";  // 4
+}
+</pre>
+
+<h2>Capture Modes</h2>
+
+<table>
+  <tr><th>Capture</th><th>Meaning</th></tr>
+  <tr><td><code>[]</code></td><td>No captures (stateless lambda)</td></tr>
+  <tr><td><code>[=]</code></td><td>Capture all by value (copy)</td></tr>
+  <tr><td><code>[&amp;]</code></td><td>Capture all by reference</td></tr>
+  <tr><td><code>[x, &amp;y]</code></td><td>Capture x by value, y by reference</td></tr>
+  <tr><td><code>[=, &amp;z]</code></td><td>Capture all by value except z by reference</td></tr>
+  <tr><td><code>[&, x]</code></td><td>Capture all by reference except x by value</td></tr>
+  <tr><td><code>[this]</code></td><td>Capture the enclosing object pointer</td></tr>
+</table>
+
+<pre>
+#include &lt;string&gt;
+#include &lt;vector&gt;
+#include &lt;iostream&gt;
+
+void capture_demo() {
+    std::string prefix = "item_";
+    int counter = 0;
+    std::vector&lt;std::string&gt; names;
+
+    // Capture by value and reference
+    auto make_name = [&amp;names, prefix, &amp;counter](const std::string&amp; base) {
+        counter++;
+        names.push_back(prefix + std::to_string(counter) + ": " + base);
+    };
+
+    make_name("alpha");
+    make_name("beta");
+    make_name("gamma");
+
+    for (const auto&amp; n : names)
+        std::cout &lt;&lt; n &lt;&lt; "\n";
+    // item_1: alpha
+    // item_2: beta
+    // item_3: gamma
+    std::cout &lt;&lt; "counter = " &lt;&lt; counter &lt;&lt; "\n";  // 3
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>Reference capture warning:</strong> Capturing local variables by reference in a lambda that outlives the scope where those variables live leads to dangling references. Be especially careful with lambdas stored in <code>std::function</code> (see <a href="function-bind.html">function and bind</a>).</p>
+</div>
+
+<h2>Mutable Lambdas</h2>
+
+<p>By default, lambdas capture by value as <code>const</code>. Use the <code>mutable</code> keyword to allow modification of captured-by-value variables.</p>
+
+<pre>
+void mutable_lambda_demo() {
+    int count = 0;
+
+    // Without mutable: cannot modify captured-by-value 'count'
+    // auto increment = [count]() { count++; };  // ERROR
+
+    // With mutable: can modify the copy
+    auto increment = [count]() mutable {
+        count++;
+        return count;
+    };
+
+    std::cout &lt;&lt; increment() &lt;&lt; "\n";  // 1
+    std::cout &lt;&lt; increment() &lt;&lt; "\n";  // 2
+    std::cout &lt;&lt; increment() &lt;&lt; "\n";  // 3
+    std::cout &lt;&lt; "original count: " &lt;&lt; count &lt;&lt; "\n";  // 0 (unchanged)
+}
+</pre>
+
+<h2>Generic Lambdas (C++14)</h2>
+
+<p>Using <code>auto</code> in parameters creates a template-like lambda that works with any type.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+void generic_lambdas() {
+    // Generic lambda — works with any type supporting +
+    auto add = [](auto a, auto b) {
+        return a + b;
+    };
+
+    std::cout &lt;&lt; add(3, 4) &lt;&lt; "\n";           // 7
+    std::cout &lt;&lt; add(3.5, 2.1) &lt;&lt; "\n";       // 5.6
+    std::cout &lt;&lt; add(std::string("a"), "b") &lt;&lt; "\n";  // "ab"
+
+    // Generic lambda with constraint (C++20)
+    // auto numeric_add = []&lt;typename T&gt;(T a, T b) requires std::is_arithmetic_v&lt;T&gt; {
+    //     return a + b;
+    // };
+
+    // Generic lambda in STL algorithms
+    std::vector&lt;int&gt; nums = {1, 2, 3, 4, 5};
+    auto sum = [](const auto&amp; vec) {
+        auto total = 0;
+        for (const auto&amp; x : vec) total += x;
+        return total;
+    };
+    std::cout &lt;&lt; "sum = " &lt;&lt; sum(nums) &lt;&lt; "\n";  // 15
+}
+</pre>
+
+<h2>Init Capture (C++14)</h2>
+
+<p>Init captures (also called generalized lambda captures) allow you to create new variables in the capture clause via move or arbitrary expressions.</p>
+
+<pre>
+#include &lt;memory&gt;
+#include &lt;iostream&gt;
+
+void init_capture_demo() {
+    auto ptr = std::make_unique&lt;int&gt;(42);
+
+    // Move a unique_ptr into a lambda (only possible with init capture)
+    auto task = [p = std::move(ptr)]() {
+        std::cout &lt;&lt; "Value: " &lt;&lt; *p &lt;&lt; "\n";
+    };
+
+    task();  // Value: 42
+    // ptr is now nullptr — ownership transferred to the lambda
+}
+
+// Useful pattern: capture with a different name
+void rename_capture_demo() {
+    int a_very_long_variable_name = 100;
+    auto fn = [short_name = a_very_long_variable_name]() {
+        std::cout &lt;&lt; short_name &lt;&lt; "\n";
+    };
+}
+</pre>
+
+<h2>Lambdas with STL Algorithms</h2>
+
+<pre>
+#include &lt;algorithm&gt;
+#include &lt;vector&gt;
+#include &lt;numeric&gt;
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+void lambdas_with_stl() {
+    std::vector&lt;std::string&gt; words = {
+        "banana", "apple", "cherry", "date", "elderberry", "fig", "grape"
+    };
+
+    // Sort by length
+    std::sort(words.begin(), words.end(),
+        [](const std::string&amp; a, const std::string&amp; b) {
+            return a.size() &lt; b.size();
+        });
+
+    // Find first word longer than 5 characters
+    auto it = std::find_if(words.begin(), words.end(),
+        [](const std::string&amp; w) { return w.size() &gt; 5; });
+
+    if (it != words.end())
+        std::cout &lt;&lt; "First long word: " &lt;&lt; *it &lt;&lt; "\n";  // "banana"
+
+    // Transform — collect lengths
+    std::vector&lt;size_t&gt; lengths;
+    std::transform(words.begin(), words.end(), std::back_inserter(lengths),
+        [](const std::string&amp; w) { return w.size(); });
+
+    // Remove if — erase-remove idiom with lambda
+    std::vector&lt;int&gt; nums = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    nums.erase(
+        std::remove_if(nums.begin(), nums.end(),
+            [](int x) { return x % 3 == 0; }),
+        nums.end());
+    // nums is now: {1, 2, 4, 5, 7, 8, 10}
+}
+</pre>
+
+<h2>constexpr Lambdas (C++17)</h2>
+
+<pre>
+// C++17 allows constexpr lambdas for compile-time computation
+constexpr auto square = [](int x) { return x * x; };
+static_assert(square(5) == 25);
+
+// Useful in template metaprogramming and with if constexpr
+template&lt;typename T&gt;
+auto process(T val) {
+    auto transform = [](auto v) { return v * v + 1; };
+    return transform(val);
+}
+</pre>
+
+<p>Lambdas pair naturally with <a href="move-semantics.html">move semantics</a> (via init captures) and are essential for mastering <a href="auto-decltype.html">auto and decltype</a>, where we explore type deduction that powers generic lambdas.</p>
+
+<div class="nav"><a href="move-semantics.html">&larr; Move Semantics</a><a href="auto-decltype.html">auto &amp; decltype &rarr;</a></div>
+</body>
+</html>

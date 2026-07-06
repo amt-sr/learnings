@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Producer-Consumer Pattern — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / Design Patterns / 3.5.5</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>Producer-Consumer Pattern</h1>
+
+<p>The Producer-Consumer pattern decouples data generation from data processing using a shared buffer. Producer threads push data into the buffer; consumer threads pop and process it. This pattern is fundamental in concurrent systems: network servers accept connections (producer) and worker threads handle requests (consumer), real-time systems collect sensor data (producer) and process it asynchronously (consumer).</p>
+
+<div class="callout">
+<p><strong>Prerequisites:</strong> <a href="../intermediate/mutex-locks.html">Mutex &amp; Locks</a>, <a href="../intermediate/condition-variable.html">Condition Variable</a>, <a href="../intermediate/thread-safe-data-structures.html">Thread-Safe Data Structures</a>, <a href="lock-free-programming.html">Lock-Free Programming</a>.</p>
+</div>
+
+<h2>Bounded Buffer with mutex + condition_variable</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;queue&gt;
+#include &lt;thread&gt;
+#include &lt;mutex&gt;
+#include &lt;condition_variable&gt;
+#include &lt;string&gt;
+#include &lt;chrono&gt;
+
+// Thread-safe bounded buffer (fixed capacity)
+template&lt;typename T&gt;
+class BoundedBuffer {
+    std::queue&lt;T&gt; queue_;
+    std::mutex mutex_;
+    std::condition_variable not_full_;   // signals when space available
+    std::condition_variable not_empty_;  // signals when data available
+    std::size_t capacity_;
+
+public:
+    explicit BoundedBuffer(std::size_t capacity) : capacity_(capacity) {}
+
+    void push(T item) {
+        std::unique_lock lock(mutex_);
+        // Wait until there is space in the buffer
+        not_full_.wait(lock, [this] { return queue_.size() &lt; capacity_; });
+        queue_.push(std::move(item));
+        lock.unlock();
+        // Notify one consumer that data is available
+        not_empty_.notify_one();
+    }
+
+    T pop() {
+        std::unique_lock lock(mutex_);
+        // Wait until buffer is not empty
+        not_empty_.wait(lock, [this] { return !queue_.empty(); });
+        T item = std::move(queue_.front());
+        queue_.pop();
+        lock.unlock();
+        // Notify one producer that space is available
+        not_full_.notify_one();
+        return item;
+    }
+
+    // Non-blocking try_pop
+    bool try_pop(T&amp; item) {
+        std::lock_guard lock(mutex_);
+        if (queue_.empty()) return false;
+        item = std::move(queue_.front());
+        queue_.pop();
+        not_full_.notify_one();
+        return true;
+    }
+
+    std::size_t size() const {
+        std::lock_guard lock(mutex_);
+        return queue_.size();
+    }
+};
+</pre>
+
+<h2>Thread-Safe Queue (General Purpose)</h2>
+
+<pre>
+#include &lt;queue&gt;
+#include &lt;mutex&gt;
+#include &lt;condition_variable&gt;
+#include &lt;optional&gt;
+
+// Unbounded thread-safe queue with shutdown support
+template&lt;typename T&gt;
+class ThreadSafeQueue {
+    std::queue&lt;T&gt; queue_;
+    mutable std::mutex mutex_;
+    std::condition_variable cv_;
+    bool shutdown_ = false;
+
+public:
+    void push(T item) {
+        {
+            std::lock_guard lock(mutex_);
+            if (shutdown_) return;
+            queue_.push(std::move(item));
+        }
+        cv_.notify_one();
+    }
+
+    // Blocking pop — returns nullopt on shutdown
+    std::optional&lt;T&gt; pop() {
+        std::unique_lock lock(mutex_);
+        cv_.wait(lock, [this] { return shutdown_ || !queue_.empty(); });
+
+        if (shutdown_ &amp;&amp; queue_.empty()) return std::nullopt;
+
+        T item = std::move(queue_.front());
+        queue_.pop();
+        return item;
+    }
+
+    // Shutdown: wake all waiting consumers
+    void shutdown() {
+        {
+            std::lock_guard lock(mutex_);
+            shutdown_ = true;
+        }
+        cv_.notify_all();
+    }
+
+    std::size_t size() const {
+        std::lock_guard lock(mutex_);
+        return queue_.size();
+    }
+};
+</pre>
+
+<h2>Multiple Producers, Multiple Consumers</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;thread&gt;
+#include &lt;vector&gt;
+#include &lt;atomic&gt;
+#include &lt;chrono&gt;
+
+BoundedBuffer&lt;int&gt; buffer(10);  // capacity 10
+std::atomic&lt;bool&gt; done{false};
+std::atomic&lt;int&gt; total_produced{0};
+std::atomic&lt;int&gt; total_consumed{0};
+
+void producer(int id) {
+    for (int i = 0; i &lt; 20; ++i) {
+        buffer.push(i + id * 100);
+        total_produced.fetch_add(1);
+        std::cout &lt;&lt; "Producer " &lt;&lt; id &lt;&lt; " pushed " &lt;&lt; (i + id * 100) &lt;&lt; "\n";
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+}
+
+void consumer(int id) {
+    while (true) {
+        int item = buffer.pop();
+        total_consumed.fetch_add(1);
+        std::cout &lt;&lt; "Consumer " &lt;&lt; id &lt;&lt; " popped " &lt;&lt; item &lt;&lt; "\n";
+        std::this_thread::sleep_for(std::chrono::milliseconds(25));
+
+        if (done.load() &amp;&amp; total_consumed.load() &gt;= total_produced.load()) {
+            break;
+        }
+    }
+}
+
+int main() {
+    const int num_producers = 3;
+    const int num_consumers = 2;
+
+    std::vector&lt;std::thread&gt; producers;
+    std::vector&lt;std::thread&gt; consumers;
+
+    for (int i = 0; i &lt; num_producers; ++i)
+        producers.emplace_back(producer, i);
+    for (int i = 0; i &lt; num_consumers; ++i)
+        consumers.emplace_back(consumer, i);
+
+    for (auto&amp; t : producers) t.join();
+
+    done.store(true);
+    for (auto&amp; t : consumers) t.join();
+
+    std::cout &lt;&lt; "Total produced: " &lt;&lt; total_produced &lt;&lt; "\n";
+    std::cout &lt;&lt; "Total consumed: " &lt;&lt; total_consumed &lt;&lt; "\n";
+}
+</pre>
+
+<h2>Connection to Thread Pools</h2>
+
+<p>A thread pool is a fixed set of consumer threads with an unbounded task queue. Producers submit tasks; worker threads execute them. The producer-consumer pattern is the backbone of every thread pool implementation:</p>
+
+<table>
+<tr><th>Component</th><th>Producer-Consumer Mapping</th></tr>
+<tr><td>Task queue</td><td>Shared buffer (usually unbounded)</td></tr>
+<tr><td>Worker threads</td><td>Consumers — pop tasks and execute</td></tr>
+<tr><td>Task submission</td><td>Producer — push tasks into queue</td></tr>
+<tr><td>Shutdown</td><td>Stop accepting tasks, drain queue, join workers</td></tr>
+</table>
+
+<div class="callout green">
+<p><strong>Best practice:</strong> Use condition variables with predicates (lambda in <code>wait()</code>) to avoid spurious wakeups. Always pair <code>notify_one/notify_all</code> with actual state changes while holding the lock. For high-throughput scenarios, consider <a href="lock-free-programming.html">Lock-Free Programming</a> approaches to avoid mutex contention.</p>
+</div>
+
+<div class="callout warning">
+<p><strong>Common pitfall — missed wakeup:</strong> If the producer notifies before the consumer waits, the notification is lost. The predicate-based <code>wait()</code> (e.g., <code>wait(lock, [this]{ return !queue_.empty(); })</code>) prevents this by checking the condition first.</p>
+</div>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="../intermediate/mutex-locks.html">Mutex &amp; Locks</a> (mutual exclusion), <a href="../intermediate/condition-variable.html">Condition Variable</a> (efficient waiting/notification), <a href="../intermediate/thread-safe-data-structures.html">Thread-Safe Data Structures</a> (concurrent containers), <a href="lock-free-programming.html">Lock-Free Programming</a> (mutex-free alternatives), <a href="../practice-questions/thread-safe-queue.html">Thread-Safe Queue Practice</a>.</p>
+</div>
+
+<div class="nav"><a href="strategy-pattern.html">&larr; Strategy Pattern</a><a href="socket-programming.html">Socket Programming &rarr;</a></div>
+</body>
+</html>

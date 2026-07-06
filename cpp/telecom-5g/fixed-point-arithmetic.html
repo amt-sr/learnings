@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fixed-Point Arithmetic — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#4">4 Telecom &amp; 5G/4G Networking</a> / Telecom C++ Techniques / 4.4.3</div>
+<div class="meta"><span class="tag medium">Medium</span></div>
+<h1>Fixed-Point Arithmetic</h1>
+
+<p>Fixed-point arithmetic represents real numbers using integers with an implicit fractional bit position. In telecom DSP, many embedded processors lack hardware floating-point units (FPU), or FPU usage introduces non-deterministic latency. Fixed-point provides deterministic, fast arithmetic for signal processing in PHY and filter implementations.</p>
+
+<h2>Q Format Notation</h2>
+
+<table>
+  <tr><th>Format</th><th>Total Bits</th><th>Fractional Bits</th><th>Range</th><th>Resolution</th></tr>
+  <tr><td>Q15</td><td>16</td><td>15</td><td>-1.0 to +0.99997</td><td>1/32768 ~ 3e-5</td></tr>
+  <tr><td>Q31</td><td>32</td><td>31</td><td>-1.0 to +0.9999999995</td><td>~4.6e-10</td></tr>
+  <tr><td>Q1.14</td><td>16</td><td>14</td><td>-2.0 to +1.99994</td><td>1/16384 ~ 6e-5</td></tr>
+  <tr><td>Q3.12</td><td>16</td><td>12</td><td>-8.0 to +7.99976</td><td>1/4096 ~ 2.4e-4</td></tr>
+  <tr><td>Q17.14</td><td>32</td><td>14</td><td>-131072 to +131071.999</td><td>~6e-5</td></tr>
+</table>
+
+<div class="callout">
+  <p><strong>Why fixed-point:</strong> Integer multiplication/addition takes 1-3 cycles on any processor. Floating-point takes 10-30 cycles on embedded cores, or requires a separate FPU. In PHY layer DSP (FFT, FIR filters), performing billions of operations per second requires the deterministic speed of integer arithmetic.</p>
+</div>
+
+<h2>Fixed-Point Operations</h2>
+
+<pre>
+  Q15 Multiplication:  a * b = (a * b) >> 15
+  Q15 Addition:         a + b = a + b  (no shift)
+  Q15 Shift Left:      a * 2 = a &lt;&lt; 1
+  Q15 Convert from float: Q15_val = (int16_t)(float_val * 32768)
+  Q15 Convert to float: float_val = (float)Q15_val / 32768.0f
+
+  Example:
+  0.5 in Q15 = 16384  (0.5 * 32768)
+  0.25 in Q15 = 8192  (0.25 * 32768)
+  0.5 * 0.25 = (16384 * 8192) >> 15
+              = 134217728 >> 15
+              = 4096 = 0.125 in Q15  (correct!)
+</pre>
+
+<h2>C++ Q15 Fixed-Point Class</h2>
+
+<pre>
+#include &lt;cstdint&gt;
+#include &lt;stdexcept&gt;
+#include &lt;type_traits&gt;
+
+// Q1.15 fixed-point (16-bit, range [-1, 1))
+class Q15 {
+public:
+    // Construct from raw integer value
+    constexpr explicit Q15(int16_t raw = 0) : val_(raw) {}
+
+    // Construct from float (implicit conversion)
+    static constexpr Q15 fromFloat(float f) {
+        // Clamp to [-1.0, 1.0)
+        f = f &lt; -1.0f ? -1.0f : (f &gt;= 1.0f ? 0.999969f : f);
+        return Q15(static_cast&lt;int16_t&gt;(f * 32768.0f));
+    }
+
+    // Convert to float
+    constexpr float toFloat() const {
+        return static_cast&lt;float&gt;(val_) / 32768.0f;
+    }
+
+    // Raw access
+    constexpr int16_t raw() const { return val_; }
+
+    // Addition (no shift needed)
+    constexpr Q15 operator+(Q15 other) const {
+        return Q15(static_cast&lt;int16_t&gt;(
+            static_cast&lt;int32_t&gt;(val_) + other.val_));
+    }
+
+    // Subtraction
+    constexpr Q15 operator-(Q15 other) const {
+        return Q15(static_cast&lt;int16_t&gt;(
+            static_cast&lt;int32_t&gt;(val_) - other.val_));
+    }
+
+    // Multiplication with saturation
+    Q15 operator*(Q15 other) const {
+        int32_t result = (static_cast&lt;int32_t&gt;(val_)
+                        * static_cast&lt;int32_t&gt;(other.val_)) &gt;&gt; 15;
+        return Q15(saturate(result));
+    }
+
+    // Multiplication with rounding
+    Q15 mulRound(Q15 other) const {
+        int64_t prod = static_cast&lt;int64_t&gt;(val_)
+                     * static_cast&lt;int64_t&gt;(other.val_);
+        // Round: add 0.5 before shift
+        int32_t result = static_cast&lt;int32_t&gt;(
+            (prod + (1LL &lt;&lt; 14)) &gt;&gt; 15);
+        return Q15(saturate(result));
+    }
+
+    // MAC (multiply-accumulate) -- core DSP operation
+    static Q15 mac(Q15 acc, Q15 a, Q15 b) {
+        int64_t prod = static_cast&lt;int64_t&gt;(a.val_)
+                     * static_cast&lt;int64_t&gt;(b.val_);
+        int64_t sum = static_cast&lt;int64_t&gt;(acc.val_) &lt;&lt; 15
+                    + prod;
+        int32_t result = static_cast&lt;int32_t&gt;(sum &gt;&gt; 15);
+        return Q15(saturate(result));
+    }
+
+    // Left shift (multiply by power of 2)
+    Q15 operator&lt;&lt;(int shift) const {
+        int32_t shifted = static_cast&lt;int32_t&gt;(val_) &lt;&lt; shift;
+        return Q15(saturate(shifted));
+    }
+
+    // Comparison operators
+    constexpr bool operator==(Q15 other) const { return val_ == other.val_; }
+    constexpr bool operator&lt;(Q15 other) const { return val_ &lt; other.val_; }
+    constexpr bool operator&gt;(Q15 other) const { return val_ &gt; other.val_; }
+
+private:
+    int16_t val_;
+
+    // Saturation: clamp to int16_t range
+    static int16_t saturate(int32_t val) {
+        if (val &gt; 32767) return 32767;
+        if (val &lt; -32768) return -32768;
+        return static_cast&lt;int16_t&gt;(val);
+    }
+};
+
+// Q15 FIR filter (common in telecom DSP)
+template&lt;uint8_t N&gt;
+class FirFilterQ15 {
+public:
+    FirFilterQ15(const Q15 (&amp;coeffs)[N]) {
+        for (uint8_t i = 0; i &lt; N; ++i)
+            coeffs_[i] = coeffs[i];
+    }
+
+    Q15 process(Q15 input) {
+        // Shift delay line
+        for (uint8_t i = N - 1; i &gt; 0; --i)
+            delay_[i] = delay_[i - 1];
+        delay_[0] = input;
+
+        // Multiply-accumulate
+        Q15 acc(0);
+        for (uint8_t i = 0; i &lt; N; ++i)
+            acc = Q15::mac(acc, coeffs_[i], delay_[i]);
+        return acc;
+    }
+
+private:
+    Q15 delay_[N]{};
+    Q15 coeffs_[N];
+};
+</pre>
+
+<h2>Overflow and Saturation</h2>
+
+<div class="callout red">
+  <p><strong>Overflow danger:</strong> Adding two Q15 values can overflow 16 bits. Always promote to 32 bits before adding: <code>(int32_t)a + (int32_t)b</code>. After multiplication, the 32-bit intermediate result must be shifted right by 15 and then saturated back to 16 bits. Overflow without saturation causes catastrophic signal distortion.</p>
+</div>
+
+<h2>Cross-References</h2>
+
+<ul>
+  <li><a href="../basics/variables-data-types.html">Variables &amp; Data Types</a> -- Integer types used in fixed-point.</li>
+  <li><a href="bit-level-operations.html">Bit-Level Operations</a> -- Shift operations for fixed-point arithmetic.</li>
+  <li><a href="signal-processing-basics.html">Signal Processing</a> -- DSP context where fixed-point is used.</li>
+  <li><a href="../practice-questions/fixed-point-arith-impl.html">Fixed-Point Practice</a> -- Exercises implementing fixed-point operations.</li>
+  <li><a href="embedded-cpp-constraints.html">Embedded C++ Constraints</a> -- Why no FPU in data path.</li>
+</ul>
+
+<div class="nav"><a href="packet-processing-dpdk.html">&larr; Packet Processing DPDK</a><a href="asn1-encoding.html">ASN.1 Encoding &rarr;</a></div>
+</body>
+</html>

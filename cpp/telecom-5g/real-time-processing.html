@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Real-Time Processing — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#4">4 Telecom &amp; 5G/4G Networking</a> / Telecom C++ Techniques / 4.4.1</div>
+<div class="meta"><span class="tag advanced">Advanced</span></div>
+<h1>Real-Time Processing</h1>
+
+<p>Telecom systems operate under strict real-time constraints. An OFDM symbol in 5G NR must be processed within microseconds, and MAC scheduling decisions must be made within one TTI (Transmission Time Interval). Missing deadlines causes packet drops, increased latency, or radio link failure.</p>
+
+<h2>Latency Budgets per Layer</h2>
+
+<table>
+  <tr><th>Layer</th><th>Processing Window</th><th>Failure Consequence</th></tr>
+  <tr><td>PHY</td><td>T_TI = 125 us (SCS 120 kHz) per symbol</td><td>Symbol missed, HARQ failure</td></tr>
+  <tr><td>MAC</td><td>1 slot (0.125 - 1 ms depending on SCS)</td><td>Scheduling missed, throughput loss</td></tr>
+  <tr><td>RLC</td><td>1-2 ms</td><td>Segmentation delay, buffer overflow</td></tr>
+  <tr><td>PDCP</td><td>1-5 ms</td><td>Ciphering delay, handover packet loss</td></tr>
+  <tr><td>RRC/NGAP</td><td>10-50 ms</td><td>Handover failure, connection drop</td></tr>
+  <tr><td>End-to-end (URLLC)</td><td>1 ms target</td><td>Factory automation / V2X failure</td></tr>
+</table>
+
+<h2>Deadline Scheduling (SCHED_DEADLINE)</h2>
+
+<div class="callout">
+  <p><strong>Linux SCHED_DEADLINE:</strong> The most appropriate scheduler for real-time RAN workloads. It provides guaranteed CPU time using the sporadic task model (C, D, P) where C = computation time, D = deadline, P = period. The kernel ensures each task gets at least C microseconds every P microseconds.</p>
+</div>
+
+<pre>
+// Set SCHED_DEADLINE via sched_setattr()
+#define _GNU_SOURCE
+#include &lt;sched.h&gt;
+#include &lt;unistd.h&gt;
+#include &lt;cstring&gt;
+
+void setDeadlineScheduling(int cpu) {
+    cpu_set_t cpuset;
+    CPU_ZERO(&amp;cpuset);
+    CPU_SET(cpu, &amp;cpuset);
+
+    // Pin to specific CPU core
+    sched_setaffinity(0, sizeof(cpuset), &amp;cpuset);
+
+    // SCHED_DEADLINE parameters
+    struct sched_attr attr{};
+    attr.size = sizeof(attr);
+    attr.sched_policy = SCHED_DEADLINE;
+    attr.sched_runtime = 50000;    // 50 us computation budget
+    attr.sched_deadline = 125000; // 125 us deadline (1 OFDM symbol)
+    attr.sched_period = 125000;  // 125 us period (matching SCS)
+
+    if (sched_setattr(0, &amp;attr, 0) == -1) {
+        // Fallback to SCHED_FIFO if DEADLINE unavailable
+        attr.sched_policy = SCHED_FIFO;
+        attr.sched_priority = 99;
+        sched_setscheduler(0, SCHED_FIFO, &amp;attr);
+    }
+}
+</pre>
+
+<h2>Priority Inversion and Solutions</h2>
+
+<pre>
+  Priority Inversion Scenario:
+
+  High-priority (PHY)       Low-priority (logging)
+       |                         |
+       |  needs mutex M          |
+       |  blocked...             |
+       |                    locks M
+       |                    preempted by...
+                                  Medium-priority (monitor)
+                                  runs indefinitely
+       |  DEADLOCK (effectively)
+
+  Solutions:
+  1. Priority Inheritance (PI) mutex: Low-priority thread
+     temporarily inherits high priority while holding the lock.
+     Linux: pthread_mutexattr_setprotocol(&attr, PTHREAD_PRIO_INHERIT)
+
+  2. Priority Ceiling: Mutex assigned a ceiling priority.
+     Any thread locking it runs at ceiling priority.
+     Linux: pthread_mutexattr_setprotocol(&attr, PTHREAD_PRIO_PROTECT)
+
+  3. Lock-free data structures: Eliminate locks entirely
+     using atomics and ring buffers (preferred in data path).
+</pre>
+
+<h2>CPU Affinity and NO_HZ</h2>
+
+<pre>
+#include &lt;sched.h&gt;
+#include &lt;unistd.h&gt;
+
+// Thread-per-core pinning for RAN
+void pinThreadToCore(int core_id) {
+    cpu_set_t cpuset;
+    CPU_ZERO(&amp;cpuset);
+    CPU_SET(core_id, &amp;cpuset);
+    pthread_setaffinity_np(pthread_self(),
+                            sizeof(cpuset), &amp;cpuset);
+}
+
+// Kernel boot parameters for NO_HZ (tickless):
+// nohz_full=2-7 rcu_nocbs=2-7
+// Cores 2-7 run without timer interrupts (dedicated to RAN)
+// Core 0-1 handle system/OS tasks
+
+// Isolate cores via kernel command line:
+// isolcpus=2-7
+// Prevents scheduler from placing other tasks on RAN cores
+</pre>
+
+<div class="callout red">
+  <p><strong>Critical:</strong> In production RAN systems, timer interrupts, softirqs, and workqueues on data-path cores cause jitter. NO_HZ full, rcu_nocbs, and isolcpus are essential kernel parameters. Without them, latency spikes of 10-100 us are common, which can violate URLLC deadlines.</p>
+</div>
+
+<h2>DPDK Overview for Telecom</h2>
+
+<p>DPDK (Data Plane Development Kit) bypasses the Linux kernel to achieve line-rate packet processing. Instead of system calls and interrupt-driven networking, DPDK uses poll-mode drivers, hugepages for zero-copy, and user-space memory for packet buffers.</p>
+
+<table>
+  <tr><th>Feature</th><th>Kernel Networking</th><th>DPDK</th></tr>
+  <tr><td>Packet delivery</td><td>Interrupt + syscall</td><td>Poll mode (busy-wait)</td></tr>
+  <tr><td>Memory</td><td>Kernel kmalloc</td><td>Hugepages (2 MB/1 GB)</td></tr>
+  <tr><td>Buffer mgmt</td><td>sk_buff</td><td>rte_mbuf</td></tr>
+  <tr><td>Throughput</td><td>1-5 Mpps (per core)</td><td>30-80 Mpps (per core)</td></tr>
+  <tr><td>Latency</td><td>10-50 us</td><td>1-5 us</td></tr>
+</table>
+
+<h2>C++ Real-Time Timer</h2>
+
+<pre>
+#include &lt;chrono&gt;
+#include &lt;atomic&gt;
+#include &lt;iostream&gt;
+
+class HighResolutionTimer {
+public:
+    void start() {
+        start_ = std::chrono::high_resolution_clock::now();
+    }
+
+    uint64_t elapsedMicroseconds() const {
+        auto now = std::chrono::high_resolution_clock::now();
+        return std::chrono::duration_cast&lt;
+            std::chrono::microseconds&gt;(now - start_).count();
+    }
+
+    bool checkDeadline(uint64_t deadline_us) const {
+        return elapsedMicroseconds() &lt;= deadline_us;
+    }
+
+private:
+    std::chrono::high_resolution_clock::time_point start_;
+};
+
+// Usage in data path
+void processSlot() {
+    HighResolutionTimer timer;
+    timer.start();
+
+    // Process PHY symbol
+    processPhySymbol();
+
+    if (!timer.checkDeadline(125)) {
+        // Deadline miss -- log and potentially trigger
+        // scheduler adjustment or alarm
+        std::atomic&lt;uint64_t&gt;::add_fetch(&amp;deadline_misses_, 1);
+    }
+}
+
+static std::atomic&lt;uint64_t&gt; deadline_misses_{0};
+void processPhySymbol() {}
+</pre>
+
+<h2>Cross-References</h2>
+
+<ul>
+  <li><a href="packet-processing-dpdk.html">Packet Processing with DPDK</a> -- Detailed DPDK architecture and code.</li>
+  <li><a href="thread-models-ran.html">Thread Models for RAN</a> -- Threading patterns for real-time systems.</li>
+  <li><a href="../advanced/memory-model-atomics.html">Memory Model &amp; Atomics</a> -- Lock-free programming for data path.</li>
+  <li><a href="../advanced/lock-free-programming.html">Lock-Free Programming</a> -- Atomic operations, memory ordering.</li>
+</ul>
+
+<div class="nav"><a href="handover-procedures.html">&larr; Handover Procedures</a><a href="packet-processing-dpdk.html">Packet Processing DPDK &rarr;</a></div>
+</body>
+</html>

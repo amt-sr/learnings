@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Pointers — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / Smart Pointers</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>Smart Pointers</h1>
+
+<p>Smart pointers are objects that manage the lifetime of dynamically allocated memory automatically. They are the modern C++ replacement for raw <code>new</code>/<code>delete</code> and are defined in the <code>&lt;memory&gt;</code> header. Using smart pointers eliminates entire classes of bugs: memory leaks, double frees, and dangling pointers.</p>
+
+<h2>Why Smart Pointers?</h2>
+
+<div class="callout red">
+  <p><strong>Raw pointer dangers:</strong> Forgetting to <code>delete</code>, deleting twice, accessing freed memory, and exception safety issues when allocations are mixed with throwing operations.</p>
+</div>
+
+<pre>
+// RAW POINTER PITFALLS (avoid this pattern)
+void raw_pointer_problems() {
+    int* p = new int(42);
+    if (some_condition()) {
+        throw std::runtime_error("leak!"); // p is never freed
+    }
+    delete p;
+}
+
+// SMART POINTER SOLUTION
+void smart_pointer_solution() {
+    auto p = std::make_unique&lt;int&gt;(42);
+    if (some_condition()) {
+        throw std::runtime_error("safe!"); // p is freed automatically
+    }
+    // no delete needed
+}
+</pre>
+
+<h2>std::unique_ptr</h2>
+
+<p><code>std::unique_ptr</code> represents <strong>exclusive ownership</strong> of a dynamically allocated object. Only one <code>unique_ptr</code> can own a given resource at a time. It cannot be copied, only moved.</p>
+
+<pre>
+#include &lt;memory&gt;
+#include &lt;iostream&gt;
+
+class Widget {
+    std::string name;
+public:
+    Widget(std::string n) : name(std::move(n)) {
+        std::cout &lt;&lt; "Widget '" &lt;&lt; name &lt;&lt; "' created\n";
+    }
+    ~Widget() { std::cout &lt;&lt; "Widget '" &lt;&lt; name &lt;&lt; "' destroyed\n"; }
+    void greet() const { std::cout &lt;&lt; "Hello from " &lt;&lt; name &lt;&lt; "\n"; }
+};
+
+void unique_ptr_basics() {
+    // create with make_unique (C++14) — preferred over new
+    auto w1 = std::make_unique&lt;Widget&gt;("Alice");
+
+    w1-&gt;greet();          // access via -&gt;
+    (*w1).greet();         // dereference with *
+
+    // cannot copy: auto w2 = w1;          // ERROR
+    // can move:
+    auto w2 = std::move(w1);  // w1 is now nullptr
+    // w1-&gt;greet();                        // CRASH — w1 is empty
+
+    std::cout &lt;&lt; "w1 is " &lt;&lt; (w1 ? "not null" : "null") &lt;&lt; "\n";
+    std::cout &lt;&lt; "w2 is " &lt;&lt; (w2 ? "not null" : "null") &lt;&lt; "\n";
+}
+// Output:
+//   Widget 'Alice' created
+//   Hello from Alice
+//   Hello from Alice
+//   w1 is null
+//   w2 is not null
+//   Widget 'Alice' destroyed
+</pre>
+
+<h3>unique_ptr with Arrays</h3>
+
+<pre>
+void unique_ptr_arrays() {
+    // unique_ptr to arrays uses partial specialization
+    auto arr = std::make_unique&lt;int[]&gt;(5);
+    for (int i = 0; i &lt; 5; ++i)
+        arr[i] = i * 10;
+
+    for (int i = 0; i &lt; 5; ++i)
+        std::cout &lt;&lt; arr[i] &lt;&lt; " ";  // 0 10 20 30 40
+    std::cout &lt;&lt; "\n";
+} // calls delete[] arr
+</pre>
+
+<div class="callout green">
+  <p><strong>Best practice:</strong> Always prefer <code>std::make_unique</code> over <code>std::unique_ptr&lt;T&gt;(new T(...))</code>. It is safer (no exception leaks), more concise, and can be slightly faster due to better cache locality.</p>
+</div>
+
+<h2>std::shared_ptr</h2>
+
+<p><code>std::shared_ptr</code> represents <strong>shared ownership</strong>. Multiple <code>shared_ptr</code> instances can own the same resource. The resource is freed when the last <code>shared_ptr</code> is destroyed. Internally it uses a reference-counted control block.</p>
+
+<pre>
+#include &lt;memory&gt;
+#include &lt;iostream&gt;
+
+class Resource {
+public:
+    Resource() { std::cout &lt;&lt; "Resource acquired\n"; }
+    ~Resource() { std::cout &lt;&lt; "Resource released\n"; }
+    void use() { std::cout &lt;&lt; "Using resource\n"; }
+};
+
+void shared_ptr_basics() {
+    std::cout &lt;&lt; "use_count: " &lt;&lt; sp1.use_count() &lt;&lt; "\n";  // 1
+
+    {
+        auto sp2 = sp1;  // copy — ref count increments
+        std::cout &lt;&lt; "use_count: " &lt;&lt; sp1.use_count() &lt;&lt; "\n";  // 2
+        sp2-&gt;use();
+    }
+    // sp2 destroyed — ref count decrements
+
+    std::cout &lt;&lt; "use_count: " &lt;&lt; sp1.use_count() &lt;&lt; "\n";  // 1
+}
+// sp1 destroyed — Resource released
+</pre>
+
+<div class="callout warning">
+  <p><strong>Performance note:</strong> <code>shared_ptr</code> has overhead: the control block requires a heap allocation (unless you use <code>make_shared</code> which combines them), and every copy involves atomic reference count operations. Use <code>unique_ptr</code> when shared ownership is not needed.</p>
+</div>
+
+<h3>make_shared vs make_unique</h3>
+
+<pre>
+// make_shared performs a single allocation for object + control block
+auto sp = std::make_shared&lt;Widget&gt;("Bob");
+
+// Constructing from new performs two allocations
+auto sp2 = std::shared_ptr&lt;Widget&gt;(new Widget("Carol"));  // less efficient
+
+// The aliasing constructor: shared_ptr to part of an object
+struct Node {
+    int value;
+    std::shared_ptr&lt;Node&gt; next;
+};
+
+auto node = std::make_shared&lt;Node&gt;();
+node-&gt;value = 42;
+// shared_ptr to just the value, sharing ownership with node
+std::shared_ptr&lt;int&gt; val_ptr(node, &amp;node-&gt;value);
+</pre>
+
+<h2>std::weak_ptr</h2>
+
+<p><code>std::weak_ptr</code> is a non-owning observer of a <code>shared_ptr</code>. It does not contribute to the reference count and is used to break <strong>circular references</strong>.</p>
+
+<pre>
+#include &lt;memory&gt;
+#include &lt;iostream&gt;
+
+class B;  // forward declaration
+
+class A {
+public:
+    std::shared_ptr&lt;B&gt; b_ptr;
+    ~A() { std::cout &lt;&lt; "A destroyed\n"; }
+};
+
+class B {
+public:
+    // weak_ptr breaks the cycle — A and B can both be freed
+    std::weak_ptr&lt;A&gt; a_ptr;
+    ~B() { std::cout &lt;&lt; "B destroyed\n"; }
+};
+
+void circular_reference_demo() {
+    auto a = std::make_shared&lt;A&gt;();
+    auto b = std::make_shared&lt;B&gt;();
+    a-&gt;b_ptr = b;
+    b-&gt;a_ptr = a;
+
+    std::cout &lt;&lt; "a.use_count = " &lt;&lt; a.use_count() &lt;&lt; "\n";  // 1 (b holds weak_ptr)
+    std::cout &lt;&lt; "b.use_count = " &lt;&lt; b.use_count() &lt;&lt; "\n";  // 2 (a + b shared)
+
+    // Access weak_ptr's object via lock()
+    if (auto locked = b-&gt;a_ptr.lock()) {
+        std::cout &lt;&lt; "A is still alive\n";
+    }
+}
+// Output:
+//   a.use_count = 1
+//   b.use_count = 2
+//   A is still alive
+//   A destroyed
+//   B destroyed
+</pre>
+
+<div class="callout red">
+  <p><strong>Without weak_ptr:</strong> If both <code>A</code> and <code>B</code> held <code>shared_ptr</code> to each other, neither would ever be destroyed — a classic memory leak via reference counting. <code>weak_ptr</code> breaks this cycle.</p>
+</div>
+
+<h2>Comparison Table</h2>
+
+<table>
+  <tr><th>Feature</th><th>unique_ptr</th><th>shared_ptr</th><th>weak_ptr</th></tr>
+  <tr><td>Ownership</td><td>Exclusive</td><td>Shared</td><td>None</td></tr>
+  <tr><td>Copyable</td><td>No (move only)</td><td>Yes</td><td>Yes</td></tr>
+  <tr><td>Runtime cost</td><td>Zero overhead</td><td>Atomic ref count</td><td>Lock + ref check</td></tr>
+  <tr><td>Factory function</td><td>make_unique</td><td>make_shared</td><td>N/A</td></tr>
+  <tr><td>Use case</td><td>Default choice</td><td>Shared ownership</td><td>Break cycles / observe</td></tr>
+</table>
+
+<h2>Common Patterns</h2>
+
+<h3>Factory Functions</h3>
+
+<pre>
+class DatabaseConnection {
+    DatabaseConnection(const std::string&amp; conn_str)
+        : connection_string(conn_str) {}
+public:
+    std::string connection_string;
+
+    // Factory returns unique_ptr — hides implementation
+    static std::unique_ptr&lt;DatabaseConnection&gt; create(const std::string&amp; conn_str) {
+        return std::make_unique&lt;DatabaseConnection&gt;(conn_str);
+    }
+};
+
+void factory_demo() {
+    // Caller cannot see DatabaseConnection's constructor
+    auto db = DatabaseConnection::create("postgresql://localhost/mydb");
+    std::cout &lt;&lt; db-&gt;connection_string &lt;&lt; "\n";
+}
+</pre>
+
+<h3>Unique_ptr as Function Parameters</h3>
+
+<pre>
+// Pass by reference if you don't transfer ownership
+void use_widget(const std::unique_ptr&lt;Widget&gt;&amp; w) {
+    w-&gt;greet();
+}
+
+// Pass by value to TRANSFER ownership (caller gives up the pointer)
+void consume_widget(std::unique_ptr&lt;Widget&gt; w) {
+    w-&gt;greet();
+    // w is destroyed here — Widget is freed
+}
+
+void parameter_demo() {
+    auto w = std::make_unique&lt;Widget&gt;("Dave");
+    use_widget(w);           // w still valid after this
+    consume_widget(std::move(w));  // w is now nullptr
+}
+</pre>
+
+<h2>When to Use Which</h2>
+
+<div class="callout green">
+  <p><strong>Decision guide:</strong></p>
+  <ul>
+    <li>Default to <code>unique_ptr</code> for all dynamically allocated objects.</li>
+    <li>Use <code>shared_ptr</code> only when ownership must truly be shared (e.g., caches, observer patterns).</li>
+    <li>Use <code>weak_ptr</code> to observe a <code>shared_ptr</code> without extending its lifetime, or to break circular references.</li>
+  </ul>
+</div>
+
+<p>Smart pointers work hand-in-hand with <a href="raii.html">RAII</a> (Resource Acquisition Is Initialization) and complement the <a href="move-semantics.html">move semantics</a> model. Understanding them is essential before diving into <a href="move-semantics.html">move semantics</a>, where we will explore how <code>unique_ptr</code> achieves its move-only behavior.</p>
+
+<div class="nav"><a href="../basics/iterators-basics.html">&larr; Iterators Basics</a><a href="move-semantics.html">Move Semantics &rarr;</a></div>
+</body>
+</html>

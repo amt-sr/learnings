@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Valgrind — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / <a href="../index.html#3.7">3.7 Build Systems &amp; Tooling</a> / 3.7.4</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>Valgrind</h1>
+
+<p>Valgrind is a suite of instrumentation tools for detecting memory errors, threading bugs, and performance bottlenecks in C and C++ programs. Unlike <a href="address-sanitizer-tools.html">AddressSanitizer</a> (which requires recompilation), Valgrind works on unmodified binaries by running them on a synthetic CPU. This makes it ideal for analyzing programs you cannot recompile.</p>
+
+<h2>Valgrind Tools Overview</h2>
+
+<table>
+<tr><th>Tool</th><th>Invocation</th><th>Purpose</th></tr>
+<tr><td><strong>Memcheck</strong></td><td><code>valgrind ./myapp</code> (default)</td><td>Detect memory errors: leaks, invalid access, uninitialized reads</td></tr>
+<tr><td><strong>Callgrind</strong></td><td><code>valgrind --tool=callgrind ./myapp</code></td><td>Profiling: call graph, instruction counts, cache simulation</td></tr>
+<tr><td><strong>Cachegrind</strong></td><td><code>valgrind --tool=cachegrind ./myapp</code></td><td>Cache miss analysis: L1, LL cache hits/misses</td></tr>
+<tr><td><strong>Helgrind</strong></td><td><code>valgrind --tool=helgrind ./myapp</code></td><td>Thread error detection: data races, lock ordering</td></tr>
+<tr><td><strong>DRD</strong></td><td><code>valgrind --tool=drd ./myapp</code></td><td>Alternative thread error detector (different algorithm)</td></tr>
+<tr><td><strong>Massif</strong></td><td><code>valgrind --tool=massif ./myapp</code></td><td>Heap profiling: memory usage over time</td></tr>
+</table>
+
+<h2>Memcheck -- Memory Error Detection</h2>
+
+<p>Memcheck is the most commonly used Valgrind tool. It detects every byte of memory in the program and tracks whether it has been initialized, freed, or is still accessible.</p>
+
+<h3>Running Memcheck</h3>
+
+<pre>
+# Basic run
+valgrind ./myapp
+
+# Full leak check with leak origins
+valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes ./myapp
+
+# Report to file
+valgrind --leak-check=full --log-file=valgrind-report.txt ./myapp
+
+# Suppress known false positives
+valgrind --suppressions=myapp.supp ./myapp
+</pre>
+
+<h3>Sample Valgrind Output</h3>
+
+<pre>
+$ valgrind --leak-check=full --track-origins=yes ./ran_simulator
+==12345== Memcheck, a memory error detector
+==12345== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==12345== Using Valgrind-3.19.0 and LibVEX
+==12345== Command: ./ran_simulator
+==12345==
+
+==12345== Invalid read of size 4
+==12345==    at 0x4A2B3C: process_packet(Packet*) src/packet.cpp:42
+==12345==    by 0x4A2C4D: handle_connection(int) src/server.cpp:78
+==12345==  Address 0x5a3d028 is 8 bytes inside a block of size 64 free'd
+==12345==    at 0x4C2F1B: operator delete(void*) (vg_replace_malloc.c:584)
+==12345==    by 0x4A2B00: free_packet(Packet*) src/packet.cpp:35
+==12345==  Block was alloc'd at
+==12345==    at 0x4C2DBF: operator new(unsigned long) (vg_replace_malloc.c:341)
+==12345==    by 0x4A2A80: create_packet(int) src/packet.cpp:28
+
+==12345== Conditional jump or move depends on uninitialised value(s)
+==12345==    at 0x4A3D50: parse_header(unsigned char*) src/parser.cpp:67
+==12345==  Uninitialised value was created by a heap allocation
+==12345==    at 0x4C2DBF: operator new(unsigned long) (vg_replace_malloc.c:341)
+==12345==    by 0x4A3D00: alloc_buffer(size_t) src/buffer.cpp:15
+
+==12345== HEAP SUMMARY:
+==12345==     in use at exit: 4,096 bytes in 3 blocks
+==12345==   total heap usage: 128 allocs, 125 frees, 65,536 bytes allocated
+==12345==
+==12345== LEAK SUMMARY:
+==12345==    definitely lost: 1,024 bytes in 1 blocks
+==12345==    indirectly lost: 0 bytes in 0 blocks
+==12345==      possibly lost: 0 bytes in 0 blocks
+==12345==    still reachable: 3,072 bytes in 2 blocks
+==12345==         suppressed: 0 bytes in 0 blocks
+==12345== Rerun with --leak-check=full to see details of leaked memory
+==12345==
+==12345== ERROR SUMMARY: 2 errors from 2 contexts (suppressed: 0 from 0)
+</pre>
+
+<h2>Common Memory Errors Detected</h2>
+
+<table>
+<tr><th>Error Type</th><th>Valgrind Message</th><th>Root Cause</th></tr>
+<tr><td>Use-after-free</td><td>Invalid read/write of size N inside a block free'd</td><td>Accessing memory after <code>delete</code> or <code>free()</code></td></tr>
+<tr><td>Uninitialized read</td><td>Conditional jump depends on uninitialised value</td><td>Reading variable before assignment</td></tr>
+<tr><td>Buffer overflow</td><td>Invalid read/write of size N after block of size M</td><td>Writing past array bounds</td></tr>
+<tr><td>Memory leak</td><td>definitely lost: N bytes in M blocks</td><td>Missing delete/free, lost pointer</td></tr>
+<tr><td>Double free</td><td>Invalid free() / delete</td><td>Freeing the same pointer twice</td></tr>
+<tr><td>Mismatched alloc/free</td><td>Mismatched free() / delete / delete []</td><td>Allocated with new[], freed with delete</td></tr>
+</table>
+
+<h2>Suppression Files</h2>
+
+<p>Suppress known false positives or third-party library issues:</p>
+
+<pre>
+# myapp.supp
+{
+    # Suppress leak from known library issue
+    lib_some_leak
+    Memcheck:Leak
+    match-leak-kinds: reachable
+    fun:malloc
+    fun:lib_init_function
+    ...
+}
+{
+    # Suppress uninitialized read in third-party code
+    third_party_uninit
+    Memcheck:Value8
+    fun:third_party_parse
+    ...
+}
+
+# Run with suppression file
+valgrind --suppressions=myapp.supp --leak-check=full ./myapp
+</pre>
+
+<h2>Callgrind -- Profiling</h2>
+
+<pre>
+# Run with Callgrind
+valgrind --tool=callgrind --callgrind-out-file=callgrind.out ./myapp
+
+# Analyze results with KCachegrind (GUI) or callgrind_annotate
+callgrind_annotate callgrind.out --auto=yes
+
+# Function-level profiling output:
+ ---------------------------------------------------------------------------
+   4,231,567  program entry point (run_all_tests)
+   2,876,432    parse_packet(char const*, int)  [src/parser.cpp:45]
+   1,543,210      decode_header(unsigned char*)  [src/codec.cpp:112]
+     987,654      validate_checksum(char const*, int)  [src/checksum.cpp:33]
+   1,234,567    process_packet(Packet&amp;)  [src/processor.cpp:78]
+     654,321      encrypt_payload(unsigned char*, int)  [src/crypto.cpp:56]
+   1,100,000  allocate_buffer(size_t)  [src/memory.cpp:22]
+ ---------------------------------------------------------------------------
+</pre>
+
+<h2>Valgrind vs AddressSanitizer</h2>
+
+<table>
+<tr><th>Aspect</th><th>Valgrind</th><th><a href="address-sanitizer-tools.html">ASan</a></th></tr>
+<tr><td>Recompilation needed</td><td>No (works on any binary)</td><td>Yes (<code>-fsanitize=address</code>)</td></tr>
+<tr><td>Performance overhead</td><td>10-50x slower</td><td>2x slower</td></tr>
+<tr><td>Memory overhead</td><td>3-5x more RAM</td><td>2x more RAM</td></tr>
+<tr><td>Use-after-free</td><td>Yes</td><td>Yes</td></tr>
+<tr><td>Uninitialized reads</td><td>Yes (Memcheck)</td><td>Yes (MSan, Clang only)</td></tr>
+<tr><td>Data races</td><td>Yes (Helgrind)</td><td>Yes (TSan)</td></tr>
+<tr><td>Stack analysis</td><td>Limited</td><td>Excellent (buffer overflows)</td></tr>
+<tr><td>Platform</td><td>Linux, macOS (limited)</td><td>All (GCC/Clang)</td></tr>
+</table>
+
+<div class="callout green">
+<p><strong>Recommendation:</strong> Use <a href="address-sanitizer-tools.html">ASan</a> for everyday development (fast, catches most memory bugs). Use Valgrind Memcheck for cases where you cannot recompile or need to detect uninitialized memory reads on GCC. Use Helgrind as a complement to TSan. See <a href="gdb-debugging.html">GDB Debugging</a> for interactive debugging and <a href="../practice-questions/memory-leak-detection.html">Memory Leak Detection</a> for practice.</p>
+</div>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="gdb-debugging.html">GDB Debugging</a>, <a href="address-sanitizer-tools.html">AddressSanitizer &amp; Tools</a>, <a href="../practice-questions/memory-leak-detection.html">Memory Leak Detection</a> (practice), <a href="../practice-questions/custom-allocator.html">Custom Allocator</a> (practice).</p>
+</div>
+
+<div class="nav"><a href="gdb-debugging.html">&larr; GDB Debugging</a><a href="../practice-questions/memory-leak-detection.html">Memory Leak Detection (Practice) &rarr;</a></div>
+</body>
+</html>

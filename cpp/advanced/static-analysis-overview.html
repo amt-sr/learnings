@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Static Code Analysis Overview — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / <a href="../index.html#3.6">3.6 Static Analysis &amp; Code Quality</a> / 3.6.1</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>Static Code Analysis Overview</h1>
+
+<p>Static analysis is the process of examining source code without executing it to find bugs, security vulnerabilities, and code quality issues. Unlike dynamic testing, static analysis can detect problems across all possible execution paths, including edge cases that are difficult to reach with tests alone.</p>
+
+<div class="callout">
+<p><strong>Why it matters:</strong> Studies consistently show that finding and fixing bugs early in development is orders of magnitude cheaper than fixing them in production. Static analysis catches entire classes of errors (memory leaks, null pointer dereferences, buffer overflows) at compile time, before the code ever runs.</p>
+</div>
+
+<h2>Types of Static Analysis</h2>
+
+<table>
+<tr><th>Technique</th><th>Description</th><th>Strengths</th><th>Limitations</th></tr>
+<tr><td>Pattern Matching</td><td>Matches known bug patterns (regex, AST patterns) against source code</td><td>Fast, low false positive rate for known patterns</td><td>Cannot discover novel bugs</td></tr>
+<tr><td>Data Flow Analysis</td><td>Tracks how data propagates through the program (taint analysis, reaching definitions)</td><td>Finds use of uninitialized variables, tainted data flows</td><td>May not model all possible paths</td></tr>
+<tr><td>Symbolic Execution</td><td>Explores all feasible paths by substituting symbolic values for inputs</td><td>Deep bug detection, proves absence of certain bug classes</td><td>Path explosion, scalability issues</td></tr>
+<tr><td>Abstract Interpretation</td><td>Models program behavior using abstract domains (intervals, congruences)</td><td>Sound analysis with guaranteed coverage</td><td>May report false positives from over-approximation</td></tr>
+<tr><td>Type-Based Analysis</td><td>Leverages the type system and type inference to find inconsistencies</td><td>Fast, precise, leverages compiler infrastructure</td><td>Limited to type-related errors</td></tr>
+</table>
+
+<h2>False Positives and False Negatives</h2>
+
+<p>Every static analyzer must balance two competing goals:</p>
+
+<ul>
+<li><strong>False positive</strong> -- The tool reports a bug that does not actually exist. High false positive rates cause alert fatigue and developers start ignoring warnings.</li>
+<li><strong>False negative</strong> -- The tool misses a real bug. Reducing false negatives requires deeper analysis but often increases false positives.</li>
+</ul>
+
+<div class="callout warning">
+<p><strong>Practical advice:</strong> A tool with 10% false positives is usable. A tool with 50% false positives will be disabled by the team. Prioritize configuring tools to minimize noise while catching the most critical bugs. See <a href="code-scanning-best-practices.html">Code Scanning Best Practices</a> for strategies on managing alerts.</p>
+</div>
+
+<h2>Tool Landscape</h2>
+
+<table>
+<tr><th>Tool</th><th>Type</th><th>Strengths</th><th>Integration</th></tr>
+<tr><td><a href="cppcheck.html">cppcheck</a></td><td>Pattern matching + data flow</td><td>Fast, no compilation required, excellent for C/C++</td><td>CLI, CMake, CI/CD</td></tr>
+<tr><td><a href="clang-tidy.html">clang-tidy</a></td><td>AST-based pattern matching</td><td>Modernize code, readability, bug-prone patterns, auto-fix</td><td>Clang, CMake, IDE</td></tr>
+<tr><td><a href="clang-static-analyzer.html">Clang Static Analyzer</a></td><td>Symbolic execution (path-sensitive)</td><td>Deep analysis, finds complex inter-procedural bugs</td><td>scan-build, Xcode</td></tr>
+<tr><td><a href="address-sanitizer-tools.html">Sanitizers (ASan/UBSan/TSan)</a></td><td>Dynamic instrumentation</td><td>Runtime detection of UB, memory errors, data races</td><td>Compiler flags</td></tr>
+<tr><td>SonarQube</td><td>Multi-language, rule-based</td><td>Code quality metrics, security hotspot detection, technical debt tracking</td><td>CI/CD, dashboards</td></tr>
+<tr><td>Coverity</td><td>Commercial, deep analysis</td><td>Enterprise-scale, lowest false positive rate among commercial tools</td><td>CI/CD, cloud</td></tr>
+</table>
+
+<h2>Integrating Static Analysis into CI/CD</h2>
+
+<p>Static analysis is most effective when it runs automatically on every commit or pull request. A typical CI/CD pipeline includes:</p>
+
+<pre>
+# Example GitHub Actions workflow for static analysis
+name: Static Analysis
+on: [push, pull_request]
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run cppcheck
+        run: |
+          cppcheck --enable=all --error-exitcode=1 \
+            --suppress=missingInclude \
+            --xml 2> cppcheck-report.xml \
+            src/
+
+      - name: Run clang-tidy
+        run: |
+          cmake -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          run-clang-tidy -p build -j$(nproc) src/
+
+      - name: Run sanitizers in tests
+        run: |
+          cmake -B build-san -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined"
+          cmake --build build-san
+          ctest --test-dir build-san --output-on-failure
+</pre>
+
+<div class="callout green">
+<p><strong>Best practice:</strong> Use multiple complementary tools. <a href="cppcheck.html">cppcheck</a> catches what <a href="clang-tidy.html">clang-tidy</a> misses and vice versa. Add <a href="address-sanitizer-tools.html">sanitizers</a> for runtime coverage. See <a href="code-scanning-best-practices.html">Code Scanning Best Practices</a> for a complete pipeline setup.</p>
+</div>
+
+<h2>Static vs Dynamic Analysis</h2>
+
+<table>
+<tr><th>Aspect</th><th>Static Analysis</th><th>Dynamic Analysis</th></tr>
+<tr><td>Execution required</td><td>No</td><td>Yes (tests or runtime)</td></tr>
+<tr><td>Coverage</td><td>All paths (theoretically)</td><td>Only exercised paths</td></tr>
+<tr><td>Performance</td><td>Build-time cost</td><td>Runtime overhead (2-20x)</td></tr>
+<tr><td>False positives</td><td>Common</td><td>Rare (if it fires, it is real)</td></tr>
+<tr><td>Bug classes</td><td>Memory, security, style, UB</td><td>Memory, concurrency, crashes</td></tr>
+<tr><td>Examples</td><td>cppcheck, clang-tidy, Coverity</td><td><a href="address-sanitizer-tools.html">ASan</a>, <a href="valgrind.html">Valgrind</a>, <a href="gdb-debugging.html">GDB</a></td></tr>
+</table>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="cppcheck.html">cppcheck</a>, <a href="clang-tidy.html">clang-tidy</a>, <a href="clang-static-analyzer.html">Clang Static Analyzer</a>, <a href="address-sanitizer-tools.html">AddressSanitizer &amp; Tools</a>, <a href="undefined-behavior.html">Undefined Behavior</a>, <a href="code-scanning-best-practices.html">Code Scanning Best Practices</a>.</p>
+</div>
+
+<div class="nav"><a href="lock-free-programming.html">&larr; Lock-Free Programming</a><a href="cppcheck.html">cppcheck &rarr;</a></div>
+</body>
+</html>

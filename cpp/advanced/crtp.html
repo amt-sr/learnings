@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CRTP — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / CRTP</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>Curiously Recurring Template Pattern (CRTP)</h1>
+
+<p>CRTP is a C++ idiom where a class derives from a base class that is templated on the derived class itself. This enables <strong>static polymorphism</strong>: the base class can call methods on the derived type without virtual dispatch. CRTP provides the benefits of polymorphism (code reuse, interface contracts) without the runtime cost of <code>virtual</code> functions (vtable lookups, indirect calls).</p>
+
+<div class="callout">
+<p><strong>Prerequisites:</strong> <a href="../intermediate/templates.html">Templates</a>, <a href="../intermediate/inheritance-polymorphism.html">Inheritance &amp; Polymorphism</a>, <a href="constexpr-deep.html">Advanced constexpr</a>.</p>
+</div>
+
+<h2>Basic CRTP Pattern</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+// CRTP base class
+template&lt;typename Derived&gt;
+class Serializer {
+public:
+    // Base class calls derived class method — static dispatch
+    std::string serialize() const {
+        const Derived&amp; d = static_cast&lt;const Derived&amp;&gt;(*this);
+        return d.to_string();
+    }
+
+    void print() const {
+        std::cout &lt;&lt; serialize() &lt;&lt; "\n";
+    }
+};
+
+// Derived class: provides the actual implementation
+class PacketHeader : public Serializer&lt;PacketHeader&gt; {
+    int src_id_ = 0;
+    int dst_id_ = 0;
+    int type_ = 0;
+
+public:
+    PacketHeader(int src, int dst, int type)
+        : src_id_(src), dst_id_(dst), type_(type) {}
+
+    std::string to_string() const {
+        return "Packet[src=" + std::to_string(src_id_)
+             + " dst=" + std::to_string(dst_id_)
+             + " type=" + std::to_string(type_) + "]";
+    }
+};
+
+class MeasurementReport : public Serializer&lt;MeasurementReport&gt; {
+    double value_ = 0.0;
+    std::string unit_ = "dBm";
+
+public:
+    MeasurementReport(double val, std::string unit)
+        : value_(val), unit_(std::move(unit)) {}
+
+    std::string to_string() const {
+        return "Measurement[" + std::to_string(value_) + " " + unit_ + "]";
+    }
+};
+
+int main() {
+    PacketHeader p(1, 2, 0);
+    p.print();  // Packet[src=1 dst=2 type=0]
+
+    MeasurementReport m(-85.5, "dBm");
+    m.print();  // Measurement[-85.5 dBm]
+
+    // No vtable — serialize() is inlined
+}
+</pre>
+
+<h2>Static Polymorphism vs Virtual Dispatch</h2>
+
+<table>
+<tr><th>Aspect</th><th>CRTP (Static)</th><th>Virtual (Dynamic)</th></tr>
+<tr><td>Dispatch mechanism</td><td>Compile-time (static_cast)</td><td>Runtime (vtable lookup)</td></tr>
+<tr><td>Indirection cost</td><td>None (can be inlined)</td><td>One indirect call per method</td></tr>
+<tr><td>Object size</td><td>No vptr overhead</td><td>One vptr (8 bytes) per object</td></tr>
+<tr><td>Heterogeneous containers</td><td>Not directly possible</td><td>Easy (<code>std::vector&lt;Base*&gt;</code>)</td></tr>
+<tr><td>Type safety</td><td>Full (checked at compile time)</td><td>Downcast may fail at runtime</td></tr>
+<tr><td>Code bloat</td><td>One instantiation per derived type</td><td>One vtable shared by all types</td></tr>
+</table>
+
+<h2>Mixin Pattern</h2>
+
+<p>CRTP is commonly used to add functionality (mixins) to a class without virtual functions:</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+// Mixin: adds comparison operators
+template&lt;typename Derived&gt;
+class Comparable {
+    [[nodiscard]] bool operator!=(const Derived&amp; other) const {
+        return !(static_cast&lt;const Derived&amp;&gt;(*this) == other);
+    }
+    [[nodiscard]] bool operator&gt;(const Derived&amp; other) const {
+        return other &lt; static_cast&lt;const Derived&amp;&gt;(*this);
+    }
+    [[nodiscard]] bool operator&lt;=(const Derived&amp; other) const {
+        return !(static_cast&lt;const Derived&amp;&gt;(*this) &gt; other);
+    }
+    [[nodiscard]] bool operator&gt;=(const Derived&amp; other) const {
+        return !(static_cast&lt;const Derived&amp;&gt;(*this) &lt; other);
+    }
+};
+
+// Mixin: adds serialization
+template&lt;typename Derived&gt;
+class Serializable {
+public:
+    std::string debug_string() const {
+        return static_cast&lt;const Derived&amp;&gt;(*this).describe();
+    }
+};
+
+// Mixin: adds reference counting
+template&lt;typename Derived&gt;
+class ReferenceCounted {
+    int ref_count_ = 1;
+public:
+    void add_ref() { ++ref_count_; }
+    void release() { if (--ref_count_ == 0) delete static_cast&lt;Derived*&gt;(this); }
+    [[nodiscard]] int ref_count() const { return ref_count_; }
+};
+
+// Combine multiple mixins
+class UeContext : public Comparable&lt;UeContext&gt;,
+                  public Serializable&lt;UeContext&gt; {
+    int ue_id_ = 0;
+    std::string state_ = "idle";
+
+public:
+    UeContext(int id, std::string state) : ue_id_(id), state_(std::move(state)) {}
+
+    int ue_id() const { return ue_id_; }
+
+    // Required by Comparable (only == is needed; !=, &gt;, &lt;=, &gt;= are auto-generated)
+    bool operator==(const UeContext&amp; other) const {
+        return ue_id_ == other.ue_id_;
+    }
+
+    // Required by Serializable
+    std::string describe() const {
+        return "UE[id=" + std::to_string(ue_id_) + " state=" + state_ + "]";
+    }
+};
+
+int main() {
+    UeContext ue1(1, "connected");
+    UeContext ue2(2, "idle");
+
+    // Mixin-provided operators
+    std::cout &lt;&lt; (ue1 != ue2) &lt;&lt; "\n";  // true (from Comparable)
+    std::cout &lt;&lt; (ue1 &gt; ue2) &lt;&lt; "\n";   // false (from Comparable)
+    std::cout &lt;&lt; ue1.debug_string() &lt;&lt; "\n";  // UE[id=1 state=connected]
+}
+</pre>
+
+<h2>CRTP with Override Enforcement</h2>
+
+<p>A common CRTP pitfall: the derived class forgets to override a method, and the base class's version is called, leading to infinite recursion. Use <code>static_assert</code> to enforce the contract:</p>
+
+<pre>
+#include &lt;type_traits&gt;
+
+template&lt;typename Derived&gt;
+class Enforcer {
+public:
+    void process() {
+        // Compile-time check: Derived must implement process_impl
+        static_assert(
+            requires(const Derived&amp; d) { d.process_impl(); },
+            "Derived must implement process_impl()"
+        );
+
+        static_cast&lt;Derived*&gt;(this)-&gt;process_impl();
+    }
+
+protected:
+    // This will trigger a linker error if Derived doesn't override
+    void process_impl() {
+        static_assert(!std::is_same_v&lt;Derived, Enforcer&lt;Derived&gt;&gt;,
+                      "Derived class must override process_impl()");
+    }
+};
+</pre>
+
+<h2>CRTP vs Type Erasure</h2>
+
+<p>CRTP and <a href="type-erasure.html">Type Erasure</a> solve the same problem (interface-based dispatch) at opposite ends of the flexibility spectrum:</p>
+
+<ul>
+<li><strong>CRTP</strong>: Static dispatch, no runtime polymorphism, best performance, but the concrete type must be known at compile time</li>
+<li><strong>Type Erasure</strong>: Runtime polymorphism without virtual functions, value semantics, can store heterogeneous types, but with some runtime overhead</li>
+</ul>
+
+<div class="callout green">
+<p><strong>When to use CRTP:</strong> When the derived type is known at the point of use, you need maximum performance, and you want to add reusable behavior (mixins) to a class hierarchy. Avoid CRTP for heterogeneous containers — use <a href="type-erasure.html">type erasure</a> or traditional virtual dispatch instead.</p>
+</div>
+
+<h2>Telecom Relevance</h2>
+
+<p>In protocol stacks, CRTP provides zero-overhead interfaces for message handling. A base <code>MessageHandler&lt;Derived&gt;</code> can define the common processing pipeline, while each derived handler (RRC, NGAP, NAS) provides the protocol-specific parsing. Since the handler type is known at compile time (each protocol has its own processing function), CRTP eliminates virtual dispatch on the per-packet path.</p>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="type-erasure.html">Type Erasure</a> (runtime polymorphism without virtual), <a href="concepts.html">C++20 Concepts</a> (compile-time constraints), <a href="sfinae-advanced.html">SFINAE Advanced</a> (compile-time type selection), <a href="strategy-pattern.html">Strategy Pattern</a> (runtime behavior selection), <a href="../intermediate/inheritance-polymorphism.html">Inheritance &amp; Polymorphism</a>.</p>
+</div>
+
+<div class="nav"><a href="constexpr-deep.html">&larr; Advanced constexpr</a><a href="type-erasure.html">Type Erasure &rarr;</a></div>
+</body>
+</html>

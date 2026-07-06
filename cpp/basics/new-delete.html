@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>new / delete — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; }
+  .breadcrumb a { color: #8b949e; }
+  .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; }
+  .callout.red { border-left-color: #f85149; }
+  .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; }
+  th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#1">1 Basics</a> / 1.3.2 new / delete</div>
+<div class="meta"><span class="tag basic">BASIC</span></div>
+<h1>1.3.2 new / delete</h1>
+
+<p>C++ provides the <code>new</code> and <code>delete</code> operators for allocating and deallocating memory on the heap at runtime. While modern C++ encourages <a href="../intermediate/smart-pointers.html">smart pointers</a> over raw <code>new</code>/<code>delete</code>, understanding how these operators work is essential for grasping C++ memory management.</p>
+
+<h2>Allocating a Single Object</h2>
+
+<p>Use <code>new</code> to allocate a single object on the heap. It returns a pointer to the allocated memory. Use <code>delete</code> to free the memory when done.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+int main() {
+    // Allocate a single int on the heap, initialized to 42
+    int* p = new int{42};
+    std::cout &lt;&lt; "Value: " &lt;&lt; *p &lt;&lt; std::endl;   // 42
+    std::cout &lt;&lt; "Address: " &lt;&lt; p &lt;&lt; std::endl;   // e.g., 0x55a3b4
+
+    // Free the memory
+    delete p;
+    p = nullptr;  // Good practice: avoid dangling pointer
+
+    return 0;
+}
+</pre>
+
+<h2>Initialization with new</h2>
+
+<p><code>new</code> supports several initialization styles:</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+int main() {
+    // Default initialization (indeterminate value for built-in types)
+    int* p1 = new int;            // *p1 is uninitialized
+
+    // Value initialization (zero-initialized for built-in types)
+    int* p2 = new int();          // *p2 == 0
+    int* p3 = new int{};         // *p3 == 0 (uniform init, C++11)
+
+    // Direct initialization
+    int* p4 = new int{100};      // *p4 == 100
+
+    // Works with any type, including user-defined classes
+    std::string* s = new std::string{"Hello"};
+    std::cout &lt;&lt; *s &lt;&lt; std::endl;   // Hello
+
+    delete p1;
+    delete p2;
+    delete p3;
+    delete p4;
+    delete s;
+
+    return 0;
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Tip:</strong> Always initialize heap memory at the point of allocation. Uninitialized <code>int</code>, <code>double</code>, etc. contain garbage values. Use <code>new int{0}</code> or <code>new int()</code> to zero-initialize.</p>
+</div>
+
+<h2>Allocating Arrays: new[] and delete[]</h2>
+
+<p>To allocate an array of objects on the heap, use <code>new[]</code>. You <strong>must</strong> use <code>delete[]</code> (with brackets) to free it. Mismatching <code>new[]</code> with <code>delete</code> (without brackets) is <strong>undefined behavior</strong>.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+int main() {
+    // Allocate an array of 10 ints on the heap
+    int* arr = new int[10];     // Elements are uninitialized
+
+    // Initialize
+    for (int i = 0; i &lt; 10; ++i) {
+        arr[i] = i * i;
+    }
+
+    // Print
+    for (int i = 0; i &lt; 10; ++i) {
+        std::cout &lt;&lt; arr[i] &lt;&lt; " ";
+    }
+    std::cout &lt;&lt; std::endl;
+    // Output: 0 1 4 9 16 25 36 49 64 81
+
+    // MUST use delete[] for arrays
+    delete[] arr;
+
+    // Value-initialized array
+    double* scores = new double[5]{};  // All elements initialized to 0.0
+    delete[] scores;
+
+    return 0;
+}
+</pre>
+
+<div class="callout red">
+  <p><strong>Critical rule:</strong> Always match allocation with the correct deallocation:
+    <br><code>new</code> &harr; <code>delete</code> (single object)
+    <br><code>new[]</code> &harr; <code>delete[]</code> (array)
+    <br>Mismatching them causes undefined behavior &mdash; the program may crash, corrupt the heap, or appear to work while silently corrupting memory.</p>
+</div>
+
+<h2>Memory Leaks</h2>
+
+<p>A <strong>memory leak</strong> occurs when heap-allocated memory is no longer referenced by any pointer but has not been freed. The memory remains allocated for the lifetime of the process, gradually consuming available RAM.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+void leak_example() {
+    int* p = new int{100};  // Allocated on heap
+    // Function returns without delete -- memory is leaked!
+    // p goes out of scope, but the int on the heap remains
+}
+
+void double_leak() {
+    int* p1 = new int{10};
+    int* p2 = new int{20};
+    p1 = p2;  // Original int{10} is now leaked (no pointer to it)
+    delete p2; // Only frees int{20}
+}
+
+void correct_cleanup() {
+    int* p = new int{100};
+    // ... use p ...
+    delete p;    // Properly freed
+    p = nullptr; // Avoid dangling pointer
+}
+
+int main() {
+    leak_example();     // Leaks 4 bytes each call
+    double_leak();      // Leaks 4 bytes
+    correct_cleanup();  // No leak
+
+    std::cout &lt;&lt; "Leaks not visible here -- use tools like Valgrind." &lt;&lt; std::endl;
+    return 0;
+}
+</pre>
+
+<table>
+  <tr><th>Scenario</th><th>Result</th></tr>
+  <tr><td>Forget <code>delete</code></td><td>Memory leak</td></tr>
+  <tr><td>Overwrite only pointer without <code>delete</code></td><td>Memory leak (previous allocation lost)</td></tr>
+  <tr><td><code>delete</code> then use pointer</td><td>Use-after-free (undefined behavior)</td></tr>
+  <tr><td><code>delete</code> twice on same pointer</td><td>Double free (undefined behavior, likely crash)</td></tr>
+  <tr><td><code>new[]</code> with plain <code>delete</code></td><td>Undefined behavior (heap corruption)</td></tr>
+</table>
+
+<div class="callout warning">
+  <p><strong>Detecting leaks:</strong> Use <a href="../advanced/valgrind.html">Valgrind</a> on Linux (<code>valgrind --leak-check=full ./program</code>), AddressSanitizer (<code>-fsanitize=address</code>), or Visual Studio's Diagnostic Tools. See <a href="../practice-questions/memory-leak-detection.html">Memory Leak Detection</a> practice questions for exercises.</p>
+</div>
+
+<h2>Handling Allocation Failure</h2>
+
+<p>If <code>new</code> cannot allocate the requested memory (e.g., out of memory), it throws <code>std::bad_alloc</code> by default. Use <code>nothrow</code> to get <code>nullptr</code> instead.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;new&gt;      // for std::nothrow
+
+int main() {
+    // Default: throws std::bad_alloc on failure
+    try {
+        int* huge = new int[1'000'000'000'000];  // Very large
+        delete[] huge;
+    } catch (const std::bad_alloc&amp; e) {
+        std::cout &lt;&lt; "Allocation failed: " &lt;&lt; e.what() &lt;&lt; std::endl;
+    }
+
+    // Nothrow version: returns nullptr on failure
+    int* p = new (std::nothrow) int[1'000'000'000'000];
+    if (p == nullptr) {
+        std::cout &lt;&lt; "Allocation failed (nothrow)" &lt;&lt; std::endl;
+    } else {
+        delete[] p;
+    }
+
+    return 0;
+}
+</pre>
+
+<h2>Smart Pointers: The Modern Alternative</h2>
+
+<p>Raw <code>new</code>/<code>delete</code> is error-prone. Modern C++ strongly prefers <strong>smart pointers</strong>, which automatically free memory when it is no longer needed.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;memory&gt;   // unique_ptr, shared_ptr
+
+int main() {
+    // unique_ptr: sole ownership, automatically deleted
+    std::unique_ptr&lt;int&gt; up = std::make_unique&lt;int&gt;(42);
+    std::cout &lt;&lt; *up &lt;&lt; std::endl;  // 42
+    // No delete needed -- freed when 'up' goes out of scope
+
+    // shared_ptr: shared ownership, freed when last reference dies
+    std::shared_ptr&lt;int&gt; sp1 = std::make_shared&lt;int&gt;(100);
+    std::shared_ptr&lt;int&gt; sp2 = sp1;  // Both point to same int
+    std::cout &lt;&lt; *sp1 &lt;&lt; " " &lt;&lt; *sp2 &lt;&lt; std::endl;  // 100 100
+    // Freed when sp1 and sp2 both go out of scope
+
+    return 0;
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Guideline:</strong> In modern C++ code, avoid raw <code>new</code> and <code>delete</code> entirely. Use <code>std::make_unique()</code> (C++14) or <code>std::make_shared()</code> (C++11) instead. See <a href="../intermediate/smart-pointers.html">Smart Pointers</a> and <a href="../intermediate/raii.html">RAII</a> for the modern approach to resource management.</p>
+</div>
+
+<h2>Best Practices Summary</h2>
+
+<ol>
+  <li>Prefer stack allocation over heap when possible.</li>
+  <li>Use <code>std::make_unique</code> and <code>std::make_shared</code> instead of raw <code>new</code>.</li>
+  <li>If you must use raw <code>new</code>, pair it with <code>delete</code> in the same scope or use RAII.</li>
+  <li>Always initialize pointers to <code>nullptr</code> after <code>delete</code>.</li>
+  <li>Never mix <code>new</code>/<code>delete[]</code> or <code>new[]</code>/<code>delete</code>.</li>
+  <li>Use <code>std::vector</code> instead of <code>new[]</code> for dynamic arrays.</li>
+  <li>Run memory-checking tools regularly in development.</li>
+</ol>
+
+<h2>Related Topics</h2>
+
+<ul>
+  <li><a href="pointers.html">Pointers</a> &mdash; Pointer fundamentals and operations</li>
+  <li><a href="stack-vs-heap.html">Stack vs Heap</a> &mdash; Where memory lives in a C++ program</li>
+  <li><a href="memory-layout.html">Memory Layout</a> &mdash; Process address space segments</li>
+  <li><a href="../intermediate/smart-pointers.html">Smart Pointers</a> &mdash; unique_ptr, shared_ptr, weak_ptr</li>
+  <li><a href="../intermediate/raii.html">RAII</a> &mdash; Resource Acquisition Is Initialization pattern</li>
+  <li><a href="../practice-questions/memory-leak-detection.html">Memory Leak Detection</a> &mdash; Practice exercises</li>
+</ul>
+
+<div class="nav">
+  <a href="stack-vs-heap.html">&larr; Stack vs Heap</a>
+  <a href="memory-layout.html">Memory Layout &rarr;</a>
+</div>
+</body>
+</html>

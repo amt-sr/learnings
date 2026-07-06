@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>F1 Interface — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#4">4 Telecom &amp; 5G/4G</a> / F1 Interface</div>
+<div class="meta"><span class="tag medium">Medium</span></div>
+<h1>F1 Interface</h1>
+
+<p>The F1 interface connects the Central Unit (CU) and the Distributed Unit (DU) in the 5G NG-RAN. It consists of F1-C (control plane, F1AP protocol) and F1-U (user plane, GTP-U). F1 is defined in 3GPP TS 38.470 and is the primary interface for CU-DU coordination in the Option 2 split.</p>
+
+<h2>F1 Interface Overview</h2>
+
+<pre>
+  +-----------+        +-----------+
+  |    CU     |        |    DU     |
+  |           |        |           |
+  |  CU-CP    |-- F1-C -&gt;|  RRC mgmt  |   F1AP over SCTP
+  |  (RRC)    |&lt;- F1-C --|  Cell mgmt |   Port: 38472
+  |           |        |           |
+  |  CU-UP    |-- F1-U -&gt;|  MAC/RLC   |   GTP-U over UDP
+  |  (PDCP)   |&lt;- F1-U --|  PHY       |   Port: 2152
+  |           |        |           |
+  +-----------+        +-----------+
+
+  Transport: IP-based (SCTP for F1-C, UDP for F1-U)
+</pre>
+
+<h2>F1AP Message Types</h2>
+
+<table>
+  <tr><th>Procedure</th><th>Initiating Message</th><th>Successful Response</th><th>Failure Response</th></tr>
+  <tr><td>F1 Setup</td><td>F1 SETUP REQUEST</td><td>F1 SETUP RESPONSE</td><td>F1 SETUP FAILURE</td></tr>
+  <tr><td>UE Context Mgmt</td><td>UE CONTEXT SETUP REQUEST</td><td>UE CONTEXT SETUP RESPONSE</td><td>UE CONTEXT SETUP FAILURE</td></tr>
+  <tr><td>UE Context Release</td><td>UE CONTEXT RELEASE COMMAND</td><td>UE CONTEXT RELEASE COMPLETE</td><td>--</td></tr>
+  <tr><td>Bearer Context</td><td>BEARER CONTEXT SETUP REQUEST</td><td>BEARER CONTEXT SETUP RESPONSE</td><td>BEARER CONTEXT SETUP FAILURE</td></tr>
+  <tr><td>F1 UE Context Modify</td><td>UE CONTEXT MODIFICATION REQUEST</td><td>UE CONTEXT MODIFICATION RESPONSE</td><td>UE CONTEXT MODIFICATION FAILURE</td></tr>
+  <tr><td>Cell Config</td><td>CELL CONFIGURATION UPDATE</td><td>CELL CONFIGURATION UPDATE ACK</td><td>--</td></tr>
+</table>
+
+<h2>C++ F1AP Message Handler</h2>
+
+<pre>
+#include &lt;cstdint&gt;
+#include &lt;string&gt;
+#include &lt;unordered_map&gt;
+#include &lt;functional&gt;
+#include &lt;vector&gt;
+
+// F1AP Procedure Codes (3GPP TS 38.473)
+enum class F1apProcedure : uint8_t {
+    F1_SETUP               = 0,
+    UE_CONTEXT_SETUP       = 1,
+    UE_CONTEXT_RELEASE     = 2,
+    UE_CONTEXT_MODIFY      = 3,
+    BEARER_CONTEXT_SETUP   = 4,
+    BEARER_CONTEXT_MODIFY  = 5,
+    BEARER_CONTEXT_RELEASE = 6,
+    CELL_CONFIG_UPDATE      = 7,
+    F1_REMOVAL            = 8,
+    RESET                 = 9
+};
+
+// F1AP message direction
+enum class F1apDirection : uint8_t {
+    INITIATING,   // Request
+    SUCCESSFUL,   // Response (success)
+    UNSUCCESSFUL  // Response (failure)
+};
+
+// F1AP UE Context Setup Request (simplified)
+struct F1apUeContextSetupRequest {
+    uint32_t gnb_cu_ue_f1ap_id;
+    uint32_t gnb_du_ue_f1ap_id;
+    uint8_t  rrc_container[4096];
+    uint32_t rrc_container_length;
+
+    // Cell information
+    uint32_t serv_cell_id;          // Serving Cell ID (NR Cell ID)
+    uint32_t pci;                   // Physical Cell ID
+
+    // SRB and DRB to setup
+    std::vector&lt;uint8_t&gt; srb_ids;   // SRB IDs to add/modify
+    std::vector&lt;uint8_t&gt; drb_ids;   // DRB IDs to add/modify
+
+    // Candidate PCI info (for CA)
+    std::vector&lt;uint32_t&gt; candidate_pcis;
+};
+
+// F1AP UE Context Setup Response (simplified)
+struct F1apUeContextSetupResponse {
+    uint32_t gnb_cu_ue_f1ap_id;
+    uint32_t gnb_du_ue_f1ap_id;
+    bool     success;
+
+    // Transport layer info for each DRB
+    struct DrbInfo {
+        uint8_t  drb_id;
+        uint32_t gtp_teid;      // GTP TEID for F1-U
+        std::string transport_addr;  // DU IP for F1-U
+    };
+    std::vector&lt;DrbInfo&gt; drbs_info;
+};
+
+// F1AP message dispatcher using message handler pattern
+class F1apMessageDispatcher {
+public:
+    using Handler = std::function&lt;void(const uint8_t* data, size_t len)&gt;;
+
+    void registerHandler(F1apProcedure proc, F1apDirection dir,
+                         Handler handler) {
+        handlers_[{static_cast&lt;uint8_t&gt;(proc),
+                    static_cast&lt;uint8_t&gt;(dir)}] = std::move(handler);
+    }
+
+    bool dispatch(F1apProcedure proc, F1apDirection dir,
+                  const uint8_t* data, size_t len) {
+        auto key = std::make_pair(static_cast&lt;uint8_t&gt;(proc),
+                                   static_cast&lt;uint8_t&gt;(dir));
+        auto it = handlers_.find(key);
+        if (it != handlers_.end()) {
+            it-&gt;second(data, len);
+            return true;
+        }
+        return false;
+    }
+
+private:
+    // Key: (procedure_code, direction)
+    std::unordered_map&lt;std::pair&lt;uint8_t, uint8_t&gt;, Handler&gt; handlers_;
+};
+
+// F1 interface endpoint (CU side)
+class F1CuEndpoint {
+public:
+    F1CuEndpoint(const std::string&amp; du_addr, uint16_t f1c_port)
+        : du_addr_(du_addr), f1c_port_(f1c_port) {}
+
+    bool connect() {
+        // Establish SCTP association to DU F1-C endpoint
+        // Send F1 SETUP REQUEST
+        return sendF1SetupRequest();
+    }
+
+    void setupUe(uint32_t cu_ue_id, uint32_t du_ue_id,
+                 const uint8_t* rrc_container, size_t rrc_len) {
+        F1apUeContextSetupRequest req{};
+        req.gnb_cu_ue_f1ap_id = cu_ue_id;
+        req.gnb_du_ue_f1ap_id = du_ue_id;
+        memcpy(req.rrc_container, rrc_container, rrc_len);
+        req.rrc_container_length = rrc_len;
+
+        // Encode F1AP message (ASN.1 PER)
+        // Send over SCTP
+        uint8_t buffer[8192];
+        size_t encoded_len = encodeF1ap(req, buffer, sizeof(buffer));
+        sendOverSctp(buffer, encoded_len);
+    }
+
+    void registerHandlers(F1apMessageDispatcher&amp; disp) {
+        // Register handlers for responses from DU
+        disp.registerHandler(F1apProcedure::UE_CONTEXT_SETUP,
+                            F1apDirection::SUCCESSFUL,
+            [this](const uint8_t* data, size_t len) {
+                handleUeContextSetupResponse(data, len);
+            });
+    }
+
+private:
+    std::string du_addr_;
+    uint16_t    f1c_port_;
+    int         sctp_fd_{-1};
+
+    bool sendF1SetupRequest();
+    size_t encodeF1ap(const F1apUeContextSetupRequest&amp; req,
+                      uint8_t* buf, size_t max_len);
+    void handleUeContextSetupResponse(const uint8_t* data, size_t len);
+    void sendOverSctp(const uint8_t* data, size_t len);
+};
+</pre>
+
+<h2>F1-U User Plane (GTP-U)</h2>
+
+<pre>
+// F1-U uses GTP-U over UDP
+#pragma pack(push, 1)
+struct GtpUHeader {
+    uint8_t  flags;          // Version (3 bits), PT (1), E (1), S (1), PN (1)
+    uint8_t  message_type;   // 0xFF = GTP-U data
+    uint16_t length;         // Payload length
+    uint32_t teid;           // Tunnel Endpoint Identifier
+};
+#pragma pack(pop)
+
+class F1UEndpoint {
+public:
+    // Setup F1-U tunnel with TEID learned from F1-C setup
+    void addTunnel(uint32_t teid, const std::string&amp; du_addr,
+                   uint16_t port = 2152) {
+        tunnels_[teid] = {du_addr, port};
+    }
+
+    // Send PDCP PDU to DU via F1-U
+    int sendDownlink(uint32_t teid, const uint8_t* pdu, size_t len) {
+        uint8_t buf[4096];
+        auto&amp; hdr = *reinterpret_cast&lt;GtpUHeader*&gt;(buf);
+        hdr.flags = 0x30;        // Version 1, no extensions
+        hdr.message_type = 0xFF; // GTP-U
+        hdr.length = static_cast&lt;uint16_t&gt;(len);
+        hdr.teid = teid;
+
+        memcpy(buf + sizeof(GtpUHeader), pdu, len);
+        return sendUdp(buf, sizeof(GtpUHeader) + len, teid);
+    }
+
+private:
+    struct Tunnel {
+        std::string addr;
+        uint16_t    port;
+    };
+    std::unordered_map&lt;uint32_t, Tunnel&gt; tunnels_;
+    int sendUdp(const uint8_t* data, size_t len, uint32_t teid);
+};
+</pre>
+
+<div class="callout">
+  <p><strong>Note:</strong> F1AP messages are encoded using ASN.1 Packed Encoding Rules (PER). See <a href="asn1-encoding.html">ASN.1 Encoding</a> for the encoding/decoding details used to serialize/deserialize F1AP messages.</p>
+</div>
+
+<h2>Cross-References</h2>
+
+<ul>
+  <li><a href="../advanced/functional.html">std::function</a> -- Message handler dispatching pattern.</li>
+  <li><a href="asn1-encoding.html">ASN.1 Encoding</a> -- F1AP uses ASN.1 PER for message serialization.</li>
+  <li><a href="cu-du-split.html">CU-DU Split</a> -- The functional split that the F1 interface connects.</li>
+  <li><a href="e1-interface.html">E1 Interface</a> -- CU-CP to CU-UP interface (parallel to F1).</li>
+  <li><a href="packet-processing-dpdk.html">DPDK</a> -- High-performance F1-U packet processing.</li>
+  <li><a href="circular-buffers.html">Circular Buffers</a> -- Zero-copy data transfer between CU and DU.</li>
+</ul>
+
+<div class="nav"><a href="oran-architecture.html">&larr; O-RAN Architecture</a><a href="x2-ng-x-interface.html">X2/NG-X Interface &rarr;</a></div>
+</body>
+</html>

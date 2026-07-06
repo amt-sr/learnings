@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SFINAE Advanced — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / Template Metaprogramming / 3.3.4</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>SFINAE &amp; enable_if Advanced</h1>
+
+<p>SFINAE (Substitution Failure Is Not An Error) is the C++ mechanism that allows the compiler to discard invalid template overloads during overload resolution rather than producing a hard error. Advanced SFINAE patterns form the foundation of type traits and generic library design in pre-C++20 code. In C++20, <a href="concepts.html">concepts</a> largely replace SFINAE, but understanding these patterns is essential for reading and maintaining legacy code.</p>
+
+<div class="callout">
+<p><strong>Prerequisites:</strong> <a href="../intermediate/sfinae.html">SFINAE Basics</a>, <a href="../intermediate/type-traits.html">Type Traits</a>, <a href="../intermediate/templates.html">Templates</a>, <a href="../intermediate/variadic-templates.html">Variadic Templates</a>.</p>
+</div>
+
+<h2>The void_t Idiom</h2>
+
+<p><code>void_t</code> is a metafunction that maps any list of types to <code>void</code>. Combined with SFINAE, it detects whether a type has a particular member or nested type:</p>
+
+<pre>
+#include &lt;type_traits&gt;
+#include &lt;iostream&gt;
+
+// C++17: std::void_t is in &lt;type_traits&gt;
+// Detect if T has a .size() method
+template&lt;typename T, typename = void&gt;
+struct has_size : std::false_type {};
+
+template&lt;typename T&gt;
+struct has_size&lt;T, std::void_t&lt;decltype(std::declval&lt;T&gt;().size())&gt;&gt;
+    : std::true_type {};
+
+// Detect if T has a nested type::iterator
+template&lt;typename T, typename = void&gt;
+struct has_iterator_type : std::false_type {};
+
+template&lt;typename T&gt;
+struct has_iterator_type&lt;T, std::void_t&lt;typename T::iterator&gt;&gt;
+    : std::true_type {};
+
+// Detect multiple members at once
+template&lt;typename T, typename = void&gt;
+struct is_container : std::false_type {};
+
+template&lt;typename T&gt;
+struct is_container&lt;T, std::void_t&lt;
+    typename T::value_type,
+    typename T::iterator,
+    decltype(std::declval&lt;T&gt;().begin()),
+    decltype(std::declval&lt;T&gt;().end()),
+    decltype(std::declval&lt;T&gt;().size())
+&gt;&gt; : std::true_type {};
+
+int main() {
+    std::cout &lt;&lt; std::boolalpha;
+    std::cout &lt;&lt; has_size&lt;std::vector&lt;int&gt;&gt;::value &lt;&lt; "\n";  // true
+    std::cout &lt;&lt; has_size&lt;int&gt;::value &lt;&lt; "\n";                 // false
+    std::cout &lt;&lt; is_container&lt;std::vector&lt;int&gt;&gt;::value &lt;&lt; "\n";  // true
+    std::cout &lt;&lt; is_container&lt;int&gt;::value &lt;&lt; "\n";                // false
+}
+</pre>
+
+<h2>if constexpr vs SFINAE</h2>
+
+<table>
+<tr><th>Aspect</th><th>SFINAE</th><th>if constexpr (C++17)</th></tr>
+<tr><td>When applied</td><td>During overload resolution</td><td>Inside function body</td></tr>
+<tr><td>Discards overloads</td><td>Yes — entire overload removed</td><td>No — single function, branching</td></tr>
+<tr><td>Works with return type</td><td>Yes</td><td>No</td></tr>
+<tr><td>Multiple branches</td><td>Multiple overloads needed</td><td>Single function with branches</td></tr>
+<tr><td>Readability</td><td>Complex</td><td>Clear, imperative</td></tr>
+<tr><td>Best for</td><td>Return type / existence checks</td><td>Internal logic branching</td></tr>
+</table>
+
+<pre>
+// SFINAE: different overloads based on type properties
+template&lt;typename T&gt;
+std::enable_if_t&lt;std::is_integral_v&lt;T&gt;, std::string&gt;
+to_string(T val) {
+    return std::to_string(val);
+}
+
+template&lt;typename T&gt;
+std::enable_if_t&lt;std::is_floating_point_v&lt;T&gt;, std::string&gt;
+to_string(T val) {
+    char buf[64];
+    std::snprintf(buf, sizeof(buf), "%.6f", val);
+    return buf;
+}
+
+// if constexpr: single function, internal branching
+template&lt;typename T&gt;
+std::string to_string_modern(T val) {
+    if constexpr (std::is_integral_v&lt;T&gt;) {
+        return std::to_string(val);
+    } else if constexpr (std::is_floating_point_v&lt;T&gt;) {
+        char buf[64];
+        std::snprintf(buf, sizeof(buf), "%.6f", val);
+        return buf;
+    } else {
+        return std::string(val);
+    }
+}
+</pre>
+
+<h2>Detection Idiom (C++17)</h2>
+
+<p>The detection idiom (from Library Fundamentals TS v2) is a generalization of <code>void_t</code> that provides a cleaner interface for checking type properties:</p>
+
+<pre>
+#include &lt;type_traits&gt;
+
+// Simplified detection idiom implementation
+namespace detail {
+    template&lt;typename Default, typename AlwaysVoid,
+             template&lt;typename...&gt; class Op, typename... Args&gt;
+    struct detector {
+        using value_t = std::false_type;
+        using type = Default;
+    };
+
+    template&lt;typename Default, template&lt;typename...&gt; class Op, typename... Args&gt;
+    struct detector&lt;Default, std::void_t&lt;Op&lt;Args...&gt;&gt;, Op, Args...&gt; {
+        using value_t = std::true_type;
+        using type = Op&lt;Args...&gt;;
+    };
+}
+
+// Convenient aliases
+template&lt;template&lt;typename...&gt; class Op, typename... Args&gt;
+using is_detected = typename detail::detector&lt;void, void, Op, Args...&gt;::value_t;
+
+template&lt;template&lt;typename...&gt; class Op, typename... Args&gt;
+using detected_t = typename detail::detector&lt;void, void, Op, Args...&gt;::type;
+
+template&lt;typename Default, template&lt;typename...&gt; class Op, typename... Args&gt;
+using detected_or = typename detail::detector&lt;Default, void, Op, Args...&gt;::type;
+
+// Define detectors for specific properties
+template&lt;typename T&gt;
+using has_size_t = decltype(std::declval&lt;T&gt;().size());
+
+template&lt;typename T&gt;
+using has_reserve_t = decltype(std::declval&lt;T&gt;().reserve(std::size_t{}));
+
+template&lt;typename T&gt;
+using has_begin_end_t = decltype(
+    std::declval&lt;T&gt;().begin(),
+    std::declval&lt;T&gt;().end()
+);
+
+// Usage
+static_assert(is_detected&lt;has_size_t, std::vector&lt;int&gt;&gt;::value);
+static_assert(!is_detected&lt;has_size_t, int&gt;::value);
+static_assert(is_detected&lt;has_reserve_t, std::vector&lt;int&gt;&gt;::value);
+static_assert(!is_detected&lt;has_reserve_t, std::list&lt;int&gt;&gt;::value);
+
+// Fallback type: detected_or provides a default if detection fails
+using default_size_type = detected_or&lt;std::size_t, has_size_t, int&gt;;
+</pre>
+
+<h2>Real-World SFINAE Patterns</h2>
+
+<h3>Conditional Member Function Enablement</h3>
+
+<pre>
+class Serializer {
+public:
+    // Only available if T is arithmetic
+    template&lt;typename T&gt;
+    std::enable_if_t&lt;std::is_arithmetic_v&lt;T&gt;&gt;
+    write(T value) {
+        // Direct binary write for arithmetic types
+    }
+
+    // Only available if T has a serialize() method
+    template&lt;typename T&gt;
+    std::enable_if_t&lt;!std::is_arithmetic_v&lt;T&gt; &amp;&amp;
+        is_detected&lt;decltype(std::declval&lt;T&gt;().serialize()), T&gt;::value&gt;
+    write(const T&amp; obj) {
+        obj.serialize(buffer_);
+    }
+};
+
+// Modern equivalent with concepts (C++20):
+class SerializerModern {
+public:
+    template&lt;std::integral T&gt;
+    void write(T value) { /* ... */ }
+
+    template&lt;typename T&gt; requires requires(const T&amp; t) { t.serialize(); }
+    void write(const T&amp; obj) { obj.serialize(buffer_); }
+};
+</pre>
+
+<h3>SFINAE with Return Type</h3>
+
+<pre>
+// Return type SFINAE — cannot be replaced with if constexpr
+template&lt;typename Container&gt;
+auto front(const Container&amp; c)
+    -&gt; decltype(c.front())  // SFINAE: removes overload if no .front()
+{
+    return c.front();
+}
+
+template&lt;typename Container&gt;
+auto front(const Container&amp; c)
+    -&gt; decltype(*c.begin())  // SFINAE: removes overload if no .begin()
+{
+    return *c.begin();
+}
+</pre>
+
+<div class="callout green">
+<p><strong>Migration path:</strong> In new code, prefer <a href="concepts.html">C++20 Concepts</a> over SFINAE. Concepts are more readable, produce better error messages, and integrate with overload resolution. Use <code>requires</code> clauses and <code>if constexpr</code> instead of <code>enable_if</code> and <code>void_t</code>.</p>
+</div>
+
+<div class="callout warning">
+<p><strong>Common mistake:</strong> Putting SFINAE in the wrong place. <code>enable_if</code> in a default template parameter affects overload resolution. <code>enable_if</code> in a function parameter creates an implicit conversion. Always use the default template parameter form unless you specifically need parameter-based SFINAE.</p>
+</div>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="../intermediate/sfinae.html">SFINAE Basics</a>, <a href="../intermediate/type-traits.html">Type Traits</a>, <a href="concepts.html">C++20 Concepts</a> (modern replacement), <a href="compile-time-computation.html">Compile-Time Computation</a> (TMP techniques), <a href="../intermediate/variadic-templates.html">Variadic Templates</a>, <a href="crtp.html">CRTP</a>.</p>
+</div>
+
+<div class="nav"><a href="compile-time-computation.html">&larr; Compile-Time Computation</a><a href="socket-programming.html">Socket Programming &rarr;</a></div>
+</body>
+</html>

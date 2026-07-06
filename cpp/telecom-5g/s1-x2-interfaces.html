@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>S1/X2 Interfaces — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#4">4 Telecom &amp; 5G/4G Networking</a> / 4G LTE Concepts / 4.3.2</div>
+<div class="meta"><span class="tag medium">Medium</span></div>
+<h1>S1/X2 Interfaces</h1>
+
+<p>S1 and X2 are the key interfaces in the LTE architecture. S1 connects the eNodeB to the EPC (MME and S-GW), while X2 connects neighboring eNodeBs for handover coordination and inter-cell interference management.</p>
+
+<h2>S1 Interface (S1-MME + S1-U)</h2>
+
+<pre>
+  S1 Interface splits into control and user planes:
+
+  eNodeB ----[S1-MME]---- MME     (Control plane, S1AP protocol)
+  eNodeB ----[S1-U]------ S-GW    (User plane, GTP-U protocol)
+
+  S1-MME (Control Plane):
+  - UE-related: Initial UE Message, UE Context Release,
+    Handover Preparation/Request
+  - eNB-related: S1 Setup, eNB Configuration Update,
+    S1 Reset
+
+  S1-U (User Plane):
+  - GTP-U tunnels carry user data packets
+  - Each EPS bearer has a dedicated GTP-U tunnel
+  - TEID (Tunnel Endpoint ID) identifies each tunnel
+</pre>
+
+<h2>X2 Interface</h2>
+
+<pre>
+  eNodeB1 ----[X2]---- eNodeB2
+  - Control plane: X2AP protocol
+  - User plane: GTP-U tunnels
+
+  X2AP Procedures:
+  - Handover Preparation (Source -> Target)
+  - Handover Request/Acknowledge
+  - SN Status Transfer (PDCP sequence numbers)
+  - UE Context Release
+  - Load Indication
+  - eNB Configuration Update
+  - Resource Status Reporting
+</pre>
+
+<h2>Interface Protocol Stacks</h2>
+
+<table>
+  <tr><th>Interface</th><th>Plane</th><th>Protocol</th><th>Transport</th></tr>
+  <tr><td>S1-MME</td><td>Control</td><td>S1AP</td><td>SCTP over IP</td></tr>
+  <tr><td>S1-U</td><td>User</td><td>GTP-U</td><td>UDP over IP</td></tr>
+  <tr><td>X2-CP</td><td>Control</td><td>X2AP</td><td>SCTP over IP</td></tr>
+  <tr><td>X2-UP</td><td>User</td><td>GTP-U</td><td>UDP over IP</td></tr>
+</table>
+
+<h2>4G to 5G Interface Evolution</h2>
+
+<table>
+  <tr><th>LTE</th><th>5G Equivalent</th><th>Change</th></tr>
+  <tr><td>S1-MME</td><td>NG (N2)</td><td>gNB to AMF, same SCTP transport</td></tr>
+  <tr><td>S1-U</td><td>NG-U (N3)</td><td>gNB to UPF, GTP-U still used</td></tr>
+  <tr><td>X2-CP</td><td>Xn-C</td><td>gNB to gNB, XnAP protocol</td></tr>
+  <tr><td>X2-UP</td><td>Xn-U</td><td>GTP-U still used for data forwarding</td></tr>
+</table>
+
+<div class="callout warning">
+  <p><strong>Key difference:</strong> In LTE, the eNodeB connects to a single MME and single S-GW. In 5G, a gNB can connect to multiple AMFs (AMF set) and multiple UPFs, enabling better load balancing and redundancy. The NG interface also supports network slicing via S-NSSAI.</p>
+</div>
+
+<h2>C++ S1AP Handler</h2>
+
+<pre>
+#include &lt;cstdint&gt;
+#include &lt;unordered_map&gt;
+#include &lt;vector&gt;
+
+// S1AP procedure codes
+enum class S1apProcedure : uint8_t {
+    INITIAL_UE_MESSAGE        = 9,
+    INITIAL_CONTEXT_SETUP_REQ = 10,
+    INITIAL_CONTEXT_SETUP_RSP  = 11,
+    UE_CONTEXT_RELEASE_CMD   = 21,
+    UE_CONTEXT_RELEASE_COMP  = 22,
+    HANDOVER_REQUEST          = 13,
+    HANDOVER_REQUEST_ACK      = 14,
+    PATH_SWITCH_REQUEST       = 24,
+    E_RAB_SETUP_REQ           = 15,
+    E_RAB_SETUP_RSP           = 16,
+    S1_SETUP_REQUEST          = 5,
+    S1_SETUP_RESPONSE         = 6
+};
+
+// S1AP E-RAB to be setup item
+struct ErabToBeSetup {
+    uint8_t  erab_id;       // EPS radio bearer ID
+    uint32_t teid_dl;        // S1-U DL TEID (SGW)
+    uint32_t teid_ul;        // S1-U UL TEID (eNB)
+    uint32_t sgw_addr;      // S-GW IP address
+    uint8_t  qci;           // QoS Class Identifier
+    uint32_t gbr_dl;        // Guaranteed bit rate DL
+    uint32_t gbr_ul;        // Guaranteed bit rate UL
+};
+
+// S1AP handler at eNodeB side
+class S1apHandler {
+public:
+    void handleInitialContextSetup(
+            uint32_t mme_ue_s1ap_id, uint32_t enb_ue_s1ap_id,
+            const std::vector&lt;ErabToBeSetup&gt;&amp; erabs,
+            const uint8_t* nas_pdu, size_t nas_len) {
+
+        // Map MME UE ID to local context
+        uint32_t ue_id = getUeId(enb_ue_s1ap_id);
+
+        // Setup each E-RAB (DRB via RRC)
+        for (const auto&amp; erab : erabs) {
+            setupDrb(ue_id, erab);
+            // Store S1-U TEID for user plane
+            s1u_teids_[ue_id][erab.erab_id] = {
+                erab.teid_dl, erab.teid_ul, erab.sgw_addr
+            };
+        }
+
+        // Send RRC Reconfiguration with NAS to UE
+        sendRrcReconfig(ue_id, nas_pdu, nas_len);
+
+        // Send S1AP Initial Context Setup Response to MME
+        sendInitialContextSetupResponse(
+            mme_ue_s1ap_id, enb_ue_s1ap_id);
+    }
+
+    void handleErabSetupRequest(
+            uint32_t mme_ue_id, uint32_t enb_ue_id,
+            const std::vector&lt;ErabToBeSetup&gt;&amp; erabs) {
+        for (const auto&amp; erab : erabs) {
+            setupDrb(getUeId(enb_ue_id), erab);
+        }
+    }
+
+private:
+    struct S1uTeidInfo {
+        uint32_t dl_teid;
+        uint32_t ul_teid;
+        uint32_t sgw_ip;
+    };
+
+    std::unordered_map&lt;uint32_t,
+        std::unordered_map&lt;uint8_t, S1uTeidInfo&gt;&gt; s1u_teids_;
+
+    uint32_t getUeId(uint32_t enb_ue_id) { return enb_ue_id; }
+    void setupDrb(uint32_t ue_id, const ErabToBeSetup&amp; erab) {}
+    void sendRrcReconfig(uint32_t, const uint8_t*, size_t) {}
+    void sendInitialContextSetupResponse(uint32_t, uint32_t) {}
+};
+</pre>
+
+<h2>SCTP in Telecom</h2>
+
+<div class="callout">
+  <p><strong>SCTP advantages over TCP:</strong> All control plane interfaces (S1AP, X2AP, NGAP, XnAP, F1AP) use SCTP. SCTP provides multi-homing (survives link failure), multi-streaming (avoid head-of-line blocking), and message-oriented delivery. Each UE association typically gets a dedicated SCTP stream.</p>
+</div>
+
+<h2>Cross-References</h2>
+
+<ul>
+  <li><a href="f1-interface.html">F1 Interface</a> -- 5G equivalent of intra-eNodeB backhaul.</li>
+  <li><a href="x2-ng-x-interface.html">X2/NG/Xn Interface</a> -- Detailed X2 and Xn comparison.</li>
+  <li><a href="e1-interface.html">E1 Interface</a> -- 5G CU-CP to CU-UP interface.</li>
+</ul>
+
+<div class="nav"><a href="lte-architecture.html">&larr; LTE Architecture</a><a href="lte-protocol-stack.html">LTE Protocol Stack &rarr;</a></div>
+</body>
+</html>

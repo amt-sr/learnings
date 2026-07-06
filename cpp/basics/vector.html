@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>std::vector — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; }
+  .breadcrumb a { color: #8b949e; }
+  .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; }
+  .callout.red { border-left-color: #f85149; }
+  .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; }
+  th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#1">1 Basics</a> / 1.5.2 std::vector</div>
+<div class="meta"><span class="tag basic">BASIC</span></div>
+<h1>1.5.2 std::vector</h1>
+
+<p><code>std::vector</code> is the most commonly used container in C++. It is a dynamic array that grows automatically when elements are added. It provides fast random access, cache-friendly contiguous storage, and amortized O(1) insertion at the end.</p>
+
+<h2>Creating Vectors</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+
+int main() {
+    // Empty vector
+    std::vector&lt;int&gt; v1;
+
+    // Vector with 5 elements, all initialized to 0
+    std::vector&lt;int&gt; v2(5);
+
+    // Vector with 5 elements, all initialized to 42
+    std::vector&lt;int&gt; v3(5, 42);
+
+    // Vector initialized with values
+    std::vector&lt;int&gt; v4 = {1, 2, 3, 4, 5};
+
+    // Copy constructor
+    std::vector&lt;int&gt; v5 = v4;
+
+    // Vector of strings
+    std::vector&lt;std::string&gt; names = {"Alice", "Bob", "Charlie"};
+
+    std::cout &lt;&lt; "v3: ";
+    for (int x : v3) std::cout &lt;&lt; x &lt;&lt; " ";
+    std::cout &lt;&lt; std::endl;
+    // v3: 42 42 42 42 42
+
+    return 0;
+}
+</pre>
+
+<h2>Common Operations</h2>
+
+<table>
+  <tr><th>Operation</th><th>Description</th><th>Time Complexity</th></tr>
+  <tr><td><code>push_back(x)</code></td><td>Add element to the end</td><td>Amortized O(1)</td></tr>
+  <tr><td><code>emplace_back(args...)</code></td><td>Construct element in-place at end</td><td>Amortized O(1)</td></tr>
+  <tr><td><code>pop_back()</code></td><td>Remove last element</td><td>O(1)</td></tr>
+  <tr><td><code>insert(pos, x)</code></td><td>Insert element at position</td><td>O(n)</td></tr>
+  <tr><td><code>erase(pos)</code></td><td>Remove element at position</td><td>O(n)</td></tr>
+  <tr><td><code>size()</code></td><td>Number of elements</td><td>O(1)</td></tr>
+  <tr><td><code>capacity()</code></td><td>Allocated storage size</td><td>O(1)</td></tr>
+  <tr><td><code>reserve(n)</code></td><td>Pre-allocate space for n elements</td><td>O(n)</td></tr>
+  <tr><td><code>resize(n)</code></td><td>Change element count to n</td><td>O(n)</td></tr>
+  <tr><td><code>clear()</code></td><td>Remove all elements</td><td>O(n)</td></tr>
+  <tr><td><code>empty()</code></td><td>Check if vector has no elements</td><td>O(1)</td></tr>
+</table>
+
+<h2>Adding Elements</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+#include &lt;string&gt;
+
+int main() {
+    std::vector&lt;int&gt; v;
+
+    // push_back: copy the value into the vector
+    v.push_back(10);
+    v.push_back(20);
+    v.push_back(30);
+
+    // emplace_back: construct in-place (more efficient for complex types)
+    std::vector&lt;std::string&gt; words;
+    words.emplace_back("hello");    // Constructs string in place
+    words.emplace_back("world");
+
+    std::cout &lt;&lt; "v: ";
+    for (int x : v) std::cout &lt;&lt; x &lt;&lt; " ";
+    std::cout &lt;&lt; std::endl;  // v: 10 20 30
+
+    std::cout &lt;&lt; "words: ";
+    for (const auto&amp; w : words) std::cout &lt;&lt; w &lt;&lt; " ";
+    std::cout &lt;&lt; std::endl;  // words: hello world
+
+    return 0;
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Tip:</strong> Prefer <code>emplace_back</code> over <code>push_back</code> for complex types. It constructs the element directly in the vector's storage, avoiding a temporary object. For primitive types like <code>int</code>, there is no practical difference.</p>
+</div>
+
+<h2>Capacity Management</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+
+int main() {
+    std::vector&lt;int&gt; v;
+
+    std::cout &lt;&lt; "Initial: size=" &lt;&lt; v.size()
+              &lt;&lt; ", capacity=" &lt;&lt; v.capacity() &lt;&lt; std::endl;
+    // Initial: size=0, capacity=0
+
+    // reserve: pre-allocate space without adding elements
+    v.reserve(100);
+    std::cout &lt;&lt; "After reserve(100): size=" &lt;&lt; v.size()
+              &lt;&lt; ", capacity=" &lt;&lt; v.capacity() &lt;&lt; std::endl;
+    // After reserve(100): size=0, capacity=100
+
+    // Add elements
+    for (int i = 0; i &lt; 10; ++i) {
+        v.push_back(i);
+    }
+    std::cout &lt;&lt; "After 10 pushes: size=" &lt;&lt; v.size()
+              &lt;&lt; ", capacity=" &lt;&lt; v.capacity() &lt;&lt; std::endl;
+    // After 10 pushes: size=10, capacity=100
+
+    // resize: change the number of elements
+    v.resize(5);  // Shrink to 5 elements
+    std::cout &lt;&lt; "After resize(5): size=" &lt;&lt; v.size() &lt;&lt; std::endl;
+    // After resize(5): size=5
+
+    v.resize(15, 99);  // Expand to 15, fill new elements with 99
+    std::cout &lt;&lt; "After resize(15, 99): size=" &lt;&lt; v.size() &lt;&lt; std::endl;
+    // After resize(15, 99): size=15
+
+    return 0;
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>Important:</strong> <code>capacity()</code> returns the amount of allocated storage, which may be larger than <code>size()</code>. When <code>size()</code> reaches <code>capacity()</code>, the vector reallocates (typically doubles capacity), copies all elements, and frees the old storage. Use <code>reserve()</code> to avoid repeated reallocations when you know the final size.</p>
+</div>
+
+<h2>Accessing Elements</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+
+int main() {
+    std::vector&lt;int&gt; v = {10, 20, 30, 40, 50};
+
+    // operator[]: no bounds checking (fast, but unsafe)
+    std::cout &lt;&lt; "v[2] = " &lt;&lt; v[2] &lt;&lt; std::endl;        // 30
+
+    // at(): bounds checking (throws std::out_of_range)
+    std::cout &lt;&lt; "v.at(0) = " &lt;&lt; v.at(0) &lt;&lt; std::endl;   // 10
+
+    // front() and back()
+    std::cout &lt;&lt; "front = " &lt;&lt; v.front() &lt;&lt; std::endl;  // 10
+    std::cout &lt;&lt; "back = " &lt;&lt; v.back() &lt;&lt; std::endl;   // 50
+
+    // data(): raw pointer to underlying array
+    int* ptr = v.data();
+    std::cout &lt;&lt; "data()[3] = " &lt;&lt; ptr[3] &lt;&lt; std::endl;   // 40
+
+    return 0;
+}
+</pre>
+
+<div class="callout red">
+  <p><strong>Warning:</strong> <code>operator[]</code> does not perform bounds checking. Accessing <code>v[100]</code> on a 5-element vector is undefined behavior &mdash; it reads from memory beyond the vector's data. Use <code>at()</code> in debug builds or when correctness matters more than speed.</p>
+</div>
+
+<h2>Iterating Over Vectors</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+
+int main() {
+    std::vector&lt;int&gt; v = {1, 2, 3, 4, 5};
+
+    // Method 1: Index-based (classic)
+    for (size_t i = 0; i &lt; v.size(); ++i) {
+        std::cout &lt;&lt; v[i] &lt;&lt; " ";
+    }
+    std::cout &lt;&lt; std::endl;
+
+    // Method 2: Range-based for (C++11, preferred)
+    for (int x : v) {
+        std::cout &lt;&lt; x &lt;&lt; " ";
+    }
+    std::cout &lt;&lt; std::endl;
+
+    // Method 3: Range-based for with reference (to modify)
+    for (int&amp; x : v) {
+        x *= 2;
+    }
+    for (const auto&amp; x : v) std::cout &lt;&lt; x &lt;&lt; " ";
+    std::cout &lt;&lt; std::endl;
+    // 2 4 6 8 10
+
+    // Method 4: Iterator-based
+    for (auto it = v.begin(); it != v.end(); ++it) {
+        std::cout &lt;&lt; *it &lt;&lt; " ";
+    }
+    std::cout &lt;&lt; std::endl;
+
+    return 0;
+}
+</pre>
+
+<h2>Vector vs C-Style Array</h2>
+
+<table>
+  <tr><th>Feature</th><th><code>std::vector</code></th><th>C-style array <code>int arr[N]</code></th></tr>
+  <tr><td><strong>Size</strong></td><td>Dynamic (grows automatically)</td><td>Fixed at compile time</td></tr>
+  <tr><td><strong>Memory management</strong></td><td>Automatic</td><td>Manual</td></tr>
+  <tr><td><strong>Knows its size</strong></td><td>Yes (<code>.size()</code>)</td><td>No (<code>sizeof</code> trick needed)</td></tr>
+  <tr><td><strong>Bounds checking</strong></td><td>Optional (<code>.at()</code>)</td><td>None</td></tr>
+  <tr><td><strong>Copy</strong></td><td>Deep copy (value semantics)</td><td>Decays to pointer (shallow)</td></tr>
+  <tr><td><strong>Assignment</strong></td><td><code>v1 = v2;</code></td><td>Not directly assignable</td></tr>
+  <tr><td><strong>Memory location</strong></td><td>Heap (internal buffer)</td><td>Stack (typically)</td></tr>
+  <tr><td><strong>Iterator support</strong></td><td>Full</td><td>Pointer arithmetic only</td></tr>
+</table>
+
+<div class="callout green">
+  <p><strong>Guideline:</strong> Almost always prefer <code>std::vector</code> over C-style arrays. Vectors are safer, more convenient, and just as fast. Only use C arrays when interfacing with C APIs or in performance-critical embedded code where heap allocation is not acceptable.</p>
+</div>
+
+<h2>Removing Elements</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+#include &lt;algorithm&gt;
+
+int main() {
+    std::vector&lt;int&gt; v = {1, 2, 3, 4, 5, 3, 7, 3};
+
+    // Remove last element
+    v.pop_back();
+    // v: {1, 2, 3, 4, 5, 3, 7}
+
+    // Remove element at index 1 (shifts everything after it)
+    v.erase(v.begin() + 1);
+    // v: {1, 3, 4, 5, 3, 7}
+
+    // Remove all elements with value 3
+    v.erase(std::remove(v.begin(), v.end(), 3), v.end());
+    // v: {1, 4, 5, 7}
+
+    for (int x : v) std::cout &lt;&lt; x &lt;&lt; " ";
+    std::cout &lt;&lt; std::endl;
+
+    return 0;
+}
+</pre>
+
+<div class="callout">
+  <p><strong>Erase-remove idiom:</strong> <code>std::remove</code> does not actually remove elements &mdash; it shifts matching elements to the end and returns an iterator to the new logical end. <code>erase</code> then physically removes them. This is the standard pattern for removing elements by value from a vector.</p>
+</div>
+
+<h2>Related Topics</h2>
+
+<ul>
+  <li><a href="stl-overview.html">STL Overview</a> &mdash; Introduction to all STL components</li>
+  <li><a href="arrays-strings.html">Arrays &amp; Strings</a> &mdash; C-style arrays and basic string handling</li>
+  <li><a href="iterators-basics.html">Iterators Basics</a> &mdash; Iterator categories and operations</li>
+  <li><a href="../intermediate/deque.html">std::deque</a> &mdash; Double-ended queue (fast front/back insertion)</li>
+  <li><a href="map-unordered-map.html">std::map &amp; std::unordered_map</a> &mdash; Key-value containers</li>
+  <li><a href="../intermediate/stl-algorithms.html">STL Algorithms</a> &mdash; std::sort, std::find, and more</li>
+</ul>
+
+<div class="nav">
+  <a href="stl-overview.html">&larr; STL Overview</a>
+  <a href="map-unordered-map.html">std::map &amp; std::unordered_map &rarr;</a>
+</div>
+</body>
+</html>

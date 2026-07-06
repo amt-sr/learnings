@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Thread-Safe Queue — C++ Practice</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.easy { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  .question { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; }
+  .question h3 { color: #f0f6fc; margin-top: 0; }
+  .solution-toggle { cursor: pointer; user-select: none; }
+  .solution-toggle h3 { color: #3fb950; display: inline; }
+  .solution-content { display: none; margin-top: 1rem; }
+  .solution-content.visible { display: block; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+  .topics-covered { margin-bottom: 1rem; font-size: 0.85rem; color: #8b949e; }
+  .topics-covered a { color: #8b949e; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#5">5 Practice</a> / Medium Questions</div>
+<div class="meta"><span class="tag medium">Medium</span></div>
+<h1>Thread-Safe Queue</h1>
+
+<div class="topics-covered">
+  <strong>Topics Covered:</strong>
+  <a href="../multithreading.html">Multithreading</a>,
+  <a href="../mutex.html">Mutex</a>,
+  <a href="../condition-variable.html">Condition Variables</a>,
+  <a href="../templates.html">Templates</a>
+</div>
+
+<div class="question">
+  <h3>Problem Statement</h3>
+  <p>Implement a thread-safe queue that can be safely used by multiple producer and consumer threads simultaneously. The queue must support:</p>
+  <ul>
+    <li><strong>push:</strong> Add an element to the queue (blocking or non-blocking).</li>
+    <li><strong>pop:</strong> Remove and return an element (blocking with optional timeout).</li>
+    <li><strong>try_pop:</strong> Non-blocking pop that returns immediately if empty.</li>
+    <li><strong>empty / size:</strong> Query the queue state.</li>
+    <li><strong>stop:</strong> Gracefully shutdown, waking all waiting threads.</li>
+  </ul>
+  <p>Use <code>std::mutex</code>, <code>std::condition_variable</code>, and <code>std::queue</code> as the underlying container.</p>
+</div>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution1')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution1">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;queue&gt;
+#include &lt;mutex&gt;
+#include &lt;condition_variable&gt;
+#include &lt;thread&gt;
+#include &lt;chrono&gt;
+#include &lt;optional&gt;
+#include &lt;atomic&gt;
+#include &lt;vector&gt;
+#include &lt;random&gt;
+
+template&lt;typename T&gt;
+class ThreadSafeQueue {
+public:
+    ThreadSafeQueue() = default;
+
+    // Disable copy and move (mutex is not copyable)
+    ThreadSafeQueue(const ThreadSafeQueue&amp;) = delete;
+    ThreadSafeQueue&amp; operator=(const ThreadSafeQueue&amp;) = delete;
+    ThreadSafeQueue(ThreadSafeQueue&amp;&amp;) = delete;
+    ThreadSafeQueue&amp; operator=(ThreadSafeQueue&amp;&amp;) = delete;
+
+    // Push an element into the queue
+    void push(const T&amp; value) {
+        {
+            std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+            if (stopped_) return;  // Reject new items after stop
+            queue_.push(value);
+        }
+        cond_.notify_one();  // Notify one waiting consumer
+    }
+
+    void push(T&amp;&amp; value) {
+        {
+            std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+            if (stopped_) return;
+            queue_.push(std::move(value));
+        }
+        cond_.notify_one();
+    }
+
+    // Pop with blocking (waits until an element is available or stopped)
+    std::optional&lt;T&gt; pop() {
+        std::unique_lock&lt;std::mutex&gt; lock(mutex_);
+        cond_.wait(lock, [this] {
+            return !queue_.empty() || stopped_;
+        });
+
+        if (queue_.empty()) return std::nullopt;  // Stopped and empty
+
+        T value = std::move(queue_.front());
+        queue_.pop();
+        return value;
+    }
+
+    // Pop with timeout
+    std::optional&lt;T&gt; pop_for(const std::chrono::milliseconds&amp; timeout) {
+        std::unique_lock&lt;std::mutex&gt; lock(mutex_);
+        if (!cond_.wait_for(lock, timeout, [this] {
+            return !queue_.empty() || stopped_;
+        })) {
+            return std::nullopt;  // Timeout
+        }
+
+        if (queue_.empty()) return std::nullopt;  // Stopped and empty
+
+        T value = std::move(queue_.front());
+        queue_.pop();
+        return value;
+    }
+
+    // Non-blocking pop
+    std::optional&lt;T&gt; try_pop() {
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        if (queue_.empty()) return std::nullopt;
+
+        T value = std::move(queue_.front());
+        queue_.pop();
+        return value;
+    }
+
+    bool empty() const {
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        return queue_.empty();
+    }
+
+    std::size_t size() const {
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        return queue_.size();
+    }
+
+    // Stop the queue and wake all waiting threads
+    void stop() {
+        {
+            std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+            stopped_ = true;
+        }
+        cond_.notify_all();  // Wake all waiting consumers
+    }
+
+private:
+    mutable std::mutex mutex_;
+    std::condition_variable cond_;
+    std::queue&lt;T&gt; queue_;
+    bool stopped_ = false;
+};
+
+// --- Demo: Producer-Consumer ---
+
+int main() {
+    ThreadSafeQueue&lt;int&gt; queue;
+    std::atomic&lt;int&gt; produced{0};
+    std::atomic&lt;int&gt; consumed{0};
+
+    // Producer thread
+    std::thread producer([&amp;]() {
+        for (int i = 1; i &lt;= 20; ++i) {
+            queue.push(i);
+            produced.fetch_add(1);
+            std::cout &lt;&lt; "Produced: " &lt;&lt; i &lt;&lt; "\n";
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        queue.stop();  // Signal consumers to stop
+    });
+
+    // Consumer threads
+    auto consumerFunc = [&amp;](int id) {
+        while (true) {
+            auto value = queue.pop();
+            if (!value) {
+                std::cout &lt;&lt; "Consumer " &lt;&lt; id &lt;&lt; " exiting\n";
+                break;  // Queue stopped and empty
+            }
+            consumed.fetch_add(1);
+            std::cout &lt;&lt; "Consumer " &lt;&lt; id &lt;&lt; " got: " &lt;&lt; *value &lt;&lt; "\n";
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+    };
+
+    std::thread consumer1(consumerFunc, 1);
+    std::thread consumer2(consumerFunc, 2);
+
+    producer.join();
+    consumer1.join();
+    consumer2.join();
+
+    std::cout &lt;&lt; "\nProduced: " &lt;&lt; produced.load() &lt;&lt; "\n";
+    std::cout &lt;&lt; "Consumed: " &lt;&lt; consumed.load() &lt;&lt; "\n";
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><strong>mutex_</strong> protects all access to the internal <code>std::queue</code>. Every public method locks it.</li>
+      <li><strong>condition_variable</strong> allows consumer threads to sleep efficiently when the queue is empty, instead of busy-waiting.</li>
+      <li><strong>notify_one</strong> (in push) wakes a single waiting consumer. <strong>notify_all</strong> (in stop) wakes all consumers to let them exit.</li>
+      <li><strong>stopped_ flag</strong> enables graceful shutdown. When set, <code>pop()</code> returns <code>nullopt</code> even if the queue is empty, allowing consumers to exit cleanly.</li>
+      <li>We use <code>std::optional&lt;T&gt;</code> for the return type to distinguish "got a value" from "queue empty/stopped".</li>
+      <li><strong>Move semantics</strong>: we <code>std::move</code> values out of the queue to avoid copies for large types.</li>
+      <li>The class is non-copyable and non-movable because <code>std::mutex</code> is not copyable.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout green">
+  <p><strong>Complexity Analysis:</strong></p>
+  <table>
+    <tr><th>Operation</th><th>Time</th><th>Blocking?</th></tr>
+    <tr><td>push</td><td>O(1) amortized</td><td>No</td></tr>
+    <tr><td>pop</td><td>O(1) amortized</td><td>Yes (until item available or stopped)</td></tr>
+    <tr><td>pop_for</td><td>O(1) amortized</td><td>Yes (up to timeout)</td></tr>
+    <tr><td>try_pop</td><td>O(1) amortized</td><td>No</td></tr>
+    <tr><td>empty / size</td><td>O(1)</td><td>No</td></tr>
+  </table>
+</div>
+
+<h2>Follow-up Questions</h2>
+
+<div class="question">
+  <h3>Variations to Try</h3>
+  <ol>
+    <li><strong>Bounded queue:</strong> Add a maximum capacity. <code>push</code> should block (or return false) when the queue is full. Use two condition variables: one for "not full" and one for "not empty".</li>
+    <li><strong>Priority queue:</strong> Replace <code>std::queue</code> with <code>std::priority_queue</code> for a thread-safe priority queue.</li>
+    <li><strong>Batch pop:</strong> Add a <code>popAll()</code> method that drains the entire queue in one lock acquisition.</li>
+    <li><strong>Fine-grained locking:</strong> Implement the queue using a linked list with separate head and tail mutexes to allow push and pop to proceed concurrently.</li>
+    <li><strong>Lock-free queue:</strong> Use <code>std::atomic</code> compare-and-swap operations to implement a lock-free MPMC queue (significantly more complex).</li>
+  </ol>
+</div>
+
+<div class="callout red">
+  <p><strong>Common Pitfalls:</strong></p>
+  <ul>
+    <li><strong>Spurious wakeups:</strong> <code>condition_variable::wait</code> can wake up without being notified. Always use the predicate overload: <code>wait(lock, predicate)</code> to guard against spurious wakeups.</li>
+    <li><strong>Missed notifications:</strong> If <code>notify</code> is called before <code>wait</code>, the notification is lost. The predicate pattern handles this correctly.</li>
+    <li><strong>Deadlock:</strong> Never lock the mutex and then call <code>notify</code> inside the lock (it works, but is suboptimal). Unlock first, then notify. In our implementation, <code>notify_one</code> is called after the <code>lock_guard</code> goes out of scope.</li>
+    <li><strong>Exception safety:</strong> If the element type's copy/move constructor throws, the queue must remain in a valid state.</li>
+  </ul>
+</div>
+
+<div class="callout">
+  <p><strong>Key Takeaways:</strong></p>
+  <ul>
+    <li>A condition variable + mutex is the canonical pattern for blocking queues in C++.</li>
+    <li>Always use the predicate form of <code>wait()</code> to handle spurious wakeups.</li>
+    <li>Use <code>std::optional</code> to signal "no result" cleanly, avoiding sentinel values or exceptions for expected conditions.</li>
+    <li>The <code>stop()</code> pattern is essential for graceful shutdown in multi-threaded applications.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="linked-list.html">&larr; Linked List</a>
+  <a href="smart-pointer-patterns.html">Smart Pointer Patterns &rarr;</a>
+</div>
+<script>
+function toggleSolution(id) {
+  document.getElementById(id).classList.toggle('visible');
+}
+</script>
+</body>
+</html>

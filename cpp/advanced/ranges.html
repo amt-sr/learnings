@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ranges — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / Ranges</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>Ranges (C++20)</h1>
+
+<p>The Ranges library provides a composable, lazy, and functional approach to working with sequences of data. Built on top of <a href="concepts.html">C++20 Concepts</a>, ranges unify iterators, containers, and algorithms under a single abstraction. They replace the traditional <code>&lt;algorithm&gt;</code> header's iterator-pair API with pipeable, composable views.</p>
+
+<h2>Core Abstractions</h2>
+
+<p>Three pillars make up the Ranges library:</p>
+
+<ul>
+<li><strong>Range</strong> — anything with <code>begin()</code> and <code>end()</code> (containers, arrays, views, I/O streams)</li>
+<li><strong>View</strong> — a lightweight, lazy, non-owning range (similar to a span or a filtered window)</li>
+<li><strong>Range Adapter</strong> — a transformation that takes a range/view and produces a new view</li>
+</ul>
+
+<div class="callout">
+<p><strong>Key insight:</strong> Views are <em>lazy</em>. A pipeline like <code>data | filter(pred) | transform(fn)</code> does zero work when constructed. Work happens only when you iterate the final view.</p>
+</div>
+
+<h2>Pipe Syntax</h2>
+
+<p>The pipe operator <code>|</code> lets you chain range adapters in a natural left-to-right reading order:</p>
+
+<pre>
+#include &lt;ranges&gt;
+#include &lt;vector&gt;
+#include &lt;iostream&gt;
+
+int main() {
+    std::vector&lt;int&gt; data = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+
+    // Traditional style (iterator pairs)
+    auto it = std::find_if(data.begin(), data.end(),
+                           [](int x) { return x &gt; 5; });
+
+    // Ranges style (pipeable)
+    auto result = data
+        | std::views::filter([](int x) { return x &gt; 5; })
+        | std::views::transform([](int x) { return x * x; })
+        | std::views::take(3);
+
+    for (int val : result) {
+        std::cout &lt;&lt; val &lt;&lt; " ";  // 36 49 64
+    }
+}
+</pre>
+
+<h2>Common Range Adapters</h2>
+
+<table>
+<tr><th>Adapter</th><th>Description</th><th>Complexity</th></tr>
+<tr><td><code>views::filter(pred)</code></td><td>Keep elements satisfying predicate</td><td>O(n) per iteration</td></tr>
+<tr><td><code>views::transform(fn)</code></td><td>Apply function to each element</td><td>O(1) per element</td></tr>
+<tr><td><code>views::take(n)</code></td><td>Take first n elements</td><td>O(1)</td></tr>
+<tr><td><code>views::drop(n)</code></td><td>Skip first n elements</td><td>O(1)</td></tr>
+<tr><td><code>views::take_while(pred)</code></td><td>Take while predicate holds</td><td>O(1) per element</td></tr>
+<tr><td><code>views::drop_while(pred)</code></td><td>Skip while predicate holds</td><td>O(1) per element</td></tr>
+<tr><td><code>views::reverse</code></td><td>Reverse iteration order</td><td>O(1)</td></tr>
+<tr><td><code>views::elements&lt;N&gt;</code></td><td>Extract Nth element from tuple-like</td><td>O(1) per element</td></tr>
+<tr><td><code>views::keys</code></td><td>Extract keys from pair/tuple range</td><td>O(1) per element</td></tr>
+<tr><td><code>views::values</code></td><td>Extract values from pair/tuple range</td><td>O(1) per element</td></tr>
+<tr><td><code>views::split(delimiter)</code></td><td>Split range by delimiter</td><td>O(1)</td></tr>
+<tr><td><code>views::join</code></td><td>Flatten range of ranges</td><td>O(1)</td></tr>
+<tr><td><code>views::iota(start)</code></td><td>Infinite counting range</td><td>O(1)</td></tr>
+<tr><td><code>views::zip(r1, r2)</code></td><td>Zip two ranges into pairs</td><td>O(1)</td></tr>
+<tr><td><code>views::chunk(n)</code></td><td>Split into chunks of n elements (C++23)</td><td>O(1)</td></tr>
+<tr><td><code>views::slide(n)</code></td><td>Sliding window of n elements (C++23)</td><td>O(1)</td></tr>
+</table>
+
+<h2>Lazy Evaluation in Detail</h2>
+
+<p>This example demonstrates that range pipelines are lazy — nothing executes until you consume the view:</p>
+
+<pre>
+#include &lt;ranges&gt;
+#include &lt;vector&gt;
+#include &lt;iostream&gt;
+
+int main() {
+    std::vector&lt;int&gt; data = {1, 2, 3, 4, 5};
+
+    // Pipeline constructed — NO computation yet
+    auto pipeline = data
+        | std::views::filter([](int x) {
+            std::cout &lt;&lt; "filtering " &lt;&lt; x &lt;&lt; "\n";
+            return x % 2 == 1;
+        })
+        | std::views::transform([](int x) {
+            std::cout &lt;&lt; "transforming " &lt;&lt; x &lt;&lt; "\n";
+            return x * 10;
+        });
+
+    std::cout &lt;&lt; "=== Pipeline ready ===\n";
+
+    // Take only the first 2 elements — only 4 elements are processed
+    std::cout &lt;&lt; "=== Consuming ===\n";
+    for (auto val : pipeline | std::views::take(2)) {
+        std::cout &lt;&lt; "result: " &lt;&lt; val &lt;&lt; "\n";
+    }
+    // Output: filtering 1, transforming 1, result: 10
+    //         filtering 2 (skipped), filtering 3, transforming 3, result: 30
+}
+</pre>
+
+<h2>Practical Examples</h2>
+
+<h3>Processing Log Entries</h3>
+
+<pre>
+#include &lt;ranges&gt;
+#include &lt;string&gt;
+#include &lt;string_view&gt;
+#include &lt;vector&gt;
+#include &lt;iostream&gt;
+
+struct LogEntry {
+    std::string timestamp;
+    std::string level;    // DEBUG, INFO, WARN, ERROR
+    std::string message;
+};
+
+int main() {
+    std::vector&lt;LogEntry&gt; logs = {
+        {"10:01:02", "DEBUG", "init complete"},
+        {"10:01:03", "INFO",  "connection established"},
+        {"10:01:05", "ERROR", "handshake timeout"},
+        {"10:01:06", "WARN",  "high latency detected"},
+        {"10:01:07", "ERROR", "socket reset"},
+        {"10:01:08", "INFO",  "retrying connection"},
+    };
+
+    // Extract only ERROR messages
+    auto errors = logs
+        | std::views::filter([](const LogEntry&amp; e) {
+            return e.level == "ERROR";
+        })
+        | std::views::transform([](const LogEntry&amp; e) {
+            return "[" + e.timestamp + "] " + e.message;
+        });
+
+    for (const auto&amp; msg : errors) {
+        std::cout &lt;&lt; msg &lt;&lt; "\n";
+    }
+}
+</pre>
+
+<h3>Data Aggregation with Views</h3>
+
+<pre>
+#include &lt;ranges&gt;
+#include &lt;numeric&gt;
+#include &lt;vector&gt;
+#include &lt;iostream&gt;
+
+struct Metric {
+    std::string name;
+    double value;
+    int count;
+};
+
+int main() {
+    std::vector&lt;Metric&gt; metrics = {
+        {"cpu",     75.2, 10},
+        {"memory",  85.1, 10},
+        {"disk",    30.5, 10},
+        {"network", 90.0, 10},
+        {"cpu",     80.0, 8},
+    };
+
+    // Sum all values for "cpu" metrics
+    double cpu_total = std::accumulate(
+        metrics
+            | std::views::filter([](const Metric&amp; m) { return m.name == "cpu"; })
+            | std::views::transform([](const Metric&amp; m) { return m.value; })
+            | std::views::begin,
+        std::ranges::end(
+            metrics
+                | std::views::filter([](const Metric&amp; m) { return m.name == "cpu"; })
+                | std::views::transform([](const Metric&amp; m) { return m.value; })
+        ),
+        0.0
+    );
+    // Note: In practice, use std::ranges::fold_left (C++23) or materialize to vector
+
+    std::cout &lt;&lt; "CPU total: " &lt;&lt; cpu_total &lt;&lt; "\n";
+}
+</pre>
+
+<h3>Zip and Iota — Generating Sequences</h3>
+
+<pre>
+#include &lt;ranges&gt;
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+
+int main() {
+    std::vector&lt;std::string&gt; names = {"Alice", "Bob", "Charlie"};
+
+    // Pair each name with an index
+    for (auto [idx, name] : std::views::zip(std::views::iota(0), names)) {
+        std::cout &lt;&lt; idx &lt;&lt; ": " &lt;&lt; name &lt;&lt; "\n";
+    }
+
+    // Generate an infinite Fibonacci-like sequence (first 10)
+    // Note: Full Fibonacci needs a custom view; iota is simpler:
+    auto squares = std::views::iota(1)
+        | std::views::transform([](int n) { return n * n; })
+        | std::views::take(10);
+
+    for (int sq : squares) {
+        std::cout &lt;&lt; sq &lt;&lt; " ";  // 1 4 9 16 25 36 49 64 81 100
+    }
+}
+</pre>
+
+<h2>Views and Ownership</h2>
+
+<div class="callout red">
+<p><strong>Dangling reference warning:</strong> Views are non-owning. A view that references a temporary container (or a view whose source has been destroyed) produces undefined behavior. Always ensure the underlying data outlives the view.</p>
+</div>
+
+<pre>
+#include &lt;ranges&gt;
+#include &lt;vector&gt;
+
+// DANGER: dangling view — temporary vector destroyed, view is invalid
+auto bad() {
+    auto v = std::vector&lt;int&gt;{1, 2, 3} | std::views::filter([](int x) {
+        return x &gt; 1;
+    });
+    return v;  // view refers to destroyed temporary vector
+}
+
+// SAFE: view over a reference that outlives usage
+auto safe(const std::vector&lt;int&gt;&amp; data) {
+    return data | std::views::filter([](int x) {
+        return x &gt; 1;
+    });  // OK — caller must keep data alive while using the view
+}
+</pre>
+
+<div class="callout warning">
+<p><strong>Materializing:</strong> To break the lazy chain and own the data, pipe into <code>std::ranges::to&lt;std::vector&lt;T&gt;&gt;()</code> (C++23) or use a loop to copy into a container.</p>
+</div>
+
+<h2>Telecom Relevance</h2>
+
+<p>Ranges are particularly useful in telecom software for processing streams of measurements, filtering protocol messages, and transforming data pipelines. For example, filtering 5G UE measurements from a raw data stream, extracting specific IE (Information Element) fields, and aggregating statistics — all can be expressed as composable range pipelines with zero-copy semantics.</p>
+
+<div class="callout green">
+<p><strong>Best practice:</strong> Use range views for read-only, composable transformations. Use <a href="crtp.html">CRTP</a> or <a href="type-erasure.html">type erasure</a> when you need polymorphic containers of different range types. Combine ranges with <a href="concepts.html">concepts</a> to constrain generic range algorithms.</p>
+</div>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="concepts.html">C++20 Concepts</a> (the constraint mechanism behind ranges), <a href="coroutines.html">Coroutines</a> (async data streams), <a href="compile-time-computation.html">Compile-Time Computation</a> (constexpr algorithms), <a href="../intermediate/stl-algorithms.html">STL Algorithms</a>.</p>
+</div>
+
+<div class="nav"><a href="concepts.html">&larr; C++20 Concepts</a><a href="coroutines.html">Coroutines &rarr;</a></div>
+</body>
+</html>

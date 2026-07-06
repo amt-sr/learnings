@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Palindrome Check — C++ Practice</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.easy { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  .question { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; }
+  .question h3 { color: #f0f6fc; margin-top: 0; }
+  .solution-toggle { cursor: pointer; user-select: none; }
+  .solution-toggle h3 { color: #3fb950; display: inline; }
+  .solution-content { display: none; margin-top: 1rem; }
+  .solution-content.visible { display: block; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+  .topics-covered { margin-bottom: 1rem; font-size: 0.85rem; color: #8b949e; }
+  .topics-covered a { color: #8b949e; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#5">5 Practice</a> / Easy Questions</div>
+<div class="meta"><span class="tag easy">Easy</span></div>
+<h1>Palindrome Check</h1>
+
+<div class="topics-covered">
+  <strong>Topics Covered:</strong>
+  <a href="../strings.html">Strings</a>,
+  <a href="../arrays.html">Arrays</a>,
+  <a href="../pointers.html">Pointers</a>
+</div>
+
+<div class="question">
+  <h3>Problem Statement</h3>
+  <p>Write a function that determines whether a given string is a palindrome. A palindrome reads the same forwards and backwards.</p>
+  <p><strong>Examples:</strong></p>
+  <ul>
+    <li><code>"racecar"</code> &rarr; <code>true</code></li>
+    <li><code>"hello"</code> &rarr; <code>false</code></li>
+    <li><code>"A man a plan a canal Panama"</code> &rarr; <code>true</code> (ignoring spaces and case)</li>
+    <li><code>""</code> &rarr; <code>true</code></li>
+    <li><code>"a"</code> &rarr; <code>true</code></li>
+  </ul>
+</div>
+
+<div class="callout warning">
+  <p><strong>Requirements:</strong></p>
+  <ul>
+    <li>Implement a <strong>basic</strong> version that does an exact comparison.</li>
+    <li>Implement an <strong>enhanced</strong> version that ignores non-alphanumeric characters and is case-insensitive.</li>
+    <li>Use the two-pointer technique for O(1) space complexity.</li>
+  </ul>
+</div>
+
+<h2>Basic Palindrome Check</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution1')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution1">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+bool isPalindrome(const std::string&amp; s) {
+    int left = 0;
+    int right = static_cast&lt;int&gt;(s.size()) - 1;
+
+    while (left &lt; right) {
+        if (s[left] != s[right]) {
+            return false;
+        }
+        ++left;
+        --right;
+    }
+    return true;
+}
+
+int main() {
+    std::cout &lt;&lt; std::boolalpha;
+    std::cout &lt;&lt; "racecar: " &lt;&lt; isPalindrome("racecar") &lt;&lt; "\n";   // true
+    std::cout &lt;&lt; "hello:   " &lt;&lt; isPalindrome("hello") &lt;&lt; "\n";      // false
+    std::cout &lt;&lt; "empty:   " &lt;&lt; isPalindrome("") &lt;&lt; "\n";           // true
+    std::cout &lt;&lt; "a:       " &lt;&lt; isPalindrome("a") &lt;&lt; "\n";           // true
+    std::cout &lt;&lt; "ab:      " &lt;&lt; isPalindrome("ab") &lt;&lt; "\n";          // false
+    std::cout &lt;&lt; "aa:      " &lt;&lt; isPalindrome("aa") &lt;&lt; "\n";          // true
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li>Two pointers start at opposite ends of the string and move toward the center.</li>
+      <li>If any pair of characters does not match, the string is not a palindrome.</li>
+      <li>If all pairs match (or the string has 0/1 characters), it is a palindrome.</li>
+      <li>Empty string and single-character strings are trivially palindromes.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Enhanced Version (Ignore Case and Non-alphanumeric)</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution2')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution2">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+#include &lt;cctype&gt;   // for std::isalnum, std::tolower
+
+bool isPalindromeClean(const std::string&amp; s) {
+    int left = 0;
+    int right = static_cast&lt;int&gt;(s.size()) - 1;
+
+    while (left &lt; right) {
+        // Skip non-alphanumeric characters from the left
+        while (left &lt; right &amp;&amp; !std::isalnum(static_cast&lt;unsigned char&gt;(s[left]))) {
+            ++left;
+        }
+        // Skip non-alphanumeric characters from the right
+        while (left &lt; right &amp;&amp; !std::isalnum(static_cast&lt;unsigned char&gt;(s[right]))) {
+            --right;
+        }
+
+        // Compare characters case-insensitively
+        if (std::tolower(static_cast&lt;unsigned char&gt;(s[left])) !=
+            std::tolower(static_cast&lt;unsigned char&gt;(s[right]))) {
+            return false;
+        }
+        ++left;
+        --right;
+    }
+    return true;
+}
+
+int main() {
+    std::cout &lt;&lt; std::boolalpha;
+    std::cout &lt;&lt; "A man a plan a canal Panama: "
+              &lt;&lt; isPalindromeClean("A man a plan a canal Panama") &lt;&lt; "\n";  // true
+    std::cout &lt;&lt; "racecar:  "
+              &lt;&lt; isPalindromeClean("racecar") &lt;&lt; "\n";                        // true
+    std::cout &lt;&lt; "No lemon, no melon: "
+              &lt;&lt; isPalindromeClean("No lemon, no melon") &lt;&lt; "\n";              // true
+    std::cout &lt;&lt; "hello:    "
+              &lt;&lt; isPalindromeClean("hello") &lt;&lt; "\n";                             // false
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li>Before each comparison, we skip any character that is not alphanumeric using <code>std::isalnum</code>.</li>
+      <li>Characters are compared after converting to lowercase with <code>std::tolower</code>.</li>
+      <li>The <code>static_cast&lt;unsigned char&gt;</code> is important because <code>std::isalnum</code> and <code>std::tolower</code> have undefined behavior if passed a negative <code>char</code> value.</li>
+      <li>This approach processes the string in a single pass without creating a cleaned copy, keeping space at O(1).</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout green">
+  <p><strong>Complexity Analysis:</strong></p>
+  <ul>
+    <li><strong>Time:</strong> O(n) &mdash; each character is visited at most once.</li>
+    <li><strong>Space:</strong> O(1) &mdash; no extra storage beyond a few variables.</li>
+  </ul>
+</div>
+
+<h2>Follow-up Questions</h2>
+
+<div class="question">
+  <h3>Variations to Try</h3>
+  <ol>
+    <li><strong>Palindrome using <code>std::equal</code>:</strong> Use the standard library algorithm <code>std::equal</code> with reverse iterators to check for palindrome in a single line.</li>
+    <li><strong>Valid Palindrome II:</strong> Given a string, check if it is a palindrome after removing at most one character. Example: <code>"abca"</code> &rarr; true (remove 'b' or 'c').</li>
+    <li><strong>Longest palindromic substring:</strong> Find the longest substring within a string that is a palindrome. This is a classic medium-level problem.</li>
+    <li><strong>Number palindrome:</strong> Check if an integer is a palindrome without converting it to a string (e.g., <code>121</code> &rarr; true, <code>-121</code> &rarr; false).</li>
+  </ol>
+</div>
+
+<div class="callout red">
+  <p><strong>Common Pitfall:</strong></p>
+  <p>When using <code>&lt;cctype&gt;</code> functions (<code>std::isalnum</code>, <code>std::tolower</code>, etc.), always cast <code>char</code> to <code>unsigned char</code> first. On platforms where <code>char</code> is signed, passing values like <code>'\\x80'</code> can trigger undefined behavior. This is a frequent source of bugs in production code.</p>
+</div>
+
+<div class="callout">
+  <p><strong>Key Takeaways:</strong></p>
+  <ul>
+    <li>The two-pointer technique is ideal for palindrome checks: compare symmetric positions moving inward.</li>
+    <li>Always consider edge cases: empty strings, single characters, strings with only non-alphanumeric characters.</li>
+    <li>The enhanced version demonstrates how to process only relevant characters in-place, a useful pattern for text processing.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="fibonacci.html">&larr; Fibonacci Numbers</a>
+  <a href="find-max.html">Find Maximum &rarr;</a>
+</div>
+<script>
+function toggleSolution(id) {
+  document.getElementById(id).classList.toggle('visible');
+}
+</script>
+</body>
+</html>

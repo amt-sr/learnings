@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Range-Based For — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / Range-Based For</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>Range-Based For</h1>
+
+<p>The range-based <code>for</code> loop (C++11) provides a cleaner, safer way to iterate over collections. It works with any type that provides <code>begin()</code> and <code>end()</code> methods or can be found via ADL (Argument Dependent Lookup).</p>
+
+<h2>Syntax</h2>
+
+<pre>
+for (declaration : range_expression) {
+    // body
+}
+</pre>
+
+<p>Internally, this is equivalent to:</p>
+
+<pre>
+{
+    auto && __range = range_expression;
+    auto __begin = begin(__range);
+    auto __end = end(__range);
+    for ( ; __begin != __end; ++__begin) {
+        declaration = *__begin;
+        // body
+    }
+}
+</pre>
+
+<h2>Capture Modes</h2>
+
+<table>
+  <tr><th>Declaration</th><th>Meaning</th><th>Use Case</th></tr>
+  <tr><td><code>for (auto x : ...)</code></td><td>Copy each element</td><td>Read-only access to cheap types</td></tr>
+  <tr><td><code>for (auto&amp; x : ...)</code></td><td>Reference — can modify</td><td>Modifying elements in-place</td></tr>
+  <tr><td><code>for (const auto&amp; x : ...)</code></td><td>Const reference — read-only</td><td>Default choice for reading</td></tr>
+  <tr><td><code>for (auto&amp;&amp; x : ...)</code></td><td>Forwarding reference</td><td>Move elements out of container</td></tr>
+</table>
+
+<pre>
+#include &lt;vector&gt;
+#include &lt;string&gt;
+#include &lt;iostream&gt;
+
+void capture_modes_demo() {
+    std::vector&lt;std::string&gt; words = {"alpha", "beta", "gamma"};
+
+    // Copy — each element copied to 'w'
+    for (auto w : words) {
+        std::cout &lt;&lt; w &lt;&lt; " ";   // modifying w doesn't affect words
+    }
+
+    // Reference — can modify original
+    for (auto&amp; w : words) {
+        w += "!";
+    }
+    // words is now: {"alpha!", "beta!", "gamma!"}
+
+    // Const reference — efficient read access (no copies)
+    for (const auto&amp; w : words) {
+        std::cout &lt;&lt; w &lt;&lt; " ";
+    }
+    std::cout &lt;&lt; "\n";
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Default choice:</strong> Use <code>for (const auto&amp; x : container)</code> for read-only access. It avoids copies and clearly signals intent. Only use <code>for (auto x : container)</code> for small, cheap-to-copy types (like <code>int</code>, <code>float</code>).</p>
+</div>
+
+<h2>Works with Various Containers</h2>
+
+<pre>
+#include &lt;vector&gt;
+#include &lt;map&gt;
+#include &lt;set&gt;
+#include &lt;array&gt;
+#include &lt;string&gt;
+#include &lt;iostream&gt;
+
+void various_containers() {
+    // std::vector
+    std::vector&lt;int&gt; nums = {1, 2, 3, 4, 5};
+    for (const auto&amp; n : nums) std::cout &lt;&lt; n &lt;&lt; " ";
+
+    // std::map — iterate over key-value pairs
+    std::map&lt;std::string, int&gt; ages = {{"Alice", 30}, {"Bob", 25}, {"Carol", 35}};
+    for (const auto&amp; [name, age] : ages) {  // structured bindings (C++17)
+        std::cout &lt;&lt; name &lt;&lt; " is " &lt;&lt; age &lt;&lt; "\n";
+    }
+
+    // std::set
+    std::set&lt;int&gt; unique_nums = {5, 3, 5, 3, 1, 4, 2, 2};
+    for (const auto&amp; n : unique_nums) std::cout &lt;&lt; n &lt;&lt; " ";  // 1 2 3 4 5
+
+    // std::array
+    std::array&lt;double, 3&gt; coords = {1.0, 2.0, 3.0};
+    for (const auto&amp; c : coords) std::cout &lt;&lt; c &lt;&lt; " ";
+
+    // std::string — iterate over characters
+    std::string greeting = "Hello";
+    for (const auto&amp; ch : greeting) std::cout &lt;&lt; ch &lt;&lt; "-";
+    std::cout &lt;&lt; "\n";
+}
+</pre>
+
+<h2>Moving Elements Out</h2>
+
+<pre>
+#include &lt;vector&gt;
+#include &lt;memory&gt;
+#include &lt;utility&gt;
+#include &lt;iostream&gt;
+
+struct Task {
+    std::string description;
+    explicit Task(std::string desc) : description(std::move(desc)) {}
+};
+
+void move_out_demo() {
+    std::vector&lt;Task&gt; tasks;
+    tasks.emplace_back("Task A");
+    tasks.emplace_back("Task B");
+    tasks.emplace_back("Task C");
+
+    // Move elements out of the vector
+    std::vector&lt;Task&gt; completed;
+    for (auto&amp;&amp; task : tasks) {
+        completed.push_back(std::move(task));
+        // task is now in a valid but unspecified state
+    }
+
+    for (const auto&amp; t : completed) {
+        std::cout &lt;&lt; t.description &lt;&lt; "\n";
+    }
+}
+</pre>
+
+<h2>Custom Iteratable Types</h2>
+
+<p>Any class providing <code>begin()</code> and <code>end()</code> works with range-based for.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+class IntRange {
+    int start_, end_;
+public:
+    class Iterator {
+        int current_;
+    public:
+        using iterator_category = std::input_iterator_tag;
+        using value_type = int;
+        using difference_type = std::ptrdiff_t;
+        using pointer = int*;
+        using reference = int&amp;;
+
+        explicit Iterator(int val) : current_(val) {}
+        int operator*() const { return current_; }
+        Iterator&amp; operator++() { ++current_; return *this; }
+        Iterator operator++(int) { Iterator tmp = *this; ++current_; return tmp; }
+        bool operator==(const Iterator&amp; other) const { return current_ == other.current_; }
+        bool operator!=(const Iterator&amp; other) const { return current_ != other.current_; }
+    };
+
+    IntRange(int start, int end) : start_(start), end_(end) {}
+    Iterator begin() const { return Iterator(start_); }
+    Iterator end() const { return Iterator(end_); }
+};
+
+void custom_iterable_demo() {
+    // Iterate from 1 to 10 (exclusive of 10)
+    for (int i : IntRange(1, 10)) {
+        std::cout &lt;&lt; i &lt;&lt; " ";  // 1 2 3 4 5 6 7 8 9
+    }
+    std::cout &lt;&lt; "\n";
+}
+</pre>
+
+<h2>Index with Range-Based For</h2>
+
+<p>C++ does not natively provide an index with range-based for. Here are common workarounds:</p>
+
+<pre>
+#include &lt;vector&gt;
+#include &lt;iostream&gt;
+
+void indexed_iteration() {
+    std::vector&lt;std::string&gt; fruits = {"apple", "banana", "cherry", "date"};
+
+    // Option 1: Manual index counter
+    std::cout &lt;&lt; "Option 1:\n";
+    int idx = 0;
+    for (const auto&amp; fruit : fruits) {
+        std::cout &lt;&lt; idx++ &lt;&lt; ": " &lt;&lt; fruit &lt;&lt; "\n";
+    }
+
+    // Option 2: Simple enumerate helper (common pattern)
+    std::cout &lt;&lt; "Option 2:\n";
+    for (size_t i = 0; i &lt; fruits.size(); ++i) {
+        std::cout &lt;&lt; i &lt;&lt; ": " &lt;&lt; fruits[i] &lt;&lt; "\n";
+    }
+}
+</pre>
+
+<p>Range-based for pairs well with <a href="constexpr.html">constexpr</a> for compile-time iteration over <code>std::array</code>, and with <a href="structured-bindings.html">structured bindings</a> (C++17) for clean access to key-value pairs. Next, we look at <a href="enum-class.html">enum class</a>.</p>
+
+<div class="nav"><a href="constexpr.html">&larr; constexpr</a><a href="enum-class.html">enum class &rarr;</a></div>
+</body>
+</html>

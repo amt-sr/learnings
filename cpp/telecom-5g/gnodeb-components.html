@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>gNB Components — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#4">4 Telecom &amp; 5G/4G</a> / gNB Components</div>
+<div class="meta"><span class="tag medium">Medium</span></div>
+<h1>gNB Components</h1>
+
+<p>A gNB (Next-Generation NodeB) in 5G is logically decomposed into four main functional units: the Central Unit Control Plane (CU-CP), Central Unit User Plane (CU-UP), Distributed Unit (DU), and Radio Unit (RU). Each unit handles specific protocol layers and has distinct real-time requirements.</p>
+
+<h2>Complete gNB Architecture</h2>
+
+<pre>
+                       5G Core (AMF/UPF)
+                            |
+                 +----------+----------+
+                 |    NG-C (to AMF)   |
+                 |    NG-U (to UPF)   |
+                 +----------+----------+
+                            |
+              +-------------+-------------+
+              |  CU-CP      |      CU-UP  |
+              |  ---------- |  ----------  |
+              |  RRC        |  SDAP        |
+              |  F1-C mgmt  |  PDCP        |
+              |  NGAP       |  F1-U mgmt   |
+              +------+------+
+                     | E1
+              +------+------+
+                     |
+              +------+------+
+              |     DU      |
+              |  ----------  |
+              |  RLC         |
+              |  MAC         |
+              |  Scheduler   |
+              |  L1 (upper)  |
+              +------+------+
+                     |
+              +------+------+
+              |     RU      |
+              |  ----------  |
+              |  L1 (lower)  |
+              |  FFT/IFFT   |
+              |  RF/ADC     |
+              +-------------+
+</pre>
+
+<h2>Component Responsibilities</h2>
+
+<table>
+  <tr><th>Component</th><th>Protocol Layers</th><th>Key Functions</th><th>Timing</th></tr>
+  <tr><td>CU-CP</td><td>RRC, NGAP</td><td>Connection management, mobility, F1-C management</td><td>Non-RT (~ms)</td></tr>
+  <tr><td>CU-UP</td><td>SDAP, PDCP</td><td>QoS mapping, header compression, ciphering, integrity</td><td>Non-RT (~ms)</td></tr>
+  <tr><td>DU</td><td>RLC, MAC, High-PHY</td><td>Scheduling, HARQ, segmentation, rate matching</td><td>RT (~us)</td></tr>
+  <tr><td>RU</td><td>Low-PHY, RF</td><td>FFT, CP insertion, beamforming, ADC/DAC</td><td>Hard-RT (~ns-us)</td></tr>
+</table>
+
+<h2>C++ Component Hierarchy</h2>
+
+<pre>
+#include &lt;memory&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+#include &lt;functional&gt;
+#include &lt;cstdint&gt;
+
+// Base interface for all gNB components
+class IGnbComponent {
+public:
+    virtual ~IGnbComponent() = default;
+    virtual bool initialize() = 0;
+    virtual bool start() = 0;
+    virtual void stop() = 0;
+    virtual std::string getName() const = 0;
+};
+
+// ==========================================
+// CU-CP: Central Unit Control Plane
+// ==========================================
+class ICuControlPlane : public IGnbComponent {
+public:
+    virtual void handleRrcMessage(uint32_t ue_id, const uint8_t* msg, size_t len) = 0;
+    virtual void handleNgapMessage(const uint8_t* msg, size_t len) = 0;
+    virtual void setupF1C() = 0;
+    virtual void handleUeContextSetup(uint32_t ue_id) = 0;
+};
+
+class CuControlPlane : public ICuControlPlane {
+public:
+    explicit CuControlPlane(const std::string&amp; amf_addr)
+        : amf_address_(amf_addr), running_(false) {}
+
+    bool initialize() override {
+        // Initialize RRC state machines for all UEs
+        // Setup NGAP connection to AMF
+        return true;
+    }
+
+    bool start() override {
+        running_ = true;
+        return establishNgC();
+    }
+
+    void stop() override { running_ = false; }
+
+    std::string getName() const override { return "CU-CP"; }
+
+    void handleRrcMessage(uint32_t ue_id, const uint8_t* msg, size_t len) override {
+        // Parse RRC message (RRCSetupRequest, RRCSetup, etc.)
+        // Update UE state machine
+    }
+
+    void setupF1C() override {
+        // Establish F1-C interface to DU
+        // Send F1 SETUP REQUEST
+    }
+
+    void handleUeContextSetup(uint32_t ue_id) override {
+        // Create UE context in CU-CP
+        // Send UE CONTEXT SETUP REQUEST to DU via F1-C
+    }
+
+private:
+    std::string amf_address_;
+    bool        running_;
+    bool        establishNgC();
+};
+
+// ==========================================
+// CU-UP: Central Unit User Plane
+// ==========================================
+class ICuUserPlane : public IGnbComponent {
+public:
+    virtual void handleSdapPdu(uint32_t ue_id, const uint8_t* pdu, size_t len) = 0;
+    virtual void mapQosFlow(uint8_t qfi, uint8_t drb_id) = 0;
+};
+
+class CuUserPlane : public ICuUserPlane {
+public:
+    bool initialize() override {
+        // Initialize SDAP and PDCP entities
+        pdcp_entities_.reserve(32);
+        return true;
+    }
+
+    bool start() override {
+        return establishNgU();
+    }
+
+    void stop() override {}
+
+    std::string getName() const override { return "CU-UP"; }
+
+    void handleSdapPdu(uint32_t ue_id, const uint8_t* pdu, size_t len) override {
+        // SDAP: Map QoS flow to DRB
+        // PDCP: Compress headers, cipher, add integrity
+    }
+
+    void mapQosFlow(uint8_t qfi, uint8_t drb_id) override {
+        // SDAP reflective QoS / non-reflective mapping
+        qos_mapping_[qfi] = drb_id;
+    }
+
+private:
+    std::vector&lt;void*&gt; pdcp_entities_;  // PDCP entity pointers
+    std::unordered_map&lt;uint8_t, uint8_t&gt; qos_mapping_;
+    bool establishNgU();
+};
+
+// ==========================================
+// DU: Distributed Unit
+// ==========================================
+class IDistributedUnit : public IGnbComponent {
+public:
+    virtual void runScheduler() = 0;
+    virtual void processHARQ() = 0;
+};
+
+class DistributedUnit : public IDistributedUnit {
+public:
+    bool initialize() override {
+        // Initialize RLC entities (TM/AM/UM)
+        // Initialize MAC scheduler
+        // Setup F1-U and F1-C interfaces
+        return true;
+    }
+
+    bool start() override {
+        // Start scheduler thread
+        // Connect to RU via fronthaul
+        return true;
+    }
+
+    void stop() override {}
+
+    std::string getName() const override { return "DU"; }
+
+    void runScheduler() override {
+        // MAC scheduler: assign PRBs to UEs
+        // Decision based on CQI, buffer status, QoS
+    }
+
+    void processHARQ() override {
+        // Process HARQ ACK/NACK
+        // Retransmission handling
+    }
+
+private:
+    // RLC entity pool
+    // MAC scheduler state
+    // F1 interface handlers
+};
+
+// ==========================================
+// RU: Radio Unit
+// ==========================================
+class IRadioUnit : public IGnbComponent {
+public:
+    virtual void processDownlink(const uint8_t* iq_samples, size_t len) = 0;
+    virtual void processUplink(uint8_t* iq_samples, size_t* len) = 0;
+};
+
+class RadioUnit : public IRadioUnit {
+public:
+    bool initialize() override {
+        // Initialize FFT engine
+        // Setup ADC/DAC
+        return true;
+    }
+
+    bool start() override {
+        // Start RF transmission/reception
+        return true;
+    }
+
+    void stop() override {}
+
+    std::string getName() const override { return "RU"; }
+
+    void processDownlink(const uint8_t* iq_samples, size_t len) override {
+        // IFFT, CP insertion, beamforming
+        // DAC and RF transmission
+    }
+
+    void processUplink(uint8_t* iq_samples, size_t* len) override {
+        // RF reception, ADC
+        // CP removal, FFT
+    }
+};
+</pre>
+
+<h2>Assembling the Full gNB</h2>
+
+<pre>
+class GnbSystem {
+public:
+    GnbSystem(const GnbId&amp; id)
+        : cu_cp_(std::make_unique&lt;CuControlPlane&gt;("10.0.0.1")),
+          cu_up_(std::make_unique&lt;CuUserPlane&gt;()),
+          du_(std::make_unique&lt;DistributedUnit&gt;()),
+          ru_(std::make_unique&lt;RadioUnit&gt;()),
+          gnb_id_(id) {}
+
+    bool start() {
+        // Initialize in order: CU-CP, CU-UP, DU, RU
+        if (!cu_cp_-&gt;initialize() || !cu_cp_-&gt;start())
+            return false;
+        if (!cu_up_-&gt;initialize() || !cu_up_-&gt;start())
+            return false;
+        if (!du_-&gt;initialize() || !du_-&gt;start())
+            return false;
+        if (!ru_-&gt;initialize() || !ru_-&gt;start())
+            return false;
+
+        // Establish E1 between CU-CP and CU-UP
+        // Establish F1 between CU and DU
+        return true;
+    }
+
+    void stop() {
+        ru_-&gt;stop();
+        du_-&gt;stop();
+        cu_up_-&gt;stop();
+        cu_cp_-&gt;stop();
+    }
+
+private:
+    std::unique_ptr&lt;CuControlPlane&gt; cu_cp_;
+    std::unique_ptr&lt;CuUserPlane&gt;    cu_up_;
+    std::unique_ptr&lt;DistributedUnit&gt; du_;
+    std::unique_ptr&lt;RadioUnit&gt;      ru_;
+    GnbId gnb_id_;
+};
+</pre>
+
+<h2>Cross-References</h2>
+
+<ul>
+  <li><a href="../advanced/smart-pointers.html">Smart Pointers</a> -- <code>std::unique_ptr</code> owns component lifetimes.</li>
+  <li><a href="../advanced/polymorphism.html">Polymorphism</a> -- Interface hierarchy with virtual functions.</li>
+  <li><a href="cu-du-split.html">CU-DU Split</a> -- Functional split options and rationale.</li>
+  <li><a href="ccdu.html">CCDU Concept</a> -- Centralized/distributed placement strategies.</li>
+  <li><a href="f1-interface.html">F1 Interface</a> -- Protocol between CU and DU.</li>
+  <li><a href="e1-interface.html">E1 Interface</a> -- Protocol between CU-CP and CU-UP.</li>
+</ul>
+
+<div class="nav"><a href="cu-du-split.html">&larr; CU-DU Split</a><a href="ccdu.html">CCDU &rarr;</a></div>
+</body>
+</html>

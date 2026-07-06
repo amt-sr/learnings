@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fixed-Point Arithmetic — C++ Practice</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.easy { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  .question { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; }
+  .question h3 { color: #f0f6fc; margin-top: 0; }
+  .solution-toggle { cursor: pointer; user-select: none; }
+  .solution-toggle h3 { color: #3fb950; display: inline; }
+  .solution-content { display: none; margin-top: 1rem; }
+  .solution-content.visible { display: block; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+  .topics-covered { margin-bottom: 1rem; font-size: 0.85rem; color: #8b949e; }
+  .topics-covered a { color: #8b949e; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#5">5 Practice</a> / Telecom Practice</div>
+<div class="meta"><span class="tag medium">Medium</span></div>
+<h1>Q15.16 Fixed-Point Arithmetic Class</h1>
+
+<div class="topics-covered">
+  <strong>Topics Covered:</strong>
+  <a href="../fixed-point.html">Fixed-Point Arithmetic</a>,
+  <a href="../operator-overloading.html">Operator Overloading</a>,
+  <a href="../templates.html">Templates</a>
+</div>
+
+<div class="question">
+  <h3>Problem Statement</h3>
+  <p>Implement a Q15.16 fixed-point arithmetic class. In the Q notation, Q15.16 means 15 bits for the integer part and 16 bits for the fractional part, stored in a 32-bit signed integer.</p>
+  <p>The class must support:</p>
+  <ul>
+    <li><strong>Addition (+)</strong> and <strong>subtraction (-)</strong></li>
+    <li><strong>Multiplication (*)</strong> with proper shift</li>
+    <li><strong>Division (/)</strong> with proper shift</li>
+    <li>Conversion to/from <code>float</code>, <code>double</code>, and <code>int</code></li>
+    <li>Comparison operators</li>
+  </ul>
+</div>
+
+<div class="callout">
+  <p><strong>Q15.16 Format Reference:</strong></p>
+  <table>
+    <tr><th>Value</th><th>Raw (hex)</th><th>Explanation</th></tr>
+    <tr><td>1.0</td><td>0x00010000</td><td>1 &lt;&lt; 16</td></tr>
+    <tr><td>0.5</td><td>0x00008000</td><td>1 &lt;&lt; 15</td></tr>
+    <tr><td>0.25</td><td>0x00004000</td><td>1 &lt;&lt; 14</td></tr>
+    <tr><td>-1.5</td><td>0xFFFE8000</td><td>Two's complement</td></tr>
+    <tr><td>3.14159</td><td>0x0003243F</td><td>3 + 0.14159 * 65536</td></tr>
+  </table>
+  <p><strong>Key formulas:</strong></p>
+  <ul>
+    <li>To convert float to Q15.16: <code>raw = (int32_t)(value * 65536.0f)</code></li>
+    <li>To convert Q15.16 to float: <code>value = (float)raw / 65536.0f</code></li>
+    <li>Multiplication: <code>(a * b) &gt;&gt; 16</code> (shift right by fractional bits)</li>
+    <li>Division: <code>(a &lt;&lt; 16) / b</code> (shift left before divide to preserve precision)</li>
+  </ul>
+</div>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution1')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution1">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;iostream&gt;
+#include &lt;cstdint&gt;
+#include &lt;cmath&gt;
+#include &lt;stdexcept&gt;
+#include &lt;string&gt;
+#include &lt;sstream&gt;
+#include &lt;iomanip&gt;
+
+class FixedQ15_16 {
+public:
+    static constexpr int FRACTIONAL_BITS = 16;
+    static constexpr int64_t SCALE = 1LL &lt;&lt; FRACTIONAL_BITS;  // 65536
+
+    // ---- Constructors ----
+
+    constexpr FixedQ15_16() : raw_(0) {}
+
+    // From raw value (advanced use)
+    explicit constexpr FixedQ15_16(int32_t raw) : raw_(raw) {}
+
+    // From integer
+    constexpr FixedQ15_16(int value) : raw_(static_cast&lt;int32_t&gt;(value &lt;&lt; FRACTIONAL_BITS)) {}
+
+    // From float (implicit)
+    constexpr FixedQ15_16(float value)
+        : raw_(static_cast&lt;int32_t&gt;(static_cast&lt;double&gt;(value) * SCALE)) {}
+
+    // From double (implicit)
+    constexpr FixedQ15_16(double value)
+        : raw_(static_cast&lt;int32_t&gt;(value * static_cast&lt;double&gt;(SCALE))) {}
+
+    // ---- Conversions ----
+
+    constexpr float toFloat() const {
+        return static_cast&lt;float&gt;(raw_) / static_cast&lt;float&gt;(SCALE);
+    }
+
+    constexpr double toDouble() const {
+        return static_cast&lt;double&gt;(raw_) / static_cast&lt;double&gt;(SCALE);
+    }
+
+    constexpr int toInt() const {
+        return raw_ &gt;&gt; FRACTIONAL_BITS;  // Truncate toward zero
+    }
+
+    constexpr int32_t raw() const { return raw_; }
+
+    // ---- Arithmetic operators ----
+
+    constexpr FixedQ15_16 operator+(const FixedQ15_16&amp; rhs) const {
+        return FixedQ15_16(raw_ + rhs.raw_);
+    }
+
+    constexpr FixedQ15_16 operator-(const FixedQ15_16&amp; rhs) const {
+        return FixedQ15_16(raw_ - rhs.raw_);
+    }
+
+    FixedQ15_16 operator*(const FixedQ15_16&amp; rhs) const {
+        // Use 64-bit intermediate to prevent overflow
+        int64_t result = static_cast&lt;int64_t&gt;(raw_) *
+                         static_cast&lt;int64_t&gt;(rhs.raw_);
+        return FixedQ15_16(static_cast&lt;int32_t&gt;(result &gt;&gt; FRACTIONAL_BITS));
+    }
+
+    FixedQ15_16 operator/(const FixedQ15_16&amp; rhs) const {
+        if (rhs.raw_ == 0) {
+            throw std::runtime_error("Fixed-point division by zero");
+        }
+        // Shift left BEFORE divide to preserve precision
+        int64_t temp = (static_cast&lt;int64_t&gt;(raw_) &lt;&lt; FRACTIONAL_BITS);
+        return FixedQ15_16(static_cast&lt;int32_t&gt;(temp / rhs.raw_));
+    }
+
+    // ---- Compound assignment ----
+
+    FixedQ15_16&amp; operator+=(const FixedQ15_16&amp; rhs) {
+        raw_ += rhs.raw_;
+        return *this;
+    }
+
+    FixedQ15_16&amp; operator-=(const FixedQ15_16&amp; rhs) {
+        raw_ -= rhs.raw_;
+        return *this;
+    }
+
+    FixedQ15_16&amp; operator*=(const FixedQ15_16&amp; rhs) {
+        *this = *this * rhs;
+        return *this;
+    }
+
+    FixedQ15_16&amp; operator/=(const FixedQ15_16&amp; rhs) {
+        *this = *this / rhs;
+        return *this;
+    }
+
+    // ---- Unary operators ----
+
+    constexpr FixedQ15_16 operator-() const {
+        return FixedQ15_16(-raw_);
+    }
+
+    constexpr FixedQ15_16 operator+() const {
+        return *this;
+    }
+
+    // ---- Comparison operators ----
+
+    constexpr bool operator==(const FixedQ15_16&amp; rhs) const { return raw_ == rhs.raw_; }
+    constexpr bool operator!=(const FixedQ15_16&amp; rhs) const { return raw_ != rhs.raw_; }
+    constexpr bool operator&lt; (const FixedQ15_16&amp; rhs) const { return raw_ &lt;  rhs.raw_; }
+    constexpr bool operator&lt;=(const FixedQ15_16&amp; rhs) const { return raw_ &lt;= rhs.raw_; }
+    constexpr bool operator&gt; (const FixedQ15_16&amp; rhs) const { return raw_ &gt;  rhs.raw_; }
+    constexpr bool operator&gt;=(const FixedQ15_16&amp; rhs) const { return raw_ &gt;= rhs.raw_; }
+
+    // ---- Utility ----
+
+    std::string toString() const {
+        std::ostringstream oss;
+        oss &lt;&lt; std::fixed &lt;&lt; std::setprecision(6) &lt;&lt; toDouble();
+        return oss.str();
+    }
+
+    // Absolute value
+    FixedQ15_16 abs() const {
+        return FixedQ15_16(raw_ &gt;= 0 ? raw_ : -raw_);
+    }
+
+private:
+    int32_t raw_;
+};
+
+// ---- Stream output ----
+
+std::ostream&amp; operator&lt;&lt;(std::ostream&amp; os, const FixedQ15_16&amp; val) {
+    return os &lt;&lt; val.toString();
+}
+
+// ---- Demo ----
+
+int main() {
+    FixedQ15_16 a = 3.5;
+    FixedQ15_16 b = 2.25;
+    FixedQ15_16 c = -1.5;
+
+    std::cout &lt;&lt; "=== FixedQ15_16 Arithmetic Demo ===\n\n";
+
+    std::cout &lt;&lt; "a = " &lt;&lt; a &lt;&lt; " (raw: 0x" &lt;&lt; std::hex &lt;&lt; a.raw() &lt;&lt; std::dec &lt;&lt; ")\n";
+    std::cout &lt;&lt; "b = " &lt;&lt; b &lt;&lt; " (raw: 0x" &lt;&lt; std::hex &lt;&lt; b.raw() &lt;&lt; std::dec &lt;&lt; ")\n";
+    std::cout &lt;&lt; "c = " &lt;&lt; c &lt;&lt; "\n\n";
+
+    // Addition and subtraction
+    std::cout &lt;&lt; "a + b = " &lt;&lt; (a + b) &lt;&lt; "\n";   // 5.750000
+    std::cout &lt;&lt; "a - b = " &lt;&lt; (a - b) &lt;&lt; "\n";   // 1.250000
+    std::cout &lt;&lt; "a + c = " &lt;&lt; (a + c) &lt;&lt; "\n";   // 2.000000
+
+    // Multiplication
+    std::cout &lt;&lt; "\na * b = " &lt;&lt; (a * b) &lt;&lt; "\n";   // 7.875000
+    std::cout &lt;&lt; "a * c = " &lt;&lt; (a * c) &lt;&lt; "\n";   // -5.250000
+
+    // Division
+    std::cout &lt;&lt; "\na / b = " &lt;&lt; (a / b) &lt;&lt; "\n";   // 1.555555...
+    std::cout &lt;&lt; "b / a = " &lt;&lt; (b / a) &lt;&lt; "\n";   // 0.642857...
+
+    // Comparisons
+    std::cout &lt;&lt; "\na &gt; b: " &lt;&lt; (a &gt; b) &lt;&lt; "\n";    // true (1)
+    std::cout &lt;&lt; "a == c: " &lt;&lt; (a == c) &lt;&lt; "\n";  // false (0)
+    std::cout &lt;&lt; "a &gt;= b: " &lt;&lt; (a &gt;= b) &lt;&lt; "\n";  // true (1)
+
+    // Integer conversion
+    std::cout &lt;&lt; "\na.toInt() = " &lt;&lt; a.toInt() &lt;&lt; "\n";  // 3
+
+    // Chained operations
+    FixedQ15_16 result = (a + b) * c / FixedQ15_16(2);
+    std::cout &lt;&lt; "\n(a + b) * c / 2 = " &lt;&lt; result &lt;&lt; "\n";
+
+    // Accuracy comparison with float
+    float fa = 3.5f, fb = 2.25f;
+    std::cout &lt;&lt; "\n--- Accuracy check ---\n";
+    std::cout &lt;&lt; "Float:     a/b = " &lt;&lt; (fa / fb) &lt;&lt; "\n";
+    std::cout &lt;&lt; "Fixed:     a/b = " &lt;&lt; (a / b).toDouble() &lt;&lt; "\n";
+    std::cout &lt;&lt; "Difference: " &lt;&lt; std::abs((a / b).toDouble() - fa / fb) &lt;&lt; "\n";
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li>The value is stored as a plain <code>int32_t</code> using an implicit scale factor of 65536 (2<sup>16</sup>).</li>
+      <li><strong>Add/Subtract:</strong> No shift needed. Both values have the same scale, so adding the raw integers is equivalent to adding the real values.</li>
+      <li><strong>Multiply:</strong> Two Q15.16 values multiplied produce a Q30.32 result (32 integer bits, 32 fractional bits). We shift right by 16 to get back to Q15.16. The 64-bit intermediate prevents overflow of the multiplication.</li>
+      <li><strong>Divide:</strong> We shift the numerator left by 16 first to compensate for the scale. Without this, the result would lose all fractional precision (integer division). Example: <code>1.0 / 2.0</code> &mdash; raw <code>65536 / 131072</code> = 0. Wrong. With shift: <code>(65536 &lt;&lt; 16) / 131072</code> = 32768 = 0.5. Correct.</li>
+      <li><strong>Conversions:</strong> Float-to-fixed multiplies by 65536; fixed-to-float divides by 65536.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout green">
+  <p><strong>Complexity Analysis:</strong></p>
+  <table>
+    <tr><th>Operation</th><th>CPU Cycles</th><th>Equivalent Float</th></tr>
+    <tr><td>Add/Sub</td><td>1-2</td><td>3-5</td></tr>
+    <tr><td>Multiply</td><td>3-5 (includes shift)</td><td>3-5</td></tr>
+    <tr><td>Divide</td><td>20-40 (integer div + shift)</td><td>15-30</td></tr>
+  </table>
+  <p>On processors without FPU (common in low-cost microcontrollers), fixed-point is dramatically faster than software-emulated floating point.</p>
+</div>
+
+<h2>Follow-up Questions</h2>
+
+<div class="question">
+  <h3>Variations to Try</h3>
+  <ol>
+    <li><strong>Template-based Q format:</strong> Generalize to <code>FixedPoint&lt;int32_t, IntBits, FracBits&gt;</code> with compile-time validation.</li>
+    <li><strong>Square root:</strong> Implement a fixed-point square root using the Newton-Raphson method.</li>
+    <li><strong>Sin/Cos lookup table:</strong> Implement sin/cos using a precomputed 256-entry lookup table with linear interpolation.</li>
+    <li><strong>Saturation arithmetic:</strong> Modify the class so that overflow clamps to the maximum/minimum value instead of wrapping (common in DSP).</li>
+    <li><strong>Q31 format:</strong> Implement Q0.31 (32 fractional bits) where the range is [-1, 1). This is used extensively in audio DSP.</li>
+  </ol>
+</div>
+
+<div class="callout">
+  <p><strong>Real-World Applications:</strong></p>
+  <ul>
+    <li>Fixed-point arithmetic is used in <strong>5G baseband processing</strong> for channel estimation, equalization, and FFT on platforms without hardware FPU.</li>
+    <li>DSP chips (like TI C55x) use fixed-point natively for audio and video codecs.</li>
+    <li>Embedded systems (Cortex-M0/M0+ without FPU) rely on fixed-point for sensor processing and motor control.</li>
+    <li>The <strong>CMSIS-DSP</strong> library from ARM provides optimized fixed-point math functions.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="circular-buffer-impl.html">&larr; Circular Buffer</a>
+  <a href="asn1-encoder.html">ASN.1 Encoder &rarr;</a>
+</div>
+<script>
+function toggleSolution(id) {
+  document.getElementById(id).classList.toggle('visible');
+}
+</script>
+</body>
+</html>

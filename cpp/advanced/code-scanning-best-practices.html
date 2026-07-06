@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Code Scanning Best Practices — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / <a href="../index.html#3.6">3.6 Static Analysis &amp; Code Quality</a> / 3.6.7</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>Code Scanning Best Practices</h1>
+
+<p>Setting up an effective code scanning pipeline requires more than just running a tool. It requires careful configuration, team buy-in, and a strategy for managing alerts over time. This guide covers best practices for integrating static analysis into your C++ development workflow.</p>
+
+<h2>Setting Up the Pipeline</h2>
+
+<p>A robust code scanning pipeline runs at multiple stages of development, catching issues as early as possible:</p>
+
+<table>
+<tr><th>Stage</th><th>Tools</th><th>Speed</th><th>Scope</th></tr>
+<tr><td>Pre-commit (local)</td><td><a href="clang-tidy.html">clang-tidy</a> (incremental)</td><td>&lt; 5 seconds</td><td>Changed files only</td></tr>
+<tr><td>Pre-commit (local)</td><td><a href="cppcheck.html">cppcheck</a> (incremental)</td><td>&lt; 3 seconds</td><td>Changed files only</td></tr>
+<tr><td>CI pull request</td><td>All static tools full scan</td><td>2-5 minutes</td><td>Entire codebase</td></tr>
+<tr><td>CI nightly</td><td><a href="clang-static-analyzer.html">Clang Static Analyzer</a>, deep analysis</td><td>10-30 minutes</td><td>Full path-sensitive analysis</td></tr>
+<tr><td>CI test</td><td><a href="address-sanitizer-tools.html">Sanitizers</a></td><td>Runtime</td><td>All test execution paths</td></tr>
+</table>
+
+<h2>Pre-Commit Hooks</h2>
+
+<pre>
+# .githooks/pre-commit (make executable: chmod +x .githooks/pre-commit)
+#!/bin/bash
+set -euo pipefail
+
+CHANGED_FILES=$(git diff --cached --name-only --diff-filter=ACM \
+    | grep -E '\.(cpp|cc|cxx|h|hpp|hxx)$' || true)
+
+if [ -z "$CHANGED_FILES" ]; then
+    exit 0
+fi
+
+echo "Running static analysis on changed files..."
+
+# clang-tidy on changed files
+for file in $CHANGED_FILES; do
+    if [ -f "$file" ]; then
+        clang-tidy --config-file=.clang-tidy "$file" 2&gt;&amp;1 || {
+            echo "ERROR: clang-tidy found issues in $file"
+            echo "Fix with: clang-tidy --fix $file"
+            exit 1
+        }
+    fi
+done
+
+# cppcheck on changed files
+cppcheck --enable=error,warning,performance \
+    --std=c++17 \
+    --suppress=missingInclude \
+    $CHANGED_FILES || {
+        echo "ERROR: cppcheck found issues"
+        exit 1
+    }
+
+echo "Static analysis passed!"
+</pre>
+
+<pre>
+# Configure git to use custom hooks
+git config core.hooksPath .githooks
+</pre>
+
+<h2>CI/CD Integration</h2>
+
+<pre>
+# .github/workflows/code-quality.yml
+name: Code Quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  static-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: cppcheck
+        run: |
+          cppcheck --enable=all --error-exitcode=1 \
+            --suppress=missingInclude \
+            --std=c++17 --xml 2> cppcheck.xml src/
+
+      - name: clang-tidy
+        run: run-clang-tidy -p build -j$(nproc) src/
+
+  sanitizers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build with ASan
+        run: |
+          cmake -B build-asan \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
+          cmake --build build-asan
+
+      - name: Run tests with sanitizers
+        run: ctest --test-dir build-asan --output-on-failure
+</pre>
+
+<h2>Suppressing False Positives</h2>
+
+<p>When a tool reports a false positive, suppress it explicitly with a reason. Never suppress blindly:</p>
+
+<pre>
+// Inline suppression with reason (NOLINT for clang-tidy)
+int legacy_offset = 42;  // NOLINT(readability-magic-numbers)
+                         // Legacy offset constant, do not change
+
+// cppcheck inline suppression
+void legacy_handler(char* buf) {
+    // cppcheck-suppress nullPointer
+    *buf = '\0';  // Caller guarantees non-null (legacy API contract)
+}
+
+// .clang-tidy suppression
+# Suppress for specific file
+Checks: '*, -modernize-use-trailing-return-type'
+</pre>
+
+<div class="callout warning">
+<p><strong>Rule:</strong> Every suppression must include a comment explaining <em>why</em> it is a false positive and whether it should be revisited. Use <code>TODO(safety):</code> tags for temporary suppressions that need fixing.</p>
+</div>
+
+<h2>Severity Levels and Triage</h2>
+
+<table>
+<tr><th>Severity</th><th>Action</th><th>Timeline</th></tr>
+<tr><td>Critical (security, memory corruption)</td><td>Block merge, fix immediately</td><td>Same day</td></tr>
+<tr><td>Error (definite bug)</td><td>Block merge, assign to author</td><td>Before merge</td></tr>
+<tr><td>Warning (likely bug)</td><td>Create issue, track</td><td>1 sprint</td></tr>
+<tr><td>Style (readability)</td><td>Auto-fix if possible, else low priority</td><td>When convenient</td></tr>
+<tr><td>Informational</td><td>Review only, no action required</td><td>Optional</td></tr>
+</table>
+
+<h2>Combining Tools Effectively</h2>
+
+<pre>
+# Recommended tool combination for C++ projects:
+
+# 1. Fast, always-on (pre-commit + CI)
+cppcheck --enable=error,warning,performance --std=c++17 src/
+clang-tidy --checks='bugprone-*,modernize-*,performance-*' src/
+
+# 2. Deep analysis (nightly CI)
+scan-build cmake --build build     # Clang Static Analyzer
+
+# 3. Runtime verification (test suite)
+cmake -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined" \
+      -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address" -B build-san
+ctest --test-dir build-san
+
+# 4. Code style enforcement
+clang-format --dry-run --Werror src/**/*.cpp src/**/*.h
+</pre>
+
+<div class="callout green">
+<p><strong>Key principles:</strong> (1) Never introduce new violations. (2) Fix existing violations incrementally -- do not try to fix everything at once. (3) Automate everything -- if it is not in CI, it will not be enforced. (4) Make alerts actionable -- developers should understand each finding and know how to fix it.</p>
+</div>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="static-analysis-overview.html">Static Analysis Overview</a>, <a href="cppcheck.html">cppcheck</a>, <a href="clang-tidy.html">clang-tidy</a>, <a href="cmake.html">CMake</a>.</p>
+</div>
+
+<div class="nav"><a href="undefined-behavior.html">&larr; Undefined Behavior</a><a href="cmake.html">CMake &rarr;</a></div>
+</body>
+</html>

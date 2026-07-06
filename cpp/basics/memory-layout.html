@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memory Layout — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; }
+  .breadcrumb a { color: #8b949e; }
+  .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; }
+  .callout.red { border-left-color: #f85149; }
+  .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; }
+  th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#1">1 Basics</a> / 1.3.3 Memory Layout</div>
+<div class="meta"><span class="tag basic">BASIC</span></div>
+<h1>1.3.3 Memory Layout</h1>
+
+<p>When a C++ program runs, the operating system allocates it a virtual address space divided into several segments. Each segment has a specific purpose, permissions, and behavior. Understanding this layout is crucial for debugging pointer errors, optimizing performance, and avoiding security vulnerabilities.</p>
+
+<h2>Process Memory Segments</h2>
+
+<table>
+  <tr><th>Segment</th><th>Contents</th><th>Permissions</th><th>Growth</th></tr>
+  <tr><td><strong>Text (Code)</strong></td><td>Compiled machine instructions</td><td>Read + Execute</td><td>Fixed size</td></tr>
+  <tr><td><strong>Initialized Data</strong></td><td>Global/static variables with explicit values</td><td>Read + Write</td><td>Fixed size</td></tr>
+  <tr><td><strong>BSS (Uninit Data)</strong></td><td>Global/static variables, zero-initialized</td><td>Read + Write</td><td>Fixed size</td></tr>
+  <tr><td><strong>Heap</strong></td><td>Dynamically allocated memory (new/malloc)</td><td>Read + Write</td><td>Grows up</td></tr>
+  <tr><td><strong>Stack</strong></td><td>Local variables, function frames</td><td>Read + Write</td><td>Grows down</td></tr>
+</table>
+
+<h2>Visual Layout</h2>
+
+<pre>
+  High Addresses (0xFFFFFFFF on 32-bit, 0x7FFF... on 64-bit)
+  +-----------------------------------------------------+
+  |                   Kernel Space                       |  (inaccessible)
+  +-----------------------------------------------------+
+  |              |                                      |
+  |     Stack    v   Local variables, return addresses   |
+  |              |   Grows downward (high to low addr)   |
+  |              |                                      |
+  +-----------------------------------------------------+
+  |                                                     |
+  |              (unmapped / free space)                |
+  |                                                     |
+  +-----------------------------------------------------+
+  |              |                                      |
+  |     Heap     ^   Dynamically allocated objects      |
+  |              |   Grows upward (low to high addr)     |
+  |              |   Managed by new/malloc               |
+  +-----------------------------------------------------+
+  |                                                     |
+  |      BSS Segment     |  Uninitialized globals       |
+  |                      |  Zero-initialized at startup  |
+  +-----------------------------------------------------+
+  |   Initialized Data   |  Global/static vars with    |
+  |                      |  explicit initial values      |
+  +-----------------------------------------------------+
+  |   Text Segment       |  Program code (instructions)  |
+  |                      |  Read-only, executable       |
+  +-----------------------------------------------------+
+  Low Addresses (0x0)
+</pre>
+
+<h2>Text Segment (Code Segment)</h2>
+
+<p>The text segment contains the compiled machine code of your program &mdash; all the CPU instructions that the program executes. This segment is typically <strong>read-only</strong> to prevent the program from accidentally modifying its own code.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+void say_hello() {
+    std::cout &lt;&lt; "Hello!" &lt;&lt; std::endl;
+    // The body of this function lives in the text segment
+    // as compiled CPU instructions
+}
+
+int main() {
+    say_hello();  // CPU jumps to the text segment to execute
+    return 0;
+}
+</pre>
+
+<div class="callout red">
+  <p><strong>Security:</strong> Modifying the text segment (e.g., via buffer overflow) is a classic attack vector. Modern OSes enforce W^X (Write XOR Execute) &mdash; memory is either writable or executable, never both. This prevents injecting and running shellcode.</p>
+</div>
+
+<h2>Initialized Data Segment</h2>
+
+<p>This segment holds global and static variables that are explicitly initialized to a non-zero value. They persist for the entire lifetime of the program.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+// Initialized Data: lives in the initialized data segment
+int global_counter = 42;
+double pi = 3.14159265;
+const int max_size = 1024;
+
+void demo() {
+    // Static local variable: also in initialized data segment
+    static int call_count = 0;
+    call_count++;
+    std::cout &lt;&lt; "Called " &lt;&lt; call_count &lt;&lt; " times" &lt;&lt; std::endl;
+}
+
+int main() {
+    std::cout &lt;&lt; "global_counter = " &lt;&lt; global_counter &lt;&lt; std::endl;
+    demo();
+    demo();
+    demo();
+    return 0;
+}
+</pre>
+
+<h2>BSS Segment (Block Started by Symbol)</h2>
+
+<p>The BSS segment stores global and static variables that are <strong>not</strong> explicitly initialized (or initialized to zero). The OS zeros this entire segment at program startup, which is more efficient than storing zeros in the executable file.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+// BSS segment: zero-initialized by the OS at startup
+int uninit_global;           // Zero-initialized to 0
+static int static_var;       // Zero-initialized to 0
+int big_array[10000];        // 40 KB zeroed at startup (no space in .exe)
+int zero_init = 0;          // Also in BSS (initialized to zero)
+
+int main() {
+    std::cout &lt;&lt; "uninit_global = " &lt;&lt; uninit_global &lt;&lt; std::endl;  // 0
+    std::cout &lt;&lt; "static_var   = " &lt;&lt; static_var &lt;&lt; std::endl;    // 0
+    std::cout &lt;&lt; "zero_init    = " &lt;&lt; zero_init &lt;&lt; std::endl;      // 0
+    return 0;
+}
+</pre>
+
+<div class="callout">
+  <p><strong>Why BSS matters:</strong> A variable like <code>int big_array[1000000]</code> would take 4 MB of space in the executable if stored in initialized data. By placing it in BSS, the OS only needs to store a note ("zero 4 MB at this address"), and the actual zeroing happens at load time. This keeps binary sizes small.</p>
+</div>
+
+<h2>Heap Segment</h2>
+
+<p>The heap is used for dynamic memory allocation via <code>new</code> (C++) or <code>malloc</code> (C). It grows upward from the BSS segment toward the stack. The C runtime manages heap allocation using algorithms that track free and occupied blocks.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+
+int main() {
+    // These allocations live in the heap
+    int* p1 = new int{10};
+    int* p2 = new int{20};
+
+    // STL containers internally use the heap for storage
+    std::vector&lt;int&gt; vec = {1, 2, 3, 4, 5};
+    // The vector object itself may be on the stack,
+    // but its internal array of 5 ints is on the heap
+
+    std::cout &lt;&lt; "Heap ptr p1: " &lt;&lt; p1 &lt;&lt; std::endl;
+    std::cout &lt;&lt; "Heap ptr p2: " &lt;&lt; p2 &lt;&lt; std::endl;
+    std::cout &lt;&lt; "Vector data: " &lt;&lt; vec.data() &lt;&lt; std::endl;
+
+    delete p1;
+    delete p2;
+
+    return 0;
+}
+</pre>
+
+<h2>Stack Segment</h2>
+
+<p>The stack holds local variables, function parameters, return addresses, and other per-call data. Each function call creates a <strong>stack frame</strong>. The stack grows downward (toward lower addresses) on most architectures.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+int add(int a, int b) {
+    // a and b are on this function's stack frame
+    int result = a + b;
+    return result;  // result is copied to caller, then frame destroyed
+}
+
+int main() {
+    int x = 10;      // On main's stack frame
+    int y = 20;      // On main's stack frame
+    int sum = add(x, y);  // After add() returns, its frame is popped
+
+    std::cout &lt;&lt; x &lt;&lt; " + " &lt;&lt; y &lt;&lt; " = " &lt;&lt; sum &lt;&lt; std::endl;
+    return 0;
+}
+</pre>
+
+<h2>How Segments Relate to Stack vs Heap</h2>
+
+<table>
+  <tr><th>Variable Type</th><th>Segment</th><th>Lifetime</th><th>Example</th></tr>
+  <tr><td>Local variable (non-static)</td><td>Stack</td><td>Function scope</td><td><code>int x = 5;</code> inside main()</td></tr>
+  <tr><td>Function parameter</td><td>Stack</td><td>Function scope</td><td><code>void f(int a)</code></td></tr>
+  <tr><td>Heap-allocated object</td><td>Heap</td><td>Until deleted</td><td><code>new int{42}</code></td></tr>
+  <tr><td>Global variable (initialized)</td><td>Data</td><td>Program lifetime</td><td><code>int g = 10;</code> at file scope</td></tr>
+  <tr><td>Global variable (uninitialized)</td><td>BSS</td><td>Program lifetime</td><td><code>int g;</code> at file scope</td></tr>
+  <tr><td>Static local variable</td><td>Data/BSS</td><td>Program lifetime</td><td><code>static int count = 0;</code></td></tr>
+  <tr><td>String literal</td><td>Text (rodata)</td><td>Program lifetime</td><td><code>"hello"</code></td></tr>
+</table>
+
+<h2>Why This Matters for Pointers</h2>
+
+<p>Understanding the memory layout is essential for writing correct pointer code. The most common bugs &mdash; dangling pointers, buffer overflows, and use-after-free &mdash; all stem from misunderstanding where data lives and how long it persists.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+int global = 10;  // Data segment -- lives forever
+
+int* dangerous() {
+    int local = 20;    // Stack -- dies when function returns
+    return &amp;local;      // Dangling pointer! Points to dead stack memory
+}
+
+int* safe() {
+    static int persistent = 30;  // Data segment -- lives forever
+    return &amp;persistent;         // Safe: variable persists
+}
+
+int* also_safe() {
+    return new int{40};  // Heap -- lives until explicitly deleted
+    // Caller MUST delete this!
+}
+
+int main() {
+    std::cout &lt;&lt; global &lt;&lt; std::endl;              // 10 (OK: data segment)
+    // std::cout &lt;&lt; *dangerous() &lt;&lt; std::endl;     // BUG: dangling pointer
+
+    int* p1 = safe();
+    std::cout &lt;&lt; *p1 &lt;&lt; std::endl;                  // 30 (OK: static storage)
+
+    int* p2 = also_safe();
+    std::cout &lt;&lt; *p2 &lt;&lt; std::endl;                  // 40 (OK: heap)
+    delete p2;                                       // Must free
+
+    return 0;
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>Remember:</strong> Pointers do not know which segment their target lives in. A pointer is just an address. It is up to the programmer to ensure the pointed-to memory is still valid when accessed. See <a href="pointers.html">Pointers</a> for pointer operations and <a href="stack-vs-heap.html">Stack vs Heap</a> for lifetime rules.</p>
+</div>
+
+<h2>Inspecting Memory Layout</h2>
+
+<pre>
+#include &lt;iostream&gt;
+
+int global_init = 1;       // Initialized data
+int global_uninit;          // BSS
+
+int main() {
+    int local = 2;           // Stack
+    int* heap = new int{3};  // Heap
+
+    std::cout &lt;&lt; "Text segment:  " &lt;&lt; (void*)&amp;main &lt;&lt; std::endl;
+    std::cout &lt;&lt; "Init data:    " &lt;&lt; (void*)&amp;global_init &lt;&lt; std::endl;
+    std::cout &lt;&lt; "BSS:          " &lt;&lt; (void*)&amp;global_uninit &lt;&lt; std::endl;
+    std::cout &lt;&lt; "Heap:         " &lt;&lt; (void*)heap &lt;&lt; std::endl;
+    std::cout &lt;&lt; "Stack:        " &lt;&lt; (void*)&amp;local &lt;&lt; std::endl;
+
+    delete heap;
+    return 0;
+}
+</pre>
+
+<h2>Related Topics</h2>
+
+<ul>
+  <li><a href="stack-vs-heap.html">Stack vs Heap</a> &mdash; Detailed comparison of stack and heap allocation</li>
+  <li><a href="pointers.html">Pointers</a> &mdash; Pointer types, operations, and arithmetic</li>
+  <li><a href="new-delete.html">new/delete</a> &mdash; C++ dynamic memory operators</li>
+  <li><a href="../advanced/shared-memory-ipc.html">Shared Memory IPC</a> &mdash; Sharing memory between processes</li>
+  <li><a href="../advanced/memory-mapped-files.html">Memory-Mapped Files</a> &mdash; Mapping files into virtual address space</li>
+</ul>
+
+<div class="nav">
+  <a href="new-delete.html">&larr; new / delete</a>
+  <a href="function-templates.html">Function Templates &rarr;</a>
+</div>
+</body>
+</html>

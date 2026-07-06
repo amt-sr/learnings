@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>clang-tidy — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / <a href="../index.html#3.6">3.6 Static Analysis &amp; Code Quality</a> / 3.6.3</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>clang-tidy</h1>
+
+<p>clang-tidy is a clang-based static analysis tool that operates on the Abstract Syntax Tree (AST). It provides an extensible framework for diagnosing and auto-fixing a wide range of C++ issues -- from coding style violations to potential bugs and performance problems.</p>
+
+<h2>Installing and Running</h2>
+
+<pre>
+# macOS (Homebrew)
+brew install llvm
+
+# Ubuntu/Debian
+sudo apt install clang-tidy
+
+# Run on a single file (requires compile_commands.json)
+clang-tidy src/parser.cpp
+
+# Run on all source files in parallel
+run-clang-tidy -p build/ -j$(nproc) src/
+
+# Run specific checks
+clang-tidy -checks='modernize-*,bugprone-*' src/main.cpp
+
+# Auto-fix with --fix (modifies files in place)
+clang-tidy --fix -checks='modernize-use-auto' src/main.cpp
+</pre>
+
+<div class="callout">
+<p><strong>Prerequisite:</strong> clang-tidy needs a <code>compile_commands.json</code> file to understand compiler flags, includes, and definitions. Generate it with <a href="cmake.html">CMake</a>: <code>cmake -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON</code></p>
+</div>
+
+<h2>.clang-tidy Configuration File</h2>
+
+<p>Place a <code>.clang-tidy</code> file in your project root to configure checks consistently across the team:</p>
+
+<pre>
+# .clang-tidy
+Checks: >
+  -*,
+  bugprone-*,
+  modernize-*,
+  readability-*,
+  performance-*,
+  -modernize-use-trailing-return-type,
+  -readability-magic-numbers,
+  -readability-identifier-length
+WarningsAsErrors: ''
+HeaderFilterRegex: 'src/.*\.h$'
+FormatStyle:     file
+CheckOptions:
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.FunctionCase
+    value: camelBack
+  - key: readability-identifier-naming.VariableCase
+    value: camelBack
+  - key: modernize-use-override.IgnoreDestructors
+    value: false
+</pre>
+
+<h3>Understanding the Checks Line</h3>
+
+<pre>
+# Enable everything, then disable what you don't want
+Checks: '*, -llvm-*, -google-*'
+
+# Enable specific categories only
+Checks: 'bugprone-*, modernize-*, performance-*'
+
+# Enable individual checks
+Checks: 'modernize-use-auto, modernize-use-nullptr,
+         bugprone-use-after-move, performance-noexcept-destructor'
+</pre>
+
+<h2>Check Categories</h2>
+
+<h3>modernize -- Modernize to C++11/14/17/20</h3>
+
+<table>
+<tr><th>Check</th><th>What it catches</th></tr>
+<tr><td><code>modernize-use-auto</code></td><td>Replace explicit type with auto where the type is obvious</td></tr>
+<tr><td><code>modernize-use-nullptr</code></td><td>Replace NULL/0 with nullptr</td></tr>
+<tr><td><code>modernize-use-override</code></td><td>Add override specifier to virtual function overrides</td></tr>
+<tr><td><code>modernize-use-emplace</code></td><td>Use emplace_back() instead of push_back(T{})</td></tr>
+<tr><td><code>modernize-use-using</code></td><td>Replace typedef with using (C++11)</td></tr>
+<tr><td><code>modernize-use-noexcept</code></td><td>Mark non-throwing functions noexcept</td></tr>
+<tr><td><code>modernize-make-unique</code></td><td>Replace new T with std::make_unique</td></tr>
+<tr><td><code>modernize-make-shared</code></td><td>Replace new T with std::make_shared</td></tr>
+<tr><td><code>modernize-loop-convert</code></td><td>Convert for loops to range-based for</td></tr>
+</table>
+
+<h3>bugprone -- Likely Bugs</h3>
+
+<table>
+<tr><th>Check</th><th>What it catches</th></tr>
+<tr><td><code>bugprone-use-after-move</code></td><td>Using an object after std::move</td></tr>
+<tr><td><code>bugprone-argument-comment</code></td><td>Mismatched argument names in calls</td></tr>
+<tr><td><code>bugprone-copy-constructor-init</code></td><td>Copy constructor initializing self</td></tr>
+<tr><td><code>bugprone-integer-division</code></td><td>Integer division where floating-point was intended</td></tr>
+<tr><td><code>bugprone-string-constructor</code></td><td>Wrong string constructor arguments</td></tr>
+<tr><td><code>bugprone-sizeof-expression</code></td><td>sizeof on pointer instead of type</td></tr>
+</table>
+
+<h3>performance -- Performance Improvements</h3>
+
+<table>
+<tr><th>Check</th><th>What it catches</th></tr>
+<tr><td><code>performance-noexcept-destructor</code></td><td>Destructors should be noexcept</td></tr>
+<tr><td><code>performance-faster-string-find</code></td><td>Use string::find(char) instead of string::find(string)</td></tr>
+<tr><td><code>performance-unnecessary-value-param</code></td><td>Pass parameters by const reference instead of value</td></tr>
+<tr><td><code>performance-for-range-copy</code></td><td>Range for loop copies instead of using reference</td></tr>
+</table>
+
+<h2>Auto-fix with --fix</h2>
+
+<pre>
+# Before auto-fix
+std::vector&lt;int&gt; numbers = {1, 2, 3};
+for (std::vector&lt;int&gt;::iterator it = numbers.begin();
+     it != numbers.end(); ++it) {
+    std::cout &lt;&lt; *it &lt;&lt; "\n";
+}
+
+# After: clang-tidy --fix -checks='modernize-use-auto,modernize-loop-convert'
+std::vector&lt;int&gt; numbers = {1, 2, 3};
+for (auto it = numbers.begin(); it != numbers.end(); ++it) {
+    std::cout &lt;&lt; *it &lt;&lt; "\n";
+}
+
+# After also applying modernize-loop-convert:
+std::vector&lt;int&gt; numbers = {1, 2, 3};
+for (int number : numbers) {
+    std::cout &lt;&lt; number &lt;&lt; "\n";
+}
+</pre>
+
+<div class="callout warning">
+<p><strong>Caution:</strong> Always review auto-fix changes before committing. Run <code>--fix</code> on a clean git branch so you can easily revert if needed. Some fixes may subtly change behavior (e.g., <code>modernize-use-noexcept</code> adds noexcept which affects overload resolution).</p>
+</div>
+
+<h2>CMake Integration</h2>
+
+<pre>
+# CMakeLists.txt
+find_program(CLANG_TIDY clang-tidy)
+if(CLANG_TIDY)
+    set_target_properties(my_target PROPERTIES
+        CXX_CLANG_TIDY "${CLANG_TIDY};--config-file=${CMAKE_SOURCE_DIR}/.clang-tidy"
+    )
+endif()
+</pre>
+
+<div class="callout green">
+<p><strong>Best practice:</strong> Start with a focused set of checks (<code>bugprone-*, modernize-*</code>), fix existing issues, then gradually enable more. Pair with <a href="cppcheck.html">cppcheck</a> for memory-focused analysis and <a href="clang-static-analyzer.html">Clang Static Analyzer</a> for deep path-sensitive analysis.</p>
+</div>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="static-analysis-overview.html">Static Analysis Overview</a>, <a href="cppcheck.html">cppcheck</a>, <a href="clang-static-analyzer.html">Clang Static Analyzer</a>, <a href="cmake.html">CMake</a>, <a href="address-sanitizer-tools.html">AddressSanitizer &amp; Tools</a>.</p>
+</div>
+
+<div class="nav"><a href="cppcheck.html">&larr; cppcheck</a><a href="clang-static-analyzer.html">Clang Static Analyzer &rarr;</a></div>
+</body>
+</html>

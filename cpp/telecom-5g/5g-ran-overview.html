@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5G RAN Overview — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#4">4 Telecom &amp; 5G/4G</a> / 5G RAN Overview</div>
+<div class="meta"><span class="tag medium">Medium</span></div>
+<h1>5G RAN Overview</h1>
+
+<p>The 5G Radio Access Network (5G RAN), also known as NG-RAN (Next-Generation RAN), is the radio network architecture defined by 3GPP for 5G New Radio (NR). It replaces the LTE E-UTRAN and introduces a fundamentally restructured architecture with a flexible functional split between central and distributed units.</p>
+
+<h2>NG-RAN Architecture</h2>
+
+<pre>
+                        +-----------+
+                        |   5G CN   |
+                        | (AMF/SMF) |
+                        +-----+-----+
+                              |
+                      NG (N2/N3)
+                              |
+              +---------------+---------------+
+              |                               |
+        +-----+-----+                   +-----+-----+
+        | gNB (SA)  |                   | ng-eNB    |
+        | (5G NR)   |                   | (LTE 4G)  |
+        +-----+-----+                   +-----------+
+              |
+    +---------+---------+
+    |                   |
++---+---+           +---+---+
+| CU   |           | CU   |
++---+---+           +---+---+
+    |                   |
++---+---+           +---+---+
+| DU   |           | DU   |
++---+---+           +---+---+
+    |
++---+---+
+|  RU  |
++-------+
+
+UE <--> NR Uu Interface
+</pre>
+
+<h2>Key Components</h2>
+
+<ul>
+  <li><strong>gNB (Next-Generation NodeB):</strong> The 5G base station, responsible for radio resource management, connection mobility control, routing of user data, and measurement configuration.</li>
+  <li><strong>ng-eNB:</strong> LTE eNodeB upgraded with NG interface to connect to the 5G Core Network.</li>
+  <li><strong>NG Interface:</strong> Connects NG-RAN to the 5G Core -- NG-C (control plane to AMF) and NG-U (user plane to UPF).</li>
+  <li><strong>Xn Interface:</strong> Connects gNBs to each other for handover and data forwarding.</li>
+  <li><strong>NR Uu:</strong> The air interface between UE and gNB.</li>
+</ul>
+
+<h2>Standalone (SA) vs Non-Standalone (NSA)</h2>
+
+<table>
+  <tr><th>Aspect</th><th>SA Mode</th><th>NSA Mode</th></tr>
+  <tr><td>Core Network</td><td>5G Core (5GC)</td><td>EPC (4G Core)</td></tr>
+  <tr><td>Control Plane</td><td>gNB &rarr; AMF</td><td>gNB &rarr; eNB &rarr; MME</td></tr>
+  <tr><td>User Plane</td><td>gNB &rarr; UPF</td><td>gNB &rarr; eNB &rarr; S-GW</td></tr>
+  <tr><td>Deployment</td><td>Greenfield, full 5G</td><td>Brownfield, 5G RAN + 4G Core</td></tr>
+  <tr><td>Key Feature</td><td>Network slicing, URLLC</td><td>EN-DC dual connectivity</td></tr>
+  <tr><td>3GPP Release</td><td>Rel-15+</td><td>Rel-15 (EN-DC)</td></tr>
+</table>
+
+<div class="callout green">
+  <p><strong>SA vs NSA C++ Tip:</strong> The control plane routing logic differs significantly. In SA, gNB connects directly to AMF via NG-C. In NSA (EN-DC), the gNB acts as a secondary node -- see <a href="x2-ng-x-interface.html">X2/NG-X Interface</a> for dual connectivity handling.</p>
+</div>
+
+<h2>C++ Data Structures for gNB</h2>
+
+<pre>
+#include &lt;string&gt;
+#include &lt;vector&gt;
+#include &lt;memory&gt;
+#include &lt;cstdint&gt;
+
+// gNB deployment mode enumeration
+enum class DeploymentMode : uint8_t {
+    STANDALONE,      // SA - connected to 5GC
+    NON_STANDALONE,  // NSA - connected via LTE eNB to EPC
+    EN_DC,           // E-UTRA NR Dual Connectivity
+    NE_DC,           // NR E-UTRA Dual Connectivity
+    NR_DC            // NR-NR Dual Connectivity
+};
+
+// gNB identifier types
+struct GnbId {
+    uint32_t plmn_id;       // Public Land Mobile Network ID
+    uint32_t gnb_id;        // gNB unique identifier (up to 32 bits)
+    uint8_t  gnb_id_length; // Number of bits in gnb_id (22-32)
+};
+
+// NR Cell configuration
+struct NrCellConfig {
+    uint32_t           cell_id;
+    uint32_t           pci;           // Physical Cell ID (0-1007)
+    uint32_t           arfcn;         // NR-ARFCN
+    uint32_t           bandwidth;     // Bandwidth in PRBs
+    uint32_t           scs_khz;       // Subcarrier spacing: 15, 30, 60, 120, 240
+    uint8_t            duplex_mode;   // 0: TDD, 1: FDD
+    uint32_t           ssb_period;    // SSB periodicity in ms
+};
+
+// gNB base class representing a 5G base station
+class GNodeB {
+public:
+    GNodeB(const GnbId&amp; id, DeploymentMode mode)
+        : id_(id), mode_(mode), is_active_(false) {}
+
+    virtual ~GNodeB() = default;
+
+    // Core interface management
+    virtual bool connectToCore() = 0;
+    virtual bool establishNgInterface() = 0;
+    virtual bool handleNgSetup() = 0;
+
+    // Cell management
+    void addCell(const NrCellConfig&amp; cell) {
+        cells_.push_back(cell);
+    }
+
+    [[nodiscard]] size_t cellCount() const { return cells_.size(); }
+    [[nodiscard]] DeploymentMode getMode() const { return mode_; }
+
+protected:
+    GnbId              id_;
+    DeploymentMode     mode_;
+    bool               is_active_;
+    std::vector&lt;NrCellConfig&gt; cells_;
+};
+
+// Standalone gNB implementation
+class SaGNodeB : public GNodeB {
+public:
+    explicit SaGNodeB(const GnbId&amp; id)
+        : GNodeB(id, DeploymentMode::STANDALONE) {}
+
+    bool connectToCore() override {
+        // SA: Connect directly to 5GC AMF via NG-C
+        // Establish SCTP association on NG-C (N2 interface)
+        return establishSctpConnection(ng_c_amf_addr_);
+    }
+
+    bool establishNgInterface() override {
+        // Setup NG-C (control) and NG-U (user) interfaces
+        return setupNgControl() &amp;&amp; setupNgUserPlane();
+    }
+
+    bool handleNgSetup() override {
+        // Send NG SETUP REQUEST to AMF
+        // Contains: gNB ID, PLMN, supported TA list, etc.
+        return sendNgSetupRequest();
+    }
+
+private:
+    std::string ng_c_amf_addr_;  // AMF address for control plane
+    std::string ng_u_upf_addr_;   // UPF address for user plane
+
+    bool establishSctpConnection(const std::string&amp; addr);
+    bool setupNgControl();
+    bool setupNgUserPlane();
+    bool sendNgSetupRequest();
+};
+
+// NSA gNB (as secondary node in EN-DC)
+class NsaGNodeB : public GNodeB {
+public:
+    explicit NsaGNodeB(const GnbId&amp; id)
+        : GNodeB(id, DeploymentMode::EN_DC), master_eNB_(nullptr) {}
+
+    void setMasterENodeB(void* eNB) { master_eNB_ = eNB; }
+
+    bool connectToCore() override {
+        // NSA: X2 connection to master eNodeB (not directly to core)
+        return establishX2Connection();
+    }
+
+    bool establishNgInterface() override {
+        // NSA uses X2-U to master eNB, which routes to S-GW
+        return true;  // X2 established during SgNB addition
+    }
+
+    bool handleNgSetup() override {
+        // NSA: SgNB Addition procedure instead of NG Setup
+        return performSgNBAddition();
+    }
+
+private:
+    void* master_eNB_;  // Pointer to master LTE eNodeB
+
+    bool establishX2Connection();
+    bool performSgNBAddition();
+};
+</pre>
+
+<h2>NR Frequency Bands and Subcarrier Spacing</h2>
+
+<table>
+  <tr><th>FR</th><th>Band</th><th>Frequency Range</th><th>SCS Options (kHz)</th><th>Max Bandwidth</th></tr>
+  <tr><td>FR1</td><td>n1</td><td>1920-1980 MHz</td><td>15, 30</td><td>100 MHz</td></tr>
+  <tr><td>FR1</td><td>n78</td><td>3300-3800 MHz</td><td>15, 30</td><td>100 MHz</td></tr>
+  <tr><td>FR2</td><td>n257</td><td>26.5-29.5 GHz</td><td>60, 120</td><td>400 MHz</td></tr>
+  <tr><td>FR2</td><td>n258</td><td>24.25-27.5 GHz</td><td>60, 120</td><td>400 MHz</td></tr>
+</table>
+
+<h2>C++ NR Bandwidth Configuration</h2>
+
+<pre>
+#include &lt;map&gt;
+#include &lt;stdexcept&gt;
+
+struct NrBandInfo {
+    uint32_t band_number;
+    uint32_t lower_freq_mhz;
+    uint32_t upper_freq_mhz;
+    bool     is_mmwave;       // FR2 = millimeter wave
+};
+
+// Bandwidth configuration based on SCS and max PRBs
+class NrBandwidthConfig {
+public:
+    // 3GPP TS 38.104 Table 5.3.2-1
+    static constexpr int MAX_PRBS[] = {
+        // SCS: 15kHz, 30kHz, 60kHz, 120kHz, 240kHz
+        264,    // 15 kHz
+        273,    // 30 kHz
+        270,    // 60 kHz
+        243,    // 120 kHz
+        99      // 240 kHz
+    };
+
+    static uint32_t getBandwidthHz(uint8_t scs_khz, uint32_t n_prbs) {
+        // BW = N_PRBs * 12 * SCS
+        // Each PRB has 12 subcarriers
+        return n_prbs * 12 * scs_khz * 1000;
+    }
+
+    static uint32_t getMaxPrbs(uint8_t scs_khz) {
+        int idx = scsToIndex(scs_khz);
+        return MAX_PRBS[idx];
+    }
+
+    static uint32_t getSlotDurationUs(uint8_t scs_khz) {
+        // Slot = 14 OFDM symbols * (1/SCS)
+        // Normal cyclic prefix: slot = 1ms for 15kHz
+        return 1000000 / (scs_khz / 15);
+    }
+
+    static uint32_t getSymbolsPerSlot() {
+        return 14;  // Normal CP
+    }
+
+private:
+    static int scsToIndex(uint8_t scs_khz) {
+        switch (scs_khz) {
+            case 15:  return 0;
+            case 30:  return 1;
+            case 60:  return 2;
+            case 120: return 3;
+            case 240: return 4;
+            default:  throw std::invalid_argument("Invalid SCS");
+        }
+    }
+};
+</pre>
+
+<h2>Cross-References</h2>
+
+<ul>
+  <li><a href="../advanced/polymorphism.html">Polymorphism</a> -- The gNB class hierarchy uses virtual functions and <code>override</code>.</li>
+  <li><a href="../basics/enums-classes.html">Enum Classes</a> -- <code>DeploymentMode</code> uses C++11 scoped enums for type safety.</li>
+  <li><a href="../basics/structs.html">Structs</a> -- <code>GnbId</code> and <code>NrCellConfig</code> use aggregate types for network configuration.</li>
+  <li><a href="cu-du-split.html">CU-DU Split</a> -- The gNB is decomposed into CU and DU functional units.</li>
+  <li><a href="oran-architecture.html">O-RAN Architecture</a> -- Open RAN further splits the gNB into O-CU, O-DU, O-RU.</li>
+</ul>
+
+<div class="nav"><a href="../advanced/valgrind.html">&larr; Valgrind</a><a href="cu-du-split.html">CU-DU Split &rarr;</a></div>
+</body>
+</html>

@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Packet Processing with DPDK — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#4">4 Telecom &amp; 5G/4G Networking</a> / Telecom C++ Techniques / 4.4.2</div>
+<div class="meta"><span class="tag advanced">Advanced</span></div>
+<h1>Packet Processing with DPDK</h1>
+
+<p>DPDK (Data Plane Development Kit) is an open-source set of libraries and drivers for fast packet processing. It enables user-space applications to directly access NIC hardware, bypassing the OS kernel. DPDK is the foundation for vRAN, 5G UPF, and high-throughput networking appliances.</p>
+
+<h2>DPDK Architecture Overview</h2>
+
+<pre>
+  Traditional Kernel Networking:
+  NIC -> IRQ -> Kernel (sk_buff) -> Syscall -> User Space
+
+  DPDK Networking:
+  NIC -> Poll Mode Driver (PMD) -> Hugepages -> User Space
+         (no interrupts, no syscalls, no context switches)
+
+  Key Components:
+  +------------------+
+  | rte_mbuf         |  Packet buffer descriptor
+  +------------------+
+  | rte_mempool      |  Pre-allocated mbuf pool
+  +------------------+
+  | rte_ring         |  Lock-free ring buffer (SPSC/MPSC)
+  +------------------+
+  | PMD (Poll Mode)  |  NIC driver, no IRQ
+  +------------------+
+  | Hugepages        |  2 MB / 1 GB pages, TLB-friendly
+  +------------------+
+</pre>
+
+<h2>Hugepages Configuration</h2>
+
+<pre>
+  # Allocate 1024 x 2MB hugepages
+  echo 1024 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
+
+  # Mount hugetlbfs
+  mkdir -p /dev/hugepages
+  mount -t hugetlbfs nodev /dev/hugepages
+
+  # Verify
+  cat /proc/meminfo | grep HugePages
+
+  Why hugepages?
+  - Standard 4 KB pages -> TLB misses at 10 Mpps
+  - 2 MB pages -> 512x fewer TLB entries needed
+  - 1 GB pages -> even fewer, best for massive memory pools
+  - Reduces page walk latency from ~100 cycles to ~10 cycles
+</pre>
+
+<h2>NUMA Awareness</h2>
+
+<div class="callout warning">
+  <p><strong>NUMA penalty:</strong> Accessing memory on a remote NUMA node adds ~40-80ns latency per access. In DPDK, always allocate memory (mempools, rings) on the same NUMA node as the core that uses them. Cross-NUMA access kills throughput in packet processing.</p>
+</div>
+
+<pre>
+// NUMA-aware allocation
+struct rte_mempool* createMempool(int socket_id) {
+    return rte_mempool_create("pkt_pool", 8192,
+        2048 + sizeof(struct rte_mbuf),  // size + mbuf overhead
+        256,       // cache size per core
+        128,       // private data size
+        socket_id, // NUMA socket ID
+        NULL, NULL, NULL, NULL,
+        NULL, NULL);  // MP init, obj init
+}
+
+// Pin thread to NUMA-local core
+void pinToNumaCore(int core_id) {
+    cpu_set_t cpuset;
+    CPU_ZERO(&amp;cpuset);
+    CPU_SET(core_id, &amp;cpuset);
+    pthread_setaffinity_np(pthread_self(),
+                            sizeof(cpuset), &amp;cpuset);
+}
+</pre>
+
+<h2>rte_ring: Lock-Free Ring Buffer</h2>
+
+<pre>
+  rte_ring modes:
+  - SPSC: Single Producer, Single Consumer (fastest)
+  - MPSC: Multi Producer, Single Consumer
+  - SPMC: Single Producer, Multi Consumer
+  - MPMC: Multi Producer, Multi Consumer
+
+  Operations (lock-free with CAS):
+  - rte_ring_sp_enqueue(): Single-producer enqueue (burst)
+  - rte_ring_mp_enqueue(): Multi-producer enqueue (burst)
+  - rte_ring_sc_dequeue(): Single-consumer dequeue (burst)
+  - rte_ring_mc_dequeue(): Multi-consumer dequeue (burst)
+
+  Burst API (process N packets at once):
+  - rte_ring_sp_enqueue_burst(): enqueue up to N items
+  - rte_ring_sc_dequeue_burst(): dequeue up to N items
+</pre>
+
+<h2>C++ DPDK Receive Loop</h2>
+
+<pre>
+#include &lt;rte_eal.h&gt;
+#include &lt;rte_ethdev.h&gt;
+#include &lt;rte_mbuf.h&gt;
+#include &lt;rte_mempool.h&gt;
+#include &lt;rte_ring.h&gt;
+#include &lt;cstdint&gt;
+#include &lt;cstdio&gt;
+
+constexpr uint16_t RX_BURST_SIZE = 32;
+
+// Initialize DPDK EAL (Environment Abstraction Layer)
+int initDpdk(int argc, char* argv[]) {
+    return rte_eal_init(argc, argv);
+}
+
+// Create packet memory pool
+struct rte_mempool* createPacketPool(int socket_id) {
+    return rte_pktmbuf_pool_create("pkt_pool",
+        8192 * 16,     // 16K mbufs
+        256,           // cache per lcore
+        0,             // private size
+        2048,          // data room size
+        socket_id);
+}
+
+// Main packet receive loop (runs on dedicated core)
+void rxLoop(uint16_t port_id, struct rte_mempool* mbuf_pool,
+            struct rte_ring* rx_ring) {
+    while (true) {
+        struct rte_mbuf* mbufs[RX_BURST_SIZE];
+        uint16_t nb_rx = rte_eth_rx_burst(port_id, 0,
+                            mbufs, RX_BURST_SIZE);
+
+        if (nb_rx == 0) continue;  // Poll, no yield
+
+        // Process burst of packets
+        for (uint16_t i = 0; i &lt; nb_rx; ++i) {
+            struct rte_mbuf* m = mbufs[i];
+
+            // Process Ethernet/IP/GTP header
+            processPacket(m);
+
+            // Enqueue to application ring
+            rte_ring_sp_enqueue_burst(rx_ring,
+                (void**)mbufs, nb_rx, NULL);
+        }
+
+        // Free processed mbufs (if not forwarded)
+        for (uint16_t i = 0; i &lt; nb_rx; ++i) {
+            rte_pktmbuf_free(mbufs[i]);
+        }
+    }
+}
+
+// Process individual packet (L2/L3/L4)
+void processPacket(struct rte_mbuf* m) {
+    uint8_t* pkt_data = rte_pktmbuf_mtod(m, uint8_t*);
+    uint16_t pkt_len = rte_pktmbuf_pkt_len(m);
+
+    // Ethernet header (14 bytes)
+    // IP header (20 bytes)
+    // GTP-U header (8 bytes minimum)
+    // Inner Ethernet + IP + UDP/TCP
+
+    // Extract GTP-U TEID (bytes 8-11 of GTP header)
+    if (pkt_len &gt; 38) {
+        uint32_t teid = (pkt_data[34] &lt;&lt; 24)
+                      | (pkt_data[35] &lt;&lt; 16)
+                      | (pkt_data[36] &lt;&lt; 8)
+                      |  pkt_data[37];
+
+        // Route based on TEID to correct bearer/Ue
+        routePacket(teid, m);
+    }
+}
+
+void routePacket(uint32_t teid, struct rte_mbuf* m) {}
+
+// Entry point
+int main(int argc, char* argv[]) {
+    initDpdk(argc, argv);
+
+    int socket_id = rte_socket_id();
+    auto* pool = createPacketPool(socket_id);
+
+    // Configure NIC port
+    uint16_t port = 0;
+    rte_eth_dev_configure(port, 1, 1, nullptr);
+    rte_eth_rx_queue_setup(port, 0, 1024, socket_id, nullptr, pool);
+    rte_eth_tx_queue_setup(port, 0, 1024, socket_id, nullptr);
+    rte_eth_dev_start(port);
+
+    auto* ring = rte_ring_create("rx_ring", 8192, socket_id, 0);
+    rxLoop(port, pool, ring);
+    return 0;
+}
+</pre>
+
+<h2>Burst Processing Benefits</h2>
+
+<table>
+  <tr><th>Approach</th><th>Packets/Syscall</th><th>Cache Efficiency</th><th>Throughput</th></tr>
+  <tr><td>Per-packet processing</td><td>1</td><td>Poor (cold cache each time)</td><td>5-10 Mpps</td></tr>
+  <tr><td>Burst of 32</td><td>32</td><td>Good (prefetch within burst)</td><td>30-50 Mpps</td></tr>
+  <tr><td>Burst of 64</td><td>64</td><td>Best (L1/L2 cache hot)</td><td>50-80 Mpps</td></tr>
+</table>
+
+<div class="callout green">
+  <p><strong>Key DPDK principle:</strong> Batch processing is everything. Processing packets one at a time defeats the purpose of DPDK. Always use burst APIs, prefetch next packets, and keep working data in L1/L2 cache.</p>
+</div>
+
+<h2>Cross-References</h2>
+
+<ul>
+  <li><a href="real-time-processing.html">Real-Time Processing</a> -- Latency constraints driving DPDK adoption.</li>
+  <li><a href="circular-buffers.html">Circular Buffers</a> -- Underlying concept for rte_ring.</li>
+  <li><a href="memory-pools-telecom.html">Memory Pools in Telecom</a> -- Pre-allocation strategies (rte_mempool).</li>
+  <li><a href="sr-iov-pcie.html">SR-IOV &amp; PCIe</a> -- NIC virtualization with DPDK.</li>
+  <li><a href="../advanced/cache-oriented-programming.html">Cache-Oriented Programming</a> -- Cache-aware design for burst processing.</li>
+</ul>
+
+<div class="nav"><a href="real-time-processing.html">&larr; Real-Time Processing</a><a href="fixed-point-arithmetic.html">Fixed-Point Arithmetic &rarr;</a></div>
+</body>
+</html>

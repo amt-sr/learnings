@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memory-Mapped Files — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / Networking &amp; IPC / 3.4.4</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>Memory-Mapped Files</h1>
+
+<p>Memory-mapped files (<code>mmap</code>) map a file's contents directly into the process's virtual address space. Instead of using <code>read()</code>/<code>write()</code> system calls, the program accesses file data through memory pointers. The OS handles paging — loading data from disk on demand and writing back changes. This approach is especially powerful for large file processing, shared memory IPC, and efficient random access.</p>
+
+<div class="callout">
+<p><strong>Prerequisites:</strong> <a href="shared-memory-ipc.html">Shared Memory IPC</a>, <a href="../intermediate/file-streams.html">File Streams</a>, <a href="memory-model-atomics.html">Memory Model</a>, <a href="placement-new-memory-pools.html">Placement New &amp; Memory Pools</a>.</p>
+</div>
+
+<h2>mmap API</h2>
+
+<table>
+<tr><th>Function</th><th>Purpose</th></tr>
+<tr><td><code>mmap(addr, len, prot, flags, fd, offset)</code></td><td>Map file (or device) into memory</td></tr>
+<tr><td><code>munmap(addr, len)</code></td><td>Remove mapping</td></tr>
+<tr><td><code>msync(addr, len, flags)</code></td><td>Flush changes to disk</td></tr>
+<tr><td><code>madvise(addr, len, advice)</code></td><td>Give kernel usage hints</td></tr>
+<tr><td><code>mprotect(addr, len, prot)</code></td><td>Change memory protection</td></tr>
+</table>
+
+<h2>Mapping a File for Reading</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;fstream&gt;
+#include &lt;cstring&gt;
+#include &lt;fcntl.h&gt;
+#include &lt;unistd.h&gt;
+#include &lt;sys/mman.h&gt;
+#include &lt;sys/stat.h&gt;
+
+class MappedFile {
+    void* data_ = nullptr;
+    std::size_t size_ = 0;
+public:
+    MappedFile(const char* path, bool readonly = true) {
+        int fd = open(path, readonly ? O_RDONLY : O_RDWR);
+        if (fd &lt; 0) throw std::runtime_error("open failed");
+
+        struct stat sb{};
+        if (fstat(fd, &amp;sb) &lt; 0) { close(fd); throw std::runtime_error("fstat failed"); }
+        size_ = static_cast&lt;std::size_t&gt;(sb.st_size);
+
+        int prot = readonly ? PROT_READ : (PROT_READ | PROT_WRITE);
+        data_ = mmap(nullptr, size_, prot, MAP_PRIVATE, fd, 0);
+        close(fd);  // fd not needed after mmap
+
+        if (data_ == MAP_FAILED) throw std::runtime_error("mmap failed");
+    }
+
+    ~MappedFile() {
+        if (data_ &amp;&amp; data_ != MAP_FAILED)
+            munmap(data_, size_);
+    }
+
+    MappedFile(const MappedFile&amp;) = delete;
+    MappedFile&amp; operator=(const MappedFile&amp;) = delete;
+
+    const char* data() const { return static_cast&lt;const char*&gt;(data_); }
+    std::size_t size() const { return size_; }
+
+    // Bounds-checked access
+    char operator[](std::size_t i) const {
+        if (i &gt;= size_) throw std::out_of_range("MappedFile index");
+        return data()[i];
+    }
+};
+
+int main() {
+    MappedFile file("data.bin");
+
+    std::cout &lt;&lt; "File size: " &lt;&lt; file.size() &lt;&lt; " bytes\n";
+
+    // Access file contents through memory pointer
+    std::size_t line_count = 0;
+    for (std::size_t i = 0; i &lt; file.size(); ++i) {
+        if (file[i] == '\n') ++line_count;
+    }
+    std::cout &lt;&lt; "Lines: " &lt;&lt; line_count &lt;&lt; "\n";
+}
+</pre>
+
+<h2>Memory-Mapped File for Writing (msync)</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;cstring&gt;
+#include &lt;fcntl.h&gt;
+#include &lt;unistd.h&gt;
+#include &lt;sys/mman.h&gt;
+
+int main() {
+    // Open/create a file for read-write
+    int fd = open("mmap_output.bin", O_RDWR | O_CREAT | O_TRUNC, 0666);
+    if (fd &lt; 0) return 1;
+
+    // Set file size (must be done before mmap)
+    constexpr std::size_t FILE_SIZE = 4096;
+    if (ftruncate(fd, FILE_SIZE) &lt; 0) { close(fd); return 1; }
+
+    // MAP_SHARED: writes go to the file
+    char* mapped = static_cast&lt;char*&gt;(
+        mmap(nullptr, FILE_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0)
+    );
+    close(fd);
+
+    if (mapped == MAP_FAILED) return 1;
+
+    // Write data through memory pointer
+    std::strcpy(mapped, "Hello from mmap!");
+    std::strcat(mapped + 18, "This is shared memory backed by a file.");
+
+    // Flush to disk (MS_SYNC = synchronous, MS_ASYNC = asynchronous)
+    if (msync(mapped, FILE_SIZE, MS_SYNC) != 0) {
+        std::cerr &lt;&lt; "msync failed\n";
+    }
+
+    std::cout &lt;&lt; "Data written and synced to disk\n";
+
+    // Verify the file
+    // $ cat mmap_output.bin
+    // Hello from mmap!This is shared memory backed by a file.
+
+    munmap(mapped, FILE_SIZE);
+    return 0;
+}
+</pre>
+
+<h2>MAP_SHARED vs MAP_PRIVATE</h2>
+
+<table>
+<tr><th>Flag</th><th>Behavior</th><th>Writes</th><th>Visibility</th></tr>
+<tr><td><code>MAP_SHARED</code></td><td>Changes shared with other processes</td><td>Written to file</td><td>All processes see changes</td></tr>
+<tr><td><code>MAP_PRIVATE</code></td><td>Copy-on-write, private view</td><td>Memory only</td><td>Changes invisible to others</td></tr>
+</table>
+
+<h2>Advantages of Memory-Mapped Files</h2>
+
+<ul>
+<li><strong>Zero-copy I/O:</strong> No buffering between kernel and user space — direct memory access</li>
+<li><strong>Lazy loading:</strong> OS loads pages on demand (only the pages you actually access)</li>
+<li><strong>Random access:</strong> Jump to any offset in O(1) — no seeking through <code>read()</code></li>
+<li><strong>Large files:</strong> Access files larger than physical RAM — OS manages paging</li>
+<li><strong>Shared access:</strong> <code>MAP_SHARED</code> enables IPC between processes (same as <a href="shared-memory-ipc.html">shared memory</a>)</li>
+<li><strong>Efficient sequential scan:</strong> Prefetching works naturally with sequential memory access</li>
+</ul>
+
+<h2>madvise — Performance Hints</h2>
+
+<pre>
+#include &lt;sys/mman.h&gt;
+
+// Tell the kernel about access patterns
+void* mapped = mmap(...);
+
+// Will access sequentially (e.g., scanning a log file)
+madvise(mapped, size, MADV_SEQUENTIAL);
+
+// Will access randomly (e.g., a database index)
+madvise(mapped, size, MADV_RANDOM);
+
+// Will access this region soon (preload into page cache)
+madvise(mapped, size, MADV_WILLNEED);
+
+// Don't need this region anymore (free pages)
+madvise(mapped + offset, len, MADV_DONTNEED);
+</pre>
+
+<div class="callout green">
+<p><strong>Best practice:</strong> Use <a href="../intermediate/raii.html">RAII</a> wrappers for mmap (construct in constructor, unmap in destructor). Always check for <code>MAP_FAILED</code>. Use <code>MAP_PRIVATE</code> for read-only access unless you need shared writes. Call <code>msync</code> before <code>munmap</code> for <code>MAP_SHARED</code> mappings to ensure durability.</p>
+</div>
+
+<div class="callout warning">
+<p><strong>Alignment:</strong> <code>mmap</code> returns page-aligned memory (typically 4096-byte aligned). The <code>offset</code> parameter must be a multiple of the page size. Accessing past the mapped region is undefined behavior (SIGSEGV).</p>
+</div>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="shared-memory-ipc.html">Shared Memory IPC</a> (shm_open uses the same mmap mechanism), <a href="../intermediate/file-streams.html">File Streams</a> (fstream vs mmap), <a href="memory-model-atomics.html">Memory Model &amp; Atomics</a> (cache coherency for shared mappings), <a href="placement-new-memory-pools.html">Placement New &amp; Memory Pools</a> (constructing objects in mmap'd memory).</p>
+</div>
+
+<div class="nav"><a href="signal-handling.html">&larr; Signal Handling</a><a href="singleton-pattern.html">Singleton Pattern &rarr;</a></div>
+</body>
+</html>

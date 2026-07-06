@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Thread Pool for 5G RAN — C++ Practice</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.easy { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  .question { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; }
+  .question h3 { color: #f0f6fc; margin-top: 0; }
+  .solution-toggle { cursor: pointer; user-select: none; }
+  .solution-toggle h3 { color: #3fb950; display: inline; }
+  .solution-content { display: none; margin-top: 1rem; }
+  .solution-content.visible { display: block; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+  .topics-covered { margin-bottom: 1rem; font-size: 0.85rem; color: #8b949e; }
+  .topics-covered a { color: #8b949e; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#5">5 Practice</a> / Telecom Practice</div>
+<div class="meta"><span class="tag advanced">Advanced</span></div>
+<h1>Thread Pool for 5G RAN Processing</h1>
+
+<div class="topics-covered">
+  <strong>Topics Covered:</strong>
+  <a href="../multithreading.html">Multithreading</a>,
+  <a href="../atomics.html">Atomics</a>,
+  <a href="../scheduling.html">Scheduling</a>,
+  <a href="../smart-pointers.html">Smart Pointers</a>
+</div>
+
+<div class="question">
+  <h3>Problem Statement</h3>
+  <p>Implement a thread pool suitable for 5G Radio Access Network (RAN) processing. The pool must support:</p>
+  <ul>
+    <li><strong>Priority-based task scheduling:</strong> Tasks have priorities (HIGH, NORMAL, LOW). Higher-priority tasks are processed first.</li>
+    <li><strong>Work stealing:</strong> Idle threads can steal tasks from other threads' local queues to improve load balancing.</li>
+    <li><strong>Graceful shutdown:</strong> Stop accepting new tasks, finish pending work, then exit cleanly.</li>
+    <li><strong>Task statistics:</strong> Track completed task count, queue depth, and active worker count.</li>
+  </ul>
+  <p>In a real 5G RAN, task priorities map to processing deadlines: slot-level processing (TTI-based) has the highest priority, followed by control-plane processing, then background management tasks.</p>
+</div>
+
+<div class="callout warning">
+  <p><strong>Design Considerations:</strong></p>
+  <ul>
+    <li>Each worker thread has a local deque of tasks. The worker pushes/pops from its own deque (lock-free for the owner).</li>
+    <li>Stealing occurs from the <strong>bottom</strong> (oldest tasks) of another thread's deque, while the owner pushes/pops from the <strong>top</strong> (newest tasks).</li>
+    <li>A global priority queue handles initially submitted tasks and distributes them to workers.</li>
+    <li>Work stealing reduces contention on the global queue and improves cache locality.</li>
+  </ul>
+</div>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution1')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution1">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;thread&gt;
+#include &lt;mutex&gt;
+#include &lt;condition_variable&gt;
+#include &lt;queue&gt;
+#include &lt;vector&gt;
+#include &lt;functional&gt;
+#include &lt;future&gt;
+#include &lt;atomic&gt;
+#include &lt;deque&gt;
+#include &lt;random&gt;
+#include &lt;chrono&gt;
+#include &lt;sstream&gt;
+#include &lt;iomanip&gt;
+
+enum class Priority { HIGH = 0, NORMAL = 1, LOW = 2, COUNT = 3 };
+
+// ---- Task with priority ----
+
+struct PrioritizedTask {
+    std::function&lt;void()&gt; func;
+    Priority priority;
+    int id;  // For tracking
+
+    // Higher priority = lower value, so we reverse the comparison
+    // for min-heap behavior (HIGH comes first)
+    bool operator&gt;(const PrioritizedTask&amp; other) const {
+        return static_cast&lt;int&gt;(priority) &gt; static_cast&lt;int&gt;(other.priority);
+    }
+};
+
+// ---- Per-thread local work queue ----
+
+class LocalQueue {
+public:
+    void push(PrioritizedTask task) {
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        tasks_.push_back(std::move(task));
+    }
+
+    bool pop(PrioritizedTask&amp; task) {
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        if (tasks_.empty()) return false;
+        task = std::move(tasks_.back());  // Pop from top (LIFO)
+        tasks_.pop_back();
+        return true;
+    }
+
+    bool steal(PrioritizedTask&amp; task) {
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        if (tasks_.empty()) return false;
+        task = std::move(tasks_.front());  // Steal from bottom (FIFO)
+        tasks_.pop_front();
+        return true;
+    }
+
+    std::size_t size() const {
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        return tasks_.size();
+    }
+
+private:
+    mutable std::mutex mutex_;
+    std::deque&lt;PrioritizedTask&gt; tasks_;
+};
+
+// ---- Thread Pool ----
+
+class RanThreadPool {
+public:
+    RanThreadPool(std::size_t numThreads)
+        : stopped_(false), nextTaskId_(0) {
+        for (std::size_t i = 0; i &lt; numThreads; ++i) {
+            workers_.emplace_back(&amp;RanThreadPool::workerLoop, this, i);
+        }
+        std::cout &lt;&lt; "ThreadPool: " &lt;&lt; numThreads &lt;&lt; " workers started\n";
+    }
+
+    ~RanThreadPool() {
+        shutdown();
+    }
+
+    // Submit a task with priority, returns a future for the result
+    template&lt;typename F, typename... Args&gt;
+    auto submit(Priority priority, F&amp;&amp; f, Args&amp;&amp;... args)
+        -&gt; std::future&lt;typename std::invoke_result_t&lt;F, Args...&gt;&gt;
+    {
+        using ReturnType = typename std::invoke_result_t&lt;F, Args...&gt;;
+
+        auto task = std::make_shared&lt;std::packaged_task&lt;ReturnType()&gt;&gt;(
+            std::bind(std::forward&lt;F&gt;(f), std::forward&lt;Args&gt;(args)...)
+        );
+
+        std::future&lt;ReturnType&gt; result = task-&gt;get_future();
+        int taskId = nextTaskId_++;
+
+        {
+            std::lock_guard&lt;std::mutex&gt; lock(globalMutex_);
+            globalQueue_.push({[task]() { (*task)(); }, priority, taskId});
+        }
+        globalCond_.notify_one();
+
+        return result;
+    }
+
+    // Submit with default NORMAL priority
+    template&lt;typename F, typename... Args&gt;
+    auto submit(F&amp;&amp; f, Args&amp;&amp;... args)
+        -&gt; std::future&lt;typename std::invoke_result_t&lt;F, Args...&gt;&gt;
+    {
+        return submit(Priority::NORMAL, std::forward&lt;F&gt;(f),
+                      std::forward&lt;Args&gt;(args)...);
+    }
+
+    void shutdown() {
+        if (stopped_) return;
+        {
+            std::lock_guard&lt;std::mutex&gt; lock(globalMutex_);
+            stopped_ = true;
+        }
+        globalCond_.notify_all();
+
+        for (auto&amp; w : workers_) {
+            if (w.joinable()) w.join();
+        }
+        std::cout &lt;&lt; "ThreadPool: all workers stopped\n";
+    }
+
+    // Statistics
+    std::size_t totalCompleted() const { return completedCount_.load(); }
+    std::size_t globalQueueSize() const {
+        std::lock_guard&lt;std::mutex&gt; lock(globalMutex_);
+        return globalQueue_.size();
+    }
+
+    std::string stats() const {
+        std::ostringstream oss;
+        oss &lt;&lt; "completed=" &lt;&lt; completedCount_.load()
+            &lt;&lt; ", globalQ=" &lt;&lt; globalQueueSize()
+            &lt;&lt; ", workers=" &lt;&lt; workers_.size();
+        return oss.str();
+    }
+
+private:
+    void workerLoop(std::size_t workerId) {
+        LocalQueue localQueue;
+        std::mt19937 rng(workerId);
+
+        while (true) {
+            PrioritizedTask task;
+
+            // 1. Try local queue first (fast path, no contention)
+            if (localQueue.pop(task)) {
+                executeTask(task);
+                continue;
+            }
+
+            // 2. Try global queue
+            {
+                std::unique_lock&lt;std::mutex&gt; lock(globalMutex_);
+                if (stopped_ &amp;&amp; globalQueue_.empty()) {
+                    return;  // Shutdown and no more work
+                }
+                if (!globalQueue_.empty()) {
+                    task = std::move(globalQueue_.top());
+                    globalQueue_.pop();
+                    lock.unlock();
+                    executeTask(task);
+                    continue;
+                }
+            }
+
+            // 3. Try work stealing from random other workers
+            bool stolen = false;
+            if (localQueues_.size() &gt; 1) {
+                for (int attempt = 0; attempt &lt; 2; ++attempt) {
+                    std::size_t victim = (workerId + 1 + attempt) % localQueues_.size();
+                    if (victim != workerId) {
+                        if (localQueues_[victim]-&gt;steal(task)) {
+                            stolen = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (stolen) {
+                executeTask(task);
+                continue;
+            }
+
+            // 4. Wait for new work
+            {
+                std::unique_lock&lt;std::mutex&gt; lock(globalMutex_);
+                globalCond_.wait(lock, [this]() {
+                    return !globalQueue_.empty() || stopped_;
+                });
+            }
+        }
+    }
+
+    void executeTask(PrioritizedTask&amp; task) {
+        try {
+            task.func();
+        } catch (const std::exception&amp; e) {
+            std::cerr &lt;&lt; "Task " &lt;&lt; task.id &lt;&lt; " exception: "
+                      &lt;&lt; e.what() &lt;&lt; "\n";
+        }
+        completedCount_.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    // Global priority queue
+    mutable std::mutex globalMutex_;
+    std::condition_variable globalCond_;
+    std::priority_queue&lt;PrioritizedTask,
+                          std::vector&lt;PrioritizedTask&gt;,
+                          std::greater&lt;PrioritizedTask&gt;&gt; globalQueue_;
+    bool stopped_;
+    int nextTaskId_;
+    std::atomic&lt;std::size_t&gt; completedCount_{0};
+
+    // Workers and their local queues
+    std::vector&lt;std::thread&gt; workers_;
+    std::vector&lt;LocalQueue*&gt; localQueues_;  // Populated by workers
+};
+
+// ---- Demo: Simulate 5G RAN processing ----
+
+void simulateSlotProcessing(int slotNum) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    // Simulated: decode PDCCH, PDSCH, process HARQ-ACK
+}
+
+void simulateControlProcessing(int ueId) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    // Simulated: RRC connection handling, measurement reports
+}
+
+void simulateBackgroundTask(int taskId) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    // Simulated: statistics collection, logging, neighbor cell discovery
+}
+
+int main() {
+    RanThreadPool pool(4);
+
+    // Submit slot-level processing (HIGH priority - time-critical)
+    std::vector&lt;std::future&lt;void&gt;&gt; slotFutures;
+    for (int i = 0; i &lt; 8; ++i) {
+        slotFutures.push_back(pool.submit(
+            Priority::HIGH,
+            [i]() { simulateSlotProcessing(i); }
+        ));
+    }
+
+    // Submit control-plane tasks (NORMAL priority)
+    std::vector&lt;std::future&lt;void&gt;&gt; ctrlFutures;
+    for (int i = 0; i &lt; 4; ++i) {
+        ctrlFutures.push_back(pool.submit(
+            Priority::NORMAL,
+            [i]() { simulateControlProcessing(i); }
+        ));
+    }
+
+    // Submit background tasks (LOW priority)
+    std::vector&lt;std::future&lt;void&gt;&gt; bgFutures;
+    for (int i = 0; i &lt; 3; ++i) {
+        bgFutures.push_back(pool.submit(
+            Priority::LOW,
+            [i]() { simulateBackgroundTask(i); }
+        ));
+    }
+
+    // Wait for all high-priority tasks first (most important)
+    std::cout &lt;&lt; "Waiting for slot processing...\n";
+    for (auto&amp; f : slotFutures) f.get();
+    std::cout &lt;&lt; "All slot processing complete. "
+              &lt;&lt; "Stats: " &lt;&lt; pool.stats() &lt;&lt; "\n";
+
+    // Wait for remaining tasks
+    for (auto&amp; f : ctrlFutures) f.get();
+    for (auto&amp; f : bgFutures) f.get();
+
+    std::cout &lt;&lt; "All tasks complete. Final stats: " &lt;&lt; pool.stats() &lt;&lt; "\n";
+
+    pool.shutdown();
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><strong>Priority queue:</strong> Tasks are stored in a <code>std::priority_queue</code> with <code>std::greater</code> comparator so that HIGH priority (value 0) is at the top.</li>
+      <li><strong>Work stealing:</strong> Each worker thread has a <code>LocalQueue</code>. When the local queue is empty and the global queue is empty, workers try to steal from other workers' queues. Stealing takes from the front (oldest tasks), while the owner pops from the back (newest tasks).</li>
+      <li><strong>Future-based return:</strong> <code>submit()</code> returns a <code>std::future</code> using <code>std::packaged_task</code>. The caller can wait for results or check completion.</li>
+      <li><strong>Graceful shutdown:</strong> Sets <code>stopped_</code> flag and wakes all threads. Workers finish their current task, then drain the global queue before exiting.</li>
+      <li><strong>Exception safety:</strong> Exceptions in tasks are caught in <code>executeTask</code> and logged, preventing one task from crashing the pool.</li>
+      <li><strong>5G RAN context:</strong> HIGH priority maps to slot-level processing (TTI = 0.5ms or 1ms deadlines), NORMAL to control-plane (RRC, measurements), LOW to background tasks.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout green">
+  <p><strong>Complexity Analysis:</strong></p>
+  <table>
+    <tr><th>Operation</th><th>Time</th><th>Notes</th></tr>
+    <tr><td>submit</td><td>O(log n)</td><td>Priority queue insertion</td></tr>
+    <tr><td>local pop</td><td>O(1)</td><td>Deque back (amortized)</td></tr>
+    <tr><td>steal</td><td>O(1)</td><td>Deque front (amortized)</td></tr>
+    <tr><td>global pop</td><td>O(log n)</td><td>Priority queue extraction</td></tr>
+  </table>
+</div>
+
+<h2>Follow-up Questions</h2>
+
+<div class="question">
+  <h3>Variations to Try</h3>
+  <ol>
+    <li><strong>Lock-free local deque:</strong> Replace <code>LocalQueue</code>'s mutex with the Chase-Lev work-stealing deque algorithm (lock-free for single producer, single consumer).</li>
+    <li><strong>Affinity-aware scheduling:</strong> Pin worker threads to specific CPU cores using <code>pthread_setaffinity_np</code> or <code>SetThreadAffinityMask</code> to minimize cache migration in NUMA systems.</li>
+    <li><strong>Deadline-aware scheduling:</strong> Instead of fixed priorities, each task has an absolute deadline. The scheduler picks the task with the earliest deadline (Earliest Deadline First algorithm).</li>
+    <li><strong>Dynamic worker count:</strong> Add/remove worker threads based on load (e.g., spin up extra workers during high traffic, remove during low traffic).</li>
+    <li><strong>Task chaining:</strong> Support dependent tasks where one task's output feeds another. Implement a DAG scheduler.</li>
+    <li><strong>Per-UE work queues:</strong> In a real RAN, each UE has its own processing context. Implement per-UE serialization so tasks for the same UE run in order while different UEs run in parallel.</li>
+  </ol>
+</div>
+
+<div class="callout">
+  <p><strong>Real-World 5G RAN Requirements:</strong></p>
+  <ul>
+    <li><strong>TTI (Transmission Time Interval):</strong> In 5G NR, the minimum TTI is 0.125ms (mini-slots). All slot-level processing must complete within this window.</li>
+    <li><strong>Latency budget:</strong> URLLC (Ultra-Reliable Low-Latency Communication) requires end-to-end latency &lt; 1ms. The thread pool must schedule and complete tasks within microseconds.</li>
+    <li><strong>Determinism:</strong> Telecom systems require bounded worst-case execution time. Work stealing helps but does not guarantee determinism. Real RAN systems often use partitioned architectures where each core handles a fixed subset of UEs.</li>
+    <li><strong>NUMA awareness:</strong> High-end base stations use multi-socket systems. Memory locality and CPU pinning are critical for performance.</li>
+  </ul>
+</div>
+
+<div class="callout red">
+  <p><strong>Advanced Topics to Explore:</strong></p>
+  <ul>
+    <li>The <strong>Chase-Lev deque</strong> is the standard lock-free work-stealing algorithm. It uses a circular array with atomic indices and careful memory ordering to allow the owner to push/pop without locks while stealers can take from the other end.</li>
+    <li><strong>Fork-join parallelism</strong> (like Intel TBB's <code>parallel_for</code>) is an alternative to thread pools for data-parallel workloads.</li>
+    <li><strong>Coroutine-based scheduling</strong> (C++20) can replace thread-based scheduling for fine-grained tasks, reducing context switch overhead.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="asn1-encoder.html">&larr; ASN.1 Encoder</a>
+  <span style="color: #8b949e;">End of Practice Questions</span>
+</div>
+<script>
+function toggleSolution(id) {
+  document.getElementById(id).classList.toggle('visible');
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>auto &amp; decltype — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / auto &amp; decltype</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>auto &amp; decltype</h1>
+
+<p>C++11 introduced <code>auto</code> for type deduction and <code>decltype</code> for querying the type of an expression. C++14 added <code>decltype(auto)</code> and relaxed <code>auto</code> rules. Together, they reduce verbosity, improve readability, and enable generic programming patterns.</p>
+
+<h2>auto Type Deduction</h2>
+
+<p><code>auto</code> tells the compiler to deduce the type from the initializer. The deduction rules follow the same pattern as template argument deduction.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+#include &lt;map&gt;
+#include &lt;type_traits&gt;
+
+void auto_basics() {
+    // Basic usage
+    auto x = 42;           // int
+    auto y = 3.14;         // double
+    auto z = "hello";      // const char*
+    auto s = std::string("world");  // std::string
+
+    // With references and const
+    int a = 10;
+    int&amp; ref = a;
+    const int&amp; cref = a;
+
+    auto b = a;     // int (not int&, not const)
+    auto c = ref;   // int (reference is stripped)
+    auto d = cref;  // int (both const and reference are stripped)
+
+    // To keep const/reference, use explicitly
+    auto&amp; e = a;      // int&
+    const auto f = a;  // const int
+    auto&amp;&amp; g = 42;     // int&amp;&amp; (forwarding reference)
+}
+</pre>
+
+<h3>auto with Iterators</h3>
+
+<pre>
+#include &lt;map&gt;
+#include &lt;vector&gt;
+
+void auto_iterators() {
+    // Before auto — verbose iterator types
+    std::map&lt;std::string, std::vector&lt;int&gt;&gt; data;
+    for (std::map&lt;std::string, std::vector&lt;int&gt;&gt;::iterator it = data.begin();
+         it != data.end(); ++it) { /* ... */ }
+
+    // With auto — clean and readable
+    for (auto it = data.begin(); it != data.end(); ++it) { /* ... */ }
+
+    // Even better: range-based for (see <a href="range-based-for.html">range-based for</a>)
+    for (const auto&amp; [key, value] : data) { /* ... */ }
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Best practice:</strong> Use <code>auto</code> when the type is obvious from context or overly complex to write out. Do not use <code>auto</code> when the explicit type adds clarity, especially for arithmetic conversions that may hide bugs.</p>
+</div>
+
+<h2>auto and Function Return Types</h2>
+
+<pre>
+// C++14: auto return type deduction
+auto add(int a, int b) {
+    return a + b;  // deduced as int
+}
+
+auto get_name() {
+    return std::string("Alice");  // deduced as std::string
+}
+
+// Can be tricky — what does this return?
+auto compute(int x) {
+    if (x &gt; 0)
+        return x;       // int
+    else
+        return 3.14;     // double — ERROR: inconsistent return types
+}
+
+// All return statements must deduce to the same type.
+// Use decltype(auto) or an explicit return type when mixing types.
+</pre>
+
+<h2>decltype</h2>
+
+<p><code>decltype</code> yields the declared type of an expression without evaluating it. Unlike <code>auto</code>, it preserves references and <code>const</code> qualifiers.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;typeinfo&gt;
+
+void decltype_basics() {
+    int x = 10;
+    int&amp; ref = x;
+    const int c = 20;
+
+    decltype(x) a = 30;        // int
+    decltype(ref) b = x;       // int& — preserves reference!
+    decltype(c) d = 40;         // const int — preserves const!
+    decltype(x + 1) e = 50;    // int — x+1 is an rvalue (prvalue)
+
+    // decltype with parenthesized variable names
+    decltype((x)) f = x;        // int& — parenthesized lvalue is reference!
+    decltype(x) g = x;          // int   — plain name is the declared type
+
+    std::cout &lt;&lt; "a: " &lt;&lt; a &lt;&lt; "\n";
+    std::cout &lt;&lt; "b: " &lt;&lt; b &lt;&lt; "\n";
+    std::cout &lt;&lt; "d: " &lt;&lt; d &lt;&lt; "\n";
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>decltype((variable)) vs decltype(variable):</strong> When the expression inside <code>decltype</code> is a parenthesized variable name, the result is a reference to that variable's type. <code>decltype(x)</code> gives <code>int</code>, but <code>decltype((x))</code> gives <code>int&amp;</code>. This is a subtle but important difference.</p>
+</div>
+
+<h2>decltype(auto)</h2>
+
+<p><code>decltype(auto)</code> (C++14) uses <code>decltype</code> deduction rules instead of <code>auto</code> rules. It preserves references and <code>const</code>, which <code>auto</code> normally strips.</p>
+
+<pre>
+#include &lt;vector&gt;
+#include &lt;iostream&gt;
+
+struct Container {
+    std::vector&lt;int&gt; data = {1, 2, 3, 4, 5};
+
+    // auto return — strips reference, returns a copy
+    auto get_at_copy(size_t idx) {
+        return data[idx];     // returns int (copy)
+    }
+
+    // decltype(auto) return — preserves reference
+    decltype(auto) get_at_ref(size_t idx) {
+        return data[idx];     // returns int& (reference)
+    }
+
+    // decltype(auto) with auto — return forwarding reference
+    template&lt;typename T&gt;
+    decltype(auto) forward_example(T&amp;&amp; arg) {
+        return std::forward&lt;T&gt;(arg);
+    }
+};
+
+void decl_auto_demo() {
+    Container c;
+    c.get_at_copy(0) = 99;  // modifies a temporary — no effect
+    c.get_at_ref(0) = 99;   // modifies actual element
+    std::cout &lt;&lt; "data[0] = " &lt;&lt; c.data[0] &lt;&lt; "\n";  // 99
+}
+</pre>
+
+<h2>Trailing Return Types</h2>
+
+<p>C++11 introduced trailing return types using <code>-&gt;</code>. While largely superseded by <code>auto</code> return type deduction (C++14), trailing return types are still needed in some template scenarios where the return type depends on template parameters.</p>
+
+<pre>
+// Trailing return type with decltype
+template&lt;typename T, typename U&gt;
+auto multiply(T a, U b) -&gt; decltype(a * b) {
+    return a * b;
+}
+
+// In C++14+, this is cleaner:
+template&lt;typename T, typename U&gt;
+auto multiply2(T a, U b) {
+    return a * b;
+}
+
+// Trailing return type with decltype still useful in complex cases:
+template&lt;typename Container&gt;
+auto begin(Container&amp; c) -&gt; decltype(c.begin()) {
+    return c.begin();
+}
+</pre>
+
+<h2>auto vs decltype — Summary</h2>
+
+<table>
+  <tr><th>Feature</th><th>auto</th><th>decltype</th></tr>
+  <tr><td>Strips <code>const</code></td><td>Yes</td><td>No</td></tr>
+  <tr><td>Strips references</td><td>Yes</td><td>No</td></tr>
+  <tr><td>Parenthesized variable</td><td>N/A</td><td>Yields reference</td></tr>
+  <tr><td>Primary use</td><td>Variable declarations, return types</td><td>Querying types, <code>decltype(auto)</code></td></tr>
+  <tr><td>Needs initializer</td><td>Yes</td><td>No (takes any expression)</td></tr>
+</table>
+
+<pre>
+#include &lt;vector&gt;
+#include &lt;iostream&gt;
+
+// Practical example: generic function returning element reference
+template&lt;typename C&gt;
+decltype(auto) front_element(C&amp; container) {
+    return container.front();
+}
+
+void practical_example() {
+    std::vector&lt;int&gt; v = {10, 20, 30};
+
+    // decltype(auto) preserves the reference returned by front()
+    decltype(auto) ref = front_element(v);
+    ref = 99;  // modifies v[0]
+    std::cout &lt;&lt; "v[0] = " &lt;&lt; v[0] &lt;&lt; "\n";  // 99
+}
+</pre>
+
+<p>Type deduction with <code>auto</code> and <code>decltype</code> underpins <a href="lambda-expressions.html">generic lambdas</a> and is used extensively with <a href="constexpr.html">constexpr</a> compile-time programming. Next, we explore constexpr functions and compile-time computation.</p>
+
+<div class="nav"><a href="lambda-expressions.html">&larr; Lambda Expressions</a><a href="constexpr.html">constexpr &rarr;</a></div>
+</body>
+</html>

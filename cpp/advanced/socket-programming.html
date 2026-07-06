@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Socket Programming — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / Networking &amp; IPC / 3.4.1</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>Socket Programming</h1>
+
+<p>Socket programming is the foundation of network communication in C++. The BSD socket API (POSIX) provides a unified interface for TCP, UDP, and Unix domain sockets. Understanding sockets is essential for building client-server applications, inter-process communication (IPC), and distributed systems.</p>
+
+<div class="callout">
+<p><strong>Prerequisites:</strong> <a href="shared-memory-ipc.html">Shared Memory IPC</a>, <a href="signal-handling.html">Signal Handling</a>, <a href="memory-mapped-files.html">Memory-Mapped Files</a>, basic I/O and system calls.</p>
+</div>
+
+<h2>Socket API Overview</h2>
+
+<table>
+<tr><th>Function</th><th>Purpose</th><th>Used By</th></tr>
+<tr><td><code>socket()</code></td><td>Create a socket file descriptor</td><td>Client &amp; Server</td></tr>
+<tr><td><code>bind()</code></td><td>Associate socket with address:port</td><td>Server</td></tr>
+<tr><td><code>listen()</code></td><td>Mark socket as passive (accepting connections)</td><td>TCP Server</td></tr>
+<tr><td><code>accept()</code></td><td>Accept incoming connection</td><td>TCP Server</td></tr>
+<tr><td><code>connect()</code></td><td>Initiate connection to server</td><td>Client</td></tr>
+<tr><td><code>send()/recv()</code></td><td>Send/receive data (TCP)</td><td>Both</td></tr>
+<tr><td><code>sendto()/recvfrom()</code></td><td>Send/receive data (UDP)</td><td>Both</td></tr>
+<tr><td><code>close()</code></td><td>Close the socket</td><td>Both</td></tr>
+</table>
+
+<h2>TCP vs UDP</h2>
+
+<table>
+<tr><th>Aspect</th><th>TCP (SOCK_STREAM)</th><th>UDP (SOCK_DGRAM)</th></tr>
+<tr><td>Connection</td><td>Connection-oriented (3-way handshake)</td><td>Connectionless</td></tr>
+<tr><td>Reliability</td><td>Guaranteed delivery, ordered</td><td>Best-effort, no ordering</td></tr>
+<tr><td>Overhead</td><td>Higher (headers, ACKs, retransmission)</td><td>Lower (minimal header)</td></tr>
+<tr><td>Use case</td><td>File transfer, HTTP, SSH</td><td>DNS, video streaming, gaming</td></tr>
+<tr><td>API</td><td><code>send()/recv()</code></td><td><code>sendto()/recvfrom()</code></td></tr>
+</table>
+
+<h2>TCP Echo Server</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+#include &lt;cstring&gt;
+#include &lt;unistd.h&gt;
+#include &lt;sys/socket.h&gt;
+#include &lt;netinet/in.h&gt;
+#include &lt;arpa/inet.h&gt;
+
+// RAII wrapper for socket file descriptor
+class Socket {
+    int fd_ = -1;
+public:
+    Socket() = default;
+    explicit Socket(int fd) : fd_(fd) {}
+    ~Socket() { if (fd_ != -1) ::close(fd_); }
+    Socket(const Socket&amp;) = delete;
+    Socket&amp; operator=(const Socket&amp;) = delete;
+    Socket(Socket&amp;&amp; other) noexcept : fd_(other.fd_) { other.fd_ = -1; }
+    operator int() const { return fd_; }
+    bool valid() const { return fd_ != -1; }
+};
+
+int main() {
+    // 1. Create TCP socket
+    Socket server_fd(::socket(AF_INET, SOCK_STREAM, 0));
+    if (!server_fd.valid()) {
+        std::cerr &lt;&lt; "socket() failed: " &lt;&lt; strerror(errno) &lt;&lt; "\n";
+        return 1;
+    }
+
+    // 2. Allow address reuse (avoid TIME_WAIT issues)
+    int opt = 1;
+    ::setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &amp;opt, sizeof(opt));
+
+    // 3. Bind to port 8080
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(8080);
+
+    if (::bind(server_fd, (sockaddr*)&amp;addr, sizeof(addr)) &lt; 0) {
+        std::cerr &lt;&lt; "bind() failed: " &lt;&lt; strerror(errno) &lt;&lt; "\n";
+        return 1;
+    }
+
+    // 4. Listen for connections (backlog = 5)
+    if (::listen(server_fd, 5) &lt; 0) {
+        std::cerr &lt;&lt; "listen() failed: " &lt;&lt; strerror(errno) &lt;&lt; "\n";
+        return 1;
+    }
+
+    std::cout &lt;&lt; "Echo server listening on port 8080\n";
+
+    // 5. Accept and handle connections
+    while (true) {
+        sockaddr_in client_addr{};
+        socklen_t client_len = sizeof(client_addr);
+
+        Socket client_fd(::accept(server_fd,
+            (sockaddr*)&amp;client_addr, &amp;client_len));
+        if (!client_fd.valid()) {
+            std::cerr &lt;&lt; "accept() failed\n";
+            continue;
+        }
+
+        char client_ip[INET_ADDRSTRLEN];
+        ::inet_ntop(AF_INET, &amp;client_addr.sin_addr,
+                     client_ip, sizeof(client_ip));
+        std::cout &lt;&lt; "Connection from " &lt;&lt; client_ip
+                  &lt;&lt; ":" &lt;&lt; ntohs(client_addr.sin_port) &lt;&lt; "\n";
+
+        // Echo loop: read and send back
+        char buffer[1024];
+        while (true) {
+            ssize_t bytes_read = ::recv(client_fd, buffer, sizeof(buffer) - 1, 0);
+            if (bytes_read &lt;= 0) break;  // 0 = disconnected, -1 = error
+
+            buffer[bytes_read] = '\0';
+            ::send(client_fd, buffer, static_cast&lt;size_t&gt;(bytes_read), 0);
+        }
+        std::cout &lt;&lt; "Client disconnected\n";
+    }
+}
+</pre>
+
+<h2>TCP Client</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+#include &lt;cstring&gt;
+#include &lt;unistd.h&gt;
+#include &lt;sys/socket.h&gt;
+#include &lt;netinet/in.h&gt;
+#include &lt;arpa/inet.h&gt;
+
+int main() {
+    int sockfd = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd &lt; 0) {
+        std::cerr &lt;&lt; "socket() failed\n";
+        return 1;
+    }
+
+    sockaddr_in server_addr{};
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(8080);
+    ::inet_pton(AF_INET, "127.0.0.1", &amp;server_addr.sin_addr);
+
+    if (::connect(sockfd, (sockaddr*)&amp;server_addr, sizeof(server_addr)) &lt; 0) {
+        std::cerr &lt;&lt; "connect() failed\n";
+        ::close(sockfd);
+        return 1;
+    }
+
+    std::cout &lt;&lt; "Connected to echo server\n";
+
+    std::string line;
+    while (std::getline(std::cin, line)) {
+        if (line == "/quit") break;
+        ::send(sockfd, line.data(), line.size(), 0);
+
+        char buffer[1024];
+        ssize_t n = ::recv(sockfd, buffer, sizeof(buffer) - 1, 0);
+        if (n &gt; 0) {
+            buffer[n] = '\0';
+            std::cout &lt;&lt; "Echo: " &lt;&lt; buffer &lt;&lt; "\n";
+        }
+    }
+
+    ::close(sockfd);
+    return 0;
+}
+</pre>
+
+<h2>Non-Blocking I/O Basics</h2>
+
+<p>By default, sockets block on <code>accept()</code>, <code>recv()</code>, and <code>send()</code>. For handling multiple connections, use non-blocking I/O with <code>O_NONBLOCK</code> flag:</p>
+
+<pre>
+// Set socket to non-blocking
+int flags = ::fcntl(sockfd, F_GETFL, 0);
+::fcntl(sockfd, F_SETFL, flags | O_NONBLOCK);
+
+// Now recv() returns -1 with errno == EAGAIN/EWOULDBLOCK
+// when no data is available (instead of blocking)
+</pre>
+
+<h2>I/O Multiplexing: select / poll / epoll</h2>
+
+<table>
+<tr><th>System Call</th><th>Complexity</th><th>Max FDs</th><th>Notes</th></tr>
+<tr><td><code>select()</code></td><td>O(n) per call</td><td>FD_SETSIZE (1024)</td><td>Portable, oldest API</td></tr>
+<tr><td><code>poll()</code></td><td>O(n) per call</td><td>No limit</td><td>No FD_SETSIZE limit</td></tr>
+<tr><td><code>epoll</code> (Linux)</td><td>O(1) per event</td><td>No practical limit</td><td>Best for many connections</td></tr>
+<tr><td><code>kqueue</code> (BSD/macOS)</td><td>O(1) per event</td><td>No practical limit</td><td>macOS equivalent of epoll</td></tr>
+</table>
+
+<div class="callout green">
+<p><strong>Best practice:</strong> Wrap socket file descriptors in <a href="../intermediate/raii.html">RAII</a> classes to prevent resource leaks. Always check return values from socket API calls. Handle <code>SIGPIPE</code> — see <a href="signal-handling.html">Signal Handling</a> for details.</p>
+</div>
+
+<div class="callout red">
+<p><strong>Thread safety:</strong> A single socket should not be used concurrently from multiple threads for read/write without synchronization. The typical pattern is one thread per connection, or a single event loop using <code>epoll</code>/<code>kqueue</code>.</p>
+</div>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="shared-memory-ipc.html">Shared Memory IPC</a> (faster alternative for local processes), <a href="signal-handling.html">Signal Handling</a> (SIGPIPE, SIGINT), <a href="memory-mapped-files.html">Memory-Mapped Files</a> (shared file access), <a href="../telecom-5g/cu-du-split.html">CU/DU Split</a> (F1 interface uses sockets), <a href="../telecom-5g/f1-interface.html">F1 Interface</a> (socket-based protocol).</p>
+</div>
+
+<div class="nav"><a href="sfinae-advanced.html">&larr; SFINAE Advanced</a><a href="shared-memory-ipc.html">Shared Memory IPC &rarr;</a></div>
+</body>
+</html>

@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Assert / Static Assert — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / <a href="../index.html#2.5">2.5 Error Handling</a> / 2.5.3 Assert / Static Assert</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>Assert / Static Assert</h1>
+
+<p>Assertions are sanity checks that verify conditions that should always be true. <code>assert()</code> checks conditions at runtime (debug builds only), while <code>static_assert</code> checks at compile time. Both catch bugs early -- <code>static_assert</code> catches them before the program even runs, and <code>assert</code> catches them during development.</p>
+
+<h2>Runtime assert</h2>
+
+<p><code>assert(expr)</code> from <code>&lt;cassert&gt;</code> checks <code>expr</code> at runtime. If false, it prints an error message and calls <code>abort()</code>. Assertions are disabled in release builds by defining <code>NDEBUG</code>.</p>
+
+<pre>
+#include &lt;cassert&gt;
+#include &lt;vector&gt;
+#include &lt;iostream&gt;
+
+int safe_divide(int a, int b) {
+    assert(b != 0 &amp;&amp; "Division by zero in safe_divide");
+    return a / b;
+}
+
+class RingBuffer {
+    std::vector&lt;int&gt; data_;
+    size_t head_ = 0;
+    size_t count_ = 0;
+public:
+    explicit RingBuffer(size_t capacity) : data_(capacity) {}
+
+    void push(int val) {
+        assert(count_ &lt; data_.size() &amp;&amp; "Buffer overflow");
+        data_[head_] = val;
+        head_ = (head_ + 1) % data_.size();
+        ++count_;
+    }
+
+    int pop() {
+        assert(count_ &gt; 0 &amp;&amp; "Buffer underflow");
+        --count_;
+        size_t idx = (head_ + data_.size() - 1) % data_.size();
+        return data_[idx];
+    }
+
+    size_t size() const { return count_; }
+};
+
+void assert_demo() {
+    std::cout &lt;&lt; safe_divide(10, 2) &lt;&lt; "\n";  // 5
+    // safe_divide(10, 0);  // ASSERTION FAILURE in debug, undefined in release
+}
+</pre>
+
+<h2>NDEBUG and Release Builds</h2>
+
+<pre>
+// When compiling with -DNDEBUG (typical for release):
+//   assert(expr) is completely removed by the preprocessor
+//   No runtime cost, no code in the binary
+
+// Debug build:
+//   g++ -g -O0 program.cpp          (asserts active)
+// Release build:
+//   g++ -O2 -DNDEBUG program.cpp    (asserts disabled)
+
+// To keep asserts even in release builds, use:
+if (condition) {
+    // This code is NOT removed in release
+    // Use for truly critical checks that must always run
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>Do not use assert for input validation:</strong> Assertions check for programmer bugs (internal invariants), not for invalid user input. User input should produce graceful error handling (exceptions, error codes), not program termination. If the check should always run in production, it is not an assert.</p>
+</div>
+
+<h2>static_assert (Compile-Time)</h2>
+
+<p><code>static_assert</code> verifies conditions at compile time. If the condition is false, compilation fails with a custom error message. This is the most powerful form of assertion because it catches bugs before the program runs.</p>
+
+<pre>
+#include &lt;type_traits&gt;
+#include &lt;cstdint&gt;
+#include &lt;string_view&gt;
+
+// C++17: static_assert with message is optional (message defaults to condition)
+template&lt;typename T&gt;
+class NumericBuffer {
+    static_assert(std::is_arithmetic_v&lt;T&gt;,
+        "NumericBuffer requires an arithmetic type");
+    static_assert(sizeof(T) &lt;= 64,
+        "NumericBuffer element type must be 64 bits or less");
+    T* data_;
+    size_t size_;
+public:
+    explicit NumericBuffer(size_t n) : data_(new T[n]), size_(n) {}
+    ~NumericBuffer() { delete[] data_; }
+};
+
+// Platform-specific compile-time checks
+static_assert(sizeof(void*) == 8, "This code requires a 64-bit platform");
+static_assert(sizeof(int) == 4, "int must be 32 bits");
+static_assert(CHAR_BIT == 8, "char must be 8 bits");
+
+// Check struct layout
+struct PacketHeader {
+    uint32_t type;
+    uint16_t length;
+    uint16_t checksum;
+};
+
+static_assert(sizeof(PacketHeader) == 8, "PacketHeader must be 8 bytes");
+static_assert(offsetof(PacketHeader, checksum) == 6,
+    "checksum must be at offset 6");
+</pre>
+
+<h2>static_assert with Type Traits</h2>
+
+<pre>
+#include &lt;type_traits&gt;
+#include &lt;iterator&gt;
+
+// Validate template constraints at compile time
+template&lt;typename Container&gt;
+auto first_element(const Container&amp; c)
+    -&gt; decltype(*c.begin())
+{
+    static_assert(std::is_same_v&lt;
+        typename std::iterator_traits&lt;decltype(c.begin())&gt;::iterator_category,
+        std::random_access_iterator_tag&gt;,
+        "first_element requires a random-access container");
+
+    return c.front();
+}
+
+// Ensure a class meets size constraints
+template&lt;typename T&gt;
+constexpr bool is_small_object_v = sizeof(T) &lt;= 64 &amp;&amp; alignof(T) &lt;= 16;
+
+struct BigData {
+    char buffer[256];
+};
+
+static_assert(is_small_object_v&lt;int&gt;);
+// static_assert(is_small_object_v&lt;BigData&gt;);  // ERROR: too large
+</pre>
+
+<h2>Comparison: assert vs static_assert</h2>
+
+<table>
+  <tr><th>Aspect</th><th>assert (runtime)</th><th>static_assert (compile-time)</th></tr>
+  <tr><td>When checked</td><td>During program execution</td><td>During compilation</td></tr>
+  <tr><td>Failure result</td><td>abort() / program crash</td><td>Compilation error</td></tr>
+  <tr><td>Release builds</td><td>Removed (NDEBUG defined)</td><td>Always checked</td></tr>
+  <tr><td>What can be checked</td><td>Runtime values, state</td><td>Types, constants, sizeof, static properties</td></tr>
+  <tr><td>Header</td><td>&lt;cassert&gt;</td><td>Built-in keyword (no header needed)</td></tr>
+  <tr><td>Use case</td><td>Function preconditions, invariants</td><td>Template constraints, platform checks, struct layout</td></tr>
+  <tr><td>C++ version</td><td>C (pre-standard)</td><td>C++11 (message required: C++17 optional)</td></tr>
+</table>
+
+<h2>When to Use Which</h2>
+
+<div class="callout green">
+  <p><strong>Use static_assert for:</strong></p>
+  <ul>
+    <li>Template type constraints (e.g., "T must be integral")</li>
+    <li>Struct/class size and layout verification</li>
+    <li>Platform assumptions (pointer size, endianness)</li>
+    <li>Any condition that can be evaluated at compile time</li>
+  </ul>
+</div>
+
+<div class="callout green">
+  <p><strong>Use assert for:</strong></p>
+  <ul>
+    <li>Function preconditions that indicate programmer bugs</li>
+    <li>Internal invariants (e.g., "this list should never be empty here")</li>
+    <li>Postconditions ("the result should always be positive")</li>
+    <li>Loop invariants in complex algorithms</li>
+  </ul>
+</div>
+
+<p>Assertions complement <a href="exception-handling.html">exception handling</a> for different error categories. <code>static_assert</code> works naturally with <a href="type-traits.html">type traits</a> and <a href="constexpr.html">constexpr</a> for compile-time validation. In C++20, <a href="../advanced/concepts.html">concepts</a> provide a more powerful alternative to <code>static_assert</code> for template constraints.</p>
+
+<div class="nav"><a href="noexcept.html">&larr; noexcept</a><a href="std-thread.html">std::thread &rarr;</a></div>
+</body>
+</html>

@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Abstract Classes — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / Abstract Classes</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>Abstract Classes</h1>
+
+<p>An abstract class is a class that contains at least one <strong>pure virtual function</strong> and cannot be instantiated directly. It serves as an interface or a partial implementation that derived classes must complete. Abstract classes are the foundation of interface-based design in C++.</p>
+
+<h2>Pure Virtual Functions</h2>
+
+<p>A pure virtual function is declared with <code>= 0</code> and has no implementation in the base class (or a default implementation that derived classes can explicitly call).</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;memory&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+
+// Abstract base class — cannot be instantiated
+class Renderer {
+public:
+    virtual ~Renderer() = default;
+
+    // Pure virtual — must be overridden by derived classes
+    virtual void render(const std::string&amp; content) = 0;
+
+    // Virtual with default implementation — can be overridden
+    virtual void clear() {
+        std::cout &lt;&lt; "[Renderer] Clearing canvas\n";
+    }
+
+    // Pure virtual with a default implementation
+    virtual void initialize() = 0;
+};
+
+void abstract_basics() {
+    // Renderer r;  // ERROR: cannot instantiate abstract class
+    // auto r = std::make_unique&lt;Renderer&gt;();  // ERROR
+
+    // Can have pointers/references to abstract class
+    // Renderer&amp; ref = /* must point to a derived object */;
+}
+</pre>
+
+<h2>Concrete Derived Classes</h2>
+
+<pre>
+class HTMLRenderer : public Renderer {
+public:
+    void render(const std::string&amp; content) override {
+        std::cout &lt;&lt; "&lt;div&gt;" &lt;&lt; content &lt;&lt; "&lt;/div&gt;\n";
+    }
+
+    void initialize() override {
+        std::cout &lt;&lt; "[HTML] Initializing HTML renderer\n";
+    }
+};
+
+class JSONRenderer : public Renderer {
+public:
+    void render(const std::string&amp; content) override {
+        std::cout &lt;&lt; "{\"output\": \"" &lt;&lt; content &lt;&lt; "\"}\n";
+    }
+
+    void initialize() override {
+        std::cout &lt;&lt; "[JSON] Initializing JSON renderer\n";
+    }
+
+    void clear() override {
+        std::cout &lt;&lt; "[JSON] Clearing JSON buffer\n";
+    }
+};
+
+void concrete_demo() {
+    std::vector&lt;std::unique_ptr&lt;Renderer&gt;&gt; renderers;
+    renderers.push_back(std::make_unique&lt;HTMLRenderer&gt;());
+    renderers.push_back(std::make_unique&lt;JSONRenderer&gt;());
+
+    for (const auto&amp; renderer : renderers) {
+        renderer-&gt;initialize();
+        renderer-&gt;render("Hello, World!");
+        renderer-&gt;clear();
+    }
+}
+</pre>
+
+<h2>Calling Pure Virtual Base Implementation</h2>
+
+<p>A pure virtual function can have a body. Derived classes can call it explicitly using scope resolution.</p>
+
+<pre>
+class Database {
+public:
+    virtual ~Database() = default;
+
+    // Pure virtual — but has a default implementation
+    virtual void connect() = 0;
+
+    virtual void disconnect() {
+        std::cout &lt;&lt; "Closing connection\n";
+    }
+};
+
+// Pure virtual with body
+void Database::connect() {
+    std::cout &lt;&lt; "Establishing base connection\n";
+}
+
+class PostgreSQL : public Database {
+public:
+    void connect() override {
+        Database::connect();  // Call base implementation explicitly
+        std::cout &lt;&lt; "  PostgreSQL-specific setup\n";
+    }
+};
+
+void call_base_demo() {
+    PostgreSQL db;
+    db.connect();
+    // Output:
+    //   Establishing base connection
+    //     PostgreSQL-specific setup
+}
+</pre>
+
+<h2>Interface Classes (Pure Abstract Classes)</h2>
+
+<p>A pure abstract class (interface) has only pure virtual functions and no data members. This is the closest C++ equivalent to Java/C# interfaces.</p>
+
+<pre>
+// Interface: no data members, all functions pure virtual
+class ISerializable {
+public:
+    virtual ~ISerializable() = default;
+    virtual std::string serialize() const = 0;
+    virtual void deserialize(const std::string&amp; data) = 0;
+};
+
+class IComparable {
+public:
+    virtual ~IComparable() = default;
+    virtual int compare(const IComparable&amp; other) const = 0;
+};
+
+class Document : public ISerializable, public IComparable {
+    std::string title_;
+    int version_;
+public:
+    Document(std::string title, int ver) : title_(std::move(title)), version_(ver) {}
+
+    std::string serialize() const override {
+        return "{\"title\": \"" + title_ + "\", \"version\": " + std::to_string(version_) + "}";
+    }
+
+    void deserialize(const std::string&amp; data) override {
+        // Simplified — real code would parse JSON
+        title_ = "deserialized";
+        version_ = 1;
+    }
+
+    int compare(const IComparable&amp; other) const override {
+        // Dynamic cast to access Document-specific members
+        auto&amp; other_doc = dynamic_cast&lt;const Document&amp;&gt;(other);
+        return version_ - other_doc.version_;
+    }
+};
+
+void interface_demo() {
+    Document doc("Design Doc", 3);
+    std::cout &lt;&lt; doc.serialize() &lt;&lt; "\n";
+    // {"title": "Design Doc", "version": 3}
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Interface naming convention:</strong> In many C++ codebases, pure abstract classes are prefixed with <code>I</code> (e.g., <code>IDrawable</code>, <code>ISerializable</code>). This is a convention, not a language rule. Others prefer suffixes like <code>...Interface</code> or no prefix at all.</p>
+</div>
+
+<h2>Abstract Class Design Implications</h2>
+
+<h3>NVId Rule</h3>
+
+<p>If a class has a virtual destructor, it probably needs to be abstract. The <strong>Non-Virtual Interface (NVI)</strong> pattern keeps public methods non-virtual and calls protected virtual methods.</p>
+
+<pre>
+class TextProcessor {
+public:
+    // Public non-virtual interface — enforces invariants
+    void process(const std::string&amp; input) {
+        validate(input);
+        auto result = do_process(input);
+        log_result(result);
+    }
+
+    virtual ~TextProcessor() = default;
+
+protected:
+    // Protected virtual hooks — extensible by derived classes
+    virtual void validate(const std::string&amp; input) {
+        if (input.empty())
+            throw std::invalid_argument("empty input");
+    }
+
+    virtual std::string do_process(const std::string&amp; input) = 0;
+
+private:
+    void log_result(const std::string&amp; result) {
+        std::cout &lt;&lt; "[LOG] Result: " &lt;&lt; result &lt;&lt; "\n";
+    }
+};
+
+class UpperCaseProcessor : public TextProcessor {
+protected:
+    std::string do_process(const std::string&amp; input) override {
+        std::string result = input;
+        for (auto&amp; c : result) c = std::toupper(c);
+        return result;
+    }
+};
+</pre>
+
+<div class="callout warning">
+  <p><strong>NVI pattern:</strong> The public non-virtual interface ensures base class invariants are always enforced (validation, logging, locking), while derived classes only implement the core logic through protected virtual hooks. This prevents derived classes from accidentally skipping important base class behavior.</p>
+</div>
+
+<p>Abstract classes rely on <a href="virtual-functions-vtable.html">virtual functions and the vtable</a> for runtime dispatch. Complex inheritance hierarchies may encounter issues covered in <a href="multiple-inheritance.html">multiple inheritance</a>. Next, we explore <a href="multiple-inheritance.html">multiple inheritance</a> and the diamond problem.</p>
+
+<div class="nav"><a href="virtual-functions-vtable.html">&larr; Virtual Functions &amp; vtable</a><a href="multiple-inheritance.html">Multiple Inheritance &rarr;</a></div>
+</body>
+</html>

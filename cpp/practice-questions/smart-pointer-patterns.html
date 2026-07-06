@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Pointer Patterns — C++ Practice</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.easy { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  .question { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; }
+  .question h3 { color: #f0f6fc; margin-top: 0; }
+  .solution-toggle { cursor: pointer; user-select: none; }
+  .solution-toggle h3 { color: #3fb950; display: inline; }
+  .solution-content { display: none; margin-top: 1rem; }
+  .solution-content.visible { display: block; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+  .topics-covered { margin-bottom: 1rem; font-size: 0.85rem; color: #8b949e; }
+  .topics-covered a { color: #8b949e; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#5">5 Practice</a> / Medium Questions</div>
+<div class="meta"><span class="tag medium">Medium</span></div>
+<h1>Design Patterns with Smart Pointers</h1>
+
+<div class="topics-covered">
+  <strong>Topics Covered:</strong>
+  <a href="../smart-pointers.html">Smart Pointers</a>,
+  <a href="../design-patterns.html">Design Patterns</a>,
+  <a href="../memory-management.html">Memory Management</a>,
+  <a href="../raii.html">RAII</a>
+</div>
+
+<div class="question">
+  <h3>Problem Statement</h3>
+  <p>Implement three classic design patterns using C++ smart pointers to demonstrate proper ownership semantics:</p>
+  <ol>
+    <li><strong>Factory Pattern</strong> with <code>unique_ptr</code>: A factory that creates objects and transfers exclusive ownership to the caller.</li>
+    <li><strong>Observer Pattern</strong> with <code>weak_ptr</code>: An observer system where subjects hold weak references to observers to avoid dangling pointers when observers are destroyed.</li>
+    <li><strong>Tree Structure</strong> with <code>shared_ptr</code>: A binary tree where child nodes are shared (parent and children reference each other via shared/weak pointers to break cycles).</li>
+  </ol>
+</div>
+
+<h2>Pattern 1: Factory with unique_ptr</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution1')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution1">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;memory&gt;
+#include &lt;string&gt;
+#include &lt;unordered_map&gt;
+
+// Base interface
+class Message {
+public:
+    virtual ~Message() = default;
+    virtual std::string serialize() const = 0;
+    virtual std::string type() const = 0;
+};
+
+// Concrete message types
+class TextMessage : public Message {
+    std::string text_;
+public:
+    explicit TextMessage(std::string text) : text_(std::move(text)) {}
+    std::string serialize() const override { return "TEXT:" + text_; }
+    std::string type() const override { return "TextMessage"; }
+};
+
+class BinaryMessage : public Message {
+    std::vector&lt;uint8_t&gt; data_;
+public:
+    explicit BinaryMessage(std::vector&lt;uint8_t&gt; data) : data_(std::move(data)) {}
+    std::string serialize() const override { return "BIN:size=" + std::to_string(data_.size()); }
+    std::string type() const override { return "BinaryMessage"; }
+};
+
+// Factory using unique_ptr: exclusive ownership transfer
+class MessageFactory {
+public:
+    enum class Type { Text, Binary };
+
+    // Returns unique_ptr: caller owns the object exclusively
+    std::unique_ptr&lt;Message&gt; create(Type type, const std::string&amp; content) {
+        switch (type) {
+            case Type::Text:
+                return std::make_unique&lt;TextMessage&gt;(content);
+            case Type::Binary: {
+                std::vector&lt;uint8_t&gt; data(content.begin(), content.end());
+                return std::make_unique&lt;BinaryMessage&gt;(std::move(data));
+            }
+        }
+        return nullptr;
+    }
+};
+
+int main() {
+    MessageFactory factory;
+
+    auto msg1 = factory.create(MessageFactory::Type::Text, "Hello World");
+    auto msg2 = factory.create(MessageFactory::Type::Binary, "\x01\x02\x03");
+
+    std::cout &lt;&lt; msg1-&gt;type() &lt;&lt; ": " &lt;&lt; msg1-&gt;serialize() &lt;&lt; "\n";
+    std::cout &lt;&lt; msg2-&gt;type() &lt;&lt; ": " &lt;&lt; msg2-&gt;serialize() &lt;&lt; "\n";
+
+    // unique_ptr is move-only: transfer ownership
+    auto msg3 = std::move(msg1);
+    // msg1 is now nullptr (moved-from state)
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><code>std::make_unique</code> creates the object on the heap and wraps it in a <code>unique_ptr</code>.</li>
+      <li><code>unique_ptr</code> represents <strong>exclusive ownership</strong> &mdash; only one <code>unique_ptr</code> can own the object at any time.</li>
+      <li>The factory returns by value (RVO/move), transferring ownership to the caller.</li>
+      <li>This eliminates <code>new</code>/<code>delete</code> at the call site and makes ownership semantics explicit.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Pattern 2: Observer with weak_ptr</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution2')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution2">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;memory&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+#include &lt;algorithm&gt;
+
+class Observer;
+
+// Subject holds weak_ptr to observers (breaks ownership cycle)
+class Subject {
+public:
+    void addObserver(const std::shared_ptr&lt;Observer&gt;&amp; observer) {
+        observers_.push_back(observer);  // stores weak_ptr internally
+    }
+
+    void removeObserver(const std::shared_ptr&lt;Observer&gt;&amp; observer) {
+        std::weak_ptr&lt;Observer&gt; weak = observer;
+        observers_.erase(
+            std::remove_if(observers_.begin(), observers_.end(),
+                [&amp;weak](const std::weak_ptr&lt;Observer&gt;&amp; w) {
+                    return w.lock() == weak.lock();
+                }),
+            observers_.end());
+    }
+
+    void notify(const std::string&amp; event) {
+        // Clean up expired observers
+        observers_.erase(
+            std::remove_if(observers_.begin(), observers_.end(),
+                [](const std::weak_ptr&lt;Observer&gt;&amp; w) {
+                    return w.expired();
+                }),
+            observers_.end());
+
+        // Notify surviving observers
+        for (const auto&amp; weakObs : observers_) {
+            if (auto obs = weakObs.lock()) {
+                obs-&gt;onNotify(event);
+            }
+        }
+    }
+
+private:
+    std::vector&lt;std::weak_ptr&lt;Observer&gt;&gt; observers_;
+};
+
+class Observer : public std::enable_shared_from_this&lt;Observer&gt; {
+    std::string name_;
+public:
+    explicit Observer(std::string name) : name_(std::move(name)) {}
+    virtual ~Observer() { std::cout &lt;&lt; "Observer '" &lt;&lt; name_ &lt;&lt; "' destroyed\n"; }
+    virtual void onNotify(const std::string&amp; event) {
+        std::cout &lt;&lt; name_ &lt;&lt; " received: " &lt;&lt; event &lt;&lt; "\n";
+    }
+    std::string name() const { return name_; }
+};
+
+int main() {
+    auto subject = std::make_shared&lt;Subject&gt;();
+
+    // Create observers (shared ownership)
+    auto obs1 = std::make_shared&lt;Observer&gt;("Logger");
+    auto obs2 = std::make_shared&lt;Observer&gt;("UI");
+    auto obs3 = std::make_shared&lt;Observer&gt;("DB");
+
+    subject-&gt;addObserver(obs1);
+    subject-&gt;addObserver(obs2);
+    subject-&gt;addObserver(obs3);
+
+    subject-&gt;notify("Data received");
+    // All three observers receive notification
+
+    // Observer destroyed (shared_ptr count drops to 0)
+    obs2.reset();
+    std::cout &lt;&lt; "After UI observer destroyed:\n";
+    subject-&gt;notify("Update");
+    // Only Logger and DB receive notification (UI is gone)
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li>The Subject stores <code>weak_ptr</code> to observers, not <code>shared_ptr</code>. This prevents reference cycles (Subject &rarr; Observer &rarr; Subject).</li>
+      <li><code>weak_ptr::lock()</code> returns a <code>shared_ptr</code> if the object is still alive, or <code>nullptr</code> if it has been destroyed.</li>
+      <li><code>weak_ptr::expired()</code> checks if the object has been destroyed without creating a temporary <code>shared_ptr</code>.</li>
+      <li>Before each notification, we clean up expired observers to keep the vector tidy.</li>
+      <li>Observers derive from <code>enable_shared_from_this</code> to safely get a <code>shared_ptr</code> to themselves when needed.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Pattern 3: Tree with shared_ptr / weak_ptr</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution3')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution3">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;memory&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+
+class TreeNode : public std::enable_shared_from_this&lt;TreeNode&gt; {
+    int value_;
+    std::shared_ptr&lt;TreeNode&gt; left_;
+    std::shared_ptr&lt;TreeNode&gt; right_;
+    std::weak_ptr&lt;TreeNode&gt; parent_;  // weak: breaks cycle
+
+public:
+    explicit TreeNode(int value)
+        : value_(value) {}
+
+    void setLeft(std::shared_ptr&lt;TreeNode&gt; child) {
+        left_ = std::move(child);
+        if (left_) left_-&gt;parent_ = shared_from_this();
+    }
+
+    void setRight(std::shared_ptr&lt;TreeNode&gt; child) {
+        right_ = std::move(child);
+        if (right_) right_-&gt;parent_ = shared_from_this();
+    }
+
+    int value() const { return value_; }
+    std::shared_ptr&lt;TreeNode&gt; left() const { return left_; }
+    std::shared_ptr&lt;TreeNode&gt; right() const { return right_; }
+    std::shared_ptr&lt;TreeNode&gt; parent() const { return parent_.lock(); }
+
+    void printTree(int depth = 0) const {
+        std::string indent(depth * 2, ' ');
+        std::cout &lt;&lt; indent &lt;&lt; "Node(" &lt;&lt; value_ &lt;&lt; ")";
+        auto p = parent_.lock();
+        if (p) std::cout &lt;&lt; " [parent=" &lt;&lt; p-&gt;value_ &lt;&lt; "]";
+        std::cout &lt;&lt; "\n";
+        if (left_)  left_-&gt;printTree(depth + 1);
+        if (right_) right_-&gt;printTree(depth + 1);
+    }
+};
+
+int main() {
+    // Build a tree:
+    //       1
+    //      / \
+    //     2   3
+    //    / \
+    //   4   5
+
+    auto root = std::make_shared&lt;TreeNode&gt;(1);
+    auto n2   = std::make_shared&lt;TreeNode&gt;(2);
+    auto n3   = std::make_shared&lt;TreeNode&gt;(3);
+    auto n4   = std::make_shared&lt;TreeNode&gt;(4);
+    auto n5   = std::make_shared&lt;TreeNode&gt;(5);
+
+    root-&gt;setLeft(n2);
+    root-&gt;setRight(n3);
+    n2-&gt;setLeft(n4);
+    n2-&gt;setRight(n5);
+
+    std::cout &lt;&lt; "Tree structure:\n";
+    root-&gt;printTree();
+
+    // Demonstrate navigation
+    std::cout &lt;&lt; "\nParent of node 4: ";
+    auto parent = n4-&gt;parent();
+    if (parent) std::cout &lt;&lt; parent-&gt;value() &lt;&lt; "\n";  // 2
+
+    // Drop root's left subtree
+    root-&gt;setLeft(nullptr);
+    // n2, n4, n5 are now destroyed (ref count drops to 0)
+
+    std::cout &lt;&lt; "\nAfter dropping left subtree:\n";
+    root-&gt;printTree();
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><strong>shared_ptr</strong> for parent&rarr;child links: the parent "owns" its children. When a parent is destroyed, its children are destroyed too (unless shared elsewhere).</li>
+      <li><strong>weak_ptr</strong> for child&rarr;parent links: avoids the reference cycle (parent &rarr; child &rarr; parent) that would cause memory leaks with shared_ptr alone.</li>
+      <li><code>enable_shared_from_this</code> is needed for a node to safely create a <code>shared_ptr</code> to itself (required when setting the parent pointer from within the node).</li>
+      <li>When <code>root-&gt;setLeft(nullptr)</code> is called, the <code>shared_ptr</code> to <code>n2</code> is released. Since <code>n4</code> and <code>n5</code> are only held by <code>n2</code>, they are destroyed as well.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout green">
+  <p><strong>Smart Pointer Selection Guide:</strong></p>
+  <table>
+    <tr><th>Pointer Type</th><th>Use When</th><th>Ownership</th></tr>
+    <tr><td><code>unique_ptr</code></td><td>Exclusive ownership, single owner</td><td>Moves only, non-copyable</td></tr>
+    <tr><td><code>shared_ptr</code></td><td>Shared ownership, multiple owners</td><td>Reference counted, copyable</td></tr>
+    <tr><td><code>weak_ptr</code></td><td>Non-owning reference, break cycles</td><td>No ownership, must lock() to use</td></tr>
+  </table>
+</div>
+
+<h2>Follow-up Questions</h2>
+
+<div class="question">
+  <h3>Variations to Try</h3>
+  <ol>
+    <li><strong>Abstract Factory:</strong> Extend the factory to support families of related objects (e.g., different message protocols).</li>
+    <li><strong>Signal/Slot with weak_ptr:</strong> Implement a signal-slot system where slots can be disconnected automatically when the listener is destroyed.</li>
+    <li><strong>DAG (Directed Acyclic Graph):</strong> Implement a DAG with shared_ptr for edges and weak_ptr for back-references. Add cycle detection.</li>
+    <li><strong>Polymorphic factory:</strong> Register types at runtime using a map of factory functions, enabling plugins to add new types.</li>
+  </ol>
+</div>
+
+<div class="callout red">
+  <p><strong>Common Mistakes:</strong></p>
+  <ul>
+    <li>Creating a <code>shared_ptr</code> from <code>this</code> directly causes double-free. Always use <code>enable_shared_from_this::shared_from_this()</code>.</li>
+    <li>Using <code>shared_ptr</code> for both sides of a parent-child relationship creates reference cycles that are never freed.</li>
+    <li>Never store a <code>weak_ptr</code> and forget to check <code>expired()</code> or <code>lock()</code> before using it.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="thread-safe-queue.html">&larr; Thread-Safe Queue</a>
+  <a href="singleton-pattern.html">Singleton Pattern &rarr;</a>
+</div>
+<script>
+function toggleSolution(id) {
+  document.getElementById(id).classList.toggle('visible');
+}
+</script>
+</body>
+</html>

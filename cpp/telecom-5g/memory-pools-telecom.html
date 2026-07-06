@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memory Pools in Telecom — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#4">4 Telecom &amp; 5G/4G Networking</a> / Telecom C++ Techniques / 4.4.5</div>
+<div class="meta"><span class="tag medium">Medium</span></div>
+<h1>Memory Pools in Telecom</h1>
+
+<p>In telecom data-path processing, calling <code>malloc</code>/<code>new</code> per packet is unacceptable. Heap allocation introduces non-deterministic latency (1-100 us), memory fragmentation, and cache thrashing. Memory pools solve this by pre-allocating fixed-size blocks that can be acquired and released in O(1) time.</p>
+
+<h2>Why Memory Pools?</h2>
+
+<table>
+  <tr><th>Aspect</th><th>malloc/new</th><th>Memory Pool</th></tr>
+  <tr><td>Allocation time</td><td>1-100 us (non-deterministic)</td><td>10-50 ns (constant)</td></tr>
+  <tr><td>Fragmentation</td><td>Yes (over time)</td><td>None (fixed-size blocks)</td></tr>
+  <tr><td>Cache behavior</td><td>Poor (scattered)</td><td>Good (contiguous region)</td></tr>
+  <tr><td>Thread safety</td><td>Global lock in glibc</td><td>Per-thread pool (no lock)</td></tr>
+  <tr><td>Deallocation</td><td>Complex (coalescing)</td><td>O(1) return to pool</td></tr>
+</table>
+
+<div class="callout red">
+  <p><strong>Data path rule:</strong> In production RAN systems, the packet processing path must never call <code>malloc</code>, <code>free</code>, <code>new</code>, or <code>delete</code>. All buffers are pre-allocated from pools at system startup. Violating this rule causes tail-latency spikes and potential deadline misses.</p>
+</div>
+
+<h2>Pool Strategies</h2>
+
+<ul>
+  <li><strong>Fixed-size pool:</strong> All blocks same size (simplest, most common). Used for packet buffers, mbufs.</li>
+  <li><strong>Ring buffer pool:</strong> Index-based free list using a circular buffer. Lock-free with atomics.</li>
+  <li><strong>Per-thread pool:</strong> Each processing core has its own pool. No synchronization needed.</li>
+  <li><strong>Slab allocator:</strong> Multiple pools for different sizes. One pool per size class.</li>
+</ul>
+
+<h2>C++ Simple Memory Pool</h2>
+
+<pre>
+#include &lt;vector&gt;
+#include &lt;atomic&gt;
+#include &lt;cstdint&gt;
+#include &lt;new&gt;
+
+// Fixed-size memory pool with lock-free free list
+template&lt;typename T, uint32_t POOL_SIZE = 4096&gt;
+class MemoryPool {
+public:
+    MemoryPool() {
+        // Pre-allocate all blocks contiguously
+        blocks_.resize(POOL_SIZE);
+        // Initialize free list: all blocks are free
+        for (uint32_t i = 0; i &lt; POOL_SIZE; ++i) {
+            free_list_[i] = i;
+        }
+        free_count_.store(POOL_SIZE, std::memory_order_relaxed);
+    }
+
+    // Allocate one object from the pool
+    T* allocate() {
+        uint32_t idx = free_count_.fetch_sub(1,
+                        std::memory_order_acq_rel) - 1;
+        if (idx &gt;= POOL_SIZE) {
+            // Pool exhausted
+            free_count_.fetch_add(1, std::memory_order_relaxed);
+            return nullptr;
+        }
+        return &amp;blocks_[free_list_[idx]];
+    }
+
+    // Return object to pool
+    void deallocate(T* ptr) {
+        if (!ptr) return;
+        uint32_t block_idx = ptr - &amp;blocks_[0];
+        uint32_t slot = free_count_.fetch_add(1,
+                        std::memory_order_acq_rel);
+        if (slot &lt; POOL_SIZE) {
+            free_list_[slot] = block_idx;
+        }
+    }
+
+    // Get number of available blocks
+    [[nodiscard]] uint32_t available() const {
+        return free_count_.load(std::memory_order_relaxed);
+    }
+
+    // Pre-construct all objects (optional)
+    void constructAll() {
+        for (auto&amp; block : blocks_) {
+            new (&amp;block) T();
+        }
+    }
+
+private:
+    alignas(64) std::vector&lt;T&gt; blocks_;       // Storage
+    alignas(64) uint32_t free_list_[POOL_SIZE]; // Free indices
+    alignas(64) std::atomic&lt;uint32_t&gt; free_count_;
+};
+
+// Example usage: packet buffer pool
+struct PacketBuffer {
+    static constexpr size_t MAX_SIZE = 2048;
+    uint8_t data[MAX_SIZE];
+    uint16_t length;
+    uint32_t timestamp_us;
+    uint8_t  lcid;  // Logical channel ID
+
+    void reset() {
+        length = 0;
+        timestamp_us = 0;
+        lcid = 0;
+    }
+};
+
+// Per-core packet pool
+class PerCorePacketPool {
+public:
+    static constexpr int MAX_CORES = 16;
+
+    void init(int num_cores) {
+        for (int i = 0; i &lt; num_cores &amp;&amp; i &lt; MAX_CORES; ++i) {
+            pools_[i].constructAll();
+        }
+        num_cores_ = num_cores;
+    }
+
+    PacketBuffer* allocate(int core_id) {
+        if (core_id &lt; 0 || core_id &gt;= num_cores_) return nullptr;
+        return pools_[core_id].allocate();
+    }
+
+    void deallocate(int core_id, PacketBuffer* buf) {
+        if (core_id &lt; 0 || core_id &gt;= num_cores_) return;
+        pools_[core_id].deallocate(buf);
+    }
+
+private:
+    MemoryPool&lt;PacketBuffer, 8192&gt; pools_[MAX_CORES];
+    int num_cores_{0};
+};
+</pre>
+
+<h2>Pre-Allocation Strategies</h2>
+
+<pre>
+  At system startup:
+  1. Calculate max buffers needed per layer:
+     - PHY: max_TBs * max_segments per TTI
+     - MAC: max_LCIDs * max_buffer_size
+     - RLC: max_bearers * max_sdus_per_bearer
+     - PDCP: max_pdus_for_handover
+
+  2. Allocate from hugepages (NUMA-aware):
+     void* pool_mem = mmap(NULL, total_size,
+         PROT_READ | PROT_WRITE,
+         MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB,
+         -1, 0);
+
+  3. Partition memory into pools:
+     - Small pool: 256 bytes (MAC headers, control)
+     - Medium pool: 2048 bytes (RLC/PDCP SDUs)
+     - Large pool: 16384 bytes (transport blocks)
+
+  4. Per-core partitioning avoids contention:
+     Core 0: pool_mem[0..N-1]
+     Core 1: pool_mem[N..2N-1]
+     ...
+</pre>
+
+<div class="callout green">
+  <p><strong>NUMA tip:</strong> Allocate pool memory on the same NUMA node as the processing core. Use <code>numa_alloc_onnode()</code> or <code>mmap</code> with <code>MPOL_BIND</code>. Cross-NUMA pool access adds 40-80ns per operation, defeating the purpose of using pools.</p>
+</div>
+
+<h2>Cross-References</h2>
+
+<ul>
+  <li><a href="../advanced/placement-new-memory-pools.html">Placement New &amp; Memory Pools</a> -- Detailed placement new techniques.</li>
+  <li><a href="../advanced/custom-allocators.html">Custom Allocators</a> -- Integrating pools with STL containers.</li>
+  <li><a href="circular-buffers.html">Circular Buffers</a> -- Ring buffer used as free list in pools.</li>
+  <li><a href="packet-processing-dpdk.html">Packet Processing DPDK</a> -- rte_mempool as industrial-strength pool.</li>
+  <li><a href="../advanced/cache-oriented-programming.html">Cache-Oriented Programming</a> -- Cache-line alignment of pool structures.</li>
+</ul>
+
+<div class="nav"><a href="asn1-encoding.html">&larr; ASN.1 Encoding</a><a href="bit-level-operations.html">Bit-Level Operations &rarr;</a></div>
+</body>
+</html>

@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PHY Layer — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#4">4 Telecom &amp; 5G/4G</a> / PHY Layer</div>
+<div class="meta"><span class="tag advanced">Advanced</span></div>
+<h1>PHY Layer</h1>
+
+<p>The Physical Layer (Layer 1) in 5G NR is responsible for coding, modulation, and radio transmission. It uses OFDM (Orthogonal Frequency Division Multiplexing) with CP-OFDM in the downlink and DFT-s-OFDM in the uplink. The PHY layer is the most computationally intensive part of the gNB and typically requires DSP/ASIC acceleration.</p>
+
+<h2>5G NR Resource Grid</h2>
+
+<pre>
+  Time Domain:
+  +----------+----------+----------+----------+---------+
+  | Slot 0   | Slot 1   | Slot 2   | ...      | Slot N  |
+  +----------+----------+----------+----------+---------+
+  | 1 slot = 14 OFDM symbols (normal CP)            |
+  | 1 ms / 2 / 4 / ... slots depending on SCS         |
+
+  Frequency Domain (1 slot):
+  +------+------+------+------+------+---+------+
+  | PRB0 | PRB1 | PRB2 | ...  | PRBn |   | PRB99 |
+  +------+------+------+------+------+---+------+
+  | 12 subcarriers per PRB                          |
+  | BW = N_PRBs * 12 * SCS                          |
+
+  Resource Element (RE):
+  +------+------+------+------+------+------+------+
+  | SC 0 | SC 1 | SC 2 | ...  | SC10 | SC11 |      |  Symbol 0
+  +------+------+------+------+------+------+------+
+  | SC 0 | SC 1 | SC 2 | ...  | SC10 | SC11 |      |  Symbol 1
+  +------+------+------+------+------+------+------+
+  | ...                                                |
+  +------+------+------+------+------+------+------+
+  | SC 0 | SC 1 | SC 2 | ...  | SC10 | SC11 |      |  Symbol 13
+  +------+------+------+------+------+------+------+
+</pre>
+
+<h2>Key PHY Parameters</h2>
+
+<table>
+  <tr><th>Parameter</th><th>Value</th></tr>
+  <tr><td>Subcarrier Spacing (SCS)</td><td>15, 30, 60, 120, 240 kHz</td></tr>
+  <tr><td>FFT Size</td><td>Depends on bandwidth and SCS (e.g., 4096 for 100 MHz @ 30 kHz)</td></tr>
+  <tr><td>CP Type</td><td>Normal CP (14 symbols/slot), Extended CP (12 symbols/slot)</td></tr>
+  <tr><td>Cyclic Prefix Length</td><td>Normal: 4.7/5.2 us (15 kHz), scales inversely with SCS</td></tr>
+  <tr><td>Modulation</td><td>QPSK, 16QAM, 64QAM, 256QAM</td></tr>
+  <tr><td>Channel Coding</td><td>LDPC (data), Polar (control)</td></tr>
+  <tr><td>PRB Size</td><td>12 subcarriers</td></tr>
+  <tr><td>Max MIMO Layers</td><td>4 (single-user), 8 (multi-user)</td></tr>
+</table>
+
+<h2>C++ OFDM Resource Grid Simulation</h2>
+
+<pre>
+#include &lt;vector&gt;
+#include &lt;complex&gt;
+#include &lt;cstddef&gt;
+#include &lt;cmath&gt;
+#include &lt;iomanip&gt;
+
+// Complex sample type for IQ data
+using Complex = std::complex&lt;double&gt;;
+
+// NR Resource Grid
+class NrResourceGrid {
+public:
+    // n_prbs: number of PRBs, n_symbols: symbols per slot (14 for normal CP)
+    // n_antennas: number of antenna ports
+    NrResourceGrid(uint32_t n_prbs, uint32_t n_symbols = 14,
+                   uint32_t n_antennas = 1)
+        : n_prbs_(n_prbs), n_symbols_(n_symbols), n_antennas_(n_antennas)
+    {
+        // 12 subcarriers per PRB
+        grid_.resize(n_prbs * 12 * n_symbols * n_antennas, Complex(0.0));
+    }
+
+    // Access RE: (symbol, prb, subcarrier, antenna)
+    Complex&amp; re(uint32_t symbol, uint32_t prb,
+                uint32_t subcarrier, uint32_t antenna = 0) {
+        size_t idx = (symbol * n_prbs_ * 12 + prb * 12 + subcarrier)
+                     * n_antennas_ + antenna;
+        return grid_[idx];
+    }
+
+    const Complex&amp; re(uint32_t symbol, uint32_t prb,
+                      uint32_t subcarrier, uint32_t antenna = 0) const {
+        size_t idx = (symbol * n_prbs_ * 12 + prb * 12 + subcarrier)
+                     * n_antennas_ + antenna;
+        return grid_[idx];
+    }
+
+    [[nodiscard]] uint32_t prbs() const { return n_prbs_; }
+    [[nodiscard]] uint32_t symbols() const { return n_symbols_; }
+    [[nodiscard]] size_t size() const { return grid_.size(); }
+
+    void clear() {
+        std::fill(grid_.begin(), grid_.end(), Complex(0.0));
+    }
+
+private:
+    uint32_t n_prbs_;
+    uint32_t n_symbols_;
+    uint32_t n_antennas_;
+    std::vector&lt;Complex&gt; grid_;
+};
+
+// OFDM Modulator: converts frequency-domain grid to time-domain
+class OfdmModulator {
+public:
+    explicit OfdmModulator(uint32_t n_prbs, uint32_t fft_size)
+        : n_prbs_(n_prbs), fft_size_(fft_size)
+    {
+        twiddle_factors_.resize(fft_size);
+        for (uint32_t k = 0; k &lt; fft_size; ++k) {
+            double angle = -2.0 * M_PI * k / fft_size;
+            twiddle_factors_[k] = Complex(std::cos(angle), std::sin(angle));
+        }
+    }
+
+    // Simple radix-2 IFFT (for simulation; real DSP uses FFTW or custom)
+    void ifft(std::vector&lt;Complex&gt;&amp; data) {
+        const size_t N = data.size();
+        if (N == 0 || (N &amp; (N - 1)) != 0) return;
+
+        // Bit-reversal permutation
+        size_t j = 0;
+        for (size_t i = 1; i &lt; N; ++i) {
+            size_t bit = N &gt;&gt; 1;
+            while (j &amp; bit) {
+                j ^= bit;
+                bit &gt;&gt; 1;
+            }
+            j ^= bit;
+            if (i &lt; j) std::swap(data[i], data[j]);
+        }
+
+        // Cooley-Tukey FFT
+        for (size_t len = 2; len &lt;= N; len &lt;&lt;= 1) {
+            double angle = -2.0 * M_PI / len;
+            Complex wlen(std::cos(angle), std::sin(angle));
+            for (size_t i = 0; i &lt; N; i += len) {
+                Complex w(1.0);
+                for (size_t k = 0; k &lt; len / 2; ++k) {
+                    Complex u = data[i + k];
+                    Complex v = data[i + k + len/2] * w;
+                    data[i + k] = u + v;
+                    data[i + k + len/2] = u - v;
+                    w *= wlen;
+                }
+            }
+        }
+
+        // Scale for IFFT
+        for (auto&amp; x : data) x /= static_cast&lt;double&gt;(N);
+    }
+
+    // Map resource grid to OFDM symbols
+    void mapToOfdmSymbol(const NrResourceGrid&amp; grid,
+                          uint32_t symbol_idx,
+                          std::vector&lt;Complex&gt;&amp; time_domain) {
+        uint32_t fft_size = fft_size_;
+        time_domain.resize(fft_size, Complex(0.0));
+
+        uint32_t dc_pos = fft_size / 2;  // DC subcarrier position
+        uint32_t n_sc = n_prbs_ * 12;     // Total active subcarriers
+        uint32_t start_sc = dc_pos - n_sc / 2;
+
+        // Map active subcarriers
+        for (uint32_t sc = 0; sc &lt; n_sc; ++sc) {
+            uint32_t prb = sc / 12;
+            uint32_t k = sc % 12;
+            time_domain[start_sc + sc] = grid.re(symbol_idx, prb, k);
+        }
+
+        // Apply IFFT
+        ifft(time_domain);
+    }
+
+private:
+    uint32_t n_prbs_;
+    uint32_t fft_size_;
+    std::vector&lt;Complex&gt; twiddle_factors_;
+};
+
+// LDPC Encoder (simplified base graph selection)
+class LdpcEncoder {
+public:
+    struct EncodingConfig {
+        uint32_t tb_size;       // Transport block size in bits
+        uint32_t code_rate;     // Target code rate * 1024 (e.g., 478/1024)
+        uint8_t  modulation;     // QPSK=2, 16QAM=4, 64QAM=6, 256QAM=8
+        uint8_t  n_layers;       // MIMO layers
+        bool     use_base_graph1; // BG1 or BG2
+    };
+
+    static bool shouldUseBaseGraph1(uint32_t tb_size,
+                                     uint32_t code_rate_numer,
+                                     uint8_t  modulation) {
+        // 3GPP TS 38.212: BG selection criteria
+        // BG1 for larger TB sizes and higher code rates
+        if (tb_size &gt; 3824) {
+            return (code_rate_numer &gt;= 496 / modulation);
+        } else if (tb_size &gt; 292) {
+            return (code_rate_numer &gt;= 490 / modulation);
+        }
+        return false;
+    }
+
+    void encode(const uint8_t* input, size_t input_bits,
+                const EncodingConfig&amp; cfg,
+                std::vector&lt;uint8_t&gt;&amp; encoded) {
+        // Rate matching, CRC attachment, code block segmentation,
+        // LDPC encoding, bit interleaving
+        // (Simplified -- production uses highly optimized DSP libraries)
+    }
+};
+</pre>
+
+<h2>PDCCH and PDSCH Resource Allocation</h2>
+
+<pre>
+// Resource allocation type (DCI format dependent)
+enum class ResourceType : uint8_t {
+    TYPE_0,   // Bitmap-based
+    TYPE_1,   // RIV-based
+    TYPE_2,   // Dynamic
+    TYPE_3    // Configured
+};
+
+// Downlink resource allocation for one UE
+struct DlResourceAllocation {
+    uint32_t ue_id;
+    uint32_t rnti;              // Radio Network Temp ID
+    uint8_t  dci_format;        // DCI format 1_0, 1_1, etc.
+    uint16_t rb_bitmap;         // RB allocation bitmap
+    uint32_t start_symbol;       // Start OFDM symbol
+    uint8_t  n_symbols;         // Number of symbols
+    uint8_t  mcs;               // Modulation and Coding Scheme
+    uint8_t  ndi;               // New Data Indicator
+    uint8_t  rv;                // Redundancy Version
+    uint8_t  harq_process;     // HARQ process ID
+    uint32_t tb_size;           // Transport block size (bits)
+    uint8_t  modulation;        // QPSK, 16QAM, etc.
+    uint32_t code_rate_numer;   // Code rate numerator
+};
+</pre>
+
+<div class="callout warning">
+  <p><strong>Performance:</strong> Real PHY layer implementations use SIMD (AVX-512/NEON), DSP assembly, or dedicated ASICs. The C++ simulation above is for understanding only. Production PHY typically achieves sub-millisecond latency per OFDM symbol with dedicated hardware. See <a href="signal-processing-basics.html">Signal Processing</a> and <a href="embedded-cpp-constraints.html">Embedded C++ Constraints</a>.</p>
+</div>
+
+<h2>Cross-References</h2>
+
+<ul>
+  <li><a href="signal-processing-basics.html">Signal Processing</a> -- FFT/IFFT and filtering implementations.</li>
+  <li><a href="fixed-point-arithmetic.html">Fixed-Point Arithmetic</a> -- Many DSP operations use fixed-point instead of floating-point.</li>
+  <li><a href="real-time-processing.html">Real-Time Processing</a> -- OFDM symbol timing constraints (~us).</li>
+  <li><a href="mac-layer.html">MAC Layer</a> -- Scheduler provides resource allocations to PHY.</li>
+  <li><a href="../basics/vectors.html">std::vector</a> -- Resource grid and IQ sample storage.</li>
+</ul>
+
+<div class="nav"><a href="e1-interface.html">&larr; E1 Interface</a><a href="mac-layer.html">MAC Layer &rarr;</a></div>
+</body>
+</html>

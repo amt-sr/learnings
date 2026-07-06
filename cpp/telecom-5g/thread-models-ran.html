@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Thread Models for RAN — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#4">4 Telecom &amp; 5G/4G Networking</a> / Telecom C++ Techniques / 4.4.8</div>
+<div class="meta"><span class="tag advanced">Advanced</span></div>
+<h1>Thread Models for RAN</h1>
+
+<p>The choice of threading model in a RAN (Radio Access Node) directly impacts throughput, latency, and scalability. Different models trade off simplicity against performance. Production gNB/vRAN systems use thread-per-core with CPU pinning and NUMA awareness for deterministic data-path processing.</p>
+
+<h2>Threading Models</h2>
+
+<table>
+  <tr><th>Model</th><th>Description</th><th>Pros</th><th>Cons</th></tr>
+  <tr><td>Pipeline</td><td>One thread per protocol layer (PHY, MAC, RLC, PDCP)</td><td>Simple, low contention</td><td>Latency accumulates across stages</td></tr>
+  <tr><td>Worker Pool</td><td>Pool of threads picks tasks from a shared queue</td><td>Load balancing, good for bursty load</td><td>Contention on queue, cache bouncing</td></tr>
+  <tr><td>Partitioned</td><td>UEs partitioned across cores, each core handles full stack</td><td>Best cache locality, scalable</td><td>Imbalanced load per UE</td></tr>
+  <tr><td>Thread-Per-Core</td><td>Dedicated thread pinned to each physical core</td><td>No contention, deterministic</td><td>Complex assignment, wasted cores</td></tr>
+</table>
+
+<h2>Thread-Per-Core Model (Production Choice)</h2>
+
+<pre>
+  Thread-Per-Core with UE Partitioning:
+
+  Core 0: Control thread (RRC, NGAP, system)
+  Core 1: UE 1-100 (PHY -> MAC -> RLC -> PDCP -> F1-U)
+  Core 2: UE 101-200 (PHY -> MAC -> RLC -> PDCP -> F1-U)
+  Core 3: UE 201-300 (PHY -> MAC -> RLC -> PDCP -> F1-U)
+  ...
+  Core N: Timer, stats, monitoring
+
+  Each core:
+  - Pinned (sched_setaffinity)
+  - Own memory pools (no sharing)
+  - Own packet ring buffers (SPSC between cores)
+  - No mutexes in data path
+</pre>
+
+<h2>CPU Pinning and NUMA</h2>
+
+<pre>
+  NUMA layout (typical dual-socket server):
+  Socket 0 (NUMA 0):         Socket 1 (NUMA 1):
+  Core 0  [Control]          Core 8  [Control backup]
+  Core 1  [UE pool A]        Core 9  [UE pool C]
+  Core 2  [UE pool A]        Core 10 [UE pool C]
+  Core 3  [UE pool B]        Core 11 [UE pool D]
+  Core 4  [UE pool B]        Core 12 [UE pool D]
+  Core 5  [S1/X2/NG]         Core 13 [F1-U]
+  Core 6  [F1-U]              Core 14 [Monitor]
+  Core 7  [Monitor]           Core 15 [Reserved]
+
+  Rule: UE data stays on same NUMA node across its lifetime.
+  Inter-UE communication via rings (no shared memory).
+</pre>
+
+<div class="callout warning">
+  <p><strong>NUMA penalty:</strong> A memory access to a remote NUMA node costs 40-80ns extra. In a tight PHY processing loop running billions of iterations, this overhead is devastating. Always keep UE context, buffers, and lookup tables on the local NUMA node.</p>
+</div>
+
+<h2>C++ Thread Pool Skeleton</h2>
+
+<pre>
+#include &lt;thread&gt;
+#include &lt;vector&gt;
+#include &lt;atomic&gt;
+#include &lt;functional&gt;
+#include &lt;sched.h&gt;
+#include &lt;unistd.h&gt;
+
+// Task for a worker thread
+struct RanTask {
+    std::function&lt;void()&gt; func;
+    uint32_t ue_id;        // For partitioning
+    uint8_t  priority;     // Task priority
+};
+
+// Partitioned RAN thread pool
+class RanThreadPool {
+public:
+    explicit RanThreadPool(int num_workers)
+        : running_(true), next_core_(0) {
+        workers_.reserve(num_workers);
+        for (int i = 0; i &lt; num_workers; ++i) {
+            workers_.emplace_back(&amp;RanThreadPool::workerLoop, this, i);
+        }
+    }
+
+    ~RanThreadPool() {
+        running_.store(false);
+        for (auto&amp; w : workers_) {
+            if (w.joinable()) w.join();
+        }
+    }
+
+    // Submit task to specific worker (partitioned by UE)
+    void submitToWorker(int worker_id, RanTask task) {
+        if (worker_id &lt; 0 ||
+            worker_id &gt;= static_cast&lt;int&gt;(workers_.size()))
+            return;
+        worker_queues_[worker_id].push(std::move(task));
+    }
+
+    // Submit to least-loaded worker (work-stealing fallback)
+    void submit(RanTask task) {
+        int id = next_core_.fetch_add(1) % workers_.size();
+        submitToWorker(id, std::move(task));
+    }
+
+    [[nodiscard]] int numWorkers() const {
+        return static_cast&lt;int&gt;(workers_.size());
+    }
+
+private:
+    static constexpr int MAX_WORKERS = 32;
+    std::vector&lt;std::thread&gt; workers_;
+    std::atomic&lt;bool&gt; running_;
+    std::atomic&lt;int&gt; next_core_;
+
+    // Per-worker SPSC task queue (simplified; use lock-free ring)
+    CircularTaskQueue worker_queues_[MAX_WORKERS];
+
+    void workerLoop(int worker_id) {
+        // Pin to specific core
+        pinToCore(worker_id);
+
+        // Set real-time priority
+        setRtPriority(90 - worker_id);
+
+        // Allocate per-core memory pool
+        initWorkerMemoryPool(worker_id);
+
+        while (running_.load(std::memory_order_relaxed)) {
+            // Poll for tasks (busy-wait in data path)
+            auto task = worker_queues_[worker_id].tryPop();
+            if (task.has_value()) {
+                task-&gt;func();
+            }
+            // Optional: brief sleep if no work
+        }
+    }
+
+    static void pinToCore(int core_id) {
+        cpu_set_t cpuset;
+        CPU_ZERO(&amp;cpuset);
+        CPU_SET(core_id, &amp;cpuset);
+        pthread_setaffinity_np(pthread_self(),
+                                sizeof(cpuset), &amp;cpuset);
+    }
+
+    static void setRtPriority(int priority) {
+        struct sched_param param{};
+        param.sched_priority = priority;
+        sched_setscheduler(0, SCHED_FIFO, &amp;param);
+    }
+
+    void initWorkerMemoryPool(int) {}
+
+    // Simplified task queue (use lock-free circular buffer)
+    struct CircularTaskQueue {
+        void push(RanTask task) {}
+        std::optional&lt;RanTask&gt; tryPop() { return std::nullopt; }
+    };
+};
+</pre>
+
+<h2>Real-World RAN Threading</h2>
+
+<table>
+  <tr><th>Function</th><th>Thread Type</th><th>Priority</th><th>CPU Pin</th></tr>
+  <tr><td>PHY TX/RX</td><td>Real-time, thread-per-core</td><td>SCHED_FIFO 99</td><td>Dedicated cores</td></tr>
+  <tr><td>MAC Scheduler</td><td>Real-time, per-cell</td><td>SCHED_FIFO 95</td><td>Pinned core</td></tr>
+  <tr><td>RLC/PDCP</td><td>Real-time, per-UE pool</td><td>SCHED_FIFO 90</td><td>Partitioned cores</td></tr>
+  <tr><td>RRC/NGAP</td><td>Normal priority</td><td>SCHED_OTHER</td><td>Control core</td></tr>
+  <tr><td>F1-U Forwarding</td><td>DPDK poll-mode</td><td>SCHED_FIFO 85</td><td>Pinned core</td></tr>
+  <tr><td>Stats/Monitor</td><td>Background</td><td>SCHED_OTHER</td><td>Shared core</td></tr>
+</table>
+
+<h2>Cross-References</h2>
+
+<ul>
+  <li><a href="../intermediate/std-thread.html">std::thread</a> -- C++ threading fundamentals.</li>
+  <li><a href="../intermediate/mutex-locks.html">Mutex &amp; Locks</a> -- Synchronization primitives.</li>
+  <li><a href="../advanced/lock-free-programming.html">Lock-Free Programming</a> -- Lock-free queues and atomics.</li>
+  <li><a href="real-time-processing.html">Real-Time Processing</a> -- Scheduling and latency constraints.</li>
+  <li><a href="../intermediate/condition-variable.html">Condition Variable</a> -- For non-data-path waiting.</li>
+  <li><a href="../practice-questions/thread-pool-ran.html">Thread Pool RAN Practice</a> -- Build a partitioned thread pool.</li>
+</ul>
+
+<div class="nav"><a href="circular-buffers.html">&larr; Circular Buffers</a><a href="sr-iov-pcie.html">SR-IOV &amp; PCIe &rarr;</a></div>
+</body>
+</html>

@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Singleton Pattern — C++ Practice</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.easy { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  .question { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; }
+  .question h3 { color: #f0f6fc; margin-top: 0; }
+  .solution-toggle { cursor: pointer; user-select: none; }
+  .solution-toggle h3 { color: #3fb950; display: inline; }
+  .solution-content { display: none; margin-top: 1rem; }
+  .solution-content.visible { display: block; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+  .topics-covered { margin-bottom: 1rem; font-size: 0.85rem; color: #8b949e; }
+  .topics-covered a { color: #8b949e; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#5">5 Practice</a> / Medium Questions</div>
+<div class="meta"><span class="tag medium">Medium</span></div>
+<h1>Thread-Safe Singleton Pattern</h1>
+
+<div class="topics-covered">
+  <strong>Topics Covered:</strong>
+  <a href="../design-patterns.html">Design Patterns</a>,
+  <a href="../multithreading.html">Multithreading</a>,
+  <a href="../memory-management.html">Memory Management</a>
+</div>
+
+<div class="question">
+  <h3>Problem Statement</h3>
+  <p>Implement the Singleton pattern in C++ using two approaches:</p>
+  <ol>
+    <li><strong>Meyer's Singleton</strong> (C++11 guaranteed thread-safe, using a local static variable).</li>
+    <li><strong>Double-Checked Locking</strong> (manual thread-safe implementation with <code>std::mutex</code> and <code>std::call_once</code>).</li>
+  </ol>
+  <p>Discuss when to use each approach and explain why the naive singleton is not thread-safe.</p>
+</div>
+
+<h2>Meyer's Singleton (Preferred)</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution1')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution1">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+#include &lt;thread&gt;
+#include &lt;vector&gt;
+#include &lt;mutex&gt;
+#include &lt;syncstream&gt;  // C++20, for osyncstream
+
+// Meyer's Singleton: thread-safe by C++11 standard guarantee
+class Logger {
+public:
+    // Delete copy and move operations
+    Logger(const Logger&amp;) = delete;
+    Logger&amp; operator=(const Logger&amp;) = delete;
+    Logger(Logger&amp;&amp;) = delete;
+    Logger&amp; operator=(Logger&amp;&amp;) = delete;
+
+    // Thread-safe access point
+    static Logger&amp; instance() {
+        // C++11 guarantees: local static is initialized exactly once,
+        // even in the presence of concurrent access
+        static Logger logger;
+        return logger;
+    }
+
+    void log(const std::string&amp; message) {
+        std::lock_guard&lt;std::mutex&gt; lock(logMutex_);
+        ++logCount_;
+        std::cout &lt;&lt; "[Log #" &lt;&lt; logCount_ &lt;&lt; "] " &lt;&lt; message &lt;&lt; "\n";
+    }
+
+    int logCount() const {
+        std::lock_guard&lt;std::mutex&gt; lock(logMutex_);
+        return logCount_;
+    }
+
+private:
+    Logger() : logCount_(0) {
+        std::cout &lt;&lt; "Logger initialized (thread: "
+                  &lt;&lt; std::this_thread::get_id() &lt;&lt; ")\n";
+    }
+    ~Logger() = default;
+
+    mutable std::mutex logMutex_;
+    int logCount_;
+};
+
+// Demo: concurrent access from multiple threads
+int main() {
+    const int numThreads = 4;
+    std::vector&lt;std::thread&gt; threads;
+
+    for (int i = 0; i &lt; numThreads; ++i) {
+        threads.emplace_back([i]() {
+            // Every thread gets the same instance
+            Logger&amp; logger = Logger::instance();
+            logger.log("Message from thread " + std::to_string(i));
+        });
+    }
+
+    for (auto&amp; t : threads) t.join();
+
+    std::cout &lt;&lt; "\nTotal log count: "
+              &lt;&lt; Logger::instance().logCount() &lt;&lt; "\n";
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li>Meyer's Singleton leverages the C++11 guarantee that the initialization of function-local static variables is thread-safe.</li>
+      <li>The compiler generates invisible code to ensure the static <code>Logger logger</code> is constructed exactly once, even if multiple threads call <code>instance()</code> concurrently.</li>
+      <li>This approach is the simplest and most efficient: no explicit mutex needed for initialization. The compiler handles the synchronization.</li>
+      <li>The Singleton's own methods (<code>log</code>) still need their own mutex for thread safety if they modify shared state.</li>
+      <li>Construction is lazy (on first use) and destruction is automatic (at program exit).</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Double-Checked Locking + std::call_once</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution2')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution2">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;mutex&gt;
+#include &lt;memory&gt;
+#include &lt;thread&gt;
+#include &lt;vector&gt;
+
+// Approach A: Double-Checked Locking (DCLP)
+class ConfigManager {
+public:
+    static ConfigManager&amp; instance() {
+        // First check: no lock (fast path for already-initialized case)
+        ConfigManager* tmp = instance_.load(std::memory_order_acquire);
+        if (!tmp) {
+            // Second check: with lock (only one thread enters here)
+            std::lock_guard&lt;std::mutex&gt; lock(initMutex_);
+            tmp = instance_.load(std::memory_order_relaxed);
+            if (!tmp) {
+                tmp = new ConfigManager();
+                instance_.store(tmp, std::memory_order_release);
+            }
+        }
+        return *tmp;
+    }
+
+    void set(const std::string&amp; key, const std::string&amp; value) {
+        std::lock_guard&lt;std::mutex&gt; lock(dataMutex_);
+        data_[key] = value;
+    }
+
+    std::string get(const std::string&amp; key) const {
+        std::lock_guard&lt;std::mutex&gt; lock(dataMutex_);
+        auto it = data_.find(key);
+        return (it != data_.end()) ? it-&gt;second : "";
+    }
+
+private:
+    ConfigManager() { std::cout &lt;&lt; "ConfigManager initialized\n"; }
+    ~ConfigManager() = default;
+
+    ConfigManager(const ConfigManager&amp;) = delete;
+    ConfigManager&amp; operator=(const ConfigManager&amp;) = delete;
+
+    static std::atomic&lt;ConfigManager*&gt; instance_;
+    static std::mutex initMutex_;
+    mutable std::mutex dataMutex_;
+    std::unordered_map&lt;std::string, std::string&gt; data_;
+};
+
+// Static member definitions
+std::atomic&lt;ConfigManager*&gt; ConfigManager::instance_{nullptr};
+std::mutex ConfigManager::initMutex_;
+
+// Approach B: std::call_once (cleaner, recommended over manual DCLP)
+class Database {
+public:
+    static Database&amp; instance() {
+        std::call_once(initFlag_, []() {
+            instance_.reset(new Database());
+        });
+        return *instance_;
+    }
+
+    void connect() { std::cout &lt;&lt; "Database connected\n"; }
+
+private:
+    Database() { std::cout &lt;&lt; "Database initialized\n"; }
+    ~Database() = default;
+
+    Database(const Database&amp;) = delete;
+    Database&amp; operator=(const Database&amp;) = delete;
+
+    static std::unique_ptr&lt;Database&gt; instance_;
+    static std::once_flag initFlag_;
+};
+
+std::unique_ptr&lt;Database&gt; Database::instance_;
+std::once_flag Database::initFlag_;
+
+int main() {
+    // DCLP approach
+    ConfigManager::instance().set("host", "localhost");
+    ConfigManager::instance().set("port", "5432");
+    std::cout &lt;&lt; "host = " &lt;&lt; ConfigManager::instance().get("host") &lt;&lt; "\n";
+
+    // call_once approach
+    Database::instance().connect();
+
+    // Concurrent test
+    std::vector&lt;std::thread&gt; threads;
+    for (int i = 0; i &lt; 8; ++i) {
+        threads.emplace_back([i]() {
+            ConfigManager::instance().set("thread", std::to_string(i));
+        });
+    }
+    for (auto&amp; t : threads) t.join();
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><strong>DCLP</strong> uses an atomic pointer for the first check (no synchronization overhead on the fast path) and a mutex for the second check (only one thread creates the instance).</li>
+      <li>Memory ordering is critical: <code>acquire</code> on the first read and <code>release</code> on the store ensure all threads see the fully-constructed object.</li>
+      <li><strong>std::call_once</strong> is the recommended C++11 approach for manual initialization: it guarantees the callable executes exactly once, regardless of how many threads call it.</li>
+      <li>Both approaches are useful when you cannot use local statics (e.g., when initialization depends on runtime parameters).</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout green">
+  <p><strong>Comparison:</strong></p>
+  <table>
+    <tr><th>Approach</th><th>Pros</th><th>Cons</th></tr>
+    <tr><td>Meyer's Singleton</td><td>Simple, no manual sync, guaranteed by standard</td><td>Cannot control init order</td></tr>
+    <tr><td>Double-Checked Locking</td><td>Fast path avoids lock, explicit control</td><td>Complex, subtle memory ordering bugs</td></tr>
+    <tr><td>std::call_once</td><td>Clean, standard, explicit control</td><td>Slightly more code than Meyer's</td></tr>
+  </table>
+</div>
+
+<h2>Follow-up Questions</h2>
+
+<div class="question">
+  <h3>Variations to Try</h3>
+  <ol>
+    <li><strong>Singleton with parameter:</strong> Implement a singleton that accepts runtime parameters for initialization (e.g., a Logger with a configurable file path).</li>
+    <li><strong>Singleton destruction order:</strong> What happens if a Singleton's destructor references another Singleton that has already been destroyed? (The "dead reference" problem.)</li>
+    <li><strong>Singleton vs. dependency injection:</strong> Discuss why Singletons are often considered an anti-pattern and how dependency injection solves the same problems with better testability.</li>
+    <li><strong>Thread-safe lazy initialization:</strong> Implement a generic <code>Lazy&lt;T&gt;</code> wrapper that provides thread-safe lazy initialization for any type.</li>
+  </ol>
+</div>
+
+<div class="callout warning">
+  <p><strong>When to Avoid Singletons:</strong></p>
+  <ul>
+    <li>Hidden dependencies: Singletons create invisible coupling between components.</li>
+    <li>Testing difficulty: Global state makes unit tests unreliable (order-dependent).</li>
+    <li>Initialization order: In multi-threaded or dynamic loading scenarios, init order can be unpredictable.</li>
+    <li>Consider using dependency injection (pass references explicitly) instead of Singletons for better testability and modularity.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="smart-pointer-patterns.html">&larr; Smart Pointer Patterns</a>
+  <a href="observer-pattern.html">Observer Pattern &rarr;</a>
+</div>
+<script>
+function toggleSolution(id) {
+  document.getElementById(id).classList.toggle('visible');
+}
+</script>
+</body>
+</html>

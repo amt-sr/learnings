@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Async / Futures — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / <a href="../index.html#2.6">2.6 Multithreading</a> / 2.6.4 Async / Futures</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>Async / Futures</h1>
+
+<p><code>std::async</code>, <code>std::future</code>, and <code>std::promise</code> provide a higher-level abstraction for asynchronous programming than raw threads. Instead of manually managing threads and shared state, you launch a task and get back a <strong>future</strong> -- a handle to a result that will be available later.</p>
+
+<h2>std::async</h2>
+
+<p><code>std::async</code> launches an asynchronous task and returns a <code>std::future</code> that holds the result. It may run the task in a new thread or defer execution until <code>get()</code> is called.</p>
+
+<pre>
+#include &lt;future&gt;
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+#include &lt;numeric&gt;
+
+long compute_sum(size_t start, size_t end) {
+    long sum = 0;
+    for (size_t i = start; i &lt; end; ++i) {
+        sum += static_cast&lt;long&gt;(i);
+    }
+    return sum;
+}
+
+void async_demo() {
+    // Launch async (may create a new thread)
+    std::future&lt;long&gt; f1 = std::async(std::launch::async,
+        compute_sum, 1, 5000000);
+
+    // Launch async with lambda
+    std::future&lt;long&gt; f2 = std::async(std::launch::async, []() {
+        return compute_sum(5000000, 10000001);
+    });
+
+    // Do other work while tasks run in background
+    std::cout &lt;&lt; "Main thread working...\n";
+
+    // get() blocks until result is ready
+    long sum1 = f1.get();
+    long sum2 = f2.get();
+
+    std::cout &lt;&lt; "Total: " &lt;&lt; (sum1 + sum2) &lt;&lt; "\n";
+}
+</pre>
+
+<h2>Launch Policies</h2>
+
+<table>
+  <tr><th>Policy</th><th>Behavior</th></tr>
+  <tr><td><code>std::launch::async</code></td><td>Forces creation of a new thread</td></tr>
+  <tr><td><code>std::launch::deferred</code></td><td>Defers execution until get()/wait() is called (lazy)</td></tr>
+  <tr><td><code>std::launch::async | std::launch::deferred</code></td><td>Implementation chooses (default)</td></tr>
+</table>
+
+<div class="callout warning">
+  <p><strong>Default launch policy:</strong> When you do not specify a policy, the implementation may choose either async or deferred. This makes timing unpredictable. For guaranteed parallelism, always use <code>std::launch::async</code>.</p>
+</div>
+
+<h2>std::promise and std::future</h2>
+
+<p><code>std::promise</code> is the producer side of a future -- you set a value or exception, and the corresponding <code>std::future</code> retrieves it. This gives you fine-grained control over when results are ready.</p>
+
+<pre>
+#include &lt;future&gt;
+#include &lt;iostream&gt;
+#include &lt;thread&gt;
+#include &lt;cmath&gt;
+
+void compute_factorial(int n, std::promise&lt;unsigned long long&gt; prom) {
+    unsigned long long result = 1;
+    for (int i = 2; i &lt;= n; ++i) {
+        result *= i;
+        if (result == 0) {  // overflow
+            prom.set_exception(
+                std::make_exception_ptr(
+                    std::overflow_error("Factorial overflow")));
+            return;
+        }
+    }
+    prom.set_value(result);
+}
+
+void promise_demo() {
+    std::promise&lt;unsigned long long&gt; prom;
+    std::future&lt;unsigned long long&gt; fut = prom.get_future();
+
+    std::thread t(compute_factorial, 20, std::move(prom));
+
+    try {
+        unsigned long long result = fut.get();
+        std::cout &lt;&lt; "20! = " &lt;&lt; result &lt;&lt; "\n";
+    } catch (const std::exception&amp; e) {
+        std::cerr &lt;&lt; "Error: " &lt;&lt; e.what() &lt;&lt; "\n";
+    }
+
+    t.join();
+}
+</pre>
+
+<h2>std::shared_future</h2>
+
+<p>Unlike <code>std::future</code> (which can only be moved, not copied), <code>std::shared_future</code> can be copied. Multiple threads can share a single result.</p>
+
+<pre>
+#include &lt;future&gt;
+#include &lt;iostream&gt;
+#include &lt;thread&gt;
+#include &lt;vector&gt;
+
+void shared_future_demo() {
+    std::promise&lt;int&gt; prom;
+    std::shared_future&lt;int&gt; sfut = prom.get_future().share();
+
+    // Multiple readers can wait on the same result
+    std::vector&lt;std::thread&gt; readers;
+    for (int i = 0; i &lt; 5; ++i) {
+        readers.emplace_back([sfut, i]() {
+            int result = sfut.get();  // all threads get the same value
+            std::cout &lt;&lt; "Reader " &lt;&lt; i &lt;&lt; " got: " &lt;&lt; result &lt;&lt; "\n";
+        });
+    }
+
+    // Producer sets the value -- all readers wake up
+    prom.set_value(42);
+
+    for (auto&amp; t : readers) t.join();
+}
+</pre>
+
+<h2>wait_for and wait_until</h2>
+
+<pre>
+#include &lt;future&gt;
+#include &lt;iostream&gt;
+
+void timeout_demo() {
+    std::future&lt;int&gt; fut = std::async(std::launch::async, []() {
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+        return 42;
+    });
+
+    // Wait with timeout
+    auto status = fut.wait_for(std::chrono::milliseconds(500));
+    if (status == std::future_status::ready) {
+        std::cout &lt;&lt; "Result: " &lt;&lt; fut.get() &lt;&lt; "\n";
+    } else if (status == std::future_status::timeout) {
+        std::cout &lt;&lt; "Still running...\n";
+    } else {
+        std::cout &lt;&lt; "Deferred\n";
+    }
+    // Output: Still running...
+}
+</pre>
+
+<h2>Async vs Thread</h2>
+
+<table>
+  <tr><th>Aspect</th><th>std::async</th><th>std::thread</th></tr>
+  <tr><td>Return value</td><td>std::future (easy result retrieval)</td><td>Must use shared state/pointers</td></tr>
+  <tr><td>Exception propagation</td><td>Automatic (re-thrown on get())</td><td>Must handle manually</td></tr>
+  <tr><td>Lifecycle</td><td>Managed by future</td><td>Must join/detach explicitly</td></tr>
+  <tr><td>Thread pool</td><td>Implementation may reuse</td><td>New thread each time</td></tr>
+  <tr><td>Overhead</td><td>Possible (shared state)</td><td>Lower per-thread overhead</td></tr>
+  <tr><td>Best for</td><td>Tasks with return values</td><td>Long-running background work</td></tr>
+</table>
+
+<div class="callout green">
+  <p><strong>Best practice:</strong> Use <code>std::async</code> when you need to launch a task and wait for its result. Use <code>std::thread</code> for long-running background work (e.g., event loops, I/O threads). Use <code>std::promise</code>/<code>std::future</code> when you need to pass results between manually managed threads.</p>
+</div>
+
+<p>Async/futures build on <a href="std-thread.html">std::thread</a> and use <a href="mutex-locks.html">mutexes</a> internally for shared state. For waiting on conditions, see <a href="condition-variable.html">condition variables</a>.</p>
+
+<div class="nav"><a href="condition-variable.html">&larr; Condition Variable</a><a href="thread-safe-data-structures.html">Thread-Safe Data Structures &rarr;</a></div>
+</body>
+</html>

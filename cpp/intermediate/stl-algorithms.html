@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STL Algorithms — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / <a href="../index.html#2.4">2.4 STL Deep Dive</a> / 2.4.6 STL Algorithms</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>STL Algorithms</h1>
+
+<p>The <code>&lt;algorithm&gt;</code> and <code>&lt;numeric&gt;</code> headers provide over 100 generic algorithms that operate on iterator ranges. They separate the "what" (what operation to perform) from the "how" (what container to use), enabling code reuse and correctness. Modern C++ code should use algorithms over hand-written loops wherever possible.</p>
+
+<h2>Sorting and Searching</h2>
+
+<pre>
+#include &lt;algorithm&gt;
+#include &lt;numeric&gt;
+#include &lt;vector&gt;
+#include &lt;iostream&gt;
+
+void sorting_searching() {
+    std::vector&lt;int&gt; v = {5, 2, 8, 1, 9, 3};
+
+    // sort: O(n log n) — requires random-access iterators
+    std::sort(v.begin(), v.end());  // {1, 2, 3, 5, 8, 9}
+
+    // Sort with custom comparator (descending)
+    std::sort(v.begin(), v.end(), std::greater&lt;&gt;());
+
+    // Partial sort: only sort the first N elements
+    std::partial_sort(v.begin(), v.begin() + 3, v.end());
+    // v = {9, 8, 5, ...} (first 3 are the largest, rest unsorted)
+
+    // Binary search (requires sorted range)
+    std::sort(v.begin(), v.end());
+    bool found = std::binary_search(v.begin(), v.end(), 5);  // true
+
+    // lower_bound / upper_bound
+    auto lo = std::lower_bound(v.begin(), v.end(), 5);  // first &gt;= 5
+    auto hi = std::upper_bound(v.begin(), v.end(), 5);  // first &gt; 5
+
+    // find: linear search — O(n)
+    auto it = std::find(v.begin(), v.end(), 8);
+    if (it != v.end()) {
+        std::cout &lt;&lt; "Found 8 at index " &lt;&lt; (it - v.begin()) &lt;&lt; "\n";
+    }
+
+    // find_if: with predicate
+    auto it2 = std::find_if(v.begin(), v.end(),
+        [](int x) { return x &gt; 5; });
+}
+</pre>
+
+<h2>Counting and Accumulating</h2>
+
+<pre>
+#include &lt;algorithm&gt;
+#include &lt;numeric&gt;
+#include &lt;vector&gt;
+#include &lt;iostream&gt;
+
+void counting() {
+    std::vector&lt;int&gt; v = {1, 2, 3, 2, 4, 2, 5};
+
+    // count: occurrences of a value
+    int twos = std::count(v.begin(), v.end(), 2);
+    std::cout &lt;&lt; "Count of 2: " &lt;&lt; twos &lt;&lt; "\n";  // 3
+
+    // count_if: with predicate
+    int evens = std::count_if(v.begin(), v.end(),
+        [](int x) { return x % 2 == 0; });
+    std::cout &lt;&lt; "Even count: " &lt;&lt; evens &lt;&lt; "\n";  // 4
+
+    // accumulate: sum with initial value (from &lt;numeric&gt;)
+    int sum = std::accumulate(v.begin(), v.end(), 0);
+    std::cout &lt;&lt; "Sum: " &lt;&lt; sum &lt;&lt; "\n";  // 19
+
+    // accumulate with custom operation
+    int product = std::accumulate(v.begin(), v.end(), 1,
+        [](int acc, int x) { return acc * x; });
+    std::cout &lt;&lt; "Product: " &lt;&lt; product &lt;&lt; "\n";  // 240
+}
+</pre>
+
+<h2>Transform and For Each</h2>
+
+<pre>
+#include &lt;algorithm&gt;
+#include &lt;vector&gt;
+#include &lt;string&gt;
+#include &lt;iostream&gt;
+
+void transform_for_each() {
+    std::vector&lt;int&gt; v = {1, 2, 3, 4, 5};
+
+    // transform: apply function to each element, store result
+    std::vector&lt;int&gt; result(v.size());
+    std::transform(v.begin(), v.end(), result.begin(),
+        [](int x) { return x * x; });
+    // result = {1, 4, 9, 16, 25}
+
+    // transform in-place
+    std::transform(v.begin(), v.end(), v.begin(),
+        [](int x) { return x * 10; });
+    // v = {10, 20, 30, 40, 50}
+
+    // for_each: perform action on each element
+    std::for_each(v.begin(), v.end(),
+        [](int x) { std::cout &lt;&lt; x &lt;&lt; " "; });
+    // Output: 10 20 30 40 50
+
+    // Transform strings
+    std::vector&lt;std::string&gt; words = {"hello", "world"};
+    std::vector&lt;std::string&gt; upper;
+    std::transform(words.begin(), words.end(), std::back_inserter(upper),
+        [](std::string s) {
+            std::transform(s.begin(), s.end(), s.begin(), ::toupper);
+            return s;
+        });
+}
+</pre>
+
+<h2>Removing and Unique</h2>
+
+<p>The erase-remove idiom is the standard way to remove elements from a container. The <code>std::remove</code> family moves non-removed elements to the front and returns the new end.</p>
+
+<pre>
+#include &lt;algorithm&gt;
+#include &lt;vector&gt;
+#include &lt;iostream&gt;
+
+void removing_elements() {
+    std::vector&lt;int&gt; v = {1, 2, 3, 4, 5, 3, 7, 3, 9};
+
+    // Erase-remove idiom: remove all 3s
+    v.erase(
+        std::remove(v.begin(), v.end(), 3),
+        v.end());
+    // v = {1, 2, 4, 5, 7, 9}
+
+    // Remove with predicate
+    v.erase(
+        std::remove_if(v.begin(), v.end(),
+            [](int x) { return x &lt; 4; }),
+        v.end());
+    // v = {4, 5, 7, 9}
+
+    // unique: remove consecutive duplicates
+    std::vector&lt;int&gt; dup = {1, 1, 2, 2, 2, 3, 4, 4};
+    dup.erase(std::unique(dup.begin(), dup.end()), dup.end());
+    // dup = {1, 2, 3, 4}
+
+    // Note: unique only removes CONSECUTIVE duplicates
+    // For full deduplication, sort first:
+    std::vector&lt;int&gt; data = {3, 1, 4, 1, 5, 9, 2, 6, 5};
+    std::sort(data.begin(), data.end());
+    data.erase(std::unique(data.begin(), data.end()), data.end());
+    // data = {1, 2, 3, 4, 5, 6, 9}
+}
+</pre>
+
+<h2>Lambdas with Algorithms</h2>
+
+<pre>
+#include &lt;algorithm&gt;
+#include &lt;vector&gt;
+#include &lt;iostream&gt;
+
+void lambda_algorithms() {
+    std::vector&lt;int&gt; data = {5, 12, 7, 3, 18, 9, 1, 15};
+
+    // any_of, all_of, none_of
+    bool has_large = std::any_of(data.begin(), data.end(),
+        [](int x) { return x &gt; 20; });  // false
+    bool all_positive = std::all_of(data.begin(), data.end(),
+        [](int x) { return x &gt; 0; });  // true
+    bool none_negative = std::none_of(data.begin(), data.end(),
+        [](int x) { return x &lt; 0; });  // true
+
+    // min_element / max_element
+    auto [min_it, max_it] = std::minmax_element(data.begin(), data.end());
+    std::cout &lt;&lt; "Min: " &lt;&lt; *min_it &lt;&lt; ", Max: " &lt;&lt; *max_it &lt;&lt; "\n";
+
+    // mismatch: find first differing elements
+    std::vector&lt;int&gt; a = {1, 2, 3, 5};
+    std::vector&lt;int&gt; b = {1, 2, 4, 5};
+    auto [ai, bi] = std::mismatch(a.begin(), a.end(), b.begin());
+    std::cout &lt;&lt; "First diff: " &lt;&lt; *ai &lt;&lt; " vs " &lt;&lt; *bi &lt;&lt; "\n";
+    // Output: First diff: 3 vs 4
+
+    // Clamp (C++17)
+    for (int x : {5, 15, 25}) {
+        std::cout &lt;&lt; std::clamp(x, 0, 20) &lt;&lt; " ";
+    }
+    // Output: 5 15 20
+}
+</pre>
+
+<h2>Key Algorithms Reference</h2>
+
+<table>
+  <tr><th>Category</th><th>Algorithm</th><th>Complexity</th></tr>
+  <tr><td>Sorting</td><td>sort, stable_sort, partial_sort</td><td>O(n log n)</td></tr>
+  <tr><td>Searching</td><td>find, find_if, binary_search, lower_bound</td><td>O(n) / O(log n)</td></tr>
+  <tr><td>Counting</td><td>count, count_if</td><td>O(n)</td></tr>
+  <tr><td>Numeric</td><td>accumulate, inner_product, iota</td><td>O(n)</td></tr>
+  <tr><td>Transform</td><td>transform, for_each</td><td>O(n)</td></tr>
+  <tr><td>Modify</td><td>remove, remove_if, unique, replace</td><td>O(n)</td></tr>
+  <tr><td>Query</td><td>any_of, all_of, none_of, minmax_element</td><td>O(n)</td></tr>
+  <tr><td>Heap</td><td>make_heap, push_heap, pop_heap, sort_heap</td><td>O(n) / O(log n)</td></tr>
+</table>
+
+<div class="callout green">
+  <p><strong>Prefer algorithms over raw loops:</strong> Algorithms express intent (sort, find, count), are well-tested, and may use SIMD optimizations. Use range-based <code>for</code> loops for simple iteration; use algorithms for anything involving searching, transforming, or computing.</p>
+</div>
+
+<p>STL algorithms work with <a href="lambda-expressions.html">lambda expressions</a> for predicates and transformations. They require <a href="iterators-basics.html">iterators</a> to specify ranges. In C++20, <a href="../advanced/ranges.html">ranges</a> provide a compositional pipeline interface on top of these algorithms.</p>
+
+<div class="nav"><a href="optional-variant.html">&larr; Optional / Variant</a><a href="function-bind.html">Function / Bind &rarr;</a></div>
+</body>
+</html>

@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>O-RAN Architecture — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#4">4 Telecom &amp; 5G/4G</a> / O-RAN Architecture</div>
+<div class="meta"><span class="tag advanced">Advanced</span></div>
+<h1>O-RAN Architecture</h1>
+
+<p>O-RAN (Open Radio Access Network) is an industry-led initiative to disaggregate and virtualize the RAN, promoting open interfaces and multi-vendor interoperability. It extends the 3GPP CU-DU split with additional functional splits and introduces an intelligent RIC (RAN Intelligent Controller) for AI/ML-driven optimization.</p>
+
+<h2>O-RAN High-Level Architecture</h2>
+
+<pre>
+  +----------------------------------------------------------+
+  |                    Service Management &amp;                   |
+  |                    Orchestration (SMO)                     |
+  |  +----------------------------------------------------+  |
+  |  |          Non-RT RIC (Near-RT RIC Management)       |  |
+  |  +---------------------+------------------------------+  |
+  +------------------------|---------------------------------+
+                           | A1 (AI/ML models, policies)
+  +------------------------|---------------------------------+
+  |        Near-RT RIC     |                                |
+  |  +---------------------+---------------------------+   |
+  |  |  +-------+  +-------+  +-------+                 |   |
+  |  |  | xApp |  | xApp |  | xApp |  (AI/ML Apps)    |   |
+  |  |  +---+---+  +---+---+  +---+---+                 |   |
+  |  |      |          |          |                       |   |
+  |  |  E2--+----O-DU--+------O-DU--+--- E2             |   |
+  |  +------+-------------------------------------------+   |
+  +----------|------|--------------------------------------+
+             |      |
+    O-F1     |      |     O-F1
+             |      |
+  +----------+--+ +-+--+----------+
+  |   O-RU       | |    O-RU       |
+  |  (7-2 split) | | (7-2 split)   |
+  |  RF + L1     | |  RF + L1     |
+  +--------------+ +---------------+
+</pre>
+
+<h2>O-RAN Components</h2>
+
+<table>
+  <tr><th>Component</th><th>Full Name</th><th>Responsibility</th></tr>
+  <tr><td>O-CU</td><td>Open Central Unit</td><td>RRC, PDCP, SDAP (same as 3GPP CU)</td></tr>
+  <tr><td>O-DU</td><td>Open Distributed Unit</td><td>RLC, MAC scheduler, High-PHY (encoding/decoding)</td></tr>
+  <tr><td>O-RU</td><td>Open Radio Unit</td><td>Low-PHY (FFT/IFFT, beamforming), RF</td></tr>
+  <tr><td>Near-RT RIC</td><td>Near-Realtime RIC</td><td>Resource optimization, &lt;10 ms control loop via E2</td></tr>
+  <tr><td>Non-RT RIC</td><td>Non-Realtime RIC</td><td>Policy, ML model management, long-term optimization</td></tr>
+  <tr><td>SMO</td><td>Service Mgmt &amp; Orchestration</td><td>Overall RAN management, O1 interface</td></tr>
+  <tr><td>xApp</td><td>(Microservice on Near-RT RIC)</td><td>Real-time ML inference (scheduling, load balancing)</td></tr>
+  <tr><td>rApp</td><td>(Microservice on Non-RT RIC)</td><td>Policy and model training</td></tr>
+</table>
+
+<h2>O-RAN Open Interfaces</h2>
+
+<table>
+  <tr><th>Interface</th><th>Between</th><th>Protocol</th><th>Purpose</th></tr>
+  <tr><td>O1</td><td>O-RAN nodes &amp; SMO</td><td>REST/Netconf</td><td>Management and fault reporting</td></tr>
+  <tr><td>A1</td><td>Non-RT RIC &amp; Near-RT RIC</td><td>JSON/Protobuf</td><td>Policy and ML model distribution</td></tr>
+  <tr><td>E2</td><td>Near-RT RIC &amp; O-DU/O-CU</td><td>E2AP (ASN.1)</td><td>Real-time control and monitoring</td></tr>
+  <tr><td>O-F1</td><td>O-CU &amp; O-DU</td><td>F1AP (same as 3GPP)</td><td>CU-DU control and user plane</td></tr>
+  <tr><td>O-DU &harr; O-RU</td><td>O-DU &amp; O-RU</td><td>eCPRI / Native</td><td>Fronthaul (7-2 split)</td></tr>
+  <tr><td>Open Fronthaul</td><td>O-DU &amp; O-RU</td><td>RoE / O-RAN FH</td><td>Multi-vendor RU interoperability</td></tr>
+</table>
+
+<h2>C++ O-RU Fronthaul Handling</h2>
+
+<pre>
+#include &lt;complex&gt;
+#include &lt;vector&gt;
+#include &lt;cstdint&gt;
+#include &lt;cstring&gt;
+
+// IQ sample for fronthaul (16-bit I, 16-bit Q)
+using IqSample = std::complex&lt;int16_t&gt;;
+
+// Section types in O-RAN fronthaul CUS-plane
+enum class SectionType : uint8_t {
+    CONTROL = 0,
+    DATA    = 1,
+    RADIO   = 2,
+    EXT     = 3
+};
+
+// O-RAN CUS-plane header (simplified)
+#pragma pack(push, 1)
+struct OFhCusHeader {
+    uint8_t  data_type_dir;  // Data type + direction
+    uint8_t  filter_index;   // Filter index
+    uint8_t  start_prb;      // Start PRB index
+    uint8_t  n_prbs;         // Number of PRBs in section
+    uint16_t start_symbol;   // Start OFDM symbol
+    uint8_t  n_symbols;      // Number of symbols
+    uint8_t  section_id;     // Section identifier
+    uint8_t  reserved[3];
+};
+#pragma pack(pop)
+
+// O-RAN U-plane header for data
+#pragma pack(push, 1)
+struct OFhUPlaneHeader {
+    uint8_t  version;
+    uint8_t  data_type;
+    uint8_t  filter_info;
+    uint16_t frame_id;
+    uint16_t subframe_id;
+    uint8_t  slot_id;
+    uint8_t  c_section_id;
+    uint16_t symbol_id;
+    uint8_t  section_start;
+    uint8_t  section_length;
+    uint32_t reserved;
+};
+#pragma pack(pop)
+
+// IQ data buffer for one PRB (12 subcarriers * N_RE per PRB)
+class IqBuffer {
+public:
+    static constexpr size_t SAMPLES_PER_PRB = 12; // Per antenna per symbol
+    static constexpr size_t SAMPLES_PER_SYMBOL = 12;
+
+    explicit IqBuffer(size_t n_prbs, size_t n_antennas = 1)
+        : n_prbs_(n_prbs), n_antennas_(n_antennas) {
+        data_.resize(n_prbs * SAMPLES_PER_PRB * n_antennas);
+    }
+
+    // Get IQ sample at specific PRB, subcarrier, antenna
+    IqSample&amp; at(size_t prb, size_t subcarrier, size_t antenna = 0) {
+        size_t idx = (prb * SAMPLES_PER_PRB + subcarrier) * n_antennas_ + antenna;
+        return data_[idx];
+    }
+
+    const IqSample&amp; at(size_t prb, size_t subcarrier, size_t antenna = 0) const {
+        size_t idx = (prb * SAMPLES_PER_PRB + subcarrier) * n_antennas_ + antenna;
+        return data_[idx];
+    }
+
+    uint8_t* raw() { return reinterpret_cast&lt;uint8_t*&gt;(data_.data()); }
+    size_t sizeBytes() const { return data_.size() * sizeof(IqSample); }
+
+private:
+    size_t n_prbs_;
+    size_t n_antennas_;
+    std::vector&lt;IqSample&gt; data_;
+};
+
+// E2 interface message types (simplified)
+enum class E2MessageType : uint8_t {
+    RIC_SUBSCRIPTION_REQUEST,
+    RIC_SUBSCRIPTION_RESPONSE,
+    RIC_SUBSCRIPTION_DELETE,
+    RIC_INDICATION,
+    RIC_CONTROL,
+    RIC_CONTROL_ACK,
+    RIC_CONTROL_FAILURE,
+    RIC_SERVICE_QUERY,
+    RIC_SERVICE_UPDATE
+};
+
+// E2SM (E2 Service Model) for RRM
+struct E2SmRrmIndication {
+    uint32_t serving_cell_id;
+    uint32_t pci;
+    uint32_t arfcn;
+    uint32_t prb_usage_dl;       // PRB utilization DL (%)
+    uint32_t prb_usage_ul;       // PRB utilization UL (%)
+    uint32_t active_ue_count;
+    int8_t   avg_rsrp_dbm;       // Average RSRP
+    uint8_t  avg_cqi;            // Average CQI
+    uint32_t total_tx_bytes;
+    uint32_t total_rx_bytes;
+};
+</pre>
+
+<h2>C++ RIC xApp Framework</h2>
+
+<pre>
+// Abstract xApp base class
+class IXApp {
+public:
+    virtual ~IXApp() = default;
+
+    // Lifecycle
+    virtual bool init() = 0;
+    virtual void start() = 0;
+    virtual void stop() = 0;
+
+    // E2 subscription (request periodic reports from O-DU)
+    virtual bool subscribe(const std::string&amp; ran_function_id,
+                           uint32_t interval_ms) = 0;
+
+    // Handle E2 indication (periodic report from O-DU)
+    virtual void onIndication(const E2SmRrmIndication&amp; ind) = 0;
+
+    // Send E2 control to O-DU
+    virtual bool sendControl(const std::string&amp; ran_function_id,
+                             const uint8_t* ctrl_msg, size_t len) = 0;
+
+    virtual std::string getName() const = 0;
+};
+
+// Example: Scheduling Optimization xApp
+class SchedulingXApp : public IXApp {
+public:
+    bool init() override {
+        // Subscribe to RRM indications from all O-DUs
+        subscribe("o-du-rrm", 10);  // 10 ms interval
+        return true;
+    }
+
+    void start() override {
+        running_ = true;
+    }
+
+    void stop() override { running_ = false; }
+
+    void onIndication(const E2SmRrmIndication&amp; ind) override {
+        // Simple PRB utilization threshold check
+        if (ind.prb_usage_dl &gt; 80) {
+            // High DL utilization -- request O-DU to adjust scheduler
+            handleHighUtilization(ind);
+        }
+    }
+
+    bool subscribe(const std::string&amp; id, uint32_t interval) override {
+        // Send E2 SUBSCRIPTION REQUEST via RIC
+        return true;
+    }
+
+    bool sendControl(const std::string&amp; id,
+                     const uint8_t* msg, size_t len) override {
+        // Send E2 CONTROL message
+        return true;
+    }
+
+    std::string getName() const override { return "SchedXApp"; }
+
+private:
+    bool running_;
+    void handleHighUtilization(const E2SmRrmIndication&amp; ind);
+};
+</pre>
+
+<div class="callout warning">
+  <p><strong>Timing Constraint:</strong> The Near-RT RIC must respond within 10 ms (O-RAN specification). xApps must process E2 indications and issue E2 control commands within this budget. This requires <a href="real-time-processing.html">real-time processing</a> techniques and careful <a href="memory-pools-telecom.html">memory management</a>.</p>
+</div>
+
+<h2>Cross-References</h2>
+
+<ul>
+  <li><a href="cu-du-split.html">CU-DU Split</a> -- The 3GPP functional split that O-RAN extends.</li>
+  <li><a href="f1-interface.html">F1 Interface</a> -- O-F1 uses the same F1AP protocol.</li>
+  <li><a href="asn1-encoding.html">ASN.1 Encoding</a> -- E2AP and F1AP messages use ASN.1 PER encoding.</li>
+  <li><a href="signal-processing-basics.html">Signal Processing</a> -- FFT/IFFT in O-RU and O-DU.</li>
+  <li><a href="thread-models-ran.html">Thread Models</a> -- RIC xApp threading and real-time requirements.</li>
+</ul>
+
+<div class="nav"><a href="ccdu.html">&larr; CCDU Concept</a><a href="f1-interface.html">F1 Interface &rarr;</a></div>
+</body>
+</html>

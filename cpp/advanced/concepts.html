@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>C++20 Concepts — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / Concepts</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>C++20 Concepts</h1>
+
+<p>Concepts are named constraints on template parameters. They improve template error messages, enable overload resolution based on type properties, and make generic code self-documenting. Concepts are one of the four major language features added in C++20, alongside <a href="ranges.html">Ranges</a>, <a href="coroutines.html">Coroutines</a>, and <a href="modules.html">Modules</a>.</p>
+
+<div class="callout">
+<p><strong>Prerequisites:</strong> Familiarity with <a href="../intermediate/templates.html">templates</a>, <a href="../intermediate/overloading.html">function overloading</a>, and <a href="sfinae-advanced.html">SFINAE</a> (SFINAE is the predecessor to concepts).</p>
+</div>
+
+<h2>Why Concepts?</h2>
+
+<p>Before C++20, template constraints relied on SFINAE with <code>std::enable_if</code>, <code>void_t</code>, and convoluted <code>decltype</code> expressions. This produced unreadable code and nearly incomprehensible error messages when constraints were violated.</p>
+
+<pre>
+// Before concepts (C++17 SFINAE) — hard to read, bad errors
+template&lt;typename T, typename = std::enable_if_t&lt;std::is_integral_v&lt;T&gt;&gt;&gt;
+void process(T value);
+
+// After concepts (C++20) — clear intent, great errors
+template&lt;std::integral T&gt;
+void process(T value);
+</pre>
+
+<h2>Defining Concepts</h2>
+
+<p>A concept is a <code>constexpr bool</code> value that evaluates whether a type satisfies a set of requirements. Use the <code>concept</code> keyword to define one.</p>
+
+<pre>
+#include &lt;concepts&gt;
+#include &lt;type_traits&gt;
+
+// A concept requiring the type to have a .size() member
+template&lt;typename T&gt;
+concept HasSize = requires(T t) {
+    { t.size() } -&gt; std::convertible_to&lt;std::size_t&gt;;
+};
+
+// A concept requiring arithmetic operations
+template&lt;typename T&gt;
+concept Addable = requires(T a, T b) {
+    { a + b } -&gt; std::same_as&lt;T&gt;;
+};
+
+// A concept with multiple requirements
+template&lt;typename T&gt;
+concept SortableContainer = requires(T container) {
+    requires std::ranges::range&lt;T&gt;;
+    requires std::totally_ordered&lt;typename T::value_type&gt;;
+    { container.begin() } -&gt; std::input_or_output_iterator;
+    { container.end() } -&gt; std::input_or_output_iterator;
+};
+</pre>
+
+<h3>requires Clause Syntax</h3>
+
+<p>There are four ways to use concepts for constraining templates:</p>
+
+<pre>
+// 1. Constrained template parameter (terse syntax)
+template&lt;std::integral T&gt;
+T square(T x) { return x * x; }
+
+// 2. requires clause after template parameter list
+template&lt;typename T&gt;
+    requires std::integral&lt;T&gt;
+T square(T x) { return x * x; }
+
+// 3. Trailing requires clause
+template&lt;typename T&gt;
+T square(T x) requires std::integral&lt;T&gt; { return x * x; }
+
+// 4. Constrained auto (non-template, abbreviated function template)
+void process(std::integral auto x) { /* ... */ }
+</pre>
+
+<h3>requires Expression</h3>
+
+<p>The <code>requires</code> expression checks whether a series of statements are valid for a given type:</p>
+
+<pre>
+template&lt;typename T&gt;
+concept Streamable = requires(T t, std::ostream&amp; os) {
+    // Valid expression (type must support &lt;&lt; operator)
+    { os &lt;&lt; t } -&gt; std::same_as&lt;std::ostream&amp;&gt;;
+};
+
+template&lt;typename T&gt;
+concept Container = requires(T t, typename T::value_type v) {
+    // Type requirements
+    typename T::value_type;
+    typename T::iterator;
+    typename T::const_iterator;
+
+    // Expression requirements
+    { t.begin() } -&gt; std::same_as&lt;typename T::iterator&gt;;
+    { t.end() } -&gt; std::same_as&lt;typename T::iterator&gt;;
+    { t.size() } -&gt; std::convertible_to&lt;std::size_t&gt;;
+    { t.empty() } -&gt; std::convertible_to&lt;bool&gt;;
+
+    // Nested requirements
+    requires std::input_iterator&lt;typename T::iterator&gt;;
+};
+</pre>
+
+<h2>Standard Library Concepts</h2>
+
+<p>C++20 provides a rich set of standard concepts in <code>&lt;concepts&gt;</code> and <code>&lt;type_traits&gt;</code>:</p>
+
+<table>
+<tr><th>Category</th><th>Concept</th><th>Description</th></tr>
+<tr><td>Core</td><td><code>std::same_as&lt;T, U&gt;</code></td><td>T and U are the same type</td></tr>
+<tr><td>Core</td><td><code>std::derived_from&lt;D, B&gt;</code></td><td>D is derived from B</td></tr>
+<tr><td>Core</td><td><code>std::convertible_to&lt;From, To&gt;</code></td><td>From is implicitly convertible to To</td></tr>
+<tr><td>Comparison</td><td><code>std::equality_comparable&lt;T&gt;</code></td><td>T supports ==</td></tr>
+<tr><td>Comparison</td><td><code>std::totally_ordered&lt;T&gt;</code></td><td>T supports &lt;, &gt;, &lt;=, &gt;=</td></tr>
+<tr><td>Object</td><td><code>std::copyable&lt;T&gt;</code></td><td>T is copy-constructible and copy-assignable</td></tr>
+<tr><td>Object</td><td><code>std::movable&lt;T&gt;</code></td><td>T is move-constructible and move-assignable</td></tr>
+<tr><td>Callable</td><td><code>std::invocable&lt;F, Args...&gt;</code></td><td>F can be called with Args</td></tr>
+<tr><td>Callable</td><td><code>std::predicate&lt;F, Args...&gt;</code></td><td>F(Args...) returns bool-convertible</td></tr>
+<tr><td>Iterator</td><td><code>std::input_iterator&lt;I&gt;</code></td><td>I satisfies input iterator requirements</td></tr>
+<tr><td>Iterator</td><td><code>std::forward_iterator&lt;I&gt;</code></td><td>I satisfies forward iterator requirements</td></tr>
+<tr><td>Range</td><td><code>std::ranges::range&lt;R&gt;</code></td><td>R has begin() and end()</td></tr>
+<tr><td>Numeric</td><td><code>std::integral&lt;T&gt;</code></td><td>T is an integral type</td></tr>
+<tr><td>Numeric</td><td><code>std::floating_point&lt;T&gt;</code></td><td>T is a floating-point type</td></tr>
+</table>
+
+<h2>Custom Concepts in Practice</h2>
+
+<h3>Network Protocol Concept</h3>
+
+<pre>
+#include &lt;string&gt;
+#include &lt;string_view&gt;
+#include &lt;array&gt;
+#include &lt;concepts&gt;
+#include &lt;cstdint&gt;
+
+// Concept for any type that can be serialized to/from bytes
+template&lt;typename T&gt;
+concept Serializable = requires(T t, std::uint8_t* buf, std::size_t buf_size) {
+    { t.serialize(buf, buf_size) } -&gt; std::same_as&lt;std::size_t&gt;;
+    { T::deserialize(buf, buf_size) } -&gt; std::same_as&lt;T&gt;;
+    { T::serialized_size() } -&gt; std::convertible_to&lt;std::size_t&gt;;
+};
+
+// Concept for a network message handler
+template&lt;typename Handler, typename MsgType&gt;
+concept MessageHandler = requires(Handler h, MsgType msg) {
+    { h.handle(msg) } -&gt; std::same_as&lt;void&gt;;
+    { h.on_error(std::string_view{}) } -&gt; std::same_as&lt;void&gt;;
+};
+
+// A serializable message
+struct RrcSetupRequest {
+    std::array&lt;std::uint8_t, 6&gt; gnb_id{};
+    std::uint16_t tac = 0;
+    std::uint8_t cause = 0;
+
+    static constexpr std::size_t serialized_size() { return 10; }
+
+    std::size_t serialize(std::uint8_t* buf, std::size_t /*buf_size*/) const {
+        std::copy(gnb_id.begin(), gnb_id.end(), buf);
+        buf[6] = static_cast&lt;std::uint8_t&gt;(tac &gt;&gt; 8);
+        buf[7] = static_cast&lt;std::uint8_t&gt;(tac & 0xFF);
+        buf[8] = cause;
+        return serialized_size();
+    }
+
+    static RrcSetupRequest deserialize(const std::uint8_t* buf, std::size_t /*size*/) {
+        RrcSetupRequest req{};
+        std::copy(buf, buf + 6, req.gnb_id.begin());
+        req.tac = (static_cast&lt;std::uint16_t&gt;(buf[6]) &lt;&lt; 8) | buf[7];
+        req.cause = buf[8];
+        return req;
+    }
+};
+
+static_assert(Serializable&lt;RrcSetupRequest&gt;, "Must be serializable");
+</pre>
+
+<h2>Concept-Based Overloading</h2>
+
+<p>Concepts participate in overload resolution. The compiler selects the most constrained overload, enabling clean dispatch based on type properties:</p>
+
+<pre>
+#include &lt;concepts&gt;
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+#include &lt;map&gt;
+
+// Most constrained: integral types
+template&lt;std::integral T&gt;
+std::string classify(T value) {
+    return "integral (" + std::to_string(value) + ")";
+}
+
+// Less constrained: any arithmetic type (includes floating-point)
+template&lt;std::floating_point T&gt;
+std::string classify(T value) {
+    return "floating-point (" + std::to_string(value) + ")";
+}
+
+// For any container of arithmetic elements
+template&lt;std::ranges::range R&gt;
+    requires std::integral&lt;typename std::ranges::range_value_t&lt;R&gt;&gt;
+std::string classify(const R&amp; range) {
+    return "container of integrals (size=" + std::to_string(range.size()) + ")";
+}
+
+int main() {
+    std::cout &lt;&lt; classify(42) &lt;&lt; "\n";          // integral
+    std::cout &lt;&lt; classify(3.14) &lt;&lt; "\n";         // floating-point
+    std::cout &lt;&lt; classify(std::vector&lt;int&gt;{1,2,3}) &lt;&lt; "\n";  // container of integrals
+}
+</pre>
+
+<div class="callout warning">
+<p><strong>Partial ordering:</strong> When multiple concepts could match, the compiler uses partial ordering to pick the most specific one. If neither is more specific, the call is ambiguous. Use <code>requires</code> clauses with boolean combinations to resolve ambiguity.</p>
+</div>
+
+<h2>Combining Concepts with Boolean Logic</h2>
+
+<pre>
+#include &lt;concepts&gt;
+
+// Any numeric type that is NOT a bool
+template&lt;typename T&gt;
+concept NumberButNotBool = std::arithmetic&lt;T&gt; &amp;&amp; !std::same_as&lt;T, bool&gt;;
+
+// Either integral or a pointer type
+template&lt;typename T&gt;
+concept IntegralOrPointer = std::integral&lt;T&gt; || std::is_pointer_v&lt;T&gt;;
+
+// Combines multiple constraints: must be a range of copyable elements
+template&lt;typename R&gt;
+concept CopyableRange = std::ranges::range&lt;R&gt;
+    &amp;&amp; std::copyable&lt;std::ranges::range_value_t&lt;R&gt;&gt;;
+
+// Use in function
+template&lt;CopyableRange R&gt;
+R duplicate(const R&amp; source) {
+    R copy = source;  // guaranteed valid because element type is copyable
+    return copy;
+}
+</pre>
+
+<h2>Concepts vs SFINAE — Migration Guide</h2>
+
+<table>
+<tr><th>Before (SFINAE)</th><th>After (Concepts)</th></tr>
+<tr><td><code>std::enable_if_t&lt;std::is_integral_v&lt;T&gt;&gt;</code></td><td><code>std::integral&lt;T&gt;</code></td></tr>
+<tr><td><code>std::void_t&lt;decltype(...)&gt;</code></td><td><code>requires { ... }</code></td></tr>
+<tr><td><code>decltype(expr, std::declval&lt;U&gt;())</code></td><td><code>requires(T t) { expr; }</code></td></tr>
+<tr><td>Deep template substitution errors</td><td>Clear "constraint not satisfied" messages</td></tr>
+<tr><td>Cannot constrain auto</td><td><code>std::integral auto</code></td></tr>
+</table>
+
+<div class="callout green">
+<p><strong>Best practice:</strong> Prefer concepts over SFINAE in all new code. Concepts are more readable, produce better error messages, and integrate with <a href="ranges.html">Ranges</a> and the standard library. See <a href="sfinae-advanced.html">SFINAE Advanced</a> for the legacy patterns you may still encounter.</p>
+</div>
+
+<h2>Telecom Relevance</h2>
+
+<p>In telecom stack development (5G RAN, Core Network), concepts enforce protocol correctness at compile time. A message processor can require that all message types implement a <code>serialize</code> interface. A scheduler can require that tasks model <code>std::invocable</code>. This eliminates an entire class of runtime errors where the wrong type is passed to a protocol handler.</p>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="ranges.html">Ranges</a> (uses concepts for iterator constraints), <a href="sfinae-advanced.html">SFINAE Advanced</a> (the predecessor), <a href="crtp.html">CRTP</a> (static polymorphism), <a href="../intermediate/templates.html">Templates</a>, <a href="../telecom-5g/5g-ran-overview.html">5G RAN Overview</a>.</p>
+</div>
+
+<div class="nav"><a href="../intermediate/string-formatting.html">&larr; String Formatting</a><a href="ranges.html">Ranges &rarr;</a></div>
+</body>
+</html>

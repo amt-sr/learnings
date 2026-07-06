@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>References — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; }
+  .breadcrumb a { color: #8b949e; }
+  .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; }
+  .callout.red { border-left-color: #f85149; }
+  .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; }
+  th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#1">1 Basics</a> / <a href="../index.html#1">1.1 Getting Started</a> / 1.1.8 References</div>
+<div class="meta"><span class="tag basic">BASIC</span></div>
+<h1>1.1.8 References</h1>
+
+<p>A reference is an <strong>alias</strong> for another variable. Once a reference is bound to a variable, it acts as an alternative name for that same variable. Unlike <a href="pointers.html">pointers</a>, references cannot be reassigned to refer to a different variable and cannot be null.</p>
+
+<h2>Declaration Syntax</h2>
+
+<p>A reference is declared by placing an <code>&amp;</code> after the type. It <strong>must be initialized</strong> at the point of declaration:</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+int main() {
+    int x = 10;
+    int&amp; ref = x;  // ref is now an alias for x
+
+    std::cout &lt;&lt; "x = " &lt;&lt; x &lt;&lt; std::endl;    // 10
+    std::cout &lt;&lt; "ref = " &lt;&lt; ref &lt;&lt; std::endl;  // 10
+
+    ref = 20;  // this modifies x
+    std::cout &lt;&lt; "x after modification = " &lt;&lt; x &lt;&lt; std::endl;  // 20
+
+    x = 30;    // this also changes ref
+    std::cout &lt;&lt; "ref after modification = " &lt;&lt; ref &lt;&lt; std::endl;  // 30
+
+    std::cout &lt;&lt; "&amp;x == &amp;ref: " &lt;&lt; (&amp;x == &amp;ref ? "true" : "false") &lt;&lt; std::endl;  // true
+
+    return 0;
+}
+</pre>
+
+<div class="callout red">
+  <p><strong>Warning:</strong> A reference must be initialized when declared. There is no such thing as an uninitialized reference. Writing <code>int&amp; ref;</code> without initialization is a compile-time error.</p>
+</div>
+
+<h2>References vs Pointers</h2>
+
+<p>References and pointers both provide indirect access to variables, but they differ in important ways:</p>
+
+<table>
+  <tr><th>Aspect</th><th>Reference</th><th>Pointer</th></tr>
+  <tr><td>Initialization</td><td>Must be initialized at declaration</td><td>Can be declared uninitialized (dangerous)</td></tr>
+  <tr><td>Reassignment</td><td>Cannot be reassigned</td><td>Can point to different variables</td></tr>
+  <tr><td>Null value</td><td>Cannot be null</td><td>Can be <code>nullptr</code></td></tr>
+  <tr><td>Syntax</td><td>Use directly: <code>ref = 10</code></td><td>Dereference to access: <code>*ptr = 10</code></td></tr>
+  <tr><td>Address</td><td><code>&amp;ref</code> gives the original variable's address</td><td><code>&amp;ptr</code> gives the pointer's own address</td></tr>
+  <tr><td>Safety</td><td>Safer &mdash; always refers to a valid object</td><td>Can be dangling, wild, or null</td></tr>
+  <tr><td>Implementation</td><td>Typically implemented as a pointer internally</td><td>Stores the address directly</td></tr>
+  <tr><td>Sizeof</td><td><code>sizeof(ref) == sizeof(T)</code></td><td><code>sizeof(ptr) == sizeof(T*)</code> (typically 8 bytes)</td></tr>
+</table>
+
+<div class="callout green">
+  <p><strong>Rule of thumb:</strong> Prefer references over pointers when possible. References provide cleaner syntax and stronger safety guarantees. Use pointers when you need nullable values, reassignment, or pointer arithmetic (e.g., with arrays).</p>
+</div>
+
+<h2>Pass by Reference vs Pass by Value</h2>
+
+<p>When passing arguments to <a href="functions.html">functions</a>, you have three main choices:</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+// Pass by value: a copy is made (safe but potentially slow for large objects)
+void by_value(std::string s) {
+    s += " (modified)";
+    std::cout &lt;&lt; "Inside by_value: " &lt;&lt; s &lt;&lt; std::endl;
+} // s is destroyed; original is unchanged
+
+// Pass by reference: no copy, original can be modified
+void by_ref(std::string&amp; s) {
+    s += " (modified)";
+    std::cout &lt;&lt; "Inside by_ref: " &lt;&lt; s &lt;&lt; std::endl;
+}
+
+// Pass by const reference: no copy, original cannot be modified
+void by_const_ref(const std::string&amp; s) {
+    std::cout &lt;&lt; "Inside by_const_ref: " &lt;&lt; s &lt;&lt; std::endl;
+    // s += " (modified)";  // ERROR: s is const
+}
+
+int main() {
+    std::string msg = "Hello";
+
+    by_value(msg);
+    std::cout &lt;&lt; "After by_value: " &lt;&lt; msg &lt;&lt; std::endl;
+    // Output: "Hello" (unchanged)
+
+    by_ref(msg);
+    std::cout &lt;&lt; "After by_ref: " &lt;&lt; msg &lt;&lt; std::endl;
+    // Output: "Hello (modified)"
+
+    by_const_ref(msg);
+
+    return 0;
+}
+</pre>
+
+<div class="callout">
+  <p><strong>Best practice:</strong> For non-primitive types (strings, vectors, structs, classes), pass by <code>const&amp;</code> to avoid expensive copies while preventing modification. For small types (int, double, bool), pass by value. Use non-const references only when the function needs to modify the argument.</p>
+</div>
+
+<h2>Const References</h2>
+
+<p>A <code>const</code> reference prevents modification of the referenced object through the reference. It also allows binding to temporary values (rvalues):</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+int main() {
+    int x = 10;
+    const int&amp; cref = x;       // cannot modify x through cref
+    // cref = 20;               // ERROR: cannot assign to const reference
+
+    // Const references can bind to temporaries (rvalues)
+    const int&amp; r = 42;          // OK: binds to a temporary int
+    const double&amp; d = 3.14;     // OK: binds to a temporary double
+
+    std::cout &lt;&lt; "r = " &lt;&lt; r &lt;&lt; ", d = " &lt;&lt; d &lt;&lt; std::endl;
+
+    return 0;
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>Note:</strong> A non-const reference cannot bind to a temporary. <code>int&amp; r = 42;</code> is a compile error because <code>42</code> is an rvalue. Only <code>const int&amp;</code> can extend the lifetime of a temporary. See <a href="../intermediate/move-semantics.html">Move Semantics</a> for more on rvalue references.</p>
+</div>
+
+<h2>Reference as Function Return Type</h2>
+
+<p>Returning a reference from a function allows callers to modify the returned object directly. This is commonly used for operator overloading and chained calls:</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+struct Score {
+    int value;
+};
+
+// Return a reference to allow modification
+int&amp; get_value(Score&amp; s) {
+    return s.value;  // returns a reference to s.value
+}
+
+// Returning a const reference prevents modification
+const int&amp; peek_value(const Score&amp; s) {
+    return s.value;
+}
+
+int main() {
+    Score s{100};
+
+    get_value(s) = 200;  // modifies s.value through the returned reference
+    std::cout &lt;&lt; "s.value = " &lt;&lt; s.value &lt;&lt; std::endl;  // 200
+
+    // peek_value(s) = 300;  // ERROR: returning const ref prevents assignment
+
+    return 0;
+}
+</pre>
+
+<div class="callout red">
+  <p><strong>Danger:</strong> Never return a reference to a local variable. The local is destroyed when the function returns, making the reference a dangling reference:</p>
+</div>
+
+<pre>
+int&amp; bad_function() {
+    int local = 42;
+    return local;  // WARNING: dangling reference!
+} // local is destroyed; returned reference is invalid
+</pre>
+
+<h2>References and Polymorphism</h2>
+
+<p>References preserve polymorphic behavior when working with derived classes, just like pointers:</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+class Animal {
+public:
+    virtual void speak() const { std::cout &lt;&lt; "..." &lt;&lt; std::endl; }
+};
+
+class Dog : public Animal {
+public:
+    void speak() const override { std::cout &lt;&lt; "Woof!" &lt;&lt; std::endl; }
+};
+
+void make_speak(const Animal&amp; animal) {
+    animal.speak();  // calls the correct override based on actual type
+}
+
+int main() {
+    Dog dog;
+    make_speak(dog);  // Output: "Woof!"
+    return 0;
+}
+</pre>
+
+<div class="callout">
+  <p><strong>Further reading:</strong> For automatic memory management through references, explore <a href="../intermediate/smart-pointers.html">Smart Pointers</a>. For understanding how references interact with value categories and move semantics, see <a href="../intermediate/move-semantics.html">Move Semantics</a>.</p>
+</div>
+
+<div class="nav">
+  <a href="pointers.html">&larr; Pointers</a>
+  <a href="classes-objects.html">Classes &amp; Objects &rarr;</a>
+</div>
+</body>
+</html>

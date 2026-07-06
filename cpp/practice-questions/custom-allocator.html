@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Custom Pool Allocator — C++ Practice</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.easy { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  .question { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; }
+  .question h3 { color: #f0f6fc; margin-top: 0; }
+  .solution-toggle { cursor: pointer; user-select: none; }
+  .solution-toggle h3 { color: #3fb950; display: inline; }
+  .solution-content { display: none; margin-top: 1rem; }
+  .solution-content.visible { display: block; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+  .topics-covered { margin-bottom: 1rem; font-size: 0.85rem; color: #8b949e; }
+  .topics-covered a { color: #8b949e; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#5">5 Practice</a> / Medium Questions</div>
+<div class="meta"><span class="tag medium">Medium</span></div>
+<h1>Simple Pool Allocator</h1>
+
+<div class="topics-covered">
+  <strong>Topics Covered:</strong>
+  <a href="../memory-management.html">Memory Management</a>,
+  <a href="../templates.html">Templates</a>,
+  <a href="../placement-new.html">Placement New</a>
+</div>
+
+<div class="question">
+  <h3>Problem Statement</h3>
+  <p>Implement a simple <strong>pool allocator</strong> for fixed-size objects. The pool pre-allocates a contiguous block of memory and partitions it into equal-sized slots. Allocation returns a free slot instantly (O(1)); deallocation returns the slot to the free list (O(1)).</p>
+  <p><strong>Requirements:</strong></p>
+  <ul>
+    <li>Template-based: works with any type T.</li>
+    <li>Fixed capacity specified at construction.</li>
+    <li>O(1) allocate and deallocate.</li>
+    <li>Detect double-free and out-of-memory conditions.</li>
+    <li>Use <code>placement new</code> for construction and explicit destructor calls for destruction.</li>
+  </ul>
+</div>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution1')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution1">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;cstddef&gt;
+#include &lt;new&gt;        // placement new
+#include &lt;stdexcept&gt;
+#include &lt;type_traits&gt;
+#include &lt;vector&gt;
+#include &lt;cassert&gt;
+
+template&lt;typename T, std::size_t Capacity&gt;
+class PoolAllocator {
+    // Align each slot to alignof(T)
+    struct alignas(alignof(T)) Slot {
+        std::byte storage[sizeof(T)];
+    };
+
+    // Free list node stored inside unused slots
+    union FreeNode {
+        FreeNode* next;
+        // We don't need the full storage here since
+        // FreeNode is only stored in unused slots
+    };
+
+public:
+    PoolAllocator() {
+        // Build the free list: each slot points to the next
+        freeList_ = reinterpret_cast&lt;FreeNode*&gt;(&amp;pool_[0]);
+        for (std::size_t i = 0; i &lt; Capacity - 1; ++i) {
+            FreeNode* node = reinterpret_cast&lt;FreeNode*&gt;(&amp;pool_[i]);
+            node-&gt;next = reinterpret_cast&lt;FreeNode*&gt;(&amp;pool_[i + 1]);
+        }
+        FreeNode* lastNode = reinterpret_cast&lt;FreeNode*&gt;(&amp;pool_[Capacity - 1]);
+        lastNode-&gt;next = nullptr;
+
+        freeCount_ = Capacity;
+        std::cout &lt;&lt; "PoolAllocator: " &lt;&lt; Capacity &lt;&lt; " slots of "
+                  &lt;&lt; sizeof(T) &lt;&lt; " bytes each\n";
+    }
+
+    ~PoolAllocator() {
+        // All allocated objects should have been deallocated
+        // In a real implementation, we might want to force-destroy
+        if (freeCount_ != Capacity) {
+            std::cerr &lt;&lt; "Warning: " &lt;&lt; (Capacity - freeCount_)
+                      &lt;&lt; " objects still allocated at destruction\n";
+        }
+    }
+
+    // Non-copyable, non-movable
+    PoolAllocator(const PoolAllocator&amp;) = delete;
+    PoolAllocator&amp; operator=(const PoolAllocator&amp;) = delete;
+
+    // Allocate a slot and construct T with given arguments
+    template&lt;typename... Args&gt;
+    T* allocate(Args&amp;&amp;... args) {
+        if (freeCount_ == 0) {
+            throw std::bad_alloc();
+        }
+
+        // Pop from free list
+        FreeNode* node = freeList_;
+        freeList_ = node-&gt;next;
+        --freeCount_;
+
+        // Use placement new to construct T in the slot
+        void* memory = static_cast&lt;void*&gt;(node);
+        T* obj = new (memory) T(std::forward&lt;Args&gt;(args)...);
+        return obj;
+    }
+
+    // Destroy and deallocate a slot
+    void deallocate(T* obj) {
+        if (!obj) return;
+
+        // Verify the pointer is within our pool
+        void* slotStart = static_cast&lt;void*&gt;(&amp;pool_[0]);
+        void* slotEnd   = static_cast&lt;void*&gt;(&amp;pool_[Capacity]);
+        void* ptr       = static_cast&lt;void*&gt;(obj);
+
+        if (ptr &lt; slotStart || ptr &gt;= slotEnd) {
+            throw std::invalid_argument("Pointer not from this pool");
+        }
+
+        // Explicitly call destructor
+        obj-&gt;~T();
+
+        // Push back to free list
+        FreeNode* node = reinterpret_cast&lt;FreeNode*&gt;(ptr);
+        node-&gt;next = freeList_;
+        freeList_ = node;
+        ++freeCount_;
+    }
+
+    std::size_t freeCount() const { return freeCount_; }
+    std::size_t allocatedCount() const { return Capacity - freeCount_; }
+    std::size_t capacity() const { return Capacity; }
+    bool isEmpty() const { return freeCount_ == Capacity; }
+    bool isFull() const { return freeCount_ == 0; }
+
+private:
+    alignas(alignof(T)) std::byte pool_[sizeof(Slot) * Capacity];
+    FreeNode* freeList_ = nullptr;
+    std::size_t freeCount_ = 0;
+};
+
+// --- Demo ---
+
+struct Packet {
+    int id;
+    double timestamp;
+    char data[32];
+
+    Packet(int i, double t) : id(i), timestamp(t) {
+        snprintf(data, sizeof(data), "Packet-%d", id);
+    }
+    ~Packet() {
+        // std::cout &lt;&lt; "Packet " &lt;&lt; id &lt;&lt; " destroyed\n";
+    }
+    void print() const {
+        std::cout &lt;&lt; "  Packet{id=" &lt;&lt; id
+                  &lt;&lt; ", time=" &lt;&lt; timestamp
+                  &lt;&lt; ", data='" &lt;&lt; data &lt;&lt; "'}\n";
+    }
+};
+
+int main() {
+    constexpr std::size_t POOL_SIZE = 8;
+    PoolAllocator&lt;Packet, POOL_SIZE&gt; pool;
+
+    std::cout &lt;&lt; "Free slots: " &lt;&lt; pool.freeCount() &lt;&lt; "\n\n";
+
+    // Allocate packets
+    std::vector&lt;Packet*&gt; packets;
+    for (int i = 0; i &lt; 5; ++i) {
+        Packet* p = pool.allocate(i, 1000.0 + i);
+        packets.push_back(p);
+        std::cout &lt;&lt; "Allocated: "; p-&gt;print();
+    }
+
+    std::cout &lt;&lt; "\nFree slots after 5 allocs: " &lt;&lt; pool.freeCount() &lt;&lt; "\n";
+
+    // Deallocate some
+    for (int i = 0; i &lt; 3; ++i) {
+        pool.deallocate(packets[i]);
+        std::cout &lt;&lt; "Deallocated packet " &lt;&lt; i &lt;&lt; "\n";
+    }
+    std::cout &lt;&lt; "Free slots after 3 deallocs: " &lt;&lt; pool.freeCount() &lt;&lt; "\n";
+
+    // Allocate again (reuses freed slots)
+    Packet* p = pool.allocate(99, 9999.0);
+    std::cout &lt;&lt; "\nRe-allocated: "; p-&gt;print();
+
+    // Cleanup remaining
+    for (int i = 3; i &lt; 5; ++i) {
+        pool.deallocate(packets[i]);
+    }
+    pool.deallocate(p);
+    std::cout &lt;&lt; "\nFinal free slots: " &lt;&lt; pool.freeCount() &lt;&lt; " / " &lt;&lt; pool.capacity() &lt;&lt; "\n";
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><strong>Pool memory:</strong> A contiguous array of <code>Slot</code> structs, each sized to hold a <code>T</code> and properly aligned using <code>alignas</code>.</li>
+      <li><strong>Free list:</strong> Uses the unused slots themselves to store the linked list of free slots. The <code>FreeNode::next</code> pointer is written into the slot's memory when the slot is free.</li>
+      <li><strong>Placement new:</strong> <code>new (memory) T(args...)</code> constructs a <code>T</code> object at a specific memory address without allocating memory. This separates allocation from construction.</li>
+      <li><strong>Explicit destructor:</strong> <code>obj-&gt;~T()</code> calls the destructor without freeing memory. This separates destruction from deallocation.</li>
+      <li><strong>Bounds checking:</strong> <code>deallocate</code> verifies that the pointer falls within the pool's memory range to catch double-free or wrong-pool errors.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout green">
+  <p><strong>Complexity Analysis:</strong></p>
+  <table>
+    <tr><th>Operation</th><th>Time</th><th>Notes</th></tr>
+    <tr><td>allocate</td><td>O(1)</td><td>Pop from free list + placement new</td></tr>
+    <tr><td>deallocate</td><td>O(1)</td><td>Destructor + push to free list</td></tr>
+    <tr><td>Memory overhead</td><td>0 bytes</td><td>Free list embedded in unused slots</td></tr>
+    <tr><td>Total memory</td><td>sizeof(T) * N</td><td>Pre-allocated at construction</td></tr>
+  </table>
+</div>
+
+<h2>Follow-up Questions</h2>
+
+<div class="question">
+  <h3>Variations to Try</h3>
+  <ol>
+    <li><strong>STL-compatible allocator:</strong> Adapt the pool allocator to satisfy the C++ Allocator requirements (rebind, allocate/deallocate with count, etc.) so you can use it with <code>std::vector&lt;T, PoolAlloc&lt;T&gt;&gt;</code>.</li>
+    <li><strong>Grow-only pool:</strong> Allow the pool to allocate additional chunks when it runs out of slots, instead of throwing <code>bad_alloc</code>.</li>
+    <li><strong>Multi-size pool:</strong> Create a memory pool that supports objects of different sizes by using separate pools for common size classes (8, 16, 32, 64, 128 bytes).</li>
+    <li><strong>Thread-safe pool:</strong> Add atomic operations or a lock to make the pool safe for concurrent allocation/deallocation.</li>
+  </ol>
+</div>
+
+<div class="callout">
+  <p><strong>Real-World Applications:</strong></p>
+  <ul>
+    <li>Pool allocators are widely used in <strong>embedded systems</strong> and <strong>telecom</strong> (e.g., 5G protocol stacks) where deterministic allocation time is critical.</li>
+    <li>Game engines use pool allocators for frequently created/destroyed objects like particles, bullets, or network packets.</li>
+    <li>The <strong>nginx</strong> web server uses memory pools extensively to avoid fragmentation.</li>
+    <li>The <strong>FreeRTOS</strong> RTOS provides <code>xPoolCreate</code> for exactly this pattern.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="memory-leak-detection.html">&larr; Memory Leak Detection</a>
+  <a href="template-metaprogramming.html">Template Metaprogramming &rarr;</a>
+</div>
+<script>
+function toggleSolution(id) {
+  document.getElementById(id).classList.toggle('visible');
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASN.1 Encoding — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#4">4 Telecom &amp; 5G/4G Networking</a> / Telecom C++ Techniques / 4.4.4</div>
+<div class="meta"><span class="tag medium">Medium</span></div>
+<h1>ASN.1 Encoding</h1>
+
+<p>ASN.1 (Abstract Syntax Notation One) is a standard interface definition language used to define data structures that telecommunications protocols serialize on the wire. 3GPP protocols -- RRC, NGAP, S1AP, X2AP, F1AP, E1AP -- all use ASN.1 to define their message formats.</p>
+
+<h2>BER vs PER Encoding</h2>
+
+<table>
+  <tr><th>Aspect</th><th>BER (Basic Encoding Rules)</th><th>PER (Packed Encoding Rules)</th></tr>
+  <tr><td>Size overhead</td><td>High (TLV with full length)</td><td>Low (bit-aligned, no padding)</td></tr>
+  <tr><td>Typical size</td><td>2-3x of PER</td><td>Compact (close to struct)</td></tr>
+  <tr><td>Decode speed</td><td>Slower (tag-length-value parse)</td><td>Faster (offset-based)</td></tr>
+  <tr><td>Used in</td><td>CSS, LDAP, SNMP</td><td>3GPP RRC, NGAP, S1AP, X2AP</td></tr>
+  <tr><td>Alignment</td><td>Byte-aligned</td><td>Bit-aligned</td></tr>
+</table>
+
+<div class="callout">
+  <p><strong>3GPP choice:</strong> All 3GPP radio and NG interface protocols use Aligned PER (Packed Encoding Rules, aligned variant). PER encodes data at the bit level with optional byte alignment for efficiency. This is critical for air interface signaling where every byte of bandwidth matters.</p>
+</div>
+
+<h2>5G Protocols Using ASN.1</h2>
+
+<table>
+  <tr><th>Protocol</th><th>Spec</th><th>Usage</th><th>Encoding</th></tr>
+  <tr><td>RRC</td><td>TS 38.331</td><td>Radio Resource Control</td><td>PER</td></tr>
+  <tr><td>NGAP</td><td>TS 38.413</td><td>NG interface (AMF-gNB)</td><td>PER</td></tr>
+  <tr><td>S1AP</td><td>TS 36.413</td><td>S1 interface (MME-eNodeB)</td><td>PER</td></tr>
+  <tr><td>X2AP</td><td>TS 36.423</td><td>X2 interface (eNodeB-eNodeB)</td><td>PER</td></tr>
+  <tr><td>F1AP</td><td>TS 38.473</td><td>F1 interface (CU-DU)</td><td>PER</td></tr>
+  <tr><td>E1AP</td><td>TS 38.463</td><td>E1 interface (CU-CP to CU-UP)</td><td>PER</td></tr>
+</table>
+
+<h2>TLV Structure (BER)</h2>
+
+<pre>
+  BER TLV (Tag-Length-Value):
+  +--------+---------+----------+
+  | Tag    | Length  | Value    |
+  | 1 byte | 1+ bytes| N bytes  |
+  +--------+---------+----------+
+
+  Tag:   Class (2 bits) | P/C (1 bit) | Tag Number (5 bits)
+  Length: Short form (&lt; 128): 1 byte
+          Long form (>= 128): first byte = 0x80 | N, then N bytes
+
+  Example (INTEGER value 42):
+  02 01 2A
+  |  |  |
+  Tag=L |  Value=42 (0x2A)
+       Length=1
+</pre>
+
+<h2>PER Bit-Level Encoding</h2>
+
+<pre>
+  PER encodes values at the bit level:
+  - BOOLEAN: 1 bit (0 or 1)
+  - INTEGER (constrained): min bits for range
+  - ENUMERATED: log2(max_value) bits
+  - BIT STRING: length + bits
+  - OCTET STRING: length + bytes
+  - SEQUENCE: fields concatenated at bit level
+  - CHOICE: index + chosen alternative
+
+  Example: ENUMERATED {idle(0), connected(1), inactive(2)}
+  PER encoding: 2 bits (enough for 3 values)
+
+  Example: INTEGER (0..4095) -> 12 bits
+  Value 1000 = 0011 1110 1000 in 12 bits
+</pre>
+
+<h2>C++ Manual PER Encoding Example</h2>
+
+<pre>
+#include &lt;cstdint&gt;
+#include &lt;cstring&gt;
+#include &lt;vector&gt;
+#include &lt;stdexcept&gt;
+
+// Bit-level encoder for PER encoding
+class PerEncoder {
+public:
+    explicit PerEncoder(size_t max_bytes = 1024)
+        : buffer_(max_bytes, 0), bit_pos_(0) {}
+
+    // Encode a boolean (1 bit)
+    void encodeBool(bool value) {
+        if (value) setBit(bit_pos_);
+        bit_pos_++;
+    }
+
+    // Encode constrained integer
+    // value must be in [min_val, max_val]
+    void encodeConstrainedInt(int32_t value,
+                                int32_t min_val,
+                                int32_t max_val) {
+        uint32_t range = max_val - min_val;
+        int n_bits = 0;
+        uint32_t temp = range;
+        while (temp &gt; 0) { n_bits++; temp &gt;&gt;= 1; }
+
+        uint32_t offset = value - min_val;
+        for (int i = n_bits - 1; i &gt;= 0; --i) {
+            if ((offset &gt;&gt; i) &amp; 1) setBit(bit_pos_);
+            bit_pos_++;
+        }
+    }
+
+    // Encode BIT STRING
+    void encodeBitString(const uint8_t* bits, size_t n_bits) {
+        // Length determinant (if not fixed)
+        // For simplicity, assume fixed length known from ASN.1
+        for (size_t i = 0; i &lt; n_bits; ++i) {
+            if ((bits[i / 8] &gt;&gt; (7 - (i % 8))) &amp; 1)
+                setBit(bit_pos_);
+            bit_pos_++;
+        }
+    }
+
+    // Encode OCTET STRING (byte-aligned)
+    void encodeOctetString(const uint8_t* data, size_t len) {
+        alignToByte();
+        // Length determinant for variable-length
+        encodeLength(len);
+        for (size_t i = 0; i &lt; len; ++i) {
+            encodeByte(data[i]);
+        }
+    }
+
+    // Align to byte boundary (required by Aligned PER)
+    void alignToByte() {
+        while (bit_pos_ % 8 != 0) bit_pos_++;
+    }
+
+    // Get encoded data and size
+    const uint8_t* data() const { return buffer_.data(); }
+    size_t byteSize() const { return (bit_pos_ + 7) / 8; }
+
+private:
+    std::vector&lt;uint8_t&gt; buffer_;
+    size_t bit_pos_;
+
+    void setBit(size_t pos) {
+        buffer_[pos / 8] |= (1 &lt;&lt; (7 - (pos % 8)));
+    }
+
+    void encodeByte(uint8_t byte) {
+        for (int i = 7; i &gt;= 0; --i) {
+            if ((byte &gt;&gt; i) &amp; 1) setBit(bit_pos_);
+            bit_pos_++;
+        }
+    }
+
+    void encodeLength(size_t len) {
+        if (len &lt; 128) {
+            encodeByte(static_cast&lt;uint8_t&gt;(len));
+        } else if (len &lt; 16384) {
+            encodeByte(static_cast&lt;uint8_t&gt;(0x80 | (len &gt;&gt; 8)));
+            encodeByte(static_cast&lt;uint8_t&gt;(len &amp; 0xFF));
+        }
+    }
+};
+
+// Example: encode a simple RRC-like message
+void encodeRrcSetupRequest(PerEncoder&amp; enc) {
+    // Message type (ENUMERATED, 6 bits)
+    enc.encodeConstrainedInt(0, 0, 63);  // RRCSetupRequest
+
+    // ng-5G-S-TMSI-Value (BIT STRING, 48 bits)
+    uint8_t guti[6] = {0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC};
+    enc.encodeBitString(guti, 48);
+
+    // establishmentCause (ENUMERATED, 0..7, 3 bits)
+    enc.encodeConstrainedInt(4, 0, 7);  // mt-Access
+}
+</pre>
+
+<h2>Open-Source ASN.1 Compilers</h2>
+
+<div class="callout green">
+  <p><strong>Production tools:</strong> In production telecom systems, you rarely hand-code PER encoding. Use <code>asn1c</code> (open-source, most common in telecom), or commercial tools like OSS ASN.1 Tools or Objective Systems. These compile .asn files into C/C++ structs with encode/decode functions.</p>
+</div>
+
+<pre>
+  # Using asn1c to compile RRC ASN.1 definition:
+  asn1c -pdu=all -fper -fnative-types RRC_NR.asn
+
+  Generated files:
+  - RRC_NR.h    : C structs matching ASN.1 definitions
+  - RRC_NR.c    : encode/decode functions
+  - converter-sample.c : usage example
+
+  Compile generated code with your application:
+  gcc -o my_app my_app.c RRC_NR.c -I.
+</pre>
+
+<h2>Cross-References</h2>
+
+<ul>
+  <li><a href="rrc-layer.html">RRC Layer</a> -- RRC messages use ASN.1 PER encoding.</li>
+  <li><a href="nas-layer.html">NAS Layer</a> -- NAS messages are TLV-based (not ASN.1).</li>
+  <li><a href="pdcp-layer.html">PDCP Layer</a> -- Ciphering applied to ASN.1-encoded RRC.</li>
+  <li><a href="../practice-questions/asn1-encoder.html">ASN.1 Encoder Practice</a> -- Build your own encoder.</li>
+</ul>
+
+<div class="nav"><a href="fixed-point-arithmetic.html">&larr; Fixed-Point Arithmetic</a><a href="memory-pools-telecom.html">Memory Pools Telecom &rarr;</a></div>
+</body>
+</html>

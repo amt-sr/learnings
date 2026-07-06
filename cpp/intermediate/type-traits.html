@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Type Traits — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / <a href="../index.html#2.3">2.3 Templates Advanced</a> / 2.3.4 Type Traits</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>Type Traits</h1>
+
+<p>Type traits are a compile-time mechanism for inspecting, modifying, and transforming types. Defined in the <code>&lt;type_traits&gt;</code> header (C++11), they form the foundation of generic programming and template metaprogramming. They produce no runtime overhead -- all work happens at compile time.</p>
+
+<h2>Type Inspection Traits</h2>
+
+<p>These traits query properties of types and return a boolean or a type as a <code>static constexpr</code> member.</p>
+
+<pre>
+#include &lt;type_traits&gt;
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+
+void inspection_demo() {
+    // Primary type categories
+    static_assert(std::is_integral_v&lt;int&gt;);
+    static_assert(std::is_floating_point_v&lt;double&gt;);
+    static_assert(std::is_pointer_v&lt;int*&gt;);
+    static_assert(std::is_reference_v&lt;int&amp;&gt;);
+    static_assert(std::is_array_v&lt;int[5]&gt;);
+    static_assert(std::is_class_v&lt;std::string&gt;);
+
+    // Composite type categories
+    static_assert(std::is_arithmetic_v&lt;int&gt;);       // integral or floating point
+    static_assert(std::is_fundamental_v&lt;char&gt;);       // arithmetic, void, or nullptr_t
+    static_assert(std::is_compound_v&lt;std::string&gt;);  // everything else
+
+    // Type relationships
+    static_assert(std::is_same_v&lt;int, int&gt;);
+    static_assert(!std::is_same_v&lt;int, unsigned int&gt;);
+    static_assert(std::is_base_of_v&lt;std::ios_base, std::iostream&gt;);
+    static_assert(std::is_convertible_v&lt;int, double&gt;);
+
+    // Property queries
+    static_assert(std::is_const_v&lt;const int&gt;);
+    static_assert(std::is_volatile_v&lt;volatile int&gt;);
+    static_assert(std::is_signed_v&lt;int&gt;);
+    static_assert(std::is_unsigned_v&lt;unsigned int&gt;);
+
+    std::cout &lt;&lt; "All type trait assertions passed!\n";
+}
+</pre>
+
+<h3>Common Type Categories</h3>
+
+<table>
+  <tr><th>Trait</th><th>Returns true for</th><th>Example</th></tr>
+  <tr><td><code>is_integral_v&lt;T&gt;</code></td><td>int, char, bool, long, etc.</td><td><code>is_integral_v&lt;int&gt;</code> = true</td></tr>
+  <tr><td><code>is_floating_point_v&lt;T&gt;</code></td><td>float, double, long double</td><td><code>is_floating_point_v&lt;double&gt;</code> = true</td></tr>
+  <tr><td><code>is_pointer_v&lt;T&gt;</code></td><td>T* (raw pointers)</td><td><code>is_pointer_v&lt;int*&gt;</code> = true</td></tr>
+  <tr><td><code>is_array_v&lt;T&gt;</code></td><td>T[N]</td><td><code>is_array_v&lt;int[10]&gt;</code> = true</td></tr>
+  <tr><td><code>is_class_v&lt;T&gt;</code></td><td>class/struct types</td><td><code>is_class_v&lt;std::string&gt;</code> = true</td></tr>
+  <tr><td><code>is_enum_v&lt;T&gt;</code></td><td>enum types</td><td><code>is_enum_v&lt;enum Color&gt;</code> = true</td></tr>
+  <tr><td><code>is_function_v&lt;T&gt;</code></td><td>function types</td><td><code>is_function_v&lt;void(int)&gt;</code> = true</td></tr>
+</table>
+
+<h2>Type Modification Traits</h2>
+
+<p>Modification traits produce a new type based on the input type. They are accessed via the <code>::type</code> member or the <code>_t</code> alias template (C++14).</p>
+
+<pre>
+#include &lt;type_traits&gt;
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+void modification_demo() {
+    // Remove/add const
+    using PlainInt = std::remove_const_t&lt;const int&gt;;       // int
+    using ConstInt = std::add_const_t&lt;int&gt;;                // const int
+
+    // Remove/add pointer
+    using NoPtr = std::remove_pointer_t&lt;int*&gt;;             // int
+    using WithPtr = std::add_pointer_t&lt;int&gt;;              // int*
+
+    // Remove/add reference
+    using NoRef = std::remove_reference_t&lt;int&amp;&gt;;          // int
+    using WithRef = std::add_lvalue_reference_t&lt;int&gt;;      // int&amp;
+
+    // Decay: removes reference, converts array to pointer, function to pointer
+    using Decayed = std::decay_t&lt;const int&amp;&gt;;              // int
+    using ArrayDecayed = std::decay_t&lt;int[10]&gt;;            // int*
+    using FuncDecayed = std::decay_t&lt;void(int)&gt;;           // void(*)(int)
+
+    // Common type: the type all arguments can convert to
+    using Common = std::common_type_t&lt;int, double, float&gt;; // double
+
+    std::cout &lt;&lt; "Modification traits compile successfully\n";
+}
+</pre>
+
+<h3>Key Modification Traits</h3>
+
+<table>
+  <tr><th>Trait</th><th>Input</th><th>Output</th></tr>
+  <tr><td><code>remove_const_t</code></td><td>const int</td><td>int</td></tr>
+  <tr><td><code>remove_reference_t</code></td><td>int&amp;</td><td>int</td></tr>
+  <tr><td><code>remove_cv_t</code></td><td>const volatile int</td><td>int</td></tr>
+  <tr><td><code>decay_t</code></td><td>const int&amp;, int[5]</td><td>int, int*</td></tr>
+  <tr><td><code>conditional_t</code></td><td>bool, T, U</td><td>T if true, U if false</td></tr>
+  <tr><td><code>common_type_t</code></td><td>int, double</td><td>double</td></tr>
+</table>
+
+<h2>std::conditional</h2>
+
+<p><code>std::conditional</code> is the compile-time equivalent of the ternary operator for types.</p>
+
+<pre>
+#include &lt;type_traits&gt;
+
+// Select unsigned type large enough to hold values up to N bits
+template&lt;size_t N&gt;
+using UintForBits = std::conditional_t&lt;
+    (N &lt;= 8),  uint8_t,
+    std::conditional_t&lt;
+        (N &lt;= 16), uint16_t,
+        std::conditional_t&lt;
+            (N &lt;= 32), uint32_t,
+            uint64_t
+        &gt;
+    &gt;
+&gt;;
+
+void conditional_demo() {
+    static_assert(std::is_same_v&lt;UintForBits&lt;7&gt;,  uint8_t&gt;);
+    static_assert(std::is_same_v&lt;UintForBits&lt;10&gt;, uint16_t&gt;);
+    static_assert(std::is_same_v&lt;UintForBits&lt;24&gt;, uint32_t&gt;);
+    static_assert(std::is_same_v&lt;UintForBits&lt;48&gt;, uint64_t&gt;);
+}
+</pre>
+
+<h2>static_assert with Type Traits</h2>
+
+<p><code>static_assert</code> combined with type traits provides compile-time validation of template constraints.</p>
+
+<pre>
+#include &lt;type_traits&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+
+template&lt;typename T&gt;
+class NumericBuffer {
+    static_assert(std::is_arithmetic_v&lt;T&gt;,
+        "NumericBuffer requires an arithmetic type (int, float, double, etc.)");
+    static_assert(std::is_trivially_copyable_v&lt;T&gt;,
+        "NumericBuffer requires a trivially copyable type");
+
+    T* data_;
+    size_t size_;
+public:
+    explicit NumericBuffer(size_t n) : data_(new T[n]), size_(n) {}
+    ~NumericBuffer() { delete[] data_; }
+};
+
+// NumericBuffer&lt;int&gt; ok1(100);       // OK
+// NumericBuffer&lt;std::string&gt; err("hi");  // ERROR: string is not arithmetic
+
+// Container type validation
+template&lt;typename Container&gt;
+void sort_container(Container&amp; c) {
+    static_assert(std::is_same_v&lt;typename Container::value_type, int&gt;,
+        "sort_container only works with int containers");
+    // sorting logic...
+}
+</pre>
+
+<h2>enable_if Revisited</h2>
+
+<p><code>std::enable_if</code> is itself a type trait that conditionally defines a type member.</p>
+
+<pre>
+#include &lt;type_traits&gt;
+
+// enable_if&lt;true, int&gt;::type is int
+// enable_if&lt;false, int&gt; has no ::type member (SFINAE!)
+template&lt;bool Cond, typename T = void&gt;
+struct enable_if {};
+
+template&lt;typename T&gt;
+struct enable_if&lt;true, T&gt; { using type = T; };
+
+// Convenience alias (C++14)
+template&lt;bool Cond, typename T = void&gt;
+using enable_if_t = typename enable_if&lt;Cond, T&gt;::type;
+</pre>
+
+<h2>Practical: Type-Preserving Serializer</h2>
+
+<pre>
+#include &lt;type_traits&gt;
+#include &lt;string&gt;
+#include &lt;iostream&gt;
+
+struct Serializer {
+    // Overload for integral types
+    template&lt;typename T&gt;
+    std::enable_if_t&lt;std::is_integral_v&lt;T&gt;, std::string&gt;
+    serialize(T value) const {
+        return "INT:" + std::to_string(value);
+    }
+
+    // Overload for floating-point types
+    template&lt;typename T&gt;
+    std::enable_if_t&lt;std::is_floating_point_v&lt;T&gt;, std::string&gt;
+    serialize(T value) const {
+        return "FLOAT:" + std::to_string(value);
+    }
+
+    // Overload for std::string
+    std::string serialize(const std::string&amp; value) const {
+        return "STR:" + value;
+    }
+};
+
+void serializer_demo() {
+    Serializer s;
+    std::cout &lt;&lt; s.serialize(42) &lt;&lt; "\n";      // INT:42
+    std::cout &lt;&lt; s.serialize(3.14) &lt;&lt; "\n";     // FLOAT:3.140000
+    std::cout &lt;&lt; s.serialize("hello") &lt;&lt; "\n";  // STR:hello
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Performance:</strong> All type traits are compile-time operations. They generate zero runtime code. The compiler evaluates them during template instantiation and may even optimize away branches enabled/disabled by type traits.</p>
+</div>
+
+<p>Type traits are essential for <a href="sfinae.html">SFINAE</a> and template metaprogramming. In C++20, <a href="../advanced/concepts.html">concepts</a> build on type traits to provide cleaner syntax. See also <a href="auto-decltype.html">auto and decltype</a> for type deduction and <a href="template-specialization.html">template specialization</a> for type-specific implementations.</p>
+
+<div class="nav"><a href="sfinae.html">&larr; SFINAE</a><a href="set-unordered-set.html">Set / Unordered Set &rarr;</a></div>
+</body>
+</html>

@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shared Memory IPC — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / Networking &amp; IPC / 3.4.2</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>Shared Memory &amp; IPC</h1>
+
+<p>Shared memory is the fastest form of inter-process communication (IPC). Multiple processes map the same physical memory region into their address spaces, enabling zero-copy data exchange. Unlike sockets or pipes, data is not copied through the kernel — processes read and write directly to shared memory, achieving maximum throughput.</p>
+
+<div class="callout">
+<p><strong>Prerequisites:</strong> <a href="socket-programming.html">Socket Programming</a>, <a href="signal-handling.html">Signal Handling</a>, <a href="memory-model-atomics.html">Memory Model &amp; Atomics</a>, <a href="memory-mapped-files.html">Memory-Mapped Files</a>.</p>
+</div>
+
+<h2>POSIX Shared Memory API</h2>
+
+<table>
+<tr><th>Function</th><th>Purpose</th></tr>
+<tr><td><code>shm_open()</code></td><td>Create or open a shared memory object</td></tr>
+<tr><td><code>ftruncate()</code></td><td>Set the size of the shared memory object</td></tr>
+<tr><td><code>mmap()</code></td><td>Map shared memory into process address space</td></tr>
+<tr><td><code>munmap()</code></td><td>Unmap shared memory from address space</td></tr>
+<tr><td><code>shm_unlink()</code></td><td>Remove shared memory object (like unlink for files)</td></tr>
+<tr><td><code>close()</code></td><td>Close the shared memory file descriptor</td></tr>
+</table>
+
+<h2>POSIX Shared Memory — Producer</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;cstring&gt;
+#include &lt;fcntl.h&gt;
+#include &lt;sys/mman.h&gt;
+#include &lt;unistd.h&gt;
+#include &lt;semaphore.h&gt;
+
+constexpr const char* SHM_NAME = "/my_shm";
+constexpr std::size_t SHM_SIZE = 4096;
+
+struct SharedData {
+    sem_t sem_producer;  // producer writes when available
+    sem_t sem_consumer;  // consumer reads when data ready
+    char buffer[SHM_SIZE - 2 * sizeof(sem_t)];
+};
+
+int main() {
+    // 1. Create shared memory object
+    int fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
+    if (fd &lt; 0) {
+        std::cerr &lt;&lt; "shm_open failed\n";
+        return 1;
+    }
+
+    // 2. Set size
+    ftruncate(fd, sizeof(SharedData));
+
+    // 3. Map into address space
+    auto* shared = static_cast&lt;SharedData*&gt;(
+        mmap(nullptr, sizeof(SharedData),
+             PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0)
+    );
+    close(fd);  // fd no longer needed after mmap
+
+    if (shared == MAP_FAILED) {
+        std::cerr &lt;&lt; "mmap failed\n";
+        return 1;
+    }
+
+    // 4. Initialize semaphores (1 = shared between processes, 0 = initial value)
+    sem_init(&amp;shared-&gt;sem_producer, 1, 1);  // producer starts with token
+    sem_init(&amp;shared-&gt;sem_consumer, 1, 0);  // consumer waits
+
+    // 5. Produce data
+    for (int i = 0; i &lt; 5; ++i) {
+        sem_wait(&amp;shared-&gt;sem_producer);  // wait for slot
+
+        std::string msg = "Message " + std::to_string(i);
+        std::strncpy(shared-&gt;buffer, msg.c_str(), sizeof(shared-&gt;buffer) - 1);
+        std::cout &lt;&lt; "Produced: " &lt;&lt; shared-&gt;buffer &lt;&lt; "\n";
+
+        sem_post(&amp;shared-&gt;sem_consumer);  // signal data ready
+        sleep(1);  // simulate work
+    }
+
+    // Cleanup
+    sem_destroy(&amp;shared-&gt;sem_producer);
+    sem_destroy(&amp;shared-&gt;sem_consumer);
+    munmap(shared, sizeof(SharedData));
+    shm_unlink(SHM_NAME);
+
+    std::cout &lt;&lt; "Producer done\n";
+    return 0;
+}
+</pre>
+
+<h2>POSIX Shared Memory — Consumer</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;cstring&gt;
+#include &lt;fcntl.h&gt;
+#include &lt;sys/mman.h&gt;
+#include &lt;unistd.h&gt;
+#include &lt;semaphore.h&gt;
+
+// Same SharedData struct as producer
+struct SharedData {
+    sem_t sem_producer;
+    sem_t sem_consumer;
+    char buffer[4096 - 2 * sizeof(sem_t)];
+};
+
+int main() {
+    // Open existing shared memory (O_RDWR, no O_CREAT)
+    int fd = shm_open("/my_shm", O_RDWR, 0666);
+    if (fd &lt; 0) {
+        std::cerr &lt;&lt; "shm_open failed — start producer first\n";
+        return 1;
+    }
+
+    auto* shared = static_cast&lt;SharedData*&gt;(
+        mmap(nullptr, sizeof(SharedData),
+             PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0)
+    );
+    close(fd);
+
+    if (shared == MAP_FAILED) {
+        std::cerr &lt;&lt; "mmap failed\n";
+        return 1;
+    }
+
+    // Consume data
+    for (int i = 0; i &lt; 5; ++i) {
+        sem_wait(&amp;shared-&gt;sem_consumer);  // wait for data
+
+        std::cout &lt;&lt; "Consumed: " &lt;&lt; shared-&gt;buffer &lt;&lt; "\n";
+
+        sem_post(&amp;shared-&gt;sem_producer);  // signal slot available
+    }
+
+    munmap(shared, sizeof(SharedData));
+    std::cout &lt;&lt; "Consumer done\n";
+    return 0;
+}
+</pre>
+
+<h2>POSIX vs System V Shared Memory</h2>
+
+<table>
+<tr><th>Aspect</th><th>POSIX</th><th>System V</th></tr>
+<tr><td>API</td><td><code>shm_open/mmap</code></td><td><code>shmget/shmat</code></td></tr>
+<tr><td>Namespace</td><td>Filesystem-like (<code>/name</code>)</td><td>Integer key (<code>ftok</code>)</td></tr>
+<tr><td>Permissions</td><td>Unix file permissions</td><td>IPC permissions</td></tr>
+<tr><td>Cleanup</td><td><code>shm_unlink()</code></td><td><code>shmctl(IPC_RMID)</code></td></tr>
+<tr><td>Portability</td><td>POSIX standard</td><td>Older, widely supported</td></tr>
+<tr><td>Recommendation</td><td>Preferred for new code</td><td>Legacy systems</td></tr>
+</table>
+
+<h2>Synchronization with Semaphores</h2>
+
+<p>Shared memory provides no built-in synchronization. Without explicit coordination, concurrent reads and writes cause data races. Two common approaches:</p>
+
+<ul>
+<li><strong>POSIX named semaphores</strong> (<code>sem_open/sem_wait/sem_post</code>) — shared between unrelated processes via name</li>
+<li><strong>POSIX unnamed semaphores</strong> (<code>sem_init</code> with <code>pshared=1</code>) — placed in shared memory itself</li>
+<li><strong>Mutexes in shared memory</strong> — <code>pthread_mutexattr_setpshared</code> for process-shared mutex</li>
+<li><strong>Atomics</strong> — <a href="memory-model-atomics.html">std::atomic</a> with <code>MAP_SHARED</code> (hardware-supported on modern systems)</li>
+</ul>
+
+<div class="callout warning">
+<p><strong>Cache coherency:</strong> When multiple processes modify shared memory, cache line bouncing between CPU cores can degrade performance. Align data structures to cache lines and minimize false sharing — see <a href="cache-oriented-programming.html">Cache-Oriented Programming</a>.</p>
+</div>
+
+<div class="callout green">
+<p><strong>Best practice:</strong> Use <a href="../intermediate/raii.html">RAII</a> wrappers for shared memory and semaphores. Always handle the case where <code>shm_open</code> returns an existing object (after a crash, the shared memory may still exist). Clean up shared memory in signal handlers or destructors.</p>
+</div>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="socket-programming.html">Socket Programming</a> (network IPC), <a href="signal-handling.html">Signal Handling</a> (cleanup on signals), <a href="memory-model-atomics.html">Memory Model &amp; Atomics</a> (lock-free shared data), <a href="memory-mapped-files.html">Memory-Mapped Files</a> (file-backed shared memory), <a href="../intermediate/condition-variable.html">Condition Variable</a> (thread synchronization).</p>
+</div>
+
+<div class="nav"><a href="socket-programming.html">&larr; Socket Programming</a><a href="signal-handling.html">Signal Handling &rarr;</a></div>
+</body>
+</html>

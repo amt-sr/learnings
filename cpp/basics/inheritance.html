@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inheritance — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; }
+  .breadcrumb a { color: #8b949e; }
+  .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; }
+  .callout.red { border-left-color: #f85149; }
+  .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; }
+  th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#1">1 Basics</a> / <a href="../index.html#1">1.2 Object-Oriented Programming</a> / 1.2.3 Inheritance</div>
+<div class="meta"><span class="tag basic">BASIC</span></div>
+<h1>1.2.3 Inheritance</h1>
+
+<p>Inheritance is a mechanism where a new class (the <strong>derived class</strong>) acquires the properties and behaviors of an existing class (the <strong>base class</strong>). It models the <strong>is-a</strong> relationship and enables code reuse, making it a core pillar of object-oriented programming alongside <a href="classes-objects.html">classes</a>, <a href="encapsulation-abstraction.html">encapsulation</a>, and <a href="polymorphism.html">polymorphism</a>.</p>
+
+<h2>Single Inheritance Syntax</h2>
+
+<p>A derived class specifies its base class after a colon. By default, inheritance is <code>private</code> for <code>class</code> &mdash; you almost always want <code>public</code> inheritance:</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+class Shape {
+protected:
+    std::string color;
+
+public:
+    Shape(const std::string&amp; c = "black") : color(c) {
+        std::cout &lt;&lt; "Shape constructor" &lt;&lt; std::endl;
+    }
+
+    void set_color(const std::string&amp; c) { color = c; }
+    std::string get_color() const { return color; }
+
+    ~Shape() {
+        std::cout &lt;&lt; "Shape destructor" &lt;&lt; std::endl;
+    }
+};
+
+// Single public inheritance
+class Circle : public Shape {
+private:
+    double radius;
+
+public:
+    Circle(double r, const std::string&amp; c = "black")
+        : Shape(c), radius(r) {      // base class constructor called first
+        std::cout &lt;&lt; "Circle constructor" &lt;&lt; std::endl;
+    }
+
+    double area() const {
+        return 3.14159265 * radius * radius;
+    }
+
+    void print() const {
+        std::cout &lt;&lt; "Circle: r=" &lt;&lt; radius
+                  &lt;&lt; ", color=" &lt;&lt; color
+                  &lt;&lt; ", area=" &lt;&lt; area() &lt;&lt; std::endl;
+    }
+
+    ~Circle() {
+        std::cout &lt;&lt; "Circle destructor" &lt;&lt; std::endl;
+    }
+};
+
+int main() {
+    Circle c{5.0, "red"};
+    c.print();  // Circle: r=5, color=red, area=78.5398
+
+    // Inherited members are accessible
+    c.set_color("blue");
+    std::cout &lt;&lt; "Color: " &lt;&lt; c.get_color() &lt;&lt; std::endl;
+
+    return 0;
+}
+</pre>
+
+<h2>Types of Inheritance</h2>
+
+<p>The access specifier before the base class controls how base class members are accessible in the derived class:</p>
+
+<table>
+  <tr><th>Inheritance Type</th><th>Base public members</th><th>Base protected members</th><th>Base private members</th></tr>
+  <tr><td><code>public</code></td><td>public in derived</td><td>protected in derived</td><td>Inaccessible</td></tr>
+  <tr><td><code>protected</code></td><td>protected in derived</td><td>protected in derived</td><td>Inaccessible</td></tr>
+  <tr><td><code>private</code></td><td>private in derived</td><td>private in derived</td><td>Inaccessible</td></tr>
+</table>
+
+<div class="callout green">
+  <p><strong>Rule of thumb:</strong> Use <code>public</code> inheritance for <strong>is-a</strong> relationships (a Dog is an Animal). Use <code>private</code> inheritance for <strong>has-a / implemented-in-terms-of</strong> relationships (a Stack implemented using a Vector). Avoid <code>protected</code> inheritance unless you have a specific reason.</p>
+</div>
+
+<h2>Constructor Chaining with Base Class</h2>
+
+<p>When a derived class is constructed, the base class constructor is called <strong>first</strong>, then member variables, then the derived class constructor body. Destruction happens in reverse order:</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+class Base {
+public:
+    Base() { std::cout &lt;&lt; "Base constructor" &lt;&lt; std::endl; }
+    Base(int x) { std::cout &lt;&lt; "Base(int) constructor: " &lt;&lt; x &lt;&lt; std::endl; }
+    ~Base() { std::cout &lt;&lt; "Base destructor" &lt;&lt; std::endl; }
+};
+
+class Derived : public Base {
+public:
+    // Calls Base() by default
+    Derived() { std::cout &lt;&lt; "Derived constructor" &lt;&lt; std::endl; }
+
+    // Calls Base(int) explicitly via init list
+    Derived(int x) : Base(x) {
+        std::cout &lt;&lt; "Derived(int) constructor" &lt;&lt; std::endl;
+    }
+
+    ~Derived() { std::cout &lt;&lt; "Derived destructor" &lt;&lt; std::endl; }
+};
+
+int main() {
+    std::cout &lt;&lt; "--- Default ---" &lt;&lt; std::endl;
+    Derived d1;
+    std::cout &lt;&lt; "--- Parameterized ---" &lt;&lt; std::endl;
+    Derived d2{42};
+    return 0;
+}
+// Output:
+// --- Default ---
+// Base constructor
+// Derived constructor
+// --- Parameterized ---
+// Base(int) constructor: 42
+// Derived(int) constructor
+// Derived destructor
+// Base destructor
+// Derived destructor
+// Base destructor
+</pre>
+
+<div class="callout warning">
+  <p><strong>Important:</strong> If the base class has no default constructor, the derived class <strong>must</strong> explicitly call a base class constructor in its initialization list. Otherwise, compilation fails because the compiler cannot implicitly call <code>Base()</code>.</p>
+</div>
+
+<h2>Is-a Relationship</h2>
+
+<p>Public inheritance models an <strong>is-a</strong> relationship. A derived class object can be used wherever a base class object is expected:</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+class Animal {
+public:
+    std::string name;
+
+    Animal(const std::string&amp; n = "Animal") : name(n) {}
+    virtual void speak() const {
+        std::cout &lt;&lt; name &lt;&lt; " makes a sound" &lt;&lt; std::endl;
+    }
+    virtual ~Animal() = default;
+};
+
+class Dog : public Animal {
+public:
+    Dog(const std::string&amp; n = "Dog") : Animal(n) {}
+
+    void speak() const override {
+        std::cout &lt;&lt; name &lt;&lt; " says: Woof!" &lt;&lt; std::endl;
+    }
+};
+
+class Cat : public Animal {
+public:
+    Cat(const std::string&amp; n = "Cat") : Animal(n) {}
+
+    void speak() const override {
+        std::cout &lt;&lt; name &lt;&lt; " says: Meow!" &lt;&lt; std::endl;
+    }
+};
+
+void make_speak(const Animal&amp; animal) {
+    animal.speak();  // calls the correct override
+}
+
+int main() {
+    Dog dog{"Rex"};
+    Cat cat{"Whiskers"};
+
+    dog.speak();       // Rex says: Woof!
+    cat.speak();       // Whiskers says: Meow!
+
+    // Dog IS-A Animal, so it can be passed to a function expecting Animal
+    make_speak(dog);   // Rex says: Woof!
+    make_speak(cat);   // Whiskers says: Meow!
+
+    return 0;
+}
+</pre>
+
+<h2>Method Overriding</h2>
+
+<p>A derived class can provide its own implementation of a base class method. Use the <code>override</code> keyword (C++11) to ensure the method actually overrides a base class virtual function:</p>
+
+<pre>
+class Base {
+public:
+    virtual void draw() const {
+        std::cout &lt;&lt; "Base::draw" &lt;&lt; std::endl;
+    }
+
+    void describe() const {
+        std::cout &lt;&lt; "Base::describe" &lt;&lt; std::endl;
+    }
+};
+
+class Derived : public Base {
+public:
+    // Correct: overrides virtual draw()
+    void draw() const override {
+        std::cout &lt;&lt; "Derived::draw" &lt;&lt; std::endl;
+    }
+
+    // ERROR: describe() is not virtual, cannot override
+    // void describe() const override { ... }
+
+    // ERROR: signature mismatch, does not override
+    // void draw() override { ... }  // missing const
+};
+</pre>
+
+<div class="callout green">
+  <p><strong>Tip:</strong> Always use the <code>override</code> keyword when overriding virtual functions. It catches bugs at compile time &mdash; if the base class signature changes, the compiler will warn you instead of silently creating a new function.</p>
+</div>
+
+<div class="callout">
+  <p><strong>Further reading:</strong> For how <code>virtual</code> functions work under the hood, see <a href="../intermediate/virtual-functions-vtable.html">Virtual Functions &amp; vtable</a>. For inheritance with multiple base classes, see <a href="../intermediate/multiple-inheritance.html">Multiple Inheritance</a>. For pure virtual functions and abstract base classes, see <a href="../intermediate/abstract-classes.html">Abstract Classes</a>.</p>
+</div>
+
+<div class="nav">
+  <a href="constructors-destructors.html">&larr; Constructors &amp; Destructors</a>
+  <a href="polymorphism.html">Polymorphism &rarr;</a>
+</div>
+</body>
+</html>

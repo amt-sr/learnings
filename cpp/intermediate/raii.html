@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RAII — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / RAII</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>RAII</h1>
+
+<p>RAII (Resource Acquisition Is Initialization) is the most important idiom in C++. The principle is simple: acquire a resource in a constructor and release it in a destructor. Since destructors are called automatically when an object goes out of scope (even when exceptions are thrown), resources are always properly cleaned up.</p>
+
+<h2>The Core Principle</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;fstream&gt;
+
+// RAII class wrapping a file handle
+class FileGuard {
+    std::ofstream file_;
+    std::string filename_;
+public:
+    explicit FileGuard(const std::string&amp; filename)
+        : filename_(filename) {
+        file_.open(filename_);
+        if (!file_.is_open()) {
+            throw std::runtime_error("Cannot open file: " + filename_);
+        }
+        std::cout &lt;&lt; "Opened: " &lt;&lt; filename_ &lt;&lt; "\n";
+    }
+
+    ~FileGuard() {
+        if (file_.is_open()) {
+            file_.close();
+            std::cout &lt;&lt; "Closed: " &lt;&lt; filename_ &lt;&lt; "\n";
+        }
+    }
+
+    // Prevent copying (exclusive resource ownership)
+    FileGuard(const FileGuard&amp;) = delete;
+    FileGuard&amp; operator=(const FileGuard&amp;) = delete;
+
+    // Allow moving
+    FileGuard(FileGuard&amp;&amp; other) noexcept
+        : file_(std::move(other.file_)), filename_(std::move(other.filename_)) {}
+
+    std::ofstream&amp; stream() { return file_; }
+};
+
+void raii_demo() {
+    FileGuard file("output.txt");
+    file.stream() &lt;&lt; "Hello, RAII!\n";
+
+    // Even if an exception is thrown here, the file is closed
+    // throw std::runtime_error("oops");
+}
+// Destructor called automatically — file is closed
+</pre>
+
+<h2>Scope-Based Resource Management</h2>
+
+<p>RAII turns scope-based object lifetime into resource lifetime management. This is the foundation for <a href="smart-pointers.html">smart pointers</a>, <a href="mutex-locks.html">lock guards</a>, and many other C++ facilities.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+class Timer {
+    std::string label_;
+    // Use a high-resolution clock for timing
+public:
+    explicit Timer(std::string label) : label_(std::move(label)) {
+        std::cout &lt;&lt; "[" &lt;&lt; label_ &lt;&lt; "] START\n";
+    }
+
+    ~Timer() {
+        std::cout &lt;&lt; "[" &lt;&lt; label_ &lt;&lt; "] END\n";
+    }
+
+    Timer(const Timer&amp;) = delete;
+    Timer&amp; operator=(const Timer&amp;) = delete;
+};
+
+void scope_management() {
+    std::cout &lt;&lt; "Entering scope_management\n";
+
+    {
+        Timer t("Inner block");
+        // Do some work here...
+    }
+    // Timer destructor called here: "[Inner block] END"
+
+    std::cout &lt;&lt; "Leaving scope_management\n";
+}
+
+// Exception safety example
+void exception_safe_operation() {
+    Timer t("Database Query");
+
+    // Step 1
+    // Step 2
+    // If any step throws, Timer's destructor still runs
+    // throw std::runtime_error("Connection failed");
+}
+</pre>
+
+<h2>Standard Library RAII Examples</h2>
+
+<pre>
+#include &lt;memory&gt;     // unique_ptr, shared_ptr — memory RAII
+#include &lt;mutex&gt;      // lock_guard, unique_lock — mutex RAII
+#include &lt;fstream&gt;    // fstream — file handle RAII
+#include &lt;vector&gt;     // vector — dynamic array RAII
+#include &lt;string&gt;     // string — character buffer RAII
+
+// All of these clean up automatically:
+void standard_raii() {
+    // Memory
+    auto ptr = std::make_unique&lt;int&gt;(42);
+
+    // File
+    std::ofstream file("data.txt");
+    file &lt;&lt; "data\n";
+    // file closed automatically when it goes out of scope
+
+    // Mutex (see <a href="mutex-locks.html">mutex and locks</a>)
+    std::mutex mtx;
+    {
+        std::lock_guard&lt;std::mutex&gt; lock(mtx);
+        // Critical section — mutex released when lock goes out of scope
+    }
+}
+</pre>
+
+<h2>Building a Custom RAII Wrapper</h2>
+
+<pre>
+#include &lt;iostream&gt;
+
+// Generic RAII wrapper for any callable (cleanup function)
+template&lt;typename Cleanup&gt;
+class ScopeGuard {
+    Cleanup cleanup_;
+    bool active_ = true;
+public:
+    explicit ScopeGuard(Cleanup cleanup) : cleanup_(std::move(cleanup)) {}
+
+    ~ScopeGuard() {
+        if (active_) cleanup_();
+    }
+
+    // Dismiss — cancel the cleanup
+    void dismiss() { active_ = false; }
+
+    // Prevent copying
+    ScopeGuard(const ScopeGuard&amp;) = delete;
+    ScopeGuard&amp; operator=(const ScopeGuard&amp;) = delete;
+
+    // Allow moving
+    ScopeGuard(ScopeGuard&amp;&amp; other) noexcept
+        : cleanup_(std::move(other.cleanup_)), active_(other.active_) {
+        other.active_ = false;
+    }
+};
+
+// Helper function for type deduction
+template&lt;typename Cleanup&gt;
+ScopeGuard&lt;Cleanup&gt; make_scope_guard(Cleanup cleanup) {
+    return ScopeGuard&lt;Cleanup&gt;(std::move(cleanup));
+}
+
+void scope_guard_demo() {
+    std::cout &lt;&lt; "Before work\n";
+    auto guard = make_scope_guard([]() {
+        std::cout &lt;&lt; "Cleanup: releasing resources\n";
+    });
+
+    // Do work...
+    std::cout &lt;&lt; "During work\n";
+
+    // If we succeed and don't need cleanup:
+    // guard.dismiss();
+
+    // Otherwise, cleanup runs automatically when guard goes out of scope
+}
+// Output:
+//   Before work
+//   During work
+//   Cleanup: releasing resources
+</pre>
+
+<h2>RAII and Exception Safety</h2>
+
+<p>RAII is the foundation of exception safety in C++. With RAII, you never need to remember to release resources — the destructor handles it, whether the scope exits normally or via an exception.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+class DatabaseConnection {
+public:
+    DatabaseConnection() { std::cout &lt;&lt; "DB connected\n"; }
+    ~DatabaseConnection() { std::cout &lt;&lt; "DB disconnected\n"; }
+
+    void execute(const std::string&amp; query) {
+        std::cout &lt;&lt; "Executing: " &lt;&lt; query &lt;&lt; "\n";
+    }
+};
+
+void transactional_operation() {
+    DatabaseConnection db;  // Connected
+
+    db.execute("BEGIN TRANSACTION");
+    db.execute("INSERT INTO users VALUES ('Alice')");
+    db.execute("UPDATE inventory SET count = count - 1");
+
+    // If exception thrown here, db destructor disconnects properly
+    if (false) throw std::runtime_error("Network error");
+
+    db.execute("COMMIT");
+}
+// db.~DatabaseConnection() called — connection closed even if exception thrown
+</pre>
+
+<div class="callout green">
+  <p><strong>RAII Guarantee:</strong> Resources are released deterministically when the owning object goes out of scope. This applies whether the scope exits normally, via <code>return</code>, via <code>break</code>, via <code>continue</code>, or via an exception. This is why C++ does not need a <code>finally</code> block — destructors serve that purpose.</p>
+</div>
+
+<h2>RAII in Practice — Summary</h2>
+
+<table>
+  <tr><th>Resource</th><th>RAII Wrapper</th><th>Cleanup Action</th></tr>
+  <tr><td>Heap memory</td><td><code>unique_ptr</code>, <code>shared_ptr</code></td><td><code>delete</code></td></tr>
+  <tr><td>File handles</td><td><code>fstream</code></td><td><code>fclose</code></td></tr>
+  <tr><td>Mutex locks</td><td><code>lock_guard</code>, <code>unique_lock</code></td><td><code>mutex.unlock()</code></td></tr>
+  <tr><td>Dynamic arrays</td><td><code>vector</code>, <code>unique_ptr&lt;T[]&gt;</code></td><td><code>delete[]</code></td></tr>
+  <tr><td>Socket handles</td><td>Custom wrapper class</td><td><code>close()</code></td></tr>
+  <tr><td>Temporary files</td><td>Custom wrapper class</td><td><code>remove()</code></td></tr>
+</table>
+
+<p>RAII underpins <a href="smart-pointers.html">smart pointers</a>, <a href="friend-functions.html">friend functions</a> patterns, and is essential for understanding <a href="copy-elision.html">copy elision</a>. Next, we explore <a href="copy-elision.html">copy elision (RVO/NRVO)</a>.</p>
+
+<div class="nav"><a href="friend-functions.html">&larr; Friend Functions</a><a href="copy-elision.html">Copy Elision &rarr;</a></div>
+</body>
+</html>

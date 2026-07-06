@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>std::thread — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / <a href="../index.html#2.6">2.6 Multithreading</a> / 2.6.1 std::thread</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>std::thread</h1>
+
+<p><code>std::thread</code> (C++11) provides a portable C++ interface for creating and managing OS threads. Each <code>std::thread</code> object represents a thread of execution. The C++ thread API abstracts away platform-specific threading (pthreads, Win32 threads) and integrates with the standard library's type system.</p>
+
+<h2>Creating and Joining Threads</h2>
+
+<pre>
+#include &lt;thread&gt;
+#include &lt;iostream&gt;
+
+void hello() {
+    std::cout &lt;&lt; "Hello from thread " &lt;&lt; std::this_thread::get_id() &lt;&lt; "\n";
+}
+
+void thread_basics() {
+    // Create a thread that runs hello()
+    std::thread t(hello);
+
+    // Wait for the thread to finish
+    t.join();
+    std::cout &lt;&lt; "Main thread: " &lt;&lt; std::this_thread::get_id() &lt;&lt; "\n";
+}
+</pre>
+
+<h2>Passing Arguments</h2>
+
+<pre>
+#include &lt;thread&gt;
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+void print_message(const std::string&amp; msg, int count) {
+    for (int i = 0; i &lt; count; ++i) {
+        std::cout &lt;&lt; msg &lt;&lt; " (" &lt;&lt; i &lt;&lt; ")\n";
+    }
+}
+
+void passing_args_demo() {
+    // Arguments are copied by default
+    std::string msg = "Hello";
+    std::thread t(print_message, msg, 3);
+
+    // Use std::ref to pass by reference
+    // std::thread t2(print_message, std::ref(msg), 3);
+
+    t.join();
+}
+
+// Avoid dangling references: arguments are ALWAYS copied
+// even if the thread function takes by reference!
+void danger_demo() {
+    std::string local = "hello";
+    // BAD: passes a pointer to local variable that may be destroyed
+    // std::thread t([](const std::string&amp; s) { std::cout &lt;&lt; s; }, local);
+    // OK: pass by value or move
+    std::thread t([local]() { std::cout &lt;&lt; local &lt;&lt; "\n"; });
+    t.join();
+}
+</pre>
+
+<div class="callout red">
+  <p><strong>Dangling reference trap:</strong> When passing arguments to <code>std::thread</code>, they are copied into internal storage and then passed to the function. If you pass a reference, the thread function receives a reference to the <em>copy</em>, not the original. Use <code>std::ref()</code> to pass by reference, or capture by value/move in a lambda.</p>
+</div>
+
+<h2>Join vs Detach</h2>
+
+<pre>
+#include &lt;thread&gt;
+#include &lt;iostream&gt;
+
+void join_vs_detach() {
+    // join: wait for thread to finish (main thread blocks)
+    std::thread t1([]() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::cout &lt;&lt; "t1 finished\n";
+    });
+    t1.join();  // blocks until t1 completes
+    std::cout &lt;&lt; "After t1 join\n";
+
+    // detach: thread runs independently (daemon thread)
+    std::thread t2([]() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        std::cout &lt;&lt; "t2 running independently\n";
+    });
+    t2.detach();  // t2 becomes a detached thread
+    // Must ensure t2 does not access destroyed resources!
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>Always join or detach:</strong> If a <code>std::thread</code> object is destroyed without being joined or detached, <code>std::terminate()</code> is called. A common pattern is to use RAII to guarantee joining (see below).</p>
+</div>
+
+<h2>RAII Thread Guard</h2>
+
+<pre>
+#include &lt;thread&gt;
+
+class ThreadGuard {
+    std::thread&amp; t_;
+public:
+    explicit ThreadGuard(std::thread&amp; t) : t_(t) {}
+    ~ThreadGuard() {
+        if (t_.joinable()) {
+            t_.join();
+        }
+    }
+    ThreadGuard(const ThreadGuard&amp;) = delete;
+    ThreadGuard&amp; operator=(const ThreadGuard&amp;) = delete;
+};
+
+void raii_thread_demo() {
+    std::thread t([]() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::cout &lt;&lt; "Background work done\n";
+    });
+
+    ThreadGuard guard(t);  // auto-joins when scope exits
+    // ... do other work ...
+    // t is automatically joined when guard is destroyed
+}
+</pre>
+
+<h2>Parallel Vector Sum</h2>
+
+<pre>
+#include &lt;thread&gt;
+#include &lt;vector&gt;
+#include &lt;numeric&gt;
+#include &lt;iostream&gt;
+
+void parallel_sum(const std::vector&lt;int&gt;&amp; data,
+                   size_t start, size_t end, long&amp; result) {
+    result = 0;
+    for (size_t i = start; i &lt; end; ++i) {
+        result += data[i];
+    }
+}
+
+void parallel_sum_demo() {
+    std::vector&lt;int&gt; data(10'000'000);
+    std::iota(data.begin(), data.end(), 1);  // 1 to 10M
+
+    const size_t num_threads = std::thread::hardware_concurrency();
+    std::vector&lt;std::thread&gt; threads;
+    std::vector&lt;long&gt; partial_sums(num_threads);
+
+    size_t chunk = data.size() / num_threads;
+
+    for (size_t i = 0; i &lt; num_threads; ++i) {
+        size_t start = i * chunk;
+        size_t end = (i == num_threads - 1) ? data.size() : start + chunk;
+        threads.emplace_back(parallel_sum,
+            std::cref(data), start, end, std::ref(partial_sums[i]));
+    }
+
+    for (auto&amp; t : threads) t.join();
+
+    long total = 0;
+    for (auto s : partial_sums) total += s;
+
+    std::cout &lt;&lt; "Parallel sum: " &lt;&lt; total &lt;&lt; "\n";
+    // Expected: 50000005000000
+}
+</pre>
+
+<h2>Common Thread Operations</h2>
+
+<table>
+  <tr><th>Operation</th><th>Description</th></tr>
+  <tr><td><code>t.joinable()</code></td><td>Returns true if thread can be joined</td></tr>
+  <tr><td><code>t.join()</code></td><td>Waits for thread to finish</td></tr>
+  <tr><td><code>t.detach()</code></td><td>Runs thread independently</td></tr>
+  <tr><td><code>t.get_id()</code></td><td>Returns thread ID</td></tr>
+  <tr><td><code>std::this_thread::get_id()</code></td><td>ID of the calling thread</td></tr>
+  <tr><td><code>std::this_thread::sleep_for(dur)</code></td><td>Sleep for a duration</td></tr>
+  <tr><td><code>std::this_thread::sleep_until(tp)</code></td><td>Sleep until a time point</td></tr>
+  <tr><td><code>std::this_thread::yield()</code></td><td>Suggest rescheduling to other threads</td></tr>
+  <tr><td><code>std::thread::hardware_concurrency()</code></td><td>Number of concurrent threads supported</td></tr>
+</table>
+
+<p>Shared data between threads requires synchronization -- see <a href="mutex-locks.html">mutex and locks</a>. For asynchronous task-based concurrency, see <a href="async-futures.html">async and futures</a>. For lock-free techniques, see <a href="../advanced/memory-model-atomics.html">memory model and atomics</a>.</p>
+
+<div class="nav"><a href="assert-static-assert.html">&larr; Assert / Static Assert</a><a href="mutex-locks.html">Mutex / Locks &rarr;</a></div>
+</body>
+</html>

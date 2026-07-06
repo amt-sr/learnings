@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RRC Layer — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#4">4 Telecom &amp; 5G/4G</a> / RRC Layer</div>
+<div class="meta"><span class="tag advanced">Advanced</span></div>
+<h1>RRC Layer</h1>
+
+<p>RRC (Radio Resource Control) is the control plane protocol that manages UE connection states, radio bearers, measurements, mobility, and security configuration. RRC messages are ASN.1 encoded and carried over SRB0/SRB1/SRB2 using RLC AM or TM mode.</p>
+
+<h2>RRC State Machine (5G NR)</h2>
+
+<pre>
+                  RRC_IDLE
+                 |        |
+                 | RRC Setup / Resume
+                 v        |
+              RRC_INACTIVE |
+             |        ^    |
+             | Resume |     |
+             v        |    |
+           RRC_CONNECTED --------+
+             |  Release        |
+             | RRC Release      |
+             v                  |
+          RRC_INACTIVE  ------+
+             | Resume          |
+             +---------&gt;--------+
+                    (Paging -&gt; Resume)
+
+  Key differences from LTE:
+  - RRC_INACTIVE is new in 5G (like LTE connected-but-suspended)
+  - UE keeps UE context in CN and gNB while inactive
+  - Resume is faster than full setup
+</pre>
+
+<h2>RRC Connection States</h2>
+
+<table>
+  <tr><th>State</th><th>UE ID</th><th>Location Known</th><th>Reception</th><th>Transmission</th></tr>
+  <tr><td>RRC_IDLE</td><td>5G-S-TMSI (no gNB context)</td><td>Tracking area</td><td>DRX, paging</td><td>RACH (PRACH)</td></tr>
+  <tr><td>RRC_INACTIVE</td><td>I-RNTI (gNB context kept)</td><td>RNA (RAN-based area)</td><td>DRX, RNA paging</td><td>Fast resume (no RACH)</td></tr>
+  <tr><td>RRC_CONNECTED</td><td>C-RNTI</td><td>Cell level</td><td>DRX (configured)</td><td>PUSCH/PUCCH</td></tr>
+</table>
+
+<h2>C++ RRC State Machine Implementation</h2>
+
+<pre>
+#include &lt;string&gt;
+#include &lt;unordered_map&gt;
+#include &lt;functional&gt;
+#include &lt;cstdint&gt;
+
+// RRC states (5G NR)
+enum class RrcState : uint8_t {
+    IDLE,
+    INACTIVE,
+    CONNECTED
+};
+
+// RRC message types (simplified)
+enum class RrcMessageType : uint8_t {
+    RRC_SETUP_REQUEST,
+    RRC_SETUP,
+    RRC_SETUP_COMPLETE,
+    RRC_RECONFIGURATION,
+    RRC_RECONFIGURATION_COMPLETE,
+    RRC_RELEASE,
+    RRC_RESUME_REQUEST,
+    RRC_RESUME,
+    RRC_RESUME_COMPLETE,
+    RRC_REESTABLISHMENT_REQUEST,
+    RRC_REESTABLISHMENT,
+    SYSTEM_INFORMATION,
+    PAGING,
+    MEASUREMENT_REPORT,
+    RRC_REJECT
+};
+
+// UE context maintained in gNB
+struct UeRrcContext {
+    uint32_t           ue_id;           // gNB UE ID
+    uint16_t           rnti;            // C-RNTI or I-RNTI
+    RrcState           state;
+    uint32_t           cell_id;         // Serving cell
+
+    // Security
+    bool               security_activated;
+    uint8_t            kgnb[32];        // gNB security key
+    uint8_t            krrenc[16];      // RRC ciphering key
+    uint8_t            krrint[16];      // RRC integrity key
+
+    // Bearers
+    uint8_t            srbs[4];         // SRB IDs configured (SRB0-3)
+    std::vector&lt;uint8_t&gt; drbs;         // DRB IDs configured
+
+    // Capabilities
+    uint8_t            release_version;  // UE 5G release
+
+    // Timers
+    uint32_t           t310_expiry;     // Radio link failure timer
+    uint32_t           t311_expiry;     // Reestablishment timer
+};
+
+// RRC state machine for one UE
+class RrcStateMachine {
+public:
+    explicit RrcStateMachine(uint32_t ue_id)
+        : ctx_({ue_id, 0, RrcState::IDLE, 0, false, {}, {}, {},
+               {}, {}, 15, 0, 0}) {}
+
+    // Handle incoming RRC message
+    void handleMessage(RrcMessageType msg_type,
+                       const uint8_t* msg, size_t len) {
+        switch (ctx_.state) {
+            case RrcState::IDLE:
+                handleIdle(msg_type, msg, len);
+                break;
+            case RrcState::INACTIVE:
+                handleInactive(msg_type, msg, len);
+                break;
+            case RrcState::CONNECTED:
+                handleConnected(msg_type, msg, len);
+                break;
+        }
+    }
+
+    RrcState getState() const { return ctx_.state; }
+    const UeRrcContext&amp; getContext() const { return ctx_; }
+
+private:
+    UeRrcContext ctx_;
+
+    void transition(RrcState new_state) {
+        RrcState old = ctx_.state;
+        ctx_.state = new_state;
+        onStateTransition(old, new_state);
+    }
+
+    // === IDLE state handlers ===
+    void handleIdle(RrcMessageType msg_type,
+                    const uint8_t* msg, size_t len) {
+        switch (msg_type) {
+            case RrcMessageType::RRC_SETUP_REQUEST:
+                // Parse setup request, check PLMN/TA
+                onRrcSetupRequest(msg, len);
+                // Send RRC SETUP with SRB1 config
+                transition(RrcState::CONNECTED);
+                sendRrcSetup();
+                break;
+
+            case RrcMessageType::RRC_RESUME_REQUEST:
+                // UE resuming from INACTIVE
+                onRrcResumeRequest(msg, len);
+                transition(RrcState::CONNECTED);
+                sendRrcResume();
+                break;
+
+            case RrcMessageType::PAGING:
+                // Not applicable (gNB sends paging, doesn't receive)
+                break;
+
+            default:
+                // Unexpected message in IDLE
+                rejectConnection();
+                break;
+        }
+    }
+
+    // === INACTIVE state handlers ===
+    void handleInactive(RrcMessageType msg_type,
+                        const uint8_t* msg, size_t len) {
+        switch (msg_type) {
+            case RrcMessageType::RRC_RESUME_REQUEST:
+                transition(RrcState::CONNECTED);
+                sendRrcResume();
+                break;
+
+            case RrcMessageType::RRC_REESTABLISHMENT_REQUEST:
+                // Re-establish after radio link failure
+                transition(RrcState::CONNECTED);
+                sendRrcReestablishment();
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    // === CONNECTED state handlers ===
+    void handleConnected(RrcMessageType msg_type,
+                         const uint8_t* msg, size_t len) {
+        switch (msg_type) {
+            case RrcMessageType::RRC_SETUP_COMPLETE:
+                onRrcSetupComplete(msg, len);
+                // Security activation, DRB setup via E1
+                break;
+
+            case RrcMessageType::RRC_RECONFIGURATION_COMPLETE:
+                onRrcReconfigComplete(msg, len);
+                break;
+
+            case RrcMessageType::RRC_RECONFIGURATION:
+                // UE-initiated reconfig (rare)
+                break;
+
+            case RrcMessageType::MEASUREMENT_REPORT:
+                onMeasurementReport(msg, len);
+                // May trigger handover
+                break;
+
+            case RrcMessageType::RRC_RELEASE:
+                // Release to INACTIVE (suspend) or IDLE
+                if (isSuspend(msg, len)) {
+                    transition(RrcState::INACTIVE);
+                    ctx_.rnti = allocateIrnti();
+                } else {
+                    transition(RrcState::IDLE);
+                }
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    // Callbacks (implemented by gNB)
+    void onRrcSetupRequest(const uint8_t* msg, size_t len);
+    void onRrcSetupComplete(const uint8_t* msg, size_t len);
+    void onRrcResumeRequest(const uint8_t* msg, size_t len);
+    void onRrcReconfigComplete(const uint8_t* msg, size_t len);
+    void onMeasurementReport(const uint8_t* msg, size_t len);
+    void onStateTransition(RrcState old, RrcState new_state);
+
+    void sendRrcSetup();
+    void sendRrcResume();
+    void sendRrcReestablishment();
+    void rejectConnection();
+    bool isSuspend(const uint8_t* msg, size_t len);
+    uint16_t allocateIrnti();
+};
+</pre>
+
+<h2>RRC Measurement Configuration</h2>
+
+<pre>
+// Measurement object for inter-frequency/inter-RAT
+struct MeasObject {
+    uint32_t    carrier_freq;      // ARFCN of the measured carrier
+    uint8_t     object_type;        // SSb, CSI-RS, or inter-RAT
+    uint32_t    ssb_periodicity;    // SSB measurement period
+    uint32_t    ssb_offset;         // SSB offset in dB
+    bool        abs_threshold;      // Absolute threshold or not
+};
+
+// Report configuration for measurement reporting
+struct ReportConfig {
+    uint32_t    report_interval_ms; // Time between reports
+    uint8_t     report_type;        // Periodic, event A1-A6, B1-B2
+    int8_t      threshold_rsrp;     // RSRP threshold (dBm)
+    int8_t      hysteresis_db;      // Hysteresis (dB)
+    uint32_t    time_to_trigger_ms; // Time to trigger
+};
+
+// Measurement ID linking object + report config
+struct MeasId {
+    uint32_t meas_id;
+    uint32_t object_id;
+    uint32_t report_config_id;
+};
+</pre>
+
+<h2>Cross-References</h2>
+
+<ul>
+  <li><a href="pdcp-layer.html">PDCP Layer</a> -- RRC messages use SRBs which go through PDCP.</li>
+  <li><a href="nas-layer.html">NAS Layer</a> -- RRC Setup carries initial NAS message.</li>
+  <li><a href="handover-procedures.html">Handover</a> -- Measurement reports trigger handover decisions.</li>
+  <li><a href="asn1-encoding.html">ASN.1 Encoding</a> -- RRC messages are ASN.1 encoded.</li>
+  <li><a href="../advanced/state-machine.html">State Machine Pattern</a> -- The RRC FSM implementation pattern.</li>
+</ul>
+
+<div class="nav"><a href="pdcp-layer.html">&larr; PDCP Layer</a><a href="sdap-layer.html">SDAP Layer &rarr;</a></div>
+</body>
+</html>

@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Set / Unordered Set — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / <a href="../index.html#2.4">2.4 STL Deep Dive</a> / 2.4.1 Set / Unordered Set</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>Set / Unordered Set</h1>
+
+<p><code>std::set</code> and <code>std::unordered_set</code> are associative containers that store unique elements. <code>std::set</code> keeps elements sorted using a balanced binary tree (typically red-black tree), while <code>std::unordered_set</code> uses a hash table for O(1) average-case lookups.</p>
+
+<h2>std::set (Ordered)</h2>
+
+<p><code>std::set</code> stores elements in sorted order. It provides bidirectional iterators and guarantees logarithmic-time insert, erase, and lookup operations.</p>
+
+<pre>
+#include &lt;set&gt;
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+void set_basics() {
+    std::set&lt;int&gt; s = {30, 10, 20, 10, 40};  // duplicates are ignored
+    // s = {10, 20, 30, 40}  (sorted)
+
+    s.insert(25);           // s = {10, 20, 25, 30, 40}
+    s.insert(10);           // no effect — already present
+
+    std::cout &lt;&lt; "Size: " &lt;&lt; s.size() &lt;&lt; "\n";       // 5
+    std::cout &lt;&lt; "Count 10: " &lt;&lt; s.count(10) &lt;&lt; "\n";  // 1
+    std::cout &lt;&lt; "Count 99: " &lt;&lt; s.count(99) &lt;&lt; "\n";  // 0
+
+    // Find and erase
+    if (auto it = s.find(25); it != s.end()) {
+        std::cout &lt;&lt; "Found: " &lt;&lt; *it &lt;&lt; "\n";
+        s.erase(it);  // erase by iterator — O(1) amortized
+    }
+
+    // Range-based for (always sorted order)
+    for (const auto&amp; val : s) {
+        std::cout &lt;&lt; val &lt;&lt; " ";
+    }
+    // Output: 10 20 30 40
+}
+</pre>
+
+<h2>std::unordered_set (Hash Table)</h2>
+
+<p><code>std::unordered_set</code> provides average O(1) insert, erase, and lookup but elements have no defined order. It requires elements to be hashable via <code>std::hash</code>.</p>
+
+<pre>
+#include &lt;unordered_set&gt;
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+void unordered_set_basics() {
+    std::unordered_set&lt;std::string&gt; names;
+    names.insert("Alice");
+    names.insert("Bob");
+    names.insert("Charlie");
+    names.insert("Alice");  // duplicate — ignored
+
+    std::cout &lt;&lt; "Size: " &lt;&lt; names.size() &lt;&lt; "\n";  // 3
+    std::cout &lt;&lt; "Bucket count: " &lt;&lt; names.bucket_count() &lt;&lt; "\n";
+    std::cout &lt;&lt; "Load factor: " &lt;&lt; names.load_factor() &lt;&lt; "\n";
+
+    if (names.contains("Bob")) {  // C++20
+        std::cout &lt;&lt; "Bob is in the set\n";
+    }
+
+    // Custom bucket count for performance tuning
+    std::unordered_set&lt;int&gt; nums;
+    nums.reserve(1000);  // avoid rehashing when inserting ~1000 elements
+    for (int i = 0; i &lt; 1000; ++i) nums.insert(i);
+}
+</pre>
+
+<h2>Comparison Table</h2>
+
+<table>
+  <tr><th>Property</th><th>std::set</th><th>std::unordered_set</th></tr>
+  <tr><td>Underlying structure</td><td>Red-black tree</td><td>Hash table</td></tr>
+  <tr><td>Ordering</td><td>Sorted (ascending by default)</td><td>Unspecified</td></tr>
+  <tr><td>Insert/erase/find</td><td>O(log n)</td><td>O(1) average, O(n) worst</td></tr>
+  <tr><td>Iterator invalidation</td><td>Only erased element</td><td>Rehash invalidates all</td></tr>
+  <tr><td>Memory overhead</td><td>3 pointers per node</td><td>1 pointer + bucket array</td></tr>
+  <tr><td>Requirements</td><td>operator&lt; (or custom comparator)</td><td>std::hash + operator==</td></tr>
+  <tr><td>Lower/upper bound</td><td>Yes</td><td>No</td></tr>
+</table>
+
+<h2>Custom Comparator and Hasher</h2>
+
+<pre>
+#include &lt;set&gt;
+#include &lt;unordered_set&gt;
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+// Custom comparator: case-insensitive set
+struct CaseInsensitiveLess {
+    bool operator()(const std::string&amp; a, const std::string&amp; b) const {
+        return std::lexicographical_compare(
+            a.begin(), a.end(), b.begin(), b.end(),
+            [](char c1, char c2) { return tolower(c1) &lt; tolower(c2); });
+    }
+};
+
+void custom_comparator_demo() {
+    std::set&lt;std::string, CaseInsensitiveLess&gt; words;
+    words.insert("Hello");
+    words.insert("hello");   // considered duplicate
+    words.insert("WORLD");
+
+    std::cout &lt;&lt; "Size: " &lt;&lt; words.size() &lt;&lt; "\n";  // 2
+}
+
+// Custom hasher for unordered_set
+struct StringHash {
+    size_t operator()(const std::string&amp; s) const {
+        size_t h = 0;
+        for (char c : s) h = h * 31 + c;
+        return h;
+    }
+};
+
+void custom_hasher_demo() {
+    std::unordered_set&lt;std::string, StringHash&gt; custom;
+    custom.insert("test");
+    std::cout &lt;&lt; "Contains 'test': " &lt;&lt; custom.count("test") &lt;&lt; "\n";
+}
+</pre>
+
+<h2>Practical: Removing Duplicates</h2>
+
+<pre>
+#include &lt;set&gt;
+#include &lt;vector&gt;
+#include &lt;iostream&gt;
+
+std::vector&lt;int&gt; remove_duplicates(const std::vector&lt;int&gt;&amp; input) {
+    std::set&lt;int&gt; unique(input.begin(), input.end());
+    return std::vector&lt;int&gt;(unique.begin(), unique.end());  // sorted
+}
+
+void dedup_demo() {
+    std::vector&lt;int&gt; data = {5, 3, 5, 1, 3, 7, 1, 9};
+    auto unique = remove_duplicates(data);
+    for (int v : unique) std::cout &lt;&lt; v &lt;&lt; " ";
+    // Output: 1 3 5 7 9
+}
+</pre>
+
+<h2>When to Use Which</h2>
+
+<div class="callout green">
+  <p><strong>Use std::set when:</strong> You need ordered iteration, range queries (lower_bound/upper_bound), or when you need guaranteed O(log n) worst case.</p>
+</div>
+
+<div class="callout green">
+  <p><strong>Use std::unordered_set when:</strong> You primarily need fast existence checks and do not care about ordering. This is the most common case for deduplication and membership testing.</p>
+</div>
+
+<div class="callout warning">
+  <p><strong>Performance tip:</strong> Call <code>reserve()</code> on <code>unordered_set</code> before inserting many elements to avoid costly rehashing. The load factor should stay below 1.0 for optimal performance.</p>
+</div>
+
+<p>Sets complement the <a href="map-unordered-map.html">map containers</a> (which store key-value pairs) and are used extensively with <a href="stl-algorithms.html">STL algorithms</a> for set operations like intersection and union.</p>
+
+<div class="nav"><a href="type-traits.html">&larr; Type Traits</a><a href="deque.html">Deque &rarr;</a></div>
+</body>
+</html>

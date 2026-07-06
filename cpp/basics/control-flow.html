@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control Flow — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; }
+  .breadcrumb a { color: #8b949e; }
+  .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; }
+  .callout.red { border-left-color: #f85149; }
+  .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; }
+  th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; }
+  .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#1">1 Basics</a> / 1.1.4 Control Flow</div>
+<div class="meta"><span class="tag basic">BASIC</span></div>
+<h1>1.1.4 Control Flow</h1>
+
+<p>Control flow statements determine the order in which statements are executed. C++ provides conditional branching, looping, and jump statements that let you express complex logic.</p>
+
+<h2>if / else if / else</h2>
+
+<p>The <code>if</code> statement is the most fundamental control flow construct. It evaluates a condition and executes a block if the condition is true.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+int main() {
+    int score = 85;
+
+    if (score &gt;= 90) {
+        std::cout &lt;&lt; "Grade: A" &lt;&lt; std::endl;
+    } else if (score &gt;= 80) {
+        std::cout &lt;&lt; "Grade: B" &lt;&lt; std::endl;
+    } else if (score &gt;= 70) {
+        std::cout &lt;&lt; "Grade: C" &lt;&lt; std::endl;
+    } else if (score &gt;= 60) {
+        std::cout &lt;&lt; "Grade: D" &lt;&lt; std::endl;
+    } else {
+        std::cout &lt;&lt; "Grade: F" &lt;&lt; std::endl;
+    }
+
+    return 0;
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Tip:</strong> Always use braces <code>{}</code> around the body of <code>if</code>/<code>else</code> statements, even for single-line bodies. This prevents the dangling else problem and makes the code easier to maintain. Many style guides (Google, LLVM, etc.) enforce this rule.</p>
+</div>
+
+<h2>switch Statement</h2>
+
+<p>The <code>switch</code> statement is a cleaner alternative to long <code>if/else if</code> chains when comparing a single expression against constant values.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+int main() {
+    int day = 3;
+
+    switch (day) {
+        case 1:
+            std::cout &lt;&lt; "Monday" &lt;&lt; std::endl;
+            break;
+        case 2:
+            std::cout &lt;&lt; "Tuesday" &lt;&lt; std::endl;
+            break;
+        case 3:
+            std::cout &lt;&lt; "Wednesday" &lt;&lt; std::endl;
+            break;
+        case 4:
+            std::cout &lt;&lt; "Thursday" &lt;&lt; std::endl;
+            break;
+        case 5:
+            std::cout &lt;&lt; "Friday" &lt;&lt; std::endl;
+            break;
+        default:
+            std::cout &lt;&lt; "Weekend" &lt;&lt; std::endl;
+            break;
+    }
+
+    return 0;
+}
+</pre>
+
+<div class="callout red">
+  <p><strong>Warning:</strong> Forgetting <code>break</code> causes <strong>fall-through</strong>, where execution continues into the next case. This is almost always a bug. If intentional fall-through is desired, add a <code>// fall through</code> comment. C++17 added the <code>[[fallthrough]]</code> attribute to suppress compiler warnings explicitly.</p>
+</div>
+
+<h2>for Loop</h2>
+
+<p>The <code>for</code> loop is the most common loop in C++. It combines initialization, condition, and increment in a single line.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+int main() {
+    // Classic for loop
+    for (int i = 0; i &lt; 5; ++i) {
+        std::cout &lt;&lt; "Iteration: " &lt;&lt; i &lt;&lt; std::endl;
+    }
+
+    // Range-based for loop (C++11)
+    int nums[] = {10, 20, 30, 40, 50};
+
+    std::cout &lt;&lt; "\nRange-based for:" &lt;&lt; std::endl;
+    for (int num : nums) {
+        std::cout &lt;&lt; num &lt;&lt; " ";
+    }
+    std::cout &lt;&lt; std::endl;
+
+    // Range-based for with reference (to modify elements)
+    for (int&amp; num : nums) {
+        num *= 2;  // Double each element
+    }
+
+    for (const int&amp; num : nums) {
+        std::cout &lt;&lt; num &lt;&lt; " ";
+    }
+    std::cout &lt;&lt; std::endl;
+
+    return 0;
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Tip:</strong> Use <code>const auto&amp;</code> in range-based for loops when you only need to read elements: <code>for (const auto&amp; item : container)</code>. This avoids unnecessary copies and prevents accidental modification.</p>
+</div>
+
+<h2>while Loop</h2>
+
+<p>The <code>while</code> loop evaluates its condition before each iteration. It is ideal when the number of iterations is unknown beforehand.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+int main() {
+    int count = 0;
+
+    // while: check condition first
+    while (count &lt; 5) {
+        std::cout &lt;&lt; "Count: " &lt;&lt; count &lt;&lt; std::endl;
+        ++count;
+    }
+
+    // Common pattern: processing input
+    int sum = 0;
+    int value;
+    std::cout &lt;&lt; "\nEnter numbers (0 to stop):" &lt;&lt; std::endl;
+    while (std::cin &gt;&gt; value &amp;&amp; value != 0) {
+        sum += value;
+    }
+    std::cout &lt;&lt; "Sum: " &lt;&lt; sum &lt;&lt; std::endl;
+
+    return 0;
+}
+</pre>
+
+<h2>do-while Loop</h2>
+
+<p>The <code>do-while</code> loop guarantees at least one iteration since the condition is checked <em>after</em> the loop body.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+int main() {
+    int choice;
+
+    do {
+        std::cout &lt;&lt; "\nMenu:" &lt;&lt; std::endl;
+        std::cout &lt;&lt; "1. Option A" &lt;&lt; std::endl;
+        std::cout &lt;&lt; "2. Option B" &lt;&lt; std::endl;
+        std::cout &lt;&lt; "3. Quit" &lt;&lt; std::endl;
+        std::cout &lt;&lt; "Choice: ";
+        std::cin &gt;&gt; choice;
+
+        switch (choice) {
+            case 1: std::cout &lt;&lt; "You chose A" &lt;&lt; std::endl; break;
+            case 2: std::cout &lt;&lt; "You chose B" &lt;&lt; std::endl; break;
+            case 3: std::cout &lt;&lt; "Goodbye!" &lt;&lt; std::endl; break;
+            default: std::cout &lt;&lt; "Invalid choice" &lt;&lt; std::endl;
+        }
+    } while (choice != 3);
+
+    return 0;
+}
+</pre>
+
+<h2>break and continue</h2>
+
+<p><code>break</code> exits the innermost loop or switch immediately. <code>continue</code> skips the rest of the current iteration and moves to the next one.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+int main() {
+    // break: find first even number
+    int nums[] = {1, 3, 7, 4, 9, 2};
+    for (int i = 0; i &lt; 6; ++i) {
+        if (nums[i] % 2 == 0) {
+            std::cout &lt;&lt; "First even: " &lt;&lt; nums[i]
+                      &lt;&lt; " at index " &lt;&lt; i &lt;&lt; std::endl;
+            break;
+        }
+    }
+
+    // continue: skip odd numbers
+    std::cout &lt;&lt; "\nEven numbers only:" &lt;&lt; std::endl;
+    for (int i = 0; i &lt; 10; ++i) {
+        if (i % 2 != 0) {
+            continue;  // Skip odd
+        }
+        std::cout &lt;&lt; i &lt;&lt; " ";
+    }
+    std::cout &lt;&lt; std::endl;
+
+    return 0;
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>Warning:</strong> Overusing <code>break</code> and <code>continue</code> can make code harder to follow because the control flow is not linear. Use them when they genuinely simplify the logic (like the search pattern above), but avoid using them in complex nested loops where they reduce readability.</p>
+</div>
+
+<h2>Nested Loops</h2>
+
+<p>Loops can be nested inside each other. A common use case is working with multi-dimensional data:</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+int main() {
+    // Multiplication table
+    for (int i = 1; i &lt;= 5; ++i) {
+        for (int j = 1; j &lt;= 5; ++j) {
+            std::cout &lt;&lt; i * j &lt;&lt; "\t";
+        }
+        std::cout &lt;&lt; std::endl;
+    }
+
+    // Searching a 2D array
+    int matrix[3][3] = {
+        {1, 2, 3},
+        {4, 5, 6},
+        {7, 8, 9}
+    };
+
+    int target = 5;
+    bool found = false;
+    for (int i = 0; i &lt; 3 &amp;&amp; !found; ++i) {
+        for (int j = 0; j &lt; 3; ++j) {
+            if (matrix[i][j] == target) {
+                std::cout &lt;&lt; "Found " &lt;&lt; target
+                          &lt;&lt; " at [" &lt;&lt; i &lt;&lt;"][" &lt;&lt; j &lt;&lt; "]" &lt;&lt; std::endl;
+                found = true;
+                break;
+            }
+        }
+    }
+
+    return 0;
+}
+</pre>
+
+<div class="callout">
+  <p><strong>Next Steps:</strong> Now that you can control program flow, learn how to organize reusable logic with <a href="functions.html">Functions</a>.</p>
+</div>
+
+<div class="nav">
+  <a href="operators.html">&larr; Operators</a>
+  <a href="functions.html">Functions &rarr;</a>
+</div>
+</body>
+</html>

@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chrono &amp; Time — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / 2.7 File I/O &amp; Utilities / 2.7.3 Chrono &amp; Time</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>Chrono &amp; Time</h1>
+
+<p>The <code>&lt;chrono&gt;</code> library (C++11) provides a type-safe, precision-independent system for dealing with time. It defines clocks, time points, and durations as distinct types, preventing the common bugs of mixing seconds with milliseconds or using raw integers for time arithmetic.</p>
+
+<h2>Clocks</h2>
+
+<p>A <em>clock</em> is a source of time points. The standard provides three clocks:</p>
+
+<table>
+  <tr><th>Clock</th><th>Monotonic</th><th>Use Case</th></tr>
+  <tr><td><code>std::chrono::system_clock</code></td><td>No (adjusts for wall-clock changes)</td><td>Timestamps, logging, dates</td></tr>
+  <tr><td><code>std::chrono::steady_clock</code></td><td>Yes (never goes backward)</td><td>Measuring elapsed time</td></tr>
+  <tr><td><code>std::chrono::high_resolution_clock</code></td><td>Implementation-defined</td><td>Shortest tick period available</td></tr>
+</table>
+
+<div class="callout warning">
+  <p><strong>Always use <code>steady_clock</code> for measuring elapsed time.</strong> <code>system_clock</code> can jump backward if the system clock is adjusted (NTP sync, DST, manual change), leading to negative or wildly incorrect durations.</p>
+</div>
+
+<h2>time_point and duration</h2>
+
+<pre>
+#include &lt;chrono&gt;
+#include &lt;iostream&gt;
+
+void time_point_basics() {
+    using namespace std::chrono;
+
+    // Get the current time point from a clock
+    auto now = system_clock::now();
+    auto steady_now = steady_clock::now();
+
+    // Duration types
+    auto d_sec    = 5s;                   // 5 seconds
+    auto d_ms     = 250ms;               // 250 milliseconds
+    auto d_us     = 100us;               // 100 microseconds
+    auto d_ns     = 50ns;                // 50 nanoseconds
+    auto d_min    = 2min;                // 2 minutes
+    auto d_hours  = 1h;                  // 1 hour
+
+    // Arithmetic on durations
+    auto total = d_sec + d_ms + d_us;    // 5.250100 seconds
+    auto doubled = d_sec * 2;            // 10 seconds
+
+    // Arithmetic on time_points
+    auto future = now + 1h;             // 1 hour from now
+    auto past   = now - 30min;          // 30 minutes ago
+
+    // Difference between time_points = duration
+    auto elapsed = steady_now - steady_now;
+}
+</pre>
+
+<h2>Measuring Elapsed Time</h2>
+
+<pre>
+#include &lt;chrono&gt;
+#include &lt;iostream&gt;
+
+void measure_elapsed() {
+    using namespace std::chrono;
+
+    auto start = steady_clock::now();
+
+    // ... code to measure ...
+    volatile double sum = 0;
+    for (int i = 0; i &lt; 1'000'000; ++i) {
+        sum += i * 0.001;
+    }
+
+    auto end = steady_clock::now();
+
+    // Convert duration to desired unit
+    auto ns   = duration_cast&lt;nanoseconds&gt;(end - start);
+    auto us   = duration_cast&lt;microseconds&gt;(end - start);
+    auto ms   = duration_cast&lt;milliseconds&gt;(end - start);
+    auto sec  = duration_cast&lt;seconds&gt;(end - start);
+
+    std::cout &lt;&lt; "Elapsed: " &lt;&lt; ns.count() &lt;&lt; " ns\n";
+    std::cout &lt;&lt; "Elapsed: " &lt;&lt; us.count() &lt;&lt; " us\n";
+    std::cout &lt;&lt; "Elapsed: " &lt;&lt; ms.count() &lt;&lt; " ms\n";
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Best practice:</strong> Always use <code>duration_cast</code> to convert between duration units. It truncates toward zero. If you need floating-point precision, use <code>duration&lt;double&gt;</code> instead.</p>
+</div>
+
+<h2>Floating-Point Durations</h2>
+
+<pre>
+#include &lt;chrono&gt;
+#include &lt;iostream&gt;
+
+void floating_duration() {
+    using namespace std::chrono;
+
+    auto start = steady_clock::now();
+    // ... work ...
+    auto end = steady_clock::now();
+
+    // Get duration as a double in seconds (preserves sub-second precision)
+    double seconds = duration&lt;double&gt;(end - start).count();
+    std::cout &lt;&lt; "Took " &lt;&lt; seconds &lt;&lt; " seconds\n";
+
+    // Or in milliseconds as double
+    double ms = duration&lt;double, std::milli&gt;(end - start).count();
+    std::cout &lt;&lt; "Took " &lt;&lt; ms &lt;&lt; " ms\n";
+}
+</pre>
+
+<h2>Sleeping</h2>
+
+<pre>
+#include &lt;chrono&gt;
+#include &lt;thread&gt;
+#include &lt;iostream&gt;
+
+void sleeping_demo() {
+    using namespace std::chrono_literals;
+
+    // Sleep for a duration
+    std::this_thread::sleep_for(500ms);       // 500 milliseconds
+    std::this_thread::sleep_for(2s);         // 2 seconds
+    std::this_thread::sleep_for(std::chrono::microseconds(100));
+
+    // Sleep until a specific time point
+    auto deadline = std::chrono::steady_clock::now() + 1s;
+    std::this_thread::sleep_until(deadline);
+}
+</pre>
+
+<div class="callout">
+  <p><strong>Note:</strong> <code>sleep_for</code> and <code>sleep_until</code> require <code>#include &lt;thread&gt;</code>. They may sleep longer than requested due to OS scheduling granularity. For real-time guarantees, platform-specific APIs are needed. See <a href="std-thread.html">std::thread</a> for threading basics.</p>
+</div>
+
+<h2>Example: Benchmarking Utility</h2>
+
+<pre>
+#include &lt;chrono&gt;
+#include &lt;iostream&gt;
+#include &lt;functional&gt;
+#include &lt;string&gt;
+
+// Reusable benchmark timer
+class Timer {
+    std::chrono::steady_clock::time_point start_;
+    std::string label_;
+public:
+    explicit Timer(std::string label = "")
+        : start_(std::chrono::steady_clock::now())
+        , label_(std::move(label)) {}
+
+    ~Timer() {
+        auto end = std::chrono::steady_clock::now();
+        double ms = std::chrono::duration&lt;double, std::milli&gt;(
+            end - start_).count();
+        std::cout &lt;&lt; "[" &lt;&lt; label_ &lt;&lt; "] "
+                  &lt;&lt; ms &lt;&lt; " ms\n";
+    }
+};
+
+void benchmark_demo() {
+    {
+        Timer t("vector sort");
+        // std::sort(vector.begin(), vector.end());
+    }
+    {
+        Timer t("hash map insert");
+        // for (...) map.insert({key, value});
+    }
+    // Output:
+    //   [vector sort] 12.3 ms
+    //   [hash map insert] 4.7 ms
+}
+</pre>
+
+<h2>Date/Time Formatting (C++20)</h2>
+
+<p>C++20 introduced the <code>&lt;format&gt;</code> library and <code>std::chrono::format</code> for calendar-based date/time formatting, replacing the need for <code>std::put_time</code> or <code>strftime</code>.</p>
+
+<pre>
+#include &lt;chrono&gt;
+#include &lt;iostream&gt;
+
+// C++20 calendar types
+void calendar_demo() {
+    using namespace std::chrono;
+
+    // Create specific dates
+    year_month_day date = year{2025} / July / day{6};
+
+    // Get today
+    auto now = system_clock::now();
+    auto today = year_month_day{
+        floor&lt;days&gt;(now)
+    };
+
+    std::cout &lt;&lt; "Year:  " &lt;&lt; today.year() &lt;&lt; "\n";
+    std::cout &lt;&lt; "Month: " &lt;&lt; today.month() &lt;&lt; "\n";
+    std::cout &lt;&lt; "Day:   " &lt;&lt; today.day() &lt;&lt; "\n";
+
+    // C++20: Format a time_point (if std::format is available)
+    // std::cout &lt;&lt; std::format("{:%Y-%m-%d %H:%M:%S}", now) &lt;&lt; "\n";
+
+    // Pre-C++20 alternative with put_time
+    auto time_t_now = system_clock::to_time_t(now);
+    std::cout &lt;&lt; std::put_time(std::localtime(&amp;time_t_now), "%F %T") &lt;&lt; "\n";
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>Compiler support:</strong> C++20 chrono calendar types (<code>year_month_day</code>, <code>hh_mm_ss</code>) require GCC 12+, Clang 14+, or MSVC 19.29. <code>std::chrono::format</code> support is still spotty across compilers as of 2025.</p>
+</div>
+
+<h2>Common Duration Literals</h2>
+
+<table>
+  <tr><th>Literal</th><th>Requires</th><th>Example</th></tr>
+  <tr><td><code>h</code></td><td><code>using namespace std::chrono_literals</code></td><td><code>auto d = 2h;</code></td></tr>
+  <tr><td><code>min</code></td><td>Same</td><td><code>auto d = 30min;</code></td></tr>
+  <tr><td><code>s</code></td><td>Same</td><td><code>auto d = 5s;</code></td></tr>
+  <tr><td><code>ms</code></td><td>Same</td><td><code>auto d = 100ms;</code></td></tr>
+  <tr><td><code>us</code></td><td>Same</td><td><code>auto d = 500us;</code></td></tr>
+  <tr><td><code>ns</code></td><td>Same</td><td><code>auto d = 1000ns;</code></td></tr>
+</table>
+
+<p>Chrono is essential for timing in <a href="std-thread.html">multithreading</a> (sleep, timeouts) and <a href="async-futures.html">async/futures</a> (wait_with_timeout). The type-safe duration model also pairs with <a href="constexpr.html">constexpr</a> for compile-time period calculations.</p>
+
+<div class="nav"><a href="regular-expressions.html">&larr; Regular Expressions</a><a href="string-formatting.html">String Formatting &rarr;</a></div>
+</body>
+</html>

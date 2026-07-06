@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Make &amp; Build Process — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / <a href="../index.html#3.7">3.7 Build Systems &amp; Tooling</a> / 3.7.2</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>Make &amp; Build Process</h1>
+
+<p>Make is a build automation tool that reads <code>Makefile</code> descriptions to determine which parts of a program need to be recompiled. It uses file timestamps to rebuild only what has changed, making incremental builds fast. While <a href="cmake.html">CMake</a> generates Makefiles as its backend, understanding Make directly is essential for debugging build issues and for smaller projects.</p>
+
+<h2>Makefile Anatomy</h2>
+
+<p>A Makefile consists of rules. Each rule has a target, prerequisites (dependencies), and a recipe (commands to run):</p>
+
+<pre>
+# target: prerequisites
+#     recipe (must be indented with TAB, not spaces)
+
+# Simple rule
+hello: main.cpp
+    g++ -std=c++17 -Wall -o hello main.cpp
+</pre>
+
+<h2>Makefile for a C++ Project</h2>
+
+<pre>
+# Makefile for a multi-file C++ project
+# ================================
+
+# Variables
+CXX      = g++
+CXXFLAGS = -std=c++17 -Wall -Wextra -Wpedantic -g -O2
+LDFLAGS  = -lpthread
+
+# Directories
+SRC_DIR  = src
+BUILD_DIR = build
+TARGET   = ran_simulator
+
+# Source files and objects
+SRCS     = $(wildcard $(SRC_DIR)/*.cpp)
+OBJS     = $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(SRCS))
+DEPS     = $(OBJS:.o=.d)
+
+# Default target
+all: $(BUILD_DIR) $(TARGET)
+
+# Create build directory
+$(BUILD_DIR):
+    mkdir -p $(BUILD_DIR)
+
+# Link executable from object files
+$(TARGET): $(OBJS)
+    $(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
+    @echo "Build complete: $(TARGET)"
+
+# Pattern rule: compile .cpp to .o
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp | $(BUILD_DIR)
+    $(CXX) $(CXXFLAGS) -MMD -MP -c $&lt; -o $@
+    @echo "Compiled: $&lt;"
+
+# Include auto-generated dependency files
+-include $(DEPS)
+
+# Phony targets (always run, not file-based)
+.PHONY: all clean debug test memcheck tidy
+
+clean:
+    rm -rf $(BUILD_DIR) $(TARGET)
+    @echo "Clean complete"
+
+debug: CXXFLAGS += -O0 -DDEBUG -fsanitize=address,undefined
+debug: clean all
+
+test: all
+    ./$(TARGET) --run-tests
+
+memcheck: all
+    valgrind --leak-check=full --error-exitcode=1 ./$(TARGET) --run-tests
+
+tidy:
+    clang-tidy $(SRC_DIR)/*.cpp -- -std=c++17
+</pre>
+
+<h2>Key Concepts</h2>
+
+<h3>Variables</h3>
+
+<pre>
+# Simple assignment (= lazy evaluation, expanded on use)
+CC = gcc
+
+# Immediate assignment (:= expanded at definition time)
+OBJS := $(SRC:.cpp=.o)
+
+# Append (+= adds to existing variable)
+CXXFLAGS += -Wall
+
+# Conditional assignment (?= only set if not already defined)
+CC ?= gcc  # Use existing CC, or default to gcc
+
+# Automatic variables (inside recipes)
+# $@ = target name
+# $&lt; = first prerequisite
+# $^ = all prerequisites
+# $* = stem of pattern rule match
+</pre>
+
+<h3>Pattern Rules</h3>
+
+<pre>
+# Pattern rule: any .o file depends on matching .cpp
+%.o: %.cpp %.h
+    $(CXX) $(CXXFLAGS) -c $&lt; -o $@
+
+# More specific pattern rule (overrides generic)
+debug/%.o: %.cpp
+    $(CXX) $(CXXFLAGS) -DDEBUG -c $&lt; -o $@
+</pre>
+
+<h3>Phony Targets</h3>
+
+<pre>
+# .PHONY tells Make these are not real files
+# Without .PHONY, "make clean" would do nothing if a file named "clean" exists
+.PHONY: all clean install test format
+
+clean:
+    rm -f *.o $(TARGET)
+
+test: $(TARGET)
+    ./$(TARGET) --test
+
+format:
+    clang-format -i src/*.cpp include/*.h
+</pre>
+
+<h2>Automatic Dependency Tracking</h2>
+
+<pre>
+# Generate header dependency files with -MMD -MP flags
+# -MMD generates .d files listing header dependencies
+# -MP adds phony targets for headers to avoid errors when headers are deleted
+
+$(BUILD_DIR)/%.d: $(SRC_DIR)/%.cpp
+    @$(CXX) $(CXXFLAGS) -MM -MG -MF $@ $&lt;
+
+# Include dependency files (silently ignore missing files with -include)
+-include $(DEPS)
+</pre>
+
+<h2>Make vs CMake Comparison</h2>
+
+<table>
+<tr><th>Feature</th><th>Make</th><th><a href="cmake.html">CMake</a></th></tr>
+<tr><td>Cross-platform</td><td>Limited (GNU Make mostly)</td><td>Full (generates Make, Ninja, VS, Xcode)</td></tr>
+<tr><td>Learning curve</td><td>Simpler for small projects</td><td>Steeper initial learning</td></tr>
+<tr><td>Dependency discovery</td><td>Manual or -MMD</td><td>Automatic</td></tr>
+<tr><td>External libraries</td><td>Manual LDFLAGS/CXXFLAGS</td><td><code>find_package()</code></td></tr>
+<tr><td>IDE integration</td><td>Basic</td><td>Full (VS, Xcode, CLion)</td></tr>
+<tr><td>Large projects</td><td>Complex, error-prone</td><td>Scales well</td></tr>
+<tr><td>Speed</td><td>Fast (direct build)</td><td>Fast with Ninja backend</td></tr>
+<tr><td>Build type management</td><td>Manual flags</td><td><code>CMAKE_BUILD_TYPE</code></td></tr>
+</table>
+
+<div class="callout green">
+<p><strong>Recommendation:</strong> Use <a href="cmake.html">CMake</a> for projects of any significant size. Use Make directly for quick scripts, one-off builds, or when CMake is overkill. Understanding Make is still valuable since CMake generates Makefiles by default, and you may need to read or debug them with <a href="gdb-debugging.html">GDB</a>.</p>
+</div>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="cmake.html">CMake</a>, <a href="gdb-debugging.html">GDB Debugging</a>, <a href="../basics/hello-world.html">Hello World &amp; Compilation</a>.</p>
+</div>
+
+<div class="nav"><a href="cmake.html">&larr; CMake</a><a href="gdb-debugging.html">GDB Debugging &rarr;</a></div>
+</body>
+</html>

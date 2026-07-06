@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Array Sum — C++ Practice</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.easy { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  .question { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; }
+  .question h3 { color: #f0f6fc; margin-top: 0; }
+  .solution-toggle { cursor: pointer; user-select: none; }
+  .solution-toggle h3 { color: #3fb950; display: inline; }
+  .solution-content { display: none; margin-top: 1rem; }
+  .solution-content.visible { display: block; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+  .topics-covered { margin-bottom: 1rem; font-size: 0.85rem; color: #8b949e; }
+  .topics-covered a { color: #8b949e; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#5">5 Practice</a> / Easy Questions</div>
+<div class="meta"><span class="tag easy">Easy</span></div>
+<h1>Sum All Elements in an Array</h1>
+
+<div class="topics-covered">
+  <strong>Topics Covered:</strong>
+  <a href="../arrays.html">Arrays</a>,
+  <a href="../stl.html">STL Algorithms</a>,
+  <a href="../iterators.html">Iterators</a>
+</div>
+
+<div class="question">
+  <h3>Problem Statement</h3>
+  <p>Write functions to calculate the sum of all elements in an array. Show multiple approaches:</p>
+  <ol>
+    <li>Using a <strong>manual loop</strong> (range-based for).</li>
+    <li>Using <strong>std::accumulate</strong> from <code>&lt;numeric&gt;</code>.</li>
+    <li>Using <strong>std::reduce</strong> from C++17 (parallel-capable).</li>
+  </ol>
+  <p><strong>Examples:</strong></p>
+  <ul>
+    <li><code>{1, 2, 3, 4, 5}</code> &rarr; <code>15</code></li>
+    <li><code>{}</code> &rarr; <code>0</code></li>
+    <li><code>{-1, 1, -1, 1}</code> &rarr; <code>0</code></li>
+  </ul>
+</div>
+
+<h2>Manual Loop Approach</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution1')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution1">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+#include &lt;array&gt;
+
+// For std::vector
+int sumVector(const std::vector&lt;int&gt;&amp; nums) {
+    int sum = 0;
+    for (const auto&amp; val : nums) {
+        sum += val;
+    }
+    return sum;
+}
+
+// Template: works with any container of any numeric type
+template&lt;typename Container&gt;
+auto sumContainer(const Container&amp; c) -&gt; typename Container::value_type {
+    using ValueType = typename Container::value_type;
+    ValueType sum = ValueType{};
+    for (const auto&amp; val : c) {
+        sum += val;
+    }
+    return sum;
+}
+
+// For C-style arrays (need the size explicitly)
+template&lt;typename T, std::size_t N&gt;
+T sumCArray(const T (&amp;arr)[N]) {
+    T sum = T{};
+    for (std::size_t i = 0; i &lt; N; ++i) {
+        sum += arr[i];
+    }
+    return sum;
+}
+
+int main() {
+    std::vector&lt;int&gt; nums = {1, 2, 3, 4, 5};
+    std::cout &lt;&lt; "Sum (manual loop): " &lt;&lt; sumVector(nums) &lt;&lt; "\n";  // 15
+
+    int cArr[] = {10, 20, 30};
+    std::cout &lt;&lt; "Sum (C-array):    " &lt;&lt; sumCArray(cArr) &lt;&lt; "\n";     // 60
+
+    std::vector&lt;double&gt; doubles = {1.5, 2.5, 3.0};
+    std::cout &lt;&lt; "Sum (template):   " &lt;&lt; sumContainer(doubles) &lt;&lt; "\n"; // 7.0
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li>Range-based for loop is the most readable way to iterate in C++11 and later.</li>
+      <li>The template version deduces the return type from the container's <code>value_type</code>.</li>
+      <li>For C-style arrays, we use a template that captures the array size <code>N</code> automatically, avoiding the need for a separate size parameter.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Using std::accumulate</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution2')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution2">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+#include &lt;numeric&gt;   // std::accumulate
+#include &lt;string&gt;
+
+int main() {
+    std::vector&lt;int&gt; nums = {1, 2, 3, 4, 5};
+
+    // Basic usage: sum with initial value 0
+    int sum = std::accumulate(nums.begin(), nums.end(), 0);
+    std::cout &lt;&lt; "Sum: " &lt;&lt; sum &lt;&lt; "\n";  // 15
+
+    // Note: passing 0 (int) as initial value computes int sum
+    // For double precision, pass 0.0
+    std::vector&lt;double&gt; doubles = {1.1, 2.2, 3.3};
+    double dsum = std::accumulate(doubles.begin(), doubles.end(), 0.0);
+    std::cout &lt;&lt; "Double sum: " &lt;&lt; dsum &lt;&lt; "\n";  // 6.6
+
+    // Concatenating strings with accumulate
+    std::vector&lt;std::string&gt; words = {"Hello", " ", "World", "!"};
+    std::string sentence = std::accumulate(words.begin(), words.end(), std::string{});
+    std::cout &lt;&lt; "Concatenated: " &lt;&lt; sentence &lt;&lt; "\n";  // "Hello World!"
+
+    // Using a custom binary operation
+    std::vector&lt;int&gt; vals = {2, 3, 4};
+    int product = std::accumulate(vals.begin(), vals.end(), 1, std::multiplies&lt;int&gt;{});
+    std::cout &lt;&lt; "Product: " &lt;&lt; product &lt;&lt; "\n";  // 24
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><code>std::accumulate</code> takes a range <code>[begin, end)</code> and an initial value.</li>
+      <li>The initial value determines both the type and the starting point. Passing <code>0</code> gives <code>int</code> accumulation; passing <code>0.0</code> gives <code>double</code>.</li>
+      <li>By default it uses <code>operator+</code>, but you can provide a custom binary operation as a fourth argument.</li>
+      <li><code>std::accumulate</code> is not just for addition &mdash; you can use it for multiplication, string concatenation, or any fold operation.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout green">
+  <p><strong>Complexity Analysis:</strong></p>
+  <ul>
+    <li><strong>Time:</strong> O(n) &mdash; every element is visited exactly once.</li>
+    <li><strong>Space:</strong> O(1) &mdash; only the accumulator variable.</li>
+  </ul>
+</div>
+
+<h2>Follow-up Questions</h2>
+
+<div class="question">
+  <h3>Variations to Try</h3>
+  <ol>
+    <li><strong>Sum of even elements:</strong> Sum only elements that satisfy a condition (use <code>std::accumulate</code> with a lambda or combine with <code>std::copy_if</code>).</li>
+    <li><strong>Prefix sum array:</strong> Given an array, compute the running prefix sum where each element is the sum of all elements before it. Example: <code>{1,2,3}</code> &rarr; <code>{0,1,3}</code>.</li>
+    <li><strong>Sum of a 2D matrix:</strong> Compute the sum of all elements in a 2D vector (<code>std::vector&lt;std::vector&lt;int&gt;&gt;</code>).</li>
+    <li><strong>Parallel sum with <code>std::reduce</code>:</strong> Use C++17's <code>std::reduce</code> with an execution policy to sum a large vector in parallel across threads.</li>
+  </ol>
+</div>
+
+<div class="callout">
+  <p><strong>Key Takeaways:</strong></p>
+  <ul>
+    <li><code>std::accumulate</code> (in <code>&lt;numeric&gt;</code>) is the idiomatic C++ way to fold/reduce a range into a single value.</li>
+    <li>Always match the initial value type to the desired result type: <code>0</code> for int, <code>0.0</code> for double, <code>""</code> or <code>std::string{}</code> for strings.</li>
+    <li>The initial value is not just a starting point &mdash; it determines the accumulator's type, which affects precision for floating-point sums.</li>
+    <li><code>std::accumulate</code> is a left fold: <code>((initial + a[0]) + a[1]) + a[2] ...</code>. The order matters for non-associative operations (like floating-point addition).</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="factorial.html">&larr; Factorial</a>
+  <a href="check-prime.html">Check Prime &rarr;</a>
+</div>
+<script>
+function toggleSolution(id) {
+  document.getElementById(id).classList.toggle('visible');
+}
+</script>
+</body>
+</html>

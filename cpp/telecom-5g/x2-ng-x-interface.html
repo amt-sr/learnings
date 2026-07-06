@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>X2 / NG-X Interface — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#4">4 Telecom &amp; 5G/4G</a> / X2 / NG-X Interface</div>
+<div class="meta"><span class="tag advanced">Advanced</span></div>
+<h1>X2 / NG-X Interface</h1>
+
+<p>The X2 interface connects LTE eNodeBs to each other, while the Xn interface (also called NG-X) connects 5G gNBs. Both support handover, load management, and inter-cell coordination. In NSA (EN-DC) mode, the X2 interface also connects the 5G gNB (SgNB) to the LTE master eNodeB (MeNB).</p>
+
+<h2>Interface Comparison</h2>
+
+<pre>
+  LTE:                          5G SA:
+  +--------+ X2-C  +--------+  +--------+ Xn-C  +--------+
+  | eNodeB |&lt;------&gt;| eNodeB |  |  gNB   |&lt;------&gt;|  gNB   |
+  | (MeNB)  | X2-U  | (SeNB) |  |        | Xn-U  |        |
+  +---+-----+&lt;------&gt;+--------+  +---+----+&lt;------&gt;+---+----+
+      |                              |              |
+   S1-MME/UE                       NG-C/AMF       NG-C/AMF
+
+  5G NSA (EN-DC):
+  +--------+ X2/Xn  +--------+
+  |  MeNB   |&lt;------&gt;|  SgNB  |
+  | (LTE)   |        | (5G)  |
+  +----+-----+        +---+---+
+       |                   |
+    S1-MME/MME           ---
+</pre>
+
+<table>
+  <tr><th>Aspect</th><th>X2 (LTE)</th><th>Xn (5G)</th></tr>
+  <tr><td>Control Plane</td><td>X2AP over SCTP</td><td>XnAP over SCTP</td></tr>
+  <tr><td>User Plane</td><td>GTP-U over UDP</td><td>GTP-U over UDP</td></tr>
+  <tr><td>Handover</td><td>X2 handover</td><td>Xn handover</td></tr>
+  <tr><td>Dual Connectivity</td><td>MeNB-SeNB (DC)</td><td>Ng-EN-DC (EN-DC)</td></tr>
+  <tr><td>Default Port</td><td>SCTP: 36442</td><td>SCTP: 36442</td></tr>
+</table>
+
+<h2>C++ XnAP Handover State Machine</h2>
+
+<pre>
+#include &lt;string&gt;
+#include &lt;unordered_map&gt;
+#include &lt;functional&gt;
+#include &lt;memory&gt;
+#include &lt;cstdint&gt;
+
+// Xn Handover states
+enum class XnHoState : uint8_t {
+    IDLE,                      // No handover in progress
+    HO_REQUEST_SENT,           // Xn HO REQUEST sent to target gNB
+    HO_REQUEST_ACK_RECEIVED,  // Xn HO REQUEST ACK received
+    HO_EXECUTED,               // UE executing handover
+    PATH_SWITCH_PENDING,       // Waiting for path switch
+    COMPLETED,                 // Handover complete
+    FAILED                     // Handover failed
+};
+
+// Xn Handover Procedure messages
+enum class XnHoMessage : uint8_t {
+    HANDOVER_REQUEST,
+    HANDOVER_REQUEST_ACK,
+    HANDOVER_CMD,
+    SN_STATUS_TRANSFER,
+    UE_CONTEXT_RELEASE,
+    HANDOVER_PREPARATION_FAILURE,
+    HANDOVER_CANCEL
+};
+
+// Xn Handover Request (simplified)
+struct XnHandoverRequest {
+    // Source gNB info
+    uint32_t source_gnb_id;
+    uint32_t source_cell_id;
+    uint32_t source_pci;
+
+    // UE context
+    uint32_t ue_id;
+    uint32_t old_amf_ue_ngap_id;
+
+    // Target info
+    uint32_t target_cell_id;
+
+    // Bearers to handover
+    struct BearerContext {
+        uint8_t  drb_id;
+        uint32_t teid_dl;        // GTP-U TEID (source side)
+        uint32_t teid_ul;
+        uint32_t pdu_sn_dl;      // PDCP TX NEXT
+        uint32_t pdu_sn_ul;      // PDCP RX NEXT
+        uint32_t pdcp_count;     // PDCP COUNT value
+    };
+    std::vector&lt;BearerContext&gt; bearers;
+
+    // UE capability and measurement info
+    uint8_t  ue_cap_info[256];
+};
+
+// Xn Handover state machine
+class XnHandoverMachine {
+public:
+    void initiate(uint32_t ue_id, uint32_t target_cell_id) {
+        ue_id_ = ue_id;
+        target_cell_ = target_cell_id;
+        transition(XnHoState::HO_REQUEST_SENT);
+        sendXnHoRequest();
+    }
+
+    void onHoRequestAck(const uint8_t* msg, size_t len) {
+        if (state_ != XnHoState::HO_REQUEST_SENT) {
+            // Unexpected message
+            return;
+        }
+        // Parse HO REQUEST ACK -- contains target config
+        parseHoRequestAck(msg, len);
+        transition(XnHoState::HO_REQUEST_ACK_RECEIVED);
+        sendHoCommandToUe();
+    }
+
+    void onSnStatusTransfer(const uint8_t* msg, size_t len) {
+        // Forward PDCP SN status from source to target
+        // Used for PDCP reordering after handover
+    }
+
+    void onHoComplete() {
+        transition(XnHoState::PATH_SWITCH_PENDING);
+        initiatePathSwitch();
+    }
+
+    void onPathSwitchAck() {
+        transition(XnHoState::COMPLETED);
+        releaseSourceResources();
+    }
+
+    XnHoState getState() const { return state_; }
+
+private:
+    uint32_t    ue_id_;
+    uint32_t    target_cell_;
+    XnHoState   state_ = XnHoState::IDLE;
+
+    void transition(XnHoState new_state) {
+        XnHoState old = state_;
+        state_ = new_state;
+        onStateChange(old, new_state);
+    }
+
+    void onStateChange(XnHoState old, XnHoState new_state) {
+        // Logging, metrics, cleanup
+    }
+
+    void sendXnHoRequest();
+    void parseHoRequestAck(const uint8_t* msg, size_t len);
+    void sendHoCommandToUe();
+    void initiatePathSwitch();
+    void releaseSourceResources();
+};
+</pre>
+
+<h2>Xn Dual Connectivity (NR-DC / EN-DC)</h2>
+
+<pre>
+// Dual connectivity configuration
+enum class DualConnectivityMode : uint8_t {
+    NONE,
+    EN_DC,         // LTE + NR (NSA)
+    NE_DC,         // NR + LTE
+    NR_DC,         // NR + NR (CA across gNBs)
+    NR_CA          // NR Carrier Aggregation (same gNB)
+};
+
+struct DualConnectivityConfig {
+    DualConnectivityMode mode;
+    uint32_t mg_nodeb_id;      // Master NodeB ID
+    uint32_t sg_nodeb_id;      // Secondary NodeB ID
+    uint32_t m_cell_id;        // Master cell
+    uint32_t s_cell_id;        // Secondary cell
+
+    // Split bearer config (SCG bearer)
+    struct SplitBearer {
+        uint8_t  drb_id;
+        uint32_t m_teid;       // MCG leg TEID
+        uint32_t s_teid;       // SCG leg TEID
+        uint32_t ul_split_ratio; // % to MCG vs SCG
+    };
+    std::vector&lt;SplitBearer&gt; split_bearers;
+};
+</pre>
+
+<h2>Cross-References</h2>
+
+<ul>
+  <li><a href="handover-procedures.html">Handover Procedures</a> -- Detailed LTE handover mechanisms.</li>
+  <li><a href="nas-layer.html">NAS Layer</a> -- Path switch to new AMF/MME after Xn handover.</li>
+  <li><a href="rrc-layer.html">RRC Layer</a> -- RRC Reconfiguration with handover info.</li>
+  <li><a href="f1-interface.html">F1 Interface</a> -- CU-DU coordination during handover.</li>
+  <li><a href="../advanced/state-machine.html">State Machine Pattern</a> -- The handover FSM implementation.</li>
+</ul>
+
+<div class="nav"><a href="f1-interface.html">&larr; F1 Interface</a><a href="e1-interface.html">E1 Interface &rarr;</a></div>
+</body>
+</html>

@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Find Maximum Element — C++ Practice</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.easy { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  .question { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; }
+  .question h3 { color: #f0f6fc; margin-top: 0; }
+  .solution-toggle { cursor: pointer; user-select: none; }
+  .solution-toggle h3 { color: #3fb950; display: inline; }
+  .solution-content { display: none; margin-top: 1rem; }
+  .solution-content.visible { display: block; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+  .topics-covered { margin-bottom: 1rem; font-size: 0.85rem; color: #8b949e; }
+  .topics-covered a { color: #8b949e; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#5">5 Practice</a> / Easy Questions</div>
+<div class="meta"><span class="tag easy">Easy</span></div>
+<h1>Find Maximum Element in an Array</h1>
+
+<div class="topics-covered">
+  <strong>Topics Covered:</strong>
+  <a href="../arrays.html">Arrays</a>,
+  <a href="../algorithms.html">STL Algorithms</a>,
+  <a href="../iterators.html">Iterators</a>
+</div>
+
+<div class="question">
+  <h3>Problem Statement</h3>
+  <p>Given an array (or any container) of integers, find the maximum element. Provide both a manual loop implementation and a solution using <code>std::max_element</code> from the STL.</p>
+  <p><strong>Examples:</strong></p>
+  <ul>
+    <li><code>{3, 7, 1, 9, 4}</code> &rarr; <code>9</code></li>
+    <li><code>{-5, -2, -9}</code> &rarr; <code>-2</code></li>
+    <li><code>{42}</code> &rarr; <code>42</code></li>
+  </ul>
+</div>
+
+<div class="callout warning">
+  <p><strong>Edge Cases to Consider:</strong></p>
+  <ul>
+    <li>Empty container &mdash; how do you signal an error?</li>
+    <li>All identical elements.</li>
+    <li>Negative numbers only.</li>
+    <li>Single-element container.</li>
+  </ul>
+</div>
+
+<h2>Manual Loop Approach</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution1')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution1">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+#include &lt;optional&gt;
+#include &lt;stdexcept&gt;
+
+// Using std::optional to handle empty container safely (C++17)
+std::optional&lt;int&gt; findMaxManual(const std::vector&lt;int&gt;&amp; arr) {
+    if (arr.empty()) {
+        return std::nullopt;
+    }
+
+    int maxVal = arr[0];
+    for (std::size_t i = 1; i &lt; arr.size(); ++i) {
+        if (arr[i] &gt; maxVal) {
+            maxVal = arr[i];
+        }
+    }
+    return maxVal;
+}
+
+// Alternative: using iterators
+std::optional&lt;int&gt; findMaxIterators(const std::vector&lt;int&gt;&amp; arr) {
+    if (arr.empty()) return std::nullopt;
+
+    auto maxIt = arr.begin();
+    for (auto it = arr.begin() + 1; it != arr.end(); ++it) {
+        if (*it &gt; *maxIt) {
+            maxIt = it;
+        }
+    }
+    return *maxIt;
+}
+
+// Template version for any container
+template&lt;typename T&gt;
+std::optional&lt;T&gt; findMaxTemplate(const std::vector&lt;T&gt;&amp; arr) {
+    if (arr.empty()) return std::nullopt;
+
+    T maxVal = arr[0];
+    for (const auto&amp; elem : arr) {
+        if (elem &gt; maxVal) {
+            maxVal = elem;
+        }
+    }
+    return maxVal;
+}
+
+int main() {
+    std::vector&lt;int&gt; nums = {3, 7, 1, 9, 4};
+
+    auto result = findMaxManual(nums);
+    if (result) {
+        std::cout &lt;&lt; "Max (manual): " &lt;&lt; *result &lt;&lt; "\n";  // 9
+    }
+
+    auto result2 = findMaxTemplate(nums);
+    if (result2) {
+        std::cout &lt;&lt; "Max (template): " &lt;&lt; *result2 &lt;&lt; "\n";  // 9
+    }
+
+    // Empty case
+    std::vector&lt;int&gt; empty;
+    auto emptyResult = findMaxManual(empty);
+    if (!emptyResult) {
+        std::cout &lt;&lt; "Empty container: no max\n";
+    }
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li>We initialize <code>maxVal</code> with the first element, then scan the rest.</li>
+      <li><code>std::optional&lt;int&gt;</code> is used to cleanly handle the empty container case without exceptions or sentinel values.</li>
+      <li>The template version works with any comparable type (int, double, float, etc.).</li>
+      <li>The range-based for loop version is the most idiomatic modern C++.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Using std::max_element</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution2')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution2">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+#include &lt;algorithm&gt;   // std::max_element
+#include &lt;climits&gt;
+
+int main() {
+    std::vector&lt;int&gt; nums = {3, 7, 1, 9, 4};
+
+    // std::max_element returns an iterator to the max element
+    auto maxIt = std::max_element(nums.begin(), nums.end());
+    if (maxIt != nums.end()) {
+        std::cout &lt;&lt; "Max element: " &lt;&lt; *maxIt &lt;&lt; "\n";        // 9
+        std::cout &lt;&lt; "At index: " &lt;&lt; (maxIt - nums.begin()) &lt;&lt; "\n";  // 3
+    }
+
+    // Works with C-arrays too
+    int arr[] = {5, 2, 8, 1, 7};
+    int* maxPtr = std::max_element(std::begin(arr), std::end(arr));
+    std::cout &lt;&lt; "Max in C-array: " &lt;&lt; *maxPtr &lt;&lt; "\n";  // 8
+
+    // With a custom comparator (find max by absolute value)
+    std::vector&lt;int&gt; vals = {-10, 3, -7, 5};
+    auto absMax = std::max_element(vals.begin(), vals.end(),
+        [](int a, int b) { return std::abs(a) &lt; std::abs(b); });
+    std::cout &lt;&lt; "Max by abs value: " &lt;&lt; *absMax &lt;&lt; "\n";  // -10
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><code>std::max_element</code> returns an <strong>iterator</strong> to the maximum element, not the value itself. Dereference with <code>*</code>.</li>
+      <li>It works with any forward-iterable container: <code>std::vector</code>, <code>std::deque</code>, <code>std::list</code>, C-arrays, etc.</li>
+      <li>If multiple elements share the maximum value, it returns an iterator to the <strong>first</strong> such element.</li>
+      <li>A custom comparator allows you to define "maximum" in any way (e.g., by absolute value).</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout green">
+  <p><strong>Complexity Analysis:</strong></p>
+  <ul>
+    <li><strong>Time:</strong> O(n) &mdash; every element is examined exactly once.</li>
+    <li><strong>Space:</strong> O(1) &mdash; only one variable for tracking the maximum.</li>
+    <li>This is optimal: you must examine every element at least once to guarantee the maximum is found.</li>
+  </ul>
+</div>
+
+<h2>Follow-up Questions</h2>
+
+<div class="question">
+  <h3>Variations to Try</h3>
+  <ol>
+    <li><strong>Find min and max together:</strong> Write a function that finds both minimum and maximum in fewer than 2n comparisons (compare pairs of elements, then compare the larger with current max and smaller with current min &mdash; 3n/2 comparisons).</li>
+    <li><strong>Find second maximum:</strong> Find the second largest element in a single pass.</li>
+    <li><strong>Find top K elements:</strong> Given an array and an integer K, return the K largest elements (consider using <code>std::partial_sort</code> or <code>std::nth_element</code>).</li>
+    <li><strong>Find max in a sorted rotated array:</strong> Given an array that was sorted then rotated, find the maximum element in O(log n).</li>
+  </ol>
+</div>
+
+<div class="callout">
+  <p><strong>Key Takeaways:</strong></p>
+  <ul>
+    <li>Prefer <code>std::max_element</code> over a manual loop in production code. It is generic, well-tested, and communicates intent clearly.</li>
+    <li>Remember that <code>std::max_element</code> returns an <strong>iterator</strong>, not a value. This is more flexible (you get position and value).</li>
+    <li>Use <code>std::optional</code> (C++17) to represent "no result" cleanly, avoiding sentinel values like <code>INT_MIN</code>.</li>
+    <li>The pattern of initializing with the first element and scanning the rest is fundamental and appears in many algorithms.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="palindrome.html">&larr; Palindrome Check</a>
+  <a href="swap-numbers.html">Swap Numbers &rarr;</a>
+</div>
+<script>
+function toggleSolution(id) {
+  document.getElementById(id).classList.toggle('visible');
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Observer Pattern — C++ Practice</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.easy { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  .question { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; }
+  .question h3 { color: #f0f6fc; margin-top: 0; }
+  .solution-toggle { cursor: pointer; user-select: none; }
+  .solution-toggle h3 { color: #3fb950; display: inline; }
+  .solution-content { display: none; margin-top: 1rem; }
+  .solution-content.visible { display: block; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+  .topics-covered { margin-bottom: 1rem; font-size: 0.85rem; color: #8b949e; }
+  .topics-covered a { color: #8b949e; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#5">5 Practice</a> / Medium Questions</div>
+<div class="meta"><span class="tag medium">Medium</span></div>
+<h1>Observer Pattern with std::function</h1>
+
+<div class="topics-covered">
+  <strong>Topics Covered:</strong>
+  <a href="../design-patterns.html">Design Patterns</a>,
+  <a href="../function-objects.html">std::function</a>,
+  <a href="../lambdas.html">Lambdas</a>,
+  <a href="../templates.html">Templates</a>
+</div>
+
+<div class="question">
+  <h3>Problem Statement</h3>
+  <p>Implement an Observer (Event/Signal-Slot) pattern using <code>std::function</code> and lambdas instead of classical inheritance-based observers. This approach is more flexible: any callable (free functions, lambdas, member functions, functors) can subscribe to events.</p>
+  <p>The implementation should support:</p>
+  <ul>
+    <li>Subscribe with any callable (lambda, free function, member function).</li>
+    <li>Unsubscribe by token/ID.</li>
+    <li>Thread-safe notification (optional, discuss trade-offs).</li>
+    <li>Type-safe events with different payload types.</li>
+  </ul>
+</div>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution1')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution1">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;functional&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+#include &lt;unordered_map&gt;
+#include &lt;memory&gt;
+#include &lt;mutex&gt;
+
+// Type alias for observer callback
+template&lt;typename... Args&gt;
+using Callback = std::function&lt;void(Args...)&gt;;
+
+// Event/Signal class that holds subscribers and notifies them
+template&lt;typename... Args&gt;
+class Event {
+public:
+    // Subscribe a callback, returns a token for unsubscription
+    int subscribe(Callback&lt;Args...&gt; callback) {
+        int token = nextToken_++;
+        callbacks_[token] = std::move(callback);
+        return token;
+    }
+
+    // Unsubscribe by token
+    bool unsubscribe(int token) {
+        return callbacks_.erase(token) &gt; 0;
+    }
+
+    // Notify all subscribers
+    void emit(Args... args) const {
+        for (const auto&amp; [token, callback] : callbacks_) {
+            callback(args...);
+        }
+    }
+
+    // Clear all subscribers
+    void clear() { callbacks_.clear(); }
+
+    std::size_t subscriberCount() const { return callbacks_.size(); }
+
+private:
+    std::unordered_map&lt;int, Callback&lt;Args...&gt;&gt; callbacks_;
+    int nextToken_ = 0;
+};
+
+// Thread-safe version
+template&lt;typename... Args&gt;
+class ThreadSafeEvent {
+public:
+    int subscribe(Callback&lt;Args...&gt; callback) {
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        int token = nextToken_++;
+        callbacks_[token] = std::move(callback);
+        return token;
+    }
+
+    bool unsubscribe(int token) {
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        return callbacks_.erase(token) &gt; 0;
+    }
+
+    void emit(Args... args) const {
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        for (const auto&amp; [token, callback] : callbacks_) {
+            callback(args...);
+        }
+    }
+
+private:
+    mutable std::mutex mutex_;
+    std::unordered_map&lt;int, Callback&lt;Args...&gt;&gt; callbacks_;
+    int nextToken_ = 0;
+};
+
+// --- Demo ---
+
+class TemperatureSensor {
+public:
+    // Events with different payload types
+    Event&lt;double&gt; onTemperatureChange;
+    Event&lt;int&gt; onCriticalAlert;
+
+    void updateTemperature(double temp) {
+        currentTemp_ = temp;
+        onTemperatureChange.emit(temp);
+
+        if (temp &gt; 100.0) {
+            onCriticalAlert.emit(static_cast&lt;int&gt;(temp));
+        }
+    }
+
+private:
+    double currentTemp_ = 0.0;
+};
+
+class Display {
+public:
+    void show(double temp) {
+        std::cout &lt;&lt; "  [Display] Temperature: " &lt;&lt; temp &lt;&lt; " C\n";
+    }
+};
+
+// Free function observer
+void logTemperature(double temp) {
+    std::cout &lt;&lt; "  [Logger] Logged: " &lt;&lt; temp &lt;&lt; " C\n";
+}
+
+int main() {
+    TemperatureSensor sensor;
+    Display display;
+
+    // Subscribe with a lambda
+    auto token1 = sensor.onTemperatureChange.subscribe(
+        [&amp;display](double temp) {
+            display.show(temp);
+        }
+    );
+
+    // Subscribe with a free function
+    auto token2 = sensor.onTemperatureChange.subscribe(logTemperature);
+
+    // Subscribe lambda to alert event
+    auto token3 = sensor.onCriticalAlert.subscribe(
+        [](int temp) {
+            std::cout &lt;&lt; "  [ALERT] CRITICAL: " &lt;&lt; temp &lt;&lt; " C!\n";
+        }
+    );
+
+    // Subscribe another lambda
+    auto token4 = sensor.onTemperatureChange.subscribe(
+        [](double temp) {
+            if (temp &gt; 50.0) {
+                std::cout &lt;&lt; "  [Warning] High temperature: " &lt;&lt; temp &lt;&lt; "\n";
+            }
+        }
+    );
+
+    std::cout &lt;&lt; "Subscribers: " &lt;&lt; sensor.onTemperatureChange.subscriberCount() &lt;&lt; "\n\n";
+
+    // Emit events
+    std::cout &lt;&lt; "--- Update 25C ---\n";
+    sensor.updateTemperature(25.0);
+
+    std::cout &lt;&lt; "\n--- Update 75C ---\n";
+    sensor.updateTemperature(75.0);
+
+    std::cout &lt;&lt; "\n--- Update 105C ---\n";
+    sensor.updateTemperature(105.0);
+
+    // Unsubscribe the display
+    sensor.onTemperatureChange.unsubscribe(token1);
+    std::cout &lt;&lt; "\n--- Update 30C (after display unsubscribed) ---\n";
+    sensor.updateTemperature(30.0);
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><code>Event&lt;Args...&gt;</code> is a variadic template that can hold callbacks with any signature.</li>
+      <li><code>std::function&lt;void(Args...)&gt;</code> type-erases any callable: lambdas (with or without captures), free functions, member functions (with <code>std::bind</code>), and functors.</li>
+      <li>Each subscription returns a <strong>token</strong> (integer ID) that can be used to unsubscribe later. This avoids the complexity of tracking callable identity.</li>
+      <li>The <code>ThreadSafeEvent</code> variant adds mutex protection for use in multi-threaded contexts.</li>
+      <li><code>TemperatureSensor</code> demonstrates domain-specific events: <code>onTemperatureChange</code> fires on every reading, <code>onCriticalAlert</code> fires only when temperature exceeds a threshold.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout green">
+  <p><strong>Advantages of std::function-based Observer:</strong></p>
+  <table>
+    <tr><th>Classical (Inheritance)</th><th>std::function (This Approach)</th></tr>
+    <tr><td>Requires abstract base class</td><td>Any callable works</td></tr>
+    <tr><td>Observers must inherit from interface</td><td>No inheritance needed</td></tr>
+    <tr><td>Can only observe events from known types</td><td>Lambdas can capture anything</td></tr>
+    <tr><td>Harder to unsubscribe specific callbacks</td><td>Token-based unsubscription</td></tr>
+    <tr><td>Compile-time type safety</td><td>Type safety via template parameters</td></tr>
+  </table>
+</div>
+
+<h2>Follow-up Questions</h2>
+
+<div class="question">
+  <h3>Variations to Try</h3>
+  <ol>
+    <li><strong>Filter by event type:</strong> Extend the Event class to support filtering, so subscribers only get notified when a predicate is satisfied (e.g., "notify me only when temp &gt; 50").</li>
+    <li><strong>Event Bus:</strong> Implement a central EventBus that routes named events to subscribers. Useful for decoupling in large systems.</li>
+    <li><strong>Thread-safe deferred emission:</strong> In the <code>ThreadSafeEvent</code>, collect callbacks in the lock, then invoke them after releasing the lock. Why is this important? (Hint: callback might try to subscribe/unsubscribe.)</li>
+    <li><strong>Member function observer:</strong> Use <code>std::bind</code> or a lambda to subscribe a member function as a callback. Example: <code>event.subscribe(std::bind(&amp;Foo::onEvent, &amp;foo, std::placeholders::_1))</code>.</li>
+  </ol>
+</div>
+
+<div class="callout red">
+  <p><strong>Important Caveat:</strong></p>
+  <p>If a callback is invoked while the emitter object is being destroyed, you get undefined behavior. Always disconnect all observers in the destructor, or use weak references (as shown in the Smart Pointer Patterns question) to check if observers still exist before calling them.</p>
+</div>
+
+<div class="callout">
+  <p><strong>Key Takeaways:</strong></p>
+  <ul>
+    <li><code>std::function</code> + lambdas provides a more flexible observer pattern than classical inheritance-based approaches.</li>
+    <li>Variadic templates allow type-safe events with any payload.</li>
+    <li>Token-based subscription is simpler and more robust than trying to compare callables for equality.</li>
+    <li>In production, always consider thread safety and lifetime management when implementing observer patterns.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="singleton-pattern.html">&larr; Singleton Pattern</a>
+  <a href="memory-leak-detection.html">Memory Leak Detection &rarr;</a>
+</div>
+<script>
+function toggleSolution(id) {
+  document.getElementById(id).classList.toggle('visible');
+}
+</script>
+</body>
+</html>

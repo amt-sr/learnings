@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Observer Pattern — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / Design Patterns / 3.5.2</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>Observer Pattern</h1>
+
+<p>The Observer pattern defines a one-to-many dependency between objects: when one object (the subject) changes state, all its dependents (observers) are notified automatically. This is the foundation of event systems, MVC architecture, and reactive programming. In C++, observers can be implemented via virtual functions, <code>std::function</code> callbacks, or the <code>std::variant</code>+visitor approach.</p>
+
+<div class="callout">
+<p><strong>Prerequisites:</strong> <a href="singleton-pattern.html">Singleton Pattern</a>, <a href="factory-pattern.html">Factory Pattern</a>, <a href="../intermediate/function-bind.html">std::function &amp; std::bind</a>, <a href="../intermediate/lambda-expressions.html">Lambda Expressions</a>.</p>
+</div>
+
+<h2>Classic Subject/Observer with Virtual Functions</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+#include &lt;memory&gt;
+
+// Observer interface
+class Observer {
+public:
+    virtual ~Observer() = default;
+    virtual void on_notify(const std::string&amp; event, int data) = 0;
+};
+
+// Subject (observable)
+class Subject {
+    std::vector&lt;Observer*&gt; observers_;
+public:
+    void attach(Observer* obs) { observers_.push_back(obs); }
+    void detach(Observer* obs) {
+        observers_.erase(
+            std::remove(observers_.begin(), observers_.end(), obs),
+            observers_.end()
+        );
+    }
+
+    void notify(const std::string&amp; event, int data) {
+        for (auto* obs : observers_) {
+            obs-&gt;on_notify(event, data);
+        }
+    }
+};
+
+// Concrete observer
+class UeMonitor : public Observer {
+    std::string name_;
+public:
+    explicit UeMonitor(std::string name) : name_(std::move(name)) {}
+
+    void on_notify(const std::string&amp; event, int data) override {
+        std::cout &lt;&lt; "[" &lt;&lt; name_ &lt;&lt; "] Event: " &lt;&lt; event
+                  &lt;&lt; ", UE-ID: " &lt;&lt; data &lt;&lt; "\n";
+    }
+};
+
+class MetricsCollector : public Observer {
+    int event_count_ = 0;
+public:
+    void on_notify(const std::string&amp; event, int /*data*/) override {
+        ++event_count_;
+        std::cout &lt;&lt; "[Metrics] Total events: " &lt;&lt; event_count_ &lt;&lt; "\n";
+    }
+};
+
+int main() {
+    Subject event_bus;
+
+    UeMonitor monitor_a("CU-1");
+    UeMonitor monitor_b("DU-1");
+    MetricsCollector metrics;
+
+    event_bus.attach(&amp;monitor_a);
+    event_bus.attach(&amp;monitor_b);
+    event_bus.attach(&amp;metrics);
+
+    event_bus.notify("HANDOVER_START", 42);
+    event_bus.notify("HANDOVER_COMPLETE", 42);
+    event_bus.notify("UE_RELEASE", 99);
+}
+</pre>
+
+<h2>Callback-Based Event System (std::function)</h2>
+
+<p>Using <code>std::function</code> removes the need for an observer base class and allows lambdas as callbacks:</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+#include &lt;functional&gt;
+#include &lt;unordered_map&gt;
+#include &lt;vector&gt;
+#include &lt;mutex&gt;
+
+class EventBus {
+    using Callback = std::function&lt;void(int)&gt;;
+    std::unordered_map&lt;std::string, std::vector&lt;Callback&gt;&gt; subscribers_;
+    mutable std::mutex mutex_;
+
+public:
+    // Subscribe to an event type
+    void on(const std::string&amp; event, Callback cb) {
+        std::lock_guard lock(mutex_);
+        subscribers_[event].push_back(std::move(cb));
+    }
+
+    // Emit an event
+    void emit(const std::string&amp; event, int data) {
+        std::lock_guard lock(mutex_);
+        auto it = subscribers_.find(event);
+        if (it != subscribers_.end()) {
+            for (const auto&amp; cb : it-&gt;second) {
+                cb(data);
+            }
+        }
+    }
+};
+
+int main() {
+    EventBus bus;
+
+    // Subscribe with lambdas
+    bus.on("UE_ATTACH", [](int ue_id) {
+        std::cout &lt;&lt; "UE attached: " &lt;&lt; ue_id &lt;&lt; "\n";
+    });
+
+    bus.on("UE_ATTACH", [](int ue_id) {
+        std::cout &lt;&lt; "Logging: UE " &lt;&lt; ue_id &lt;&lt; " connected\n";
+    });
+
+    int handover_count = 0;
+    bus.on("HANDOVER", [&amp;handover_count](int ue_id) {
+        ++handover_count;
+        std::cout &lt;&lt; "Handover #" &lt;&lt; handover_count
+                  &lt;&lt; " for UE " &lt;&lt; ue_id &lt;&lt; "\n";
+    });
+
+    bus.emit("UE_ATTACH", 1001);
+    bus.emit("UE_ATTACH", 1002);
+    bus.emit("HANDOVER", 1001);
+}
+</pre>
+
+<h2>Type-Safe Events with std::variant</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+#include &lt;variant&gt;
+#include &lt;vector&gt;
+#include &lt;functional&gt;
+
+// Define event types
+struct UeAttachEvent { int ue_id; std::string cell; };
+struct UeReleaseEvent { int ue_id; int cause; };
+struct HandoverEvent { int ue_id; std::string source; std::string target; };
+
+using Event = std::variant&lt;UeAttachEvent, UeReleaseEvent, HandoverEvent&gt;;
+
+// Type-safe event bus
+class TypedEventBus {
+    std::vector&lt;std::function&lt;void(const Event&amp;)&gt;&gt; handlers_;
+public:
+    void subscribe(std::function&lt;void(const Event&amp;)&gt; handler) {
+        handlers_.push_back(std::move(handler));
+    }
+
+    void publish(const Event&amp; event) {
+        for (const auto&amp; h : handlers_) {
+            h(event);
+        }
+    }
+};
+
+int main() {
+    TypedEventBus bus;
+
+    bus.subscribe([](const Event&amp; e) {
+        std::visit([](auto&amp;&amp; arg) {
+            using T = std::decay_t&lt;decltype(arg)&gt;;
+            if constexpr (std::is_same_v&lt;T, UeAttachEvent&gt;) {
+                std::cout &lt;&lt; "Attach: UE " &lt;&lt; arg.ue_id
+                          &lt;&lt; " at " &lt;&lt; arg.cell &lt;&lt; "\n";
+            } else if constexpr (std::is_same_v&lt;T, UeReleaseEvent&gt;) {
+                std::cout &lt;&lt; "Release: UE " &lt;&lt; arg.ue_id
+                          &lt;&lt; " cause=" &lt;&lt; arg.cause &lt;&lt; "\n";
+            } else if constexpr (std::is_same_v&lt;T, HandoverEvent&gt;) {
+                std::cout &lt;&lt; "Handover: UE " &lt;&lt; arg.ue_id
+                          &lt;&lt; " " &lt;&lt; arg.source &lt;&lt; " -&gt; " &lt;&lt; arg.target &lt;&lt; "\n";
+            }
+        }, e);
+    });
+
+    bus.publish(UeAttachEvent{1001, "Cell-A"});
+    bus.publish(HandoverEvent{1001, "Cell-A", "Cell-B"});
+    bus.publish(UeReleaseEvent{1001, 0});
+}
+</pre>
+
+<h2>Implementation Comparison</h2>
+
+<table>
+<tr><th>Approach</th><th>Pros</th><th>Cons</th></tr>
+<tr><td>Virtual functions</td><td>Type-safe, polymorphic</td><td>Requires inheritance, rigid interface</td></tr>
+<tr><td>std::function</td><td>Flexible, lambdas, no inheritance</td><td>Type erasure overhead, no type safety</td></tr>
+<tr><td>std::variant</td><td>Type-safe, extensible, no vtable</td><td>All event types in one variant, verbose</td></tr>
+<tr><td>Signals/Slots (Qt-style)</td><td>Very flexible, thread-safe</td><td>Library dependency</td></tr>
+</table>
+
+<div class="callout green">
+<p><strong>Best practice:</strong> Use <code>std::function</code> callbacks for simple event systems. Use <code>std::variant</code> when you need compile-time type safety for events. Always make the event bus thread-safe if observers are subscribed/unsubscribed from different threads. See <a href="../practice-questions/observer-pattern.html">Observer Pattern Practice</a> for exercises.</p>
+</div>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="singleton-pattern.html">Singleton Pattern</a> (event bus as singleton), <a href="factory-pattern.html">Factory Pattern</a> (creating event objects), <a href="../intermediate/function-bind.html">std::function</a> (callback mechanism), <a href="../intermediate/lambda-expressions.html">Lambda Expressions</a> (inline observers), <a href="../practice-questions/observer-pattern.html">Observer Practice</a>.</p>
+</div>
+
+<div class="nav"><a href="singleton-pattern.html">&larr; Singleton Pattern</a><a href="factory-pattern.html">Factory Pattern &rarr;</a></div>
+</body>
+</html>

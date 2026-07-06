@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Polymorphism — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; }
+  .breadcrumb a { color: #8b949e; }
+  .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; }
+  .callout.red { border-left-color: #f85149; }
+  .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; }
+  th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#1">1 Basics</a> / <a href="../index.html#1">1.2 Object-Oriented Programming</a> / 1.2.4 Polymorphism</div>
+<div class="meta"><span class="tag basic">BASIC</span></div>
+<h1>1.2.4 Polymorphism</h1>
+
+<p>Polymorphism means "many forms." In C++, it is the ability to use a single interface to represent different underlying behaviors. There are two main types: <strong>compile-time polymorphism</strong> (resolved at compile time) and <strong>runtime polymorphism</strong> (resolved at runtime). Both enable flexible and extensible <a href="inheritance.html">inheritance</a>-based designs.</p>
+
+<h2>Compile-Time Polymorphism</h2>
+
+<p>Compile-time polymorphism is resolved by the compiler before the program runs. The two primary forms are function overloading and operator overloading.</p>
+
+<h3>Function Overloading</h3>
+
+<p>Multiple functions can share the same name if they differ in their parameter types or count. The compiler selects the correct version based on the arguments provided:</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+class Printer {
+public:
+    void print(int value) const {
+        std::cout &lt;&lt; "int: " &lt;&lt; value &lt;&lt; std::endl;
+    }
+
+    void print(double value) const {
+        std::cout &lt;&lt; "double: " &lt;&lt; value &lt;&lt; std::endl;
+    }
+
+    void print(const std::string&amp; value) const {
+        std::cout &lt;&lt; "string: " &lt;&lt; value &lt;&lt; std::endl;
+    }
+
+    void print(int a, int b) const {
+        std::cout &lt;&lt; "two ints: " &lt;&lt; a &lt;&lt; ", " &lt;&lt; b &lt;&lt; std::endl;
+    }
+};
+
+int main() {
+    Printer p;
+    p.print(42);             // calls print(int)
+    p.print(3.14);           // calls print(double)
+    p.print("hello");        // calls print(const string&amp;)
+    p.print(10, 20);         // calls print(int, int)
+    return 0;
+}
+</pre>
+
+<h3>Operator Overloading (Overview)</h3>
+
+<p>C++ allows you to redefine how operators work for user-defined types. This is covered in depth in <a href="../intermediate/operator-overloading.html">Operator Overloading</a>. Here is a brief example:</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+class Complex {
+private:
+    double real, imag;
+
+public:
+    Complex(double r = 0, double i = 0) : real(r), imag(i) {}
+
+    // Overload + operator
+    Complex operator+(const Complex&amp; other) const {
+        return Complex{real + other.real, imag + other.imag};
+    }
+
+    void print() const {
+        std::cout &lt;&lt; real &lt;&lt; " + " &lt;&lt; imag &lt;&lt; "i" &lt;&lt; std::endl;
+    }
+};
+
+int main() {
+    Complex a{3.0, 4.0};
+    Complex b{1.0, 2.0};
+    Complex c = a + b;  // uses overloaded operator+
+    c.print();          // 4 + 6i
+    return 0;
+}
+</pre>
+
+<h2>Runtime Polymorphism</h2>
+
+<p>Runtime polymorphism uses <strong>virtual functions</strong> to determine which function to call at runtime based on the actual type of the object. This is the foundation of dynamic dispatch in C++:</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+#include &lt;memory&gt;
+
+class Shape {
+public:
+    virtual double area() const = 0;           // pure virtual
+    virtual void describe() const {
+        std::cout &lt;&lt; "A shape" &lt;&lt; std::endl;
+    }
+    virtual ~Shape() = default;              // virtual destructor
+};
+
+class Rectangle : public Shape {
+    double w, h;
+public:
+    Rectangle(double w, double h) : w(w), h(h) {}
+    double area() const override { return w * h; }
+    void describe() const override {
+        std::cout &lt;&lt; "Rectangle " &lt;&lt; w &lt;&lt; "x" &lt;&lt; h
+                  &lt;&lt; " (area=" &lt;&lt; area() &lt;&lt; ")" &lt;&lt; std::endl;
+    }
+};
+
+class Circle : public Shape {
+    double r;
+public:
+    Circle(double r) : r(r) {}
+    double area() const override { return 3.14159265 * r * r; }
+    void describe() const override {
+        std::cout &lt;&lt; "Circle r=" &lt;&lt; r
+                  &lt;&lt; " (area=" &lt;&lt; area() &lt;&lt; ")" &lt;&lt; std::endl;
+    }
+};
+
+int main() {
+    // Base class pointers/references can point to derived objects
+    Shape* s1 = new Rectangle{4.0, 5.0};
+    Shape* s2 = new Circle{3.0};
+
+    s1-&gt;describe();   // calls Rectangle::describe()
+    s2-&gt;describe();   // calls Circle::describe()
+
+    delete s1;
+    delete s2;
+    return 0;
+}
+</pre>
+
+<h2>When to Use virtual</h2>
+
+<table>
+  <tr><th>Use <code>virtual</code></th><th>Do not use <code>virtual</code></th></tr>
+  <tr><td>Base class with derived classes that need different behavior</td><td>Final (leaf) classes with no derived types</td></tr>
+  <tr><td>Functions called through base class pointers or references</td><td>Internal helper functions never called polymorphically</td></tr>
+  <tr><td>Interface / abstract base classes</td><td>Small, performance-critical inner loops</td></tr>
+  <tr><td>Destructors in base classes (always)</td><td>Functions called only from within the class</td></tr>
+</table>
+
+<div class="callout red">
+  <p><strong>Critical rule:</strong> If a class has <strong>any virtual functions</strong>, its destructor must also be <code>virtual</code>. Without a virtual destructor, deleting a derived object through a base pointer results in undefined behavior (the derived destructor is never called).</p>
+</div>
+
+<pre>
+// WRONG: Base has virtual functions but non-virtual destructor
+class Base {
+public:
+    virtual void foo() {}
+    ~Base() {}           // NOT virtual!
+};
+
+class Derived : public Base {
+public:
+    ~Derived() { /* cleanup derived resources */ }
+};
+
+// DANGER: Derived destructor NOT called
+Base* p = new Derived{};
+delete p;  // only Base::~Base() runs; ~Derived() is skipped
+</pre>
+
+<h2>vtable Basics</h2>
+
+<p>When a class has virtual functions, the compiler creates a <strong>vtable</strong> (virtual function table) for that class. Each object of the class contains a hidden pointer (<strong>vptr</strong>) to its class's vtable. At runtime, a virtual function call looks up the correct function address in the vtable:</p>
+
+<table>
+  <tr><th>Concept</th><th>Description</th></tr>
+  <tr><td>vtable</td><td>A static table (per class) containing function pointers for all virtual functions</td></tr>
+  <tr><td>vptr</td><td>A hidden pointer (per object) pointing to the class's vtable</td></tr>
+  <tr><td>Cost</td><td>One pointer per object + one vtable per polymorphic class + indirect call per virtual invocation</td></tr>
+</table>
+
+<div class="callout">
+  <p><strong>Deep dive:</strong> For a detailed explanation of how vtables are laid out, how multiple inheritance affects them, and performance implications, see <a href="../intermediate/virtual-functions-vtable.html">Virtual Functions &amp; vtable</a>.</p>
+</div>
+
+<h2>Combining Both Types</h2>
+
+<p>A well-designed C++ class hierarchy often uses both compile-time and runtime polymorphism together:</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+class Sensor {
+public:
+    // Runtime: derived classes override this
+    virtual std::string read() const = 0;
+    virtual ~Sensor() = default;
+
+    // Compile-time: overloaded for different parameter types
+    void calibrate(double offset) const {
+        std::cout &lt;&lt; "Calibrating with offset: " &lt;&lt; offset &lt;&lt; std::endl;
+    }
+    void calibrate(double offset, double scale) const {
+        std::cout &lt;&lt; "Calibrating offset: " &lt;&lt; offset
+                  &lt;&lt; ", scale: " &lt;&lt; scale &lt;&lt; std::endl;
+    }
+};
+
+class TemperatureSensor : public Sensor {
+public:
+    std::string read() const override {
+        return "25.3 C";
+    }
+};
+
+int main() {
+    TemperatureSensor ts;
+    ts.calibrate(0.5);                    // compile-time overload
+    ts.calibrate(0.1, 1.2);               // compile-time overload
+
+    Sensor* s = &amp;ts;
+    std::cout &lt;&lt; s-&gt;read() &lt;&lt; std::endl;  // runtime dispatch
+
+    return 0;
+}
+</pre>
+
+<div class="callout">
+  <p><strong>Further reading:</strong> For pure virtual functions and abstract classes, see <a href="../intermediate/abstract-classes.html">Abstract Classes</a>. For detailed operator overloading syntax, see <a href="../intermediate/operator-overloading.html">Operator Overloading</a>. For the RAII pattern applied to polymorphic types, see <a href="../intermediate/raii.html">RAII</a>.</p>
+</div>
+
+<div class="nav">
+  <a href="inheritance.html">&larr; Inheritance</a>
+  <a href="encapsulation-abstraction.html">Encapsulation &amp; Abstraction &rarr;</a>
+</div>
+</body>
+</html>

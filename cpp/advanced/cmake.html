@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CMake — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / <a href="../index.html#3.7">3.7 Build Systems &amp; Tooling</a> / 3.7.1</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>CMake</h1>
+
+<p>CMake is the de facto standard build system for C++ projects. It generates native build files (Makefiles, Ninja, Visual Studio projects) from a platform-independent <code>CMakeLists.txt</code> configuration. Modern CMake (3.15+) promotes target-based configuration over directory-level variables.</p>
+
+<h2>CMake Basics</h2>
+
+<pre>
+# Minimum CMake version (always set this first)
+cmake_minimum_required(VERSION 3.20)
+
+# Project name and language
+project(MyProject VERSION 1.0.0 LANGUAGES CXX)
+
+# Set C++ standard
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)  # Use -std=c++17, not -std=gnu++17
+
+# Export compile_commands.json (needed by clang-tidy, clangd)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+</pre>
+
+<h2>Multi-Target CMakeLists.txt</h2>
+
+<pre>
+cmake_minimum_required(VERSION 3.20)
+project(RanStack VERSION 2.0.0 LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXPORT_COMPILE_COMMANDS ON)
+
+# --- Compile options (modern CMake: use target_*, not add_definitions) ---
+add_library(ran_compile_options INTERFACE)
+target_compile_options(ran_compile_options INTERFACE
+    -Wall -Wextra -Wpedantic
+    $&lt;$&lt;CMAKE_BUILD_TYPE:Debug&gt;:-g -O0&gt;
+    $&lt;$&lt;CMAKE_BUILD_TYPE:Release&gt;:-O2 -DNDEBUG&gt;
+)
+
+# --- Library target ---
+add_library(ran_protocol
+    src/packet.cpp
+    src/rlc_layer.cpp
+    src/pdcp_layer.cpp
+)
+target_include_directories(ran_protocol PUBLIC
+    $&lt;BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include&gt;
+    $&lt;INSTALL_INTERFACE:include&gt;
+)
+target_link_libraries(ran_protocol
+    PUBLIC Threads::Threads
+    PRIVATE ran_compile_options
+)
+
+# --- Executable target ---
+add_executable(ran_simulator
+    src/main.cpp
+    src/simulator.cpp
+)
+target_link_libraries(ran_simulator
+    PRIVATE ran_protocol ran_compile_options
+)
+
+# --- Test target ---
+add_executable(ran_tests
+    tests/main.cpp
+    tests/packet_test.cpp
+    tests/rlc_test.cpp
+)
+target_link_libraries(ran_tests
+    PRIVATE ran_protocol GTest::gtest_main ran_compile_options
+)
+enable_testing()
+add_test(NAME protocol_tests COMMAND ran_tests)
+
+# --- Static analysis integration ---
+find_program(CPPCHECK cppcheck)
+if(CPPCHECK)
+    add_custom_target(cppcheck
+        COMMAND ${CPPCHECK} --enable=all --std=c++17 --suppress=missingInclude
+                ${CMAKE_CURRENT_SOURCE_DIR}/src
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    )
+endif()
+
+find_program(CLANG_TIDY clang-tidy)
+if(CLANG_TIDY)
+    set_target_properties(ran_protocol ran_simulator PROPERTIES
+        CXX_CLANG_TIDY "${CLANG_TIDY};--config-file=${CMAKE_SOURCE_DIR}/.clang-tidy"
+    )
+endif()
+</pre>
+
+<h2>Key CMake Commands</h2>
+
+<table>
+<tr><th>Command</th><th>Purpose</th><th>Example</th></tr>
+<tr><td><code>add_executable</code></td><td>Define an executable target</td><td><code>add_executable(app main.cpp)</code></td></tr>
+<tr><td><code>add_library</code></td><td>Define a library (STATIC, SHARED, OBJECT, INTERFACE)</td><td><code>add_library(lib STATIC lib.cpp)</code></td></tr>
+<tr><td><code>target_link_libraries</code></td><td>Link libraries and transitively propagate their settings</td><td><code>target_link_libraries(app PRIVATE lib)</code></td></tr>
+<tr><td><code>target_include_directories</code></td><td>Add include search paths for a target</td><td><code>target_include_directories(lib PUBLIC include/)</code></td></tr>
+<tr><td><code>target_compile_options</code></td><td>Add compiler flags for a target</td><td><code>target_compile_options(app PRIVATE -Wall)</code></td></tr>
+<tr><td><code>target_compile_definitions</code></td><td>Add preprocessor definitions</td><td><code>target_compile_definitions(app PRIVATE DEBUG)</code></td></tr>
+<tr><td><code>find_package</code></td><td>Locate and import external libraries</td><td><code>find_package(Threads REQUIRED)</code></td></tr>
+<tr><td><code>enable_testing / add_test</code></td><td>Register tests with CTest</td><td><code>add_test(NAME mytest COMMAND app)</code></td></tr>
+</table>
+
+<h2>Modern CMake: Link Visibility</h2>
+
+<pre>
+# PUBLIC: headers and link dependencies propagate to consumers
+target_include_directories(mylib PUBLIC include/)     # consumers see headers
+target_link_libraries(mylib PUBLIC Threads::Threads)  # consumers also link Threads
+
+# PRIVATE: only for this target, not propagated to consumers
+target_compile_options(mylib PRIVATE -Wno-old-style-cast)
+
+# INTERFACE: only propagated to consumers, not used by this target itself
+add_library(mylib_interface INTERFACE)
+target_link_libraries(mylib_interface INTERFACE
+    Threads::Threads
+    nlohmann_json::nlohmann_json
+)
+</pre>
+
+<div class="callout warning">
+<p><strong>Legacy vs Modern:</strong> Avoid <code>include_directories()</code>, <code>link_directories()</code>, <code>add_definitions()</code>, and <code>link_libraries()</code> (no target prefix). These set directory-level properties that are not target-scoped and cause hard-to-debug dependency issues.</p>
+</div>
+
+<h2>Building with CMake</h2>
+
+<pre>
+# Configure (out-of-source build)
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+# Build
+cmake --build build --parallel 8
+
+# Run tests
+ctest --test-dir build --output-on-failure
+
+# Debug build
+cmake -B build-debug -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-fsanitize=address"
+cmake --build build-debug
+</pre>
+
+<div class="callout green">
+<p><strong>Best practice:</strong> Always use out-of-source builds (<code>-B build</code>). Keep <code>compile_commands.json</code> enabled for <a href="cppcheck.html">cppcheck</a> and <a href="clang-tidy.html">clang-tidy</a> integration. Use target-based commands exclusively. Use <a href="make-build.html">Make</a> as the generator backend or Ninja for faster builds.</p>
+</div>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="make-build.html">Make &amp; Build Process</a>, <a href="gdb-debugging.html">GDB Debugging</a>, <a href="cppcheck.html">cppcheck</a>, <a href="clang-tidy.html">clang-tidy</a>.</p>
+</div>
+
+<div class="nav"><a href="code-scanning-best-practices.html">&larr; Code Scanning Best Practices</a><a href="make-build.html">Make &amp; Build Process &rarr;</a></div>
+</body>
+</html>

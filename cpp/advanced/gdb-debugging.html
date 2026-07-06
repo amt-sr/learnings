@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GDB Debugging — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / <a href="../index.html#3.7">3.7 Build Systems &amp; Tooling</a> / 3.7.3</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>GDB &amp; Debugging</h1>
+
+<p>GDB (GNU Debugger) is the standard command-line debugger for C and C++ programs on Linux and macOS. It allows you to pause execution, inspect memory and variables, set conditional breakpoints, and trace program flow. Combined with <a href="cmake.html">CMake</a> builds that include debug symbols (<code>-g</code>), GDB is indispensable for tracking down bugs.</p>
+
+<h2>Starting GDB</h2>
+
+<pre>
+# Compile with debug symbols
+g++ -std=c++17 -g -O0 -o myapp src/main.cpp
+
+# Start GDB
+gdb ./myapp
+
+# Start with a core dump
+gdb ./myapp core
+
+# Attach to a running process
+gdb ./myapp 12345   # where 12345 is the PID
+
+# Common GDB startup commands
+(gdb) start          # Run to main() and stop
+(gdb) run            # Run the program
+(gdb) run --arg1 val # Run with arguments
+</pre>
+
+<h2>Common GDB Commands</h2>
+
+<table>
+<tr><th>Category</th><th>Command</th><th>Description</th></tr>
+<tr><td rowspan="5">Breakpoints</td><td><code>break main.cpp:42</code></td><td>Set breakpoint at line 42 of main.cpp</td></tr>
+<tr><td><code>break MyClass::method</code></td><td>Set breakpoint at a method</td></tr>
+<tr><td><code>break main.cpp:42 if x &gt; 10</code></td><td>Conditional breakpoint</td></tr>
+<tr><td><code>info break</code></td><td>List all breakpoints</td></tr>
+<tr><td><code>delete 1</code></td><td>Delete breakpoint number 1</td></tr>
+<tr><td rowspan="4">Stepping</td><td><code>step</code> (s)</td><td>Step into function calls</td></tr>
+<tr><td><code>next</code> (n)</td><td>Step over function calls</td></tr>
+<tr><td><code>finish</code> (fin)</td><td>Run until current function returns</td></tr>
+<tr><td><code>continue</code> (c)</td><td>Continue execution until next breakpoint</td></tr>
+<tr><td rowspan="5">Inspecting</td><td><code>print x</code> (p)</td><td>Print value of variable x</td></tr>
+<tr><td><code>print *ptr</code></td><td>Dereference and print</td></tr>
+<tr><td><code>print arr@10</code></td><td>Print 10 elements of array arr</td></tr>
+<tr><td><code>print /x value</code></td><td>Print in hex format</td></tr>
+<tr><td><code>display x</code></td><td>Show x every time execution stops</td></tr>
+<tr><td rowspan="3">Stack</td><td><code>backtrace</code> (bt)</td><td>Show call stack</td></tr>
+<tr><td><code>backtrace full</code></td><td>Show stack with local variables</td></tr>
+<tr><td><code>frame 3</code> (f)</td><td>Switch to stack frame 3</td></tr>
+<tr><td rowspan="3">Watchpoints</td><td><code>watch x</code></td><td>Break when x is written</td></tr>
+<tr><td><code>rwatch x</code></td><td>Break when x is read</td></tr>
+<tr><td><code>awatch x</code></td><td>Break when x is read or written</td></tr>
+<tr><td rowspan="3">Threads</td><td><code>info threads</code></td><td>List all threads</td></tr>
+<tr><td><code>thread 3</code></td><td>Switch to thread 3</td></tr>
+<tr><td><code>thread apply all bt</code></td><td>Backtrace all threads</td></tr>
+</table>
+
+<h2>Inspecting C++ Types</h2>
+
+<pre>
+(gdb) print packet
+$1 = {type = 1, length = 128, payload = 0x7fffffffe100}
+
+(gdb) print packet.length
+$2 = 128
+
+(gdb) print packet.payload[0]
+$3 = 42
+
+(gdb) print *this
+$4 = {m_buffer = 0x5555555b2eb0, m_size = 1024, m_offset = 0}
+
+(gdb) print *this.m_buffer@10
+$5 = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
+
+# Print std::vector contents (GDB 7.0+ with pretty printers)
+(gdb) print vec
+$6 = std::vector of length 5, capacity 8 = {10, 20, 30, 40, 50}
+
+# Print std::map
+(gdb) print mymap
+$7 = std::map with 3 elements = {[1] = "one", [2] = "two", [3] = "three"}
+</pre>
+
+<h2>Watchpoints</h2>
+
+<p>Watchpoints break execution when a variable's value changes. They are essential for tracking down corruption bugs:</p>
+
+<pre>
+(gdb) break main.cpp:15
+(gdb) run
+(gdb) watch counter
+Hardware watchpoint 2: counter
+(gdb) continue
+Hardware watchpoint 2: counter
+
+Old value = 0
+New value = 42
+0x0000555555555201 in increment() at src/counter.cpp:23
+23      counter += delta;
+(gdb) backtrace
+#0  increment() at src/counter.cpp:23
+#1  process_packet() at src/packet.cpp:67
+#2  main() at src/main.cpp:15
+</pre>
+
+<h2>Core Dumps</h2>
+
+<pre>
+# Enable core dumps (Linux)
+ulimit -c unlimited
+
+# Set core dump pattern
+sudo sysctl -w kernel.core_pattern=/tmp/core.%e.%p
+
+# Analyze a core dump
+gdb ./myapp /tmp/core.myapp.12345
+
+(gdb) bt full
+#0  0x0000555555554567 in crash_function (ptr=0x0) src/bug.cpp:42
+    ptr = 0x0
+#1  0x0000555555554789 in handle_request (req=...) src/handler.cpp:78
+    req = {type = 3, data = 0x5555555b2010}
+#2  0x00005555555548ab in main () src/main.cpp:15
+</pre>
+
+<h2>GDB with Multithreaded Programs</h2>
+
+<pre>
+# List all threads
+(gdb) info threads
+  Id   Target Id         Frame
+* 1    Thread 0x7f8a0   main () at src/main.cpp:20
+  2    Thread 0x7f8a1   worker (id=0) at src/worker.cpp:45
+  3    Thread 0x7f8a2   worker (id=1) at src/worker.cpp:45
+
+# Apply a command to all threads
+(gdb) thread apply all backtrace
+
+# Lock the scheduler (only current thread runs)
+(gdb) set scheduler-locking on
+
+# Break only in a specific thread
+(gdb) thread 2
+(gdb) break worker.cpp:50
+</pre>
+
+<div class="callout warning">
+<p><strong>Important:</strong> Always compile with <code>-g -O0</code> for debugging. Optimized code (<code>-O2</code>) reorders instructions, inlines functions, and eliminates variables, making GDB output confusing. For production debugging with sanitizers, use <code>-g -O1 -fsanitize=address</code> as a compromise.</p>
+</div>
+
+<div class="callout green">
+<p><strong>Pro tip:</strong> Use <code>set print pretty on</code> for formatted struct output, <code>set pagination off</code> to prevent GDB from pausing for long outputs, and create a <code>.gdbinit</code> file for persistent settings. Combine with <a href="valgrind.html">Valgrind</a> for memory error detection that GDB cannot catch.</p>
+</div>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="cmake.html">CMake</a>, <a href="make-build.html">Make &amp; Build Process</a>, <a href="valgrind.html">Valgrind</a>, <a href="address-sanitizer-tools.html">AddressSanitizer &amp; Tools</a>, <a href="undefined-behavior.html">Undefined Behavior</a>.</p>
+</div>
+
+<div class="nav"><a href="make-build.html">&larr; Make &amp; Build Process</a><a href="valgrind.html">Valgrind &rarr;</a></div>
+</body>
+</html>

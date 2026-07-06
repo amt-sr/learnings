@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>noexcept — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / <a href="../index.html#2.5">2.5 Error Handling</a> / 2.5.2 noexcept</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>noexcept</h1>
+
+<p>The <code>noexcept</code> specifier tells the compiler that a function is guaranteed not to throw exceptions. This enables compiler optimizations (no exception cleanup code), allows containers to make better choices (e.g., <code>std::vector</code> uses move instead of copy during reallocation if the move constructor is noexcept), and serves as documentation for API contracts.</p>
+
+<h2>noexcept Specifier</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+
+// Unconditionally noexcept
+void safe_function() noexcept {
+    std::cout &lt;&lt; "This will never throw\n";
+}
+
+// noexcept(false) — explicitly may throw (default for most functions)
+void risky_function() noexcept(false) {
+    // throw std::runtime_error("oops");  // OK
+}
+
+// Conditional noexcept — depends on whether T's move is noexcept
+template&lt;typename T&gt;
+void swap_values(T&amp; a, T&amp; b) noexcept(noexcept(T(std::move(a)))) {
+    T tmp = std::move(a);
+    a = std::move(b);
+    b = std::move(tmp);
+}
+
+void noexcept_demo() {
+    std::cout &lt;&lt; std::boolalpha;
+    std::cout &lt;&lt; "safe_function noexcept? "
+              &lt;&lt; noexcept(safe_function()) &lt;&lt; "\n";  // true
+    std::cout &lt;&lt; "risky_function noexcept? "
+              &lt;&lt; noexcept(risky_function()) &lt;&lt; "\n";  // false
+
+    // Conditional: depends on int's move constructor
+    std::cout &lt;&lt; "swap_values&lt;int&gt; noexcept? "
+              &lt;&lt; noexcept(swap_values&lt;int&gt;(std::declval&lt;int&amp;&gt;(),
+                                            std::declval&lt;int&amp;&gt;()))
+              &lt;&lt; "\n";  // true (int move is noexcept)
+}
+</pre>
+
+<h2>noexcept Operator</h2>
+
+<p>The <code>noexcept(expr)</code> operator is a compile-time check that returns <code>true</code> if the compiler can determine that <code>expr</code> will not throw. It evaluates the expression at compile time without actually executing it.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+#include &lt;string&gt;
+
+void noexcept_operator_demo() {
+    std::cout &lt;&lt; std::boolalpha;
+
+    // Built-in operations are noexcept
+    std::cout &lt;&lt; "int + int noexcept? "
+              &lt;&lt; noexcept(std::declval&lt;int&gt;() + std::declval&lt;int&gt;()) &lt;&lt; "\n";  // true
+
+    // vector::size() is noexcept
+    std::cout &lt;&lt; "vector::size noexcept? "
+              &lt;&lt; noexcept(std::declval&lt;std::vector&lt;int&gt;&gt;().size()) &lt;&lt; "\n";  // true
+
+    // vector::at() is NOT noexcept (throws out_of_range)
+    std::cout &lt;&lt; "vector::at noexcept? "
+              &lt;&lt; noexcept(std::declval&lt;std::vector&lt;int&gt;&gt;().at(0)) &lt;&lt; "\n";  // false
+}
+</pre>
+
+<h2>Move Constructors and noexcept</h2>
+
+<p>Marking move constructors and move assignment operators as <code>noexcept</code> has a significant practical impact: <code>std::vector</code> (and other containers) will only use move operations during reallocation if they are <code>noexcept</code>. Otherwise, it falls back to copy to maintain the strong exception guarantee.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+
+class NoThrowMovable {
+    int* data_;
+public:
+    explicit NoThrowMovable(int val) : data_(new int(val)) {}
+    ~NoThrowMovable() { delete data_; }
+
+    // Move constructor — noexcept allows vector to move during realloc
+    NoThrowMovable(NoThrowMovable&amp;&amp; other) noexcept
+        : data_(other.data_) {
+        other.data_ = nullptr;
+    }
+
+    NoThrowMovable&amp; operator=(NoThrowMovable&amp;&amp; other) noexcept {
+        if (this != &amp;other) {
+            delete data_;
+            data_ = other.data_;
+            other.data_ = nullptr;
+        }
+        return *this;
+    }
+
+    // Copy operations
+    NoThrowMovable(const NoThrowMovable&amp; other)
+        : data_(new int(*other.data_)) {}
+    NoThrowMovable&amp; operator=(const NoThrowMovable&amp; other) {
+        *data_ = *other.data_;
+        return *this;
+    }
+};
+
+void move_noexcept_demo() {
+    std::vector&lt;NoThrowMovable&gt; v;
+    v.reserve(2);
+    v.emplace_back(1);
+    v.emplace_back(2);
+
+    // When vector grows, it MOVES elements (fast, no copies)
+    // because the move constructor is noexcept
+    v.emplace_back(3);
+    std::cout &lt;&lt; "Vector moved elements during growth\n";
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>If a noexcept function throws:</strong> <code>std::terminate()</code> is called immediately. The program aborts without stack unwinding. This is why you must be certain that <code>noexcept</code> functions truly cannot throw -- or catch any potential exceptions internally.</p>
+</div>
+
+<h2>What Should Be noexcept</h2>
+
+<table>
+  <tr><th>Should be noexcept</th><th>Should NOT be noexcept</th></tr>
+  <tr><td>Destructors (implicitly noexcept in C++11+)</td><td>Functions that allocate memory (new)</td></tr>
+  <tr><td>Move constructors/assignment (when safe)</td><td>Functions that call potentially-throwing code</td></tr>
+  <tr><td>swap functions</td><td>Functions with complex logic (file I/O, parsing)</td></tr>
+  <tr><td>getters and simple accessors</td><td>Virtual functions (subclass may throw)</td></tr>
+  <tr><td>hash functions</td><td>Functions returning by value of complex types</td></tr>
+</table>
+
+<pre>
+#include &lt;utility&gt;
+
+class Point {
+    double x_, y_;
+public:
+    Point(double x, double y) : x_(x), y_(y) {}
+
+    // Getters: simple, no throwing
+    double x() const noexcept { return x_; }
+    double y() const noexcept { return y_; }
+
+    // Swap: should always be noexcept
+    friend void swap(Point&amp; a, Point&amp; b) noexcept {
+        using std::swap;
+        swap(a.x_, b.x_);
+        swap(a.y_, b.y_);
+    }
+};
+</pre>
+
+<div class="callout green">
+  <p><strong>Rule of thumb:</strong> Make functions <code>noexcept</code> whenever they cannot throw. It enables better optimization and is part of a correct API contract. Destructors are implicitly <code>noexcept</code> since C++11 -- do not add <code>throw</code> to destructors.</p>
+</div>
+
+<p>noexcept interacts with <a href="exception-handling.html">exception handling</a> and <a href="move-semantics.html">move semantics</a>. For smart pointer usage, see <a href="smart-pointers.html">smart pointers</a>.</p>
+
+<div class="nav"><a href="exception-handling.html">&larr; Exception Handling</a><a href="assert-static-assert.html">Assert / Static Assert &rarr;</a></div>
+</body>
+</html>

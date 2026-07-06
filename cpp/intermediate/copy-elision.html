@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Copy Elision — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / Copy Elision</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>Copy Elision</h1>
+
+<p>Copy elision is an optimization where the compiler omits copy or move constructors, constructing the object directly in the target memory location. In C++17, certain cases of copy elision became <strong>mandatory</strong>, meaning the copy/move constructor may not even exist and the program must still compile.</p>
+
+<h2>RVO — Return Value Optimization</h2>
+
+<p>When a function returns a local object by value, the compiler can construct the result directly in the caller's storage, eliminating the copy/move entirely.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+class BigObject {
+    std::string data_;
+public:
+    explicit BigObject(const std::string&amp; s) : data_(s) {
+        std::cout &lt;&lt; "  Constructor: " &lt;&lt; data_ &lt;&lt; "\n";
+    }
+
+    BigObject(const BigObject&amp; other) : data_(other.data_) {
+        std::cout &lt;&lt; "  Copy constructor: " &lt;&lt; data_ &lt;&lt; "\n";
+    }
+
+    BigObject(BigObject&amp;&amp; other) noexcept : data_(std::move(other.data_)) {
+        std::cout &lt;&lt; "  Move constructor: " &lt;&lt; data_ &lt;&lt; "\n";
+    }
+
+    ~BigObject() { std::cout &lt;&lt; "  Destructor: " &lt;&lt; data_ &lt;&lt; "\n"; }
+};
+
+// The compiler constructs 'obj' directly in the caller's memory
+BigObject create_object(const std::string&amp; name) {
+    std::cout &lt;&lt; "Inside create_object\n";
+    return BigObject(name);  // No copy/move — RVO
+}
+
+void rvo_demo() {
+    std::cout &lt;&lt; "Before create_object\n";
+    BigObject obj = create_object("my_object");
+    std::cout &lt;&lt; "After create_object\n";
+}
+// Output (with RVO — typical):
+//   Before create_object
+//   Inside create_object
+//     Constructor: my_object
+//   After create_object
+//     Destructor: my_object
+//
+// Note: Only ONE constructor call and ONE destructor call.
+// No copy or move constructor is called.
+</pre>
+
+<h2>NRVO — Named Return Value Optimization</h2>
+
+<p>When the returned object has a name, NRVO can still elide the copy, but it was optional before C++17.</p>
+
+<pre>
+// NRVO — the returned variable 'result' is named
+BigObject make_named_object(const std::string&amp; a, const std::string&amp; b) {
+    std::cout &lt;&lt; "Inside make_named_object\n";
+    BigObject result(a + b);   // named local variable
+    // ... do some processing ...
+    return result;  // NRVO may elide the copy/move
+}
+
+void nrvo_demo() {
+    std::cout &lt;&lt; "Before make_named_object\n";
+    BigObject obj = make_named_object("hello", "world");
+    std::cout &lt;&lt; "After make_named_object\n";
+}
+// Output (with NRVO — typical):
+//   Before make_named_object
+//   Inside make_named_object
+//     Constructor: helloworld
+//   After make_named_object
+//     Destructor: helloworld
+</pre>
+
+<div class="callout warning">
+  <p><strong>NRVO is still optional:</strong> Unlike RVO for prvalues (C++17 mandatory), NRVO is still an optimization the compiler may or may not perform. If NRVO does not happen, the move constructor is used (if available). NRVO can fail if there are multiple return paths with different named objects.</p>
+</div>
+
+<h2>Mandatory Copy Elision (C++17)</h2>
+
+<p>C++17 made copy elision mandatory in two cases involving <strong>prvalues</strong> (pure rvalues).</p>
+
+<pre>
+// C++17: This object is guaranteed to be constructed directly
+// in 'obj' — no copy, no move, and the copy/move constructors
+// need not even exist or be accessible.
+
+class NoCopy {
+public:
+    NoCopy() = default;
+    NoCopy(const NoCopy&amp;) = delete;   // deleted copy
+    NoCopy(NoCopy&amp;&amp;) = delete;        // deleted move
+};
+
+// C++17: This works! Mandatory copy elision means the deleted
+// constructors are never needed.
+NoCopy make_no_copy() {
+    return NoCopy();  // C++17 OK: mandatory elision
+}
+
+void mandatory_elision_demo() {
+    // NoCopy is constructed directly — no copy/move attempted
+    NoCopy obj = make_no_copy();
+
+    // Direct initialization from prvalue — also mandatory elision
+    NoCopy obj2 = NoCopy();  // C++17 OK
+
+    // This is still a copy initialization from an lvalue — ERROR
+    // NoCopy obj3 = obj2;  // ERROR: uses deleted copy constructor
+}
+</pre>
+
+<h2>Copy Elision and std::move — Do Not Return std::move</h2>
+
+<div class="callout red">
+  <p><strong>Anti-pattern:</strong> Do not use <code>std::move</code> on return values. It prevents RVO/NRVO and can actually force a move when elision would have been better.</p>
+</div>
+
+<pre>
+// BAD: std::move on return prevents NRVO
+BigObject bad_create(const std::string&amp; s) {
+    BigObject obj(s);
+    return std::move(obj);   // Prevents NRVO! Forces move constructor.
+}
+
+// GOOD: just return the local variable
+BigObject good_create(const std::string&amp; s) {
+    BigObject obj(s);
+    return obj;  // NRVO applies — no copy/move at all
+}
+</pre>
+
+<h2>When Copy Elision Matters</h2>
+
+<pre>
+#include &lt;vector&gt;
+#include &lt;iostream&gt;
+
+class Matrix {
+    std::vector&lt;double&gt; data_;
+    size_t rows_, cols_;
+public:
+    Matrix(size_t rows, size_t cols)
+        : data_(rows * cols, 0.0), rows_(rows), cols_(cols) {
+        std::cout &lt;&lt; "  Constructing " &lt;&lt; rows &lt;&lt; "x" &lt;&lt; cols
+                  &lt;&lt; " matrix (" &lt;&lt; data_.size() &lt;&lt; " elements)\n";
+    }
+
+    Matrix(const Matrix&amp; other) : data_(other.data_), rows_(other.rows_), cols_(other.cols_) {
+        std::cout &lt;&lt; "  Copying " &lt;&lt; rows_ &lt;&lt; "x" &lt;&lt; cols_
+                  &lt;&lt; " matrix (" &lt;&lt; data_.size() &lt;&lt; " elements)\n";
+    }
+
+    Matrix(Matrix&amp;&amp; other) noexcept
+        : data_(std::move(other.data_)), rows_(other.rows_), cols_(other.cols_) {
+        std::cout &lt;&lt; "  Moving " &lt;&lt; rows_ &lt;&lt; "x" &lt;&lt; cols_
+                  &lt;&lt; " matrix (" &lt;&lt; data_.size() &lt;&lt; " elements)\n";
+    }
+};
+
+// Without copy elision: constructing a 1000x1000 matrix,
+// then copying it (copying 8 million doubles!) would be catastrophic.
+// With RVO: one construction, zero copies.
+Matrix create_identity(size_t n) {
+    Matrix m(n, n);
+    // ... set diagonal elements ...
+    return m;  // RVO/NRVO — no copy
+}
+
+void performance_demo() {
+    std::cout &lt;&lt; "Creating identity matrix:\n";
+    Matrix m = create_identity(1000);
+    std::cout &lt;&lt; "Done.\n";
+    // Output:
+    //   Creating identity matrix:
+    //     Constructing 1000x1000 matrix (1000000 elements)
+    //   Done.
+    // (No copy or move constructor called!)
+}
+</pre>
+
+<h2>Summary</h2>
+
+<table>
+  <tr><th>Case</th><th>Before C++17</th><th>C++17+</th></tr>
+  <tr><td><code>T obj = T();</code> (prvalue)</td><td>Optional elision</td><td><strong>Mandatory</strong> elision</td></tr>
+  <tr><td><code>return T();</code> (prvalue)</td><td>Optional elision</td><td><strong>Mandatory</strong> elision</td></tr>
+  <tr><td><code>return named_var;</code> (NRVO)</td><td>Optional elision</td><td>Optional elision (falls back to move)</td></tr>
+  <tr><td>Function parameter passing</td><td>No elision</td><td>No elision (use <code>std::move</code> if needed)</td></tr>
+</table>
+
+<p>Copy elision complements <a href="move-semantics.html">move semantics</a> — when elision happens, moves are unnecessary. When elision cannot happen (NRVO failure), move semantics provide the fallback. Together with <a href="raii.html">RAII</a>, they form C++'s resource management story. Next, we explore <a href="template-specialization.html">template specialization</a>.</p>
+
+<div class="nav"><a href="raii.html">&larr; RAII</a><a href="template-specialization.html">Template Specialization &rarr;</a></div>
+</body>
+</html>

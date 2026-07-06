@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LTE Architecture — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#4">4 Telecom &amp; 5G/4G Networking</a> / 4G LTE Concepts / 4.3.1</div>
+<div class="meta"><span class="tag medium">Medium</span></div>
+<h1>LTE Architecture</h1>
+
+<p>LTE (Long-Term Evolution) is the 4G cellular architecture defined by 3GPP. It consists of the Evolved UTRAN (E-UTRAN) for radio access and the Evolved Packet Core (EPC) for core networking. Understanding LTE architecture is essential for appreciating 5G design changes.</p>
+
+<h2>Architecture Diagram</h2>
+
+<pre>
+  LTE Architecture (EPC + E-UTRAN):
+
+  UE ---[Uu]--- eNodeB ---[S1-MME]--- MME
+                  |                       |
+               [S1-U]                [S6a] | [S11]
+                  |                       |    |
+              S-GW ----[S5/S8]---- P-GW ---[SGi]--- Internet
+                                    |
+                               PCRF (Rx+)
+                               HSS  (S6a)
+
+  Key Nodes:
+  eNodeB  = Base station (radio + control + user plane)
+  MME     = Mobility Management Entity (control plane)
+  S-GW    = Serving Gateway (user plane anchor, mobility)
+  P-GW    = PDN Gateway (UE IP allocation, packet filtering)
+  HSS     = Home Subscriber Server (subscription data)
+  PCRF    = Policy and Charging Rules Function (QoS)
+</pre>
+
+<h2>EPC Network Elements</h2>
+
+<table>
+  <tr><th>Element</th><th>Function</th><th>Interface Role</th></tr>
+  <tr><td><strong>MME</strong></td><td>NAS signaling, authentication, bearer management, tracking area management, handover control</td><td>S1-MME, S6a, S10, S11</td></tr>
+  <tr><td><strong>S-GW</strong></td><td>User plane anchor for inter-eNodeB handover, packet routing, lawful interception</td><td>S1-U, S5/S8, S12, S4</td></tr>
+  <tr><td><strong>P-GW</strong></td><td>IP address allocation (DHCP/IPv6), per-PDN QoS enforcement, packet filtering, traffic metering</td><td>S5/S8, SGi, Gx (PCRF)</td></tr>
+  <tr><td><strong>HSS</strong></td><td>User subscription profiles, authentication vectors, roaming info</td><td>S6a (to MME)</td></tr>
+  <tr><td><strong>PCRF</strong></td><td>QoS policy decisions, charging rules</td><td>Gx (P-GW), Rx (application)</td></tr>
+  <tr><td><strong>eNodeB</strong></td><td>Radio resource management, scheduling, RRC, MAC, PHY, header compression</td><td>S1-MME, S1-U, X2</td></tr>
+</table>
+
+<h2>C++ Architecture Model</h2>
+
+<pre>
+#include &lt;string&gt;
+#include &lt;vector&gt;
+#include &lt;unordered_map&gt;
+#include &lt;memory&gt;
+#include &lt;cstdint&gt;
+
+// Cell configuration for an eNodeB
+struct ENodeBConfig {
+    uint32_t    cell_id;           // ECI (28-bit)
+    uint16_t    tac;               // Tracking Area Code
+    uint16_t    plmn_id;           // PLMN (MCC+MNC)
+    uint32_t    earfcn;            // ARFCN
+    uint8_t     bandwidth;         // 1.4, 3, 5, 10, 15, 20 MHz
+    uint8_t     pci;               // Physical Cell ID (0-503)
+    uint16_t    max_ues;           // Max UEs supported
+};
+
+// EPS Bearer context
+struct EpsBearerContext {
+    uint8_t  bearer_id;           // EPS bearer ID (5-15)
+    uint8_t  qci;                 // QoS Class Identifier (1-9)
+    uint32_t arp;                 // Allocation and Retention Priority
+    uint32_t ambr_ul;             // Aggregate MBR UL (bps)
+    uint32_t ambr_dl;             // Aggregate MBR DL (bps)
+    uint32_t gbr_ul;              // Guaranteed BR UL
+    uint32_t gbr_dl;              // Guaranteed BR DL
+};
+
+// Simplified EPC node abstraction
+class EpcCore {
+public:
+    struct UeContext {
+        uint32_t                ue_id;
+        std::string             imsi;
+        uint32_t                enb_ue_id;
+        uint16_t                cell_id;
+        uint16_t                tac;
+        std::vector&lt;EpsBearerContext&gt; bearers;
+        uint8_t                 mme_ue_s1ap_id;
+    };
+
+    // MME function: handle UE attach
+    void handleAttachRequest(uint32_t enb_id, uint16_t cell_id,
+                              const std::string&amp; imsi) {
+        uint32_t ue_id = allocateUeId();
+        UeContext ctx;
+        ctx.ue_id = ue_id;
+        ctx.imsi = imsi;
+        ctx.enb_ue_id = enb_id;
+        ctx.cell_id = cell_id;
+        ctx.tac = getTacForCell(cell_id);
+
+        // Query HSS for subscription
+        auto sub_info = queryHss(imsi);
+        if (!sub_info.allowed) {
+            sendAttachReject(ue_id);
+            return;
+        }
+
+        // Create default bearer
+        EpsBearerContext default_bearer{};
+        default_bearer.bearer_id = 5;
+        default_bearer.qci = sub_info.default_qci;
+        default_bearer.ambr_ul = sub_info.subscribed_ambr_ul;
+        default_bearer.ambr_dl = sub_info.subscribed_ambr_dl;
+        ctx.bearers.push_back(default_bearer);
+
+        ue_contexts_[ue_id] = ctx;
+        sendAttachAccept(ue_id, default_bearer);
+    }
+
+private:
+    std::unordered_map&lt;uint32_t, UeContext&gt; ue_contexts_;
+
+    uint32_t allocateUeId() { return next_ue_id_++; }
+    uint16_t getTacForCell(uint16_t cell_id) { return 0x01A0; }
+    void sendAttachAccept(uint32_t, const EpsBearerContext&amp;) {}
+    void sendAttachReject(uint32_t) {}
+
+    struct SubscriptionInfo {
+        bool     allowed;
+        uint8_t  default_qci;
+        uint32_t subscribed_ambr_ul;
+        uint32_t subscribed_ambr_dl;
+    };
+    SubscriptionInfo queryHss(const std::string&amp; imsi);
+
+    uint32_t next_ue_id_{1};
+};
+</pre>
+
+<h2>4G LTE vs 5G NR Comparison</h2>
+
+<table>
+  <tr><th>Aspect</th><th>4G LTE (EPC)</th><th>5G NR (5GC)</th></tr>
+  <tr><td>Core</td><td>EPC (MME + S-GW + P-GW)</td><td>5GC (AMF + SMF + UPF)</td></tr>
+  <tr><td>RAN node</td><td>eNodeB (integrated CU+DU)</td><td>gNB (CU-DU split)</td></tr>
+  <tr><td>Control plane</td><td>MME</td><td>AMF (access) + SMF (session)</td></tr>
+  <tr><td>User plane</td><td>S-GW + P-GW</td><td>UPF</td></tr>
+  <tr><td>Paging</td><td>MME -> eNodeB</td><td>AMF -> gNB</td></tr>
+  <tr><td>QoS granularity</td><td>EPS bearer (QCI)</td><td>QoS flow (5QI) via SDAP</td></tr>
+  <tr><td>Network slicing</td><td>Not supported</td><td>NSSAI-based slicing</td></tr>
+  <tr><td>State model</td><td>IDLE, CONNECTED</td><td>IDLE, INACTIVE, CONNECTED</td></tr>
+</table>
+
+<div class="callout green">
+  <p><strong>5G evolution:</strong> The biggest architectural change is the separation of control and user plane. In 5G, AMF handles mobility while SMF manages sessions. UPF is a pure user-plane function. This CUPS (Control and User Plane Separation) enables flexible network deployment and edge computing.</p>
+</div>
+
+<h2>Cross-References</h2>
+
+<ul>
+  <li><a href="5g-ran-overview.html">5G RAN Overview</a> -- 5G architecture comparison.</li>
+  <li><a href="cu-du-split.html">CU-DU Split</a> -- 5G gNB separation vs integrated LTE eNodeB.</li>
+  <li><a href="gnodeb-components.html">gNB Components</a> -- Detailed gNB internal architecture.</li>
+</ul>
+
+<div class="nav"><a href="nas-layer.html">&larr; NAS Layer</a><a href="s1-x2-interfaces.html">S1/X2 Interfaces &rarr;</a></div>
+</body>
+</html>

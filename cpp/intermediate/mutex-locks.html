@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mutex / Locks — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / <a href="../index.html#2.6">2.6 Multithreading</a> / 2.6.2 Mutex / Locks</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>Mutex / Locks</h1>
+
+<p>Mutexes (mutual exclusion locks) protect shared data from concurrent access by multiple threads. When a thread locks a mutex, other threads attempting to lock the same mutex block until it is unlocked. C++11 provides several RAII lock classes that manage the lifetime of mutex locks automatically.</p>
+
+<h2>std::mutex</h2>
+
+<pre>
+#include &lt;mutex&gt;
+#include &lt;iostream&gt;
+
+class ThreadSafeCounter {
+    int count_ = 0;
+    std::mutex mutex_;
+public:
+    void increment() {
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        ++count_;
+    }
+
+    void decrement() {
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        --count_;
+    }
+
+    int get() const {
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        return count_;
+    }
+};
+
+void mutex_demo() {
+    ThreadSafeCounter counter;
+
+    std::thread t1([&amp;]() {
+        for (int i = 0; i &lt; 10000; ++i) counter.increment();
+    });
+    std::thread t2([&amp;]() {
+        for (int i = 0; i &lt; 10000; ++i) counter.decrement();
+    });
+
+    t1.join();
+    t2.join();
+    std::cout &lt;&lt; "Counter: " &lt;&lt; counter.get() &lt;&lt; "\n";  // 0
+}
+</pre>
+
+<h2>Lock Classes Comparison</h2>
+
+<table>
+  <tr><th>Lock Type</th><th>Behavior</th><th>Use Case</th></tr>
+  <tr><td><code>std::lock_guard</code></td><td>Locks in constructor, unlocks in destructor. Non-copyable.</td><td>Simple scoped locks. Default choice.</td></tr>
+  <tr><td><code>std::unique_lock</code></td><td>Like lock_guard but can defer, unlock early, and transfer ownership.</td><td>Condition variables, deferred locking, manual unlock.</td></tr>
+  <tr><td><code>std::scoped_lock</code> (C++17)</td><td>Locks multiple mutexes deadlock-free using a deadlock avoidance algorithm.</td><td>Multiple mutexes simultaneously.</td></tr>
+</table>
+
+<h2>std::unique_lock</h2>
+
+<pre>
+#include &lt;mutex&gt;
+#include &lt;iostream&gt;
+
+void unique_lock_demo() {
+    std::mutex mtx;
+
+    // Defer locking
+    std::unique_lock&lt;std::mutex&gt; lock(mtx, std::defer_lock);
+
+    // ... do some work without holding the lock ...
+
+    lock.lock();  // explicitly lock
+    std::cout &lt;&lt; "Protected section\n";
+    lock.unlock();  // explicitly unlock early
+
+    // ... do more work without holding the lock ...
+
+    // Lock automatically released when 'lock' goes out of scope
+    // Even if we didn't call unlock(), destructor handles it
+}
+</pre>
+
+<h2>std::scoped_lock (C++17)</h2>
+
+<p><code>std::scoped_lock</code> can lock multiple mutexes simultaneously without deadlock. It uses the same algorithm as <code>std::lock()</code> to avoid deadlock when acquiring multiple locks.</p>
+
+<pre>
+#include &lt;mutex&gt;
+#include &lt;iostream&gt;
+
+class BankAccount {
+    int balance_;
+    std::mutex mtx_;
+public:
+    explicit BankAccount(int balance) : balance_(balance) {}
+
+    int balance() { return balance_; }
+
+    friend void transfer(BankAccount&amp; from, BankAccount&amp; to, int amount) {
+        // Lock both mutexes deadlock-free
+        std::scoped_lock lock(from.mtx_, to.mtx_);
+        from.balance_ -= amount;
+        to.balance_ += amount;
+    }
+};
+
+void scoped_lock_demo() {
+    BankAccount a(1000);
+    BankAccount b(500);
+
+    transfer(a, b, 200);
+    std::cout &lt;&lt; "A: " &lt;&lt; a.balance() &lt;&lt; ", B: " &lt;&lt; b.balance() &lt;&lt; "\n";
+    // A: 800, B: 700
+}
+</pre>
+
+<h2>Deadlocks</h2>
+
+<p>A deadlock occurs when two or more threads each hold a lock and wait for a lock held by another thread. No thread can proceed.</p>
+
+<div class="callout red">
+  <p><strong>Deadlock conditions (Coffman conditions):</strong> Mutual exclusion, hold and wait, no preemption, circular wait. All four must hold for a deadlock. Break any one to prevent deadlocks.</p>
+</div>
+
+<pre>
+// DEADLOCK EXAMPLE (do not copy this!)
+void deadlock_example() {
+    std::mutex mtx_a, mtx_b;
+
+    std::thread t1([&amp;]() {
+        std::lock_guard&lt;std::mutex&gt; lock1(mtx_a);
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        std::lock_guard&lt;std::mutex&gt; lock2(mtx_b);  // DEADLOCK
+    });
+
+    std::thread t2([&amp;]() {
+        std::lock_guard&lt;std::mutex&gt; lock1(mtx_b);
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        std::lock_guard&lt;std::mutex&gt; lock2(mtx_a);  // DEADLOCK
+    });
+
+    t1.join();
+    t2.join();
+}
+
+// SOLUTION 1: Always lock in the same order
+std::lock(mtx_a, mtx_b);  // locks both without deadlock
+
+// SOLUTION 2: Use std::scoped_lock (C++17)
+std::scoped_lock lock(mtx_a, mtx_b);  // deadlock-free
+</pre>
+
+<h3>Deadlock Prevention Strategies</h3>
+
+<ol>
+  <li><strong>Lock ordering:</strong> Always acquire locks in a fixed global order.</li>
+  <li><strong>std::lock / scoped_lock:</strong> Use the standard library's deadlock-free multi-lock.</li>
+  <li><strong>Minimal lock scope:</strong> Hold locks for the shortest possible time.</li>
+  <li><strong>Avoid nested locks:</strong> Minimize the number of locks held simultaneously.</li>
+  <li><strong>std::try_lock:</strong> Use try_lock with backoff for non-blocking acquisition.</li>
+</ol>
+
+<h2>Thread-Safe Counter (Complete Example)</h2>
+
+<pre>
+#include &lt;mutex&gt;
+#include &lt;thread&gt;
+#include &lt;vector&gt;
+#include &lt;iostream&gt;
+
+class AtomicCounter {
+    std::mutex mtx_;
+    int value_ = 0;
+public:
+    void increment() {
+        std::lock_guard&lt;std::mutex&gt; lock(mtx_);
+        ++value_;
+    }
+
+    void add(int n) {
+        std::lock_guard&lt;std::mutex&gt; lock(mtx_);
+        value_ += n;
+    }
+
+    int get() const {
+        std::lock_guard&lt;std::mutex&gt; lock(mtx_);
+        return value_;
+    }
+};
+
+void thread_safe_counter_demo() {
+    AtomicCounter counter;
+    std::vector&lt;std::thread&gt; threads;
+
+    for (int i = 0; i &lt; 10; ++i) {
+        threads.emplace_back([&amp;counter]() {
+            for (int j = 0; j &lt; 1000; ++j) {
+                counter.increment();
+            }
+        });
+    }
+
+    for (auto&amp; t : threads) t.join();
+    std::cout &lt;&lt; "Counter: " &lt;&lt; counter.get() &lt;&lt; "\n";  // 10000
+}
+</pre>
+
+<p>Mutex locks work with <a href="std-thread.html">std::thread</a> and are used by <a href="condition-variable.html">condition variables</a> for waiting/signaling. For lock-free approaches, see <a href="../advanced/lock-free-programming.html">lock-free programming</a>. Practice with <a href="../practice-questions/thread-safe-queue.html">thread-safe queue</a>.</p>
+
+<div class="nav"><a href="std-thread.html">&larr; std::thread</a><a href="condition-variable.html">Condition Variable &rarr;</a></div>
+</body>
+</html>

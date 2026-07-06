@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lock-Free Programming — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / Lock-Free Programming</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>Lock-Free Programming</h1>
+
+<p>Lock-free programming uses atomic operations instead of mutexes to synchronize threads. The goal is to avoid the overhead and pitfalls of locks: priority inversion, deadlocks, convoy effects, and the cost of kernel-mode transitions for contended locks. This topic builds directly on <a href="memory-model-atomics.html">Memory Model &amp; Atomics</a>.</p>
+
+<h2>Compare-Exchange (CAS)</h2>
+
+<p>The fundamental building block of lock-free algorithms is <code>compare_exchange</code>. It atomically checks whether a value equals an expected value and, if so, replaces it with a desired value:</p>
+
+<pre>
+#include &lt;atomic&gt;
+#include &lt;iostream&gt;
+
+int main() {
+    std::atomic&lt;int&gt; value{10};
+    int expected = 10;
+    int desired = 20;
+
+    // CAS succeeds: value was 10, now becomes 20
+    bool success = value.compare_exchange_strong(expected, desired);
+    std::cout &lt;&lt; "Success: " &lt;&lt; success &lt;&lt; ", value: " &lt;&lt; value.load() &lt;&lt; "\n";
+    // Success: true, value: 20
+
+    // CAS fails: expected was updated to 20 (the actual value)
+    success = value.compare_exchange_strong(expected, 99);
+    std::cout &lt;&lt; "Success: " &lt;&lt; success &lt;&lt; ", expected (updated): " &lt;&lt; expected &lt;&lt; "\n";
+    // Success: false, expected: 20 (not 99 — expected is updated to actual)
+}
+</pre>
+
+<h3>compare_exchange_strong vs compare_exchange_weak</h3>
+
+<table>
+<tr><th>Variant</th><th>Behavior</th><th>Use Case</th></tr>
+<tr><td><code>_strong</code></td><td>Guarantees success when value equals expected (may spin on false spurious failures)</td><td>Simpler loops, correctness-critical</td></tr>
+<tr><td><code>_weak</code></td><td>May fail spuriously even when value equals expected</td><td>Loops that retry anyway (performance)</td></tr>
+</table>
+
+<pre>
+// Both produce the same result in a loop, but weak may be faster on some architectures
+std::atomic&lt;int&gt; counter{0};
+
+void increment_weak() {
+    int expected = counter.load(std::memory_order_relaxed);
+    while (!counter.compare_exchange_weak(expected, expected + 1,
+                                          std::memory_order_relaxed)) {
+        // expected is automatically updated to current value
+    }
+}
+
+void increment_strong() {
+    int expected = counter.load(std::memory_order_relaxed);
+    while (!counter.compare_exchange_strong(expected, expected + 1,
+                                             std::memory_order_relaxed)) {
+        // same loop, but no spurious failures
+    }
+}
+</pre>
+
+<h2>Spinlock Implementation</h2>
+
+<p>A spinlock is the simplest lock-free primitive (technically "busy-wait lock"). It polls an atomic flag in a tight loop:</p>
+
+<pre>
+#include &lt;atomic&gt;
+#include &lt;thread&gt;
+
+class SpinLock {
+    std::atomic&lt;bool&gt; locked_{false};
+
+public:
+    void lock() noexcept {
+        while (true) {
+            // Try to set locked_ from false to true
+            bool expected = false;
+            if (locked_.compare_exchange_weak(expected, true,
+                                               std::memory_order_acquire)) {
+                return;  // acquired the lock
+            }
+            // Spinning — optional: add a small pause to reduce contention
+            // std::this_thread::yield(); or _mm_pause() on x86
+        }
+    }
+
+    void unlock() noexcept {
+        locked_.store(false, std::memory_order_release);
+    }
+};
+
+// Usage
+SpinLock lock;
+std::atomic&lt;int&gt; shared_data{0};
+
+void worker() {
+    lock.lock();
+    shared_data.fetch_add(1, std::memory_order_relaxed);
+    lock.unlock();
+}
+</pre>
+
+<div class="callout warning">
+<p><strong>Spinlock caveats:</strong> A spinlock is not "lock-free" in the strict academic sense (one thread's failure to acquire does not prevent another thread's progress). True lock-free algorithms guarantee system-wide progress. Spinlocks also waste CPU cycles while spinning. Use them only for very short critical sections where the lock hold time is less than the cost of a context switch.</p>
+</div>
+
+<h2>Treiber Stack — Lock-Free Stack</h2>
+
+<pre>
+#include &lt;atomic&gt;
+#include &lt;memory&gt;
+
+template&lt;typename T&gt;
+class LockFreeStack {
+    struct Node {
+        T data;
+        Node* next;
+        explicit Node(T val) : data(std::move(val)), next(nullptr) {}
+    };
+
+    std::atomic&lt;Node*&gt; head_{nullptr};
+
+public:
+    void push(T value) {
+        Node* new_node = new Node(std::move(value));
+        new_node-&gt;next = head_.load(std::memory_order_relaxed);
+
+        // Retry until we successfully link the new node
+        while (!head_.compare_exchange_weak(
+                   new_node-&gt;next,
+                   new_node,
+                   std::memory_order_release,
+                   std::memory_order_relaxed)) {
+            // new_node-&gt;next is updated to current head on failure
+        }
+    }
+
+    bool pop(T&amp; result) {
+        Node* old_head = head_.load(std::memory_order_acquire);
+        while (old_head) {
+            Node* next = old_head-&gt;next;
+            if (head_.compare_exchange_weak(
+                    old_head, next,
+                    std::memory_order_release,
+                    std::memory_order_relaxed)) {
+                result = std::move(old_head-&gt;data);
+                delete old_head;  // WARNING: ABA problem (see below)
+                return true;
+            }
+            // old_head is updated to current head on failure
+        }
+        return false;  // stack was empty
+    }
+
+    ~LockFreeStack() {
+        T dummy;
+        while (pop(dummy)) {}
+    }
+};
+</pre>
+
+<h2>The ABA Problem</h2>
+
+<p>The ABA problem is the classic pitfall of CAS-based algorithms. It occurs when:</p>
+
+<ol>
+<li>Thread 1 reads value A from a shared variable</li>
+<li>Thread 2 changes A to B, then back to A</li>
+<li>Thread 1's CAS succeeds because the value is still A, but the underlying data may have changed</li>
+</ol>
+
+<div class="callout red">
+<p><strong>In the Treiber stack:</strong> Between Thread 1 loading <code>old_head</code> and performing CAS, Thread 2 could pop <code>old_head</code>, delete it, allocate a new node that reuses the same memory address, and push it. Thread 1's CAS succeeds, but it now holds a dangling pointer to the deleted node's memory.</p>
+</div>
+
+<h3>Solutions to ABA</h3>
+
+<pre>
+// Solution 1: Hazard pointers (each thread publishes pointers it's accessing)
+// Solution 2: Epoch-based reclamation
+// Solution 3: Tagged pointer (append a counter to the pointer)
+
+// Tagged pointer solution for ABA:
+#include &lt;atomic&gt;
+#include &lt;cstdint&gt;
+
+template&lt;typename T&gt;
+class TaggedPointer {
+    static constexpr std::uintptr_t kPointerBits = 48;  // 48-bit address space
+    static constexpr std::uintptr_t kCounterBits = 16;
+    static constexpr std::uintptr_t kPointerMask =
+        (std::uintptr_t{1} &lt;&lt; kPointerBits) - 1;
+
+    std::atomic&lt;std::uintptr_t&gt; packed_{0};
+
+public:
+    // Pack pointer and counter into a single atomic word
+    void set(T* ptr, std::uint16_t counter) {
+        std::uintptr_t packed =
+            reinterpret_cast&lt;std::uintptr_t&gt;(ptr) |
+            (static_cast&lt;std::uintptr_t&gt;(counter) &lt;&lt; kPointerBits);
+        packed_.store(packed, std::memory_order_release);
+    }
+
+    T* pointer() const {
+        return reinterpret_cast&lt;T*&gt;(packed_.load(std::memory_order_acquire) &amp; kPointerMask);
+    }
+
+    std::uint16_t counter() const {
+        return static_cast&lt;std::uint16_t&gt;(
+            packed_.load(std::memory_order_acquire) &gt;&gt; kPointerBits);
+    }
+};
+</pre>
+
+<h2>Lock-Free Queue (MPSC)</h2>
+
+<pre>
+#include &lt;atomic&gt;
+#include &lt;optional&gt;
+
+// A simple multi-producer, single-consumer (MPSC) queue
+template&lt;typename T&gt;
+class MpscQueue {
+    struct Node {
+        T data;
+        std::atomic&lt;Node*&gt; next{nullptr};
+
+        explicit Node(T val) : data(std::move(val)) {}
+    };
+
+    std::atomic&lt;Node*&gt; head_{nullptr};  // producers push here
+    Node* tail_ = nullptr;               // consumer reads from here
+
+    // Sentinel node simplifies empty-state handling
+    void init() {
+        tail_ = new Node(T{});
+        head_.store(tail_, std::memory_order_relaxed);
+    }
+
+public:
+    MpscQueue() { init(); }
+
+    void push(T value) {
+        Node* node = new Node(std::move(value));
+        Node* expected = head_.load(std::memory_order_acquire);
+        do {
+            node-&gt;next.store(expected, std::memory_order_relaxed);
+        } while (!head_.compare_exchange_weak(
+                     expected, node,
+                     std::memory_order_release,
+                     std::memory_order_relaxed));
+    }
+
+    std::optional&lt;T&gt; try_pop() {
+        // Consumer only — no CAS needed since single consumer
+        if (tail_ == head_.load(std::memory_order_acquire)) {
+            return std::nullopt;
+        }
+        Node* node = tail_;
+        tail_ = node-&gt;next.load(std::memory_order_relaxed);
+        T result = std::move(node-&gt;data);
+        delete node;
+        return result;
+    }
+
+    ~MpscQueue() {
+        while (try_pop().has_value()) {}
+        delete tail_;  // delete sentinel
+    }
+};
+</pre>
+
+<h2>When to Use Lock-Free</h2>
+
+<div class="callout green">
+<p><strong>Use lock-free when:</strong> Latency requirements are extremely tight (sub-microsecond), lock contention is measured and problematic, the algorithm is well-known and verified, or you are building infrastructure (queues, pools) used by many threads.</p>
+</div>
+
+<div class="callout red">
+<p><strong>Avoid lock-free when:</strong> The algorithm is complex and unverified, you are optimizing prematurely, your team lacks concurrency expertise, or a mutex would be simpler and fast enough. A correct mutex-based solution is always preferable to a buggy lock-free one.</p>
+</div>
+
+<h2>Telecom Relevance</h2>
+
+<p>In high-throughput telecom (5G UPF, base station datapath), packet processing pipelines process millions of packets per second. Lock-free queues between processing stages eliminate lock contention on the critical path. Lock-free counters for statistics avoid cache-line bouncing from mutex acquisition.</p>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="memory-model-atomics.html">Memory Model &amp; Atomics</a> (CAS operations), <a href="cache-oriented-programming.html">Cache-Oriented Programming</a> (cache-line effects on atomics), <a href="custom-allocators.html">Custom Allocators</a> (lock-free allocation), <a href="producer-consumer-pattern.html">Producer-Consumer Pattern</a> (bounded buffer).</p>
+</div>
+
+<div class="nav"><a href="memory-model-atomics.html">&larr; Memory Model &amp; Atomics</a><a href="custom-allocators.html">Custom Allocators &rarr;</a></div>
+</body>
+</html>

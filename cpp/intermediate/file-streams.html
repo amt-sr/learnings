@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>File Streams (fstream) — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / 2.7 File I/O &amp; Utilities / 2.7.1 File Streams</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>File Streams (fstream)</h1>
+
+<p>C++ file I/O is handled by three stream classes defined in <code>&lt;fstream&gt;</code>: <code>std::ifstream</code> for reading, <code>std::ofstream</code> for writing, and <code>std::fstream</code> for both. These classes inherit from <code>std::ios</code> and integrate seamlessly with the <a href="../basics/std-string.html">std::string</a> and <a href="../basics/stl-overview.html">STL</a> ecosystem.</p>
+
+<h2>Stream Types</h2>
+
+<table>
+  <tr><th>Class</th><th>Header</th><th>Purpose</th><th>Default Mode</th></tr>
+  <tr><td><code>std::ifstream</code></td><td><code>&lt;fstream&gt;</code></td><td>Read from file</td><td><code>in</code></td></tr>
+  <tr><td><code>std::ofstream</code></td><td><code>&lt;fstream&gt;</code></td><td>Write to file</td><td><code>out</code></td></tr>
+  <tr><td><code>std::fstream</code></td><td><code>&lt;fstream&gt;</code></td><td>Read and write</td><td><code>in | out</code></td></tr>
+</table>
+
+<h2>Opening and Closing Files</h2>
+
+<pre>
+#include &lt;fstream&gt;
+#include &lt;iostream&gt;
+
+void open_close_demo() {
+    // Method 1: Constructor opens the file
+    std::ifstream reader("data.txt");
+
+    // Method 2: Open later with open()
+    std::ofstream writer;
+    writer.open("output.txt");
+
+    // Always check if the file opened successfully
+    if (!reader.is_open()) {
+        std::cerr &lt;&lt; "Error: cannot open data.txt\n";
+        return;
+    }
+
+    // Close explicitly (optional — destructor closes automatically)
+    reader.close();
+    writer.close();
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>Common pitfall:</strong> Forgetting to check <code>is_open()</code> leads to silent failures. Always validate the file opened before reading or writing. The destructor will close the file, so explicit <code>close()</code> is optional but good for clarity.</p>
+</div>
+
+<h2>Reading from Files</h2>
+
+<pre>
+#include &lt;fstream&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+#include &lt;iostream&gt;
+
+// Method 1: Line by line (most common)
+void read_line_by_line(const std::string&amp; path) {
+    std::ifstream file(path);
+    if (!file) return;
+
+    std::string line;
+    while (std::getline(file, line)) {
+        std::cout &lt;&lt; line &lt;&lt; "\n";
+    }
+}
+
+// Method 2: Word by word (whitespace-delimited)
+void read_words(const std::string&amp; path) {
+    std::ifstream file(path);
+    std::string word;
+    while (file &gt;&gt; word) {  // operator&gt;&gt; skips whitespace
+        std::cout &lt;&lt; "[" &lt;&lt; word &lt;&lt; "] ";
+    }
+    std::cout &lt;&lt; "\n";
+}
+
+// Method 3: Read entire file into a string
+std::string read_entire_file(const std::string&amp; path) {
+    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    if (!file) return "";
+
+    auto size = file.tellg();
+    file.seekg(0);
+
+    std::string content(size, '\0');
+    file.read(content.data(), size);
+    return content;
+}
+
+// Method 4: Read lines into a vector
+std::vector&lt;std::string&gt; read_lines(const std::string&amp; path) {
+    std::vector&lt;std::string&gt; lines;
+    std::ifstream file(path);
+    std::string line;
+    while (std::getline(file, line)) {
+        lines.push_back(line);
+    }
+    return lines;
+}
+</pre>
+
+<h2>Writing to Files</h2>
+
+<pre>
+#include &lt;fstream&gt;
+
+void writing_demo() {
+    // Overwrite mode (default — truncates existing file)
+    std::ofstream out1("log.txt");
+    out1 &lt;&lt; "First entry\n";
+
+    // Append mode
+    std::ofstream out2("log.txt", std::ios::app);
+    out2 &lt;&lt; "Second entry (appended)\n";
+
+    // Write multiple lines with formatting
+    std::ofstream data("records.csv");
+    data &lt;&lt; "name,age,score\n";
+    data &lt;&lt; "Alice,30,95.5\n";
+    data &lt;&lt; "Bob,25,87.2\n";
+
+    // flush() forces buffer to disk (automatic on close/destruct)
+    data.flush();
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Best practice:</strong> Use <code>std::ios::app</code> for log files to avoid overwriting previous entries. Use <code>std::ios::ate</code> to open and seek to the end (for reading) without truncating.</p>
+</div>
+
+<h2>Open Modes</h2>
+
+<table>
+  <tr><th>Flag</th><th>Meaning</th></tr>
+  <tr><td><code>in</code></td><td>Open for reading</td></tr>
+  <tr><td><code>out</code></td><td>Open for writing (truncates by default)</td></tr>
+  <tr><td><code>app</code></td><td>Append — all writes go to end of file</td></tr>
+  <tr><td><code>ate</code></td><td>Open and seek to end immediately</td></tr>
+  <tr><td><code>trunc</code></td><td>Truncate file if it exists</td></tr>
+  <tr><td><code>binary</code></td><td>Open in binary mode</td></tr>
+</table>
+
+<h2>Binary Mode</h2>
+
+<p>Binary mode prevents <code>\n</code> from being translated to platform-specific line endings. Use it for non-text data like structs, images, or protocol buffers.</p>
+
+<pre>
+#include &lt;fstream&gt;
+#include &lt;iostream&gt;
+
+struct Record {
+    int id;
+    double value;
+    char name[32];
+};
+
+void binary_io_demo() {
+    // Write binary
+    Record r{42, 3.14, "sensor_data"};
+    std::ofstream out("data.bin", std::ios::binary);
+    out.write(reinterpret_cast&lt;const char*&gt;(&amp;r), sizeof(r));
+
+    // Read binary
+    Record loaded{};
+    std::ifstream in("data.bin", std::ios::binary);
+    in.read(reinterpret_cast&lt;char*&gt;(&amp;loaded), sizeof(loaded));
+
+    std::cout &lt;&lt; "id=" &lt;&lt; loaded.id
+              &lt;&lt; " value=" &lt;&lt; loaded.value
+              &lt;&lt; " name=" &lt;&lt; loaded.name &lt;&lt; "\n";
+}
+</pre>
+
+<div class="callout red">
+  <p><strong>Portability warning:</strong> Binary I/O with <code>reinterpret_cast</code> depends on struct layout, endianness, and alignment. For portable serialization, use libraries like protobuf, flatbuffers, or write field-by-field.</p>
+</div>
+
+<h2>File Parsing Example: Reading a Config</h2>
+
+<pre>
+#include &lt;fstream&gt;
+#include &lt;string&gt;
+#include &lt;unordered_map&gt;
+#include &lt;iostream&gt;
+
+// Parses files like: key = value  (ignores # comments and blank lines)
+std::unordered_map&lt;std::string, std::string&gt; parse_config(const std::string&amp; path) {
+    std::unordered_map&lt;std::string, std::string&gt; config;
+    std::ifstream file(path);
+    std::string line;
+
+    while (std::getline(file, line)) {
+        // Skip empty lines and comments
+        if (line.empty() || line[0] == '#') continue;
+
+        // Find the delimiter
+        auto pos = line.find('=');
+        if (pos == std::string::npos) continue;
+
+        std::string key = line.substr(0, pos);
+        std::string val = line.substr(pos + 1);
+
+        // Trim whitespace (simplified)
+        auto trim = [](std::string&amp; s) {
+            size_t start = s.find_first_not_of(" \t");
+            size_t end   = s.find_last_not_of(" \t");
+            if (start != std::string::npos)
+                s = s.substr(start, end - start + 1);
+        };
+        trim(key);
+        trim(val);
+
+        config[key] = val;
+    }
+    return config;
+}
+
+void config_demo() {
+    auto cfg = parse_config("settings.cfg");
+    std::cout &lt;&lt; "host = " &lt;&lt; cfg["host"] &lt;&lt; "\n";
+    std::cout &lt;&lt; "port = " &lt;&lt; cfg["port"] &lt;&lt; "\n";
+}
+</pre>
+
+<h2>File Position and State</h2>
+
+<pre>
+#include &lt;fstream&gt;
+
+void position_demo() {
+    std::fstream file("data.txt", std::ios::in | std::ios::out);
+
+    // Get current position
+    auto pos = file.tellg();
+
+    // Seek to beginning
+    file.seekg(0, std::ios::beg);
+
+    // Seek to end
+    file.seekg(0, std::ios::end);
+
+    // Seek relative to current position
+    file.seekg(-10, std::ios::cur);
+
+    // Check stream state
+    if (file.eof())  std::cout &lt;&lt; "End of file\n";
+    if (file.fail()) std::cout &lt;&lt; "Read/write error\n";
+    if (file.bad())  std::cout &lt;&lt; "Fatal I/O error\n";
+}
+</pre>
+
+<p>File streams work naturally with <a href="../basics/std-string.html">std::string</a> operations and are often combined with <a href="regular-expressions.html">regular expressions</a> for structured data parsing. For an overview of STL containers that store loaded data, see <a href="../basics/stl-overview.html">STL Overview</a>.</p>
+
+<div class="nav"><a href="thread-safe-data-structures.html">&larr; Thread-Safe Data Structures</a><a href="regular-expressions.html">Regular Expressions &rarr;</a></div>
+</body>
+</html>

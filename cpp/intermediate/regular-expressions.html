@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Regular Expressions — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / 2.7 File I/O &amp; Utilities / 2.7.2 Regular Expressions</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>Regular Expressions</h1>
+
+<p>C++11 introduced the <code>&lt;regex&gt;</code> library, providing <code>std::regex</code> and related functions for pattern matching. Regular expressions are a powerful tool for validating input, parsing strings, and transforming text, complementing the <a href="../basics/std-string.html">std::string</a> and <a href="string-formatting.html">string formatting</a> facilities.</p>
+
+<h2>Core Functions</h2>
+
+<table>
+  <tr><th>Function</th><th>Purpose</th><th>Match Scope</th></tr>
+  <tr><td><code>std::regex_match</code></td><td>Full string must match pattern</td><td>Entire string</td></tr>
+  <tr><td><code>std::regex_search</code></td><td>Find a match anywhere in string</td><td>Substring</td></tr>
+  <tr><td><code>std::regex_replace</code></td><td>Replace matched substrings</td><td>All matches</td></tr>
+</table>
+
+<h2>Basic Matching</h2>
+
+<pre>
+#include &lt;regex&gt;
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+void basic_matching() {
+    std::string text = "Hello, World! 123";
+
+    // regex_match: entire string must match
+    std::cout &lt;&lt; std::regex_match(text,
+        std::regex(R"(\w+, \w+! \d+)")) &lt;&lt; "\n";  // true
+
+    // regex_search: find pattern anywhere
+    std::cout &lt;&lt; std::regex_search(text,
+        std::regex(R"(\d+)")) &lt;&lt; "\n";  // true
+
+    // regex_replace: replace all digits
+    std::string result = std::regex_replace(text,
+        std::regex(R"(\d+)"), "NUM");
+    std::cout &lt;&lt; result &lt;&lt; "\n";  // "Hello, World! NUM"
+}
+</pre>
+
+<div class="callout">
+  <p><strong>Raw string literals:</strong> Use <code>R"(...)"</code> syntax to avoid double-escaping backslashes. Without it, <code>\\d</code> becomes <code>\d</code> after C++ string processing. With it, <code>\d</code> stays as-is.</p>
+</div>
+
+<h2>Regex Syntax Quick Reference</h2>
+
+<table>
+  <tr><th>Syntax</th><th>Meaning</th><th>Example</th></tr>
+  <tr><td><code>.</code></td><td>Any single character</td><td><code>a.c</code> matches "abc"</td></tr>
+  <tr><td><code>\d</code></td><td>Digit [0-9]</td><td><code>\d{3}</code> matches "123"</td></tr>
+  <tr><td><code>\w</code></td><td>Word character [a-zA-Z0-9_]</td><td><code>\w+</code> matches "hello_1"</td></tr>
+  <tr><td><code>\s</code></td><td>Whitespace</td><td><code>\s+</code> matches spaces/tabs</td></tr>
+  <tr><td><code>^</code> / <code>$</code></td><td>Start / end of string</td><td><code>^\w+</code> matches start of line</td></tr>
+  <tr><td><code>*</code> / <code>+</code> / <code>?</code></td><td>0+ / 1+ / 0-or-1</td><td><code>ab?c</code> matches "ac" or "abc"</td></tr>
+  <tr><td><code>{n,m}</code></td><td>Between n and m repetitions</td><td><code>\d{2,4}</code> matches 2-4 digits</td></tr>
+  <tr><td><code>[abc]</code></td><td>Character class</td><td><code>[aeiou]</code> matches vowels</td></tr>
+  <tr><td><code>(...)</code></td><td>Capturing group</td><td><code>(\w+)@(\w+)</code></td></tr>
+  <tr><td><code>|</code></td><td>Alternation (OR)</td><td><code>cat|dog</code></td></tr>
+</table>
+
+<h2>Capturing Groups</h2>
+
+<p>Groups enclosed in parentheses capture matched substrings for extraction.</p>
+
+<pre>
+#include &lt;regex&gt;
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+void capturing_groups() {
+    std::string date = "2025-07-06";
+
+    // Extract year, month, day
+    std::regex re(R"((\d{4})-(\d{2})-(\d{2}))");
+    std::smatch matches;
+
+    if (std::regex_match(date, matches, re)) {
+        std::cout &lt;&lt; "Full:   " &lt;&lt; matches[0] &lt;&lt; "\n";  // 2025-07-06
+        std::cout &lt;&lt; "Year:   " &lt;&lt; matches[1] &lt;&lt; "\n";  // 2025
+        std::cout &lt;&lt; "Month:  " &lt;&lt; matches[2] &lt;&lt; "\n";  // 07
+        std::cout &lt;&lt; "Day:    " &lt;&lt; matches[3] &lt;&lt; "\n";  // 06
+    }
+
+    // Iterating over all matches with regex_search
+    std::string log = "user=alice id=42 user=bob id=99";
+    std::regex user_re(R"(user=(\w+))");
+    std::sregex_iterator it(log.begin(), log.end(), user_re);
+    std::sregex_iterator end;
+
+    for (; it != end; ++it) {
+        std::cout &lt;&lt; "Found user: " &lt;&lt; (*it)[1] &lt;&lt; "\n";
+        // "alice", then "bob"
+    }
+}
+</pre>
+
+<h2>Example: Email Validation</h2>
+
+<pre>
+#include &lt;regex&gt;
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+
+bool is_valid_email(const std::string&amp; email) {
+    // Basic email regex (not RFC 5322 compliant but practical)
+    static const std::regex email_re(
+        R"(^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$)"
+    );
+    return std::regex_match(email, email_re);
+}
+
+void email_validation_demo() {
+    std::vector&lt;std::string&gt; tests = {
+        "user@example.com",
+        "user.name+tag@domain.co.uk",
+        "invalid-email",
+        "@missing-local.com",
+        "no-tld@domain"
+    };
+
+    for (const auto&amp; email : tests) {
+        std::cout &lt;&lt; email &lt;&lt; " : "
+                  &lt;&lt; (is_valid_email(email) ? "VALID" : "INVALID") &lt;&lt; "\n";
+    }
+}
+</pre>
+
+<h2>Example: Log Parsing</h2>
+
+<pre>
+#include &lt;regex&gt;
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+void parse_log_line(const std::string&amp; line) {
+    // Match: [YYYY-MM-DD HH:MM:SS] LEVEL message
+    static const std::regex log_re(
+        R"(\[(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})\]\s+(\w+)\s+(.*))"
+    );
+    std::smatch m;
+
+    if (std::regex_match(line, m, log_re)) {
+        std::cout &lt;&lt; "Date: " &lt;&lt; m[1]
+                  &lt;&lt; " Time: " &lt;&lt; m[2]
+                  &lt;&lt; " Level: " &lt;&lt; m[3]
+                  &lt;&lt; " Msg: " &lt;&lt; m[4] &lt;&lt; "\n";
+    }
+}
+
+void log_parsing_demo() {
+    parse_log_line("[2025-07-06 14:30:01] ERROR connection timeout");
+    // Date: 2025-07-06 Time: 14:30:01 Level: ERROR Msg: connection timeout
+}
+</pre>
+
+<h2>Performance Considerations</h2>
+
+<div class="callout red">
+  <p><strong>std::regex is notoriously slow.</strong> The C++ standard does not mandate a particular regex engine implementation. Many standard library implementations (notably GCC's libstdc++) use a backtracking engine that can exhibit exponential time on pathological inputs.</p>
+</div>
+
+<pre>
+// The regex object should be created ONCE and reused
+// NOT inside a loop:
+
+// BAD — recompiles regex on every iteration
+for (const auto&amp; line : lines) {
+    std::regex re(R"(\d+)");        // recompiled every time!
+    std::regex_search(line, re);
+}
+
+// GOOD — compile once, reuse
+const std::regex re(R"(\d+)");      // compiled once
+for (const auto&amp; line : lines) {
+    std::regex_search(line, re);
+}
+</pre>
+
+<h3>Alternative Libraries</h3>
+
+<table>
+  <tr><th>Library</th><th>Speed</th><th>Notes</th></tr>
+  <tr><td><code>std::regex</code></td><td>Slow (GCC) / OK (MSVC)</td><td>Standard, portable</td></tr>
+  <tr><td><code>RE2</code> (Google)</td><td>Fast, guaranteed linear</td><td>No backreferences</td></tr>
+  <tr><td><code>PCRE2</code></td><td>Fast, full feature set</td><td>C library with C++ wrappers</td></tr>
+  <tr><td><code>Boost.Regex</code></td><td>Good</td><td>Similar API to std::regex</td></tr>
+</table>
+
+<div class="callout warning">
+  <p><strong>Rule of thumb:</strong> For high-throughput applications (log processing, network protocol parsing), use <code>RE2</code> or <code>PCRE2</code> instead of <code>std::regex</code>. Use <code>std::regex</code> for one-time validations or low-volume parsing.</p>
+</div>
+
+<h2>regex_replace with Format Flags</h2>
+
+<pre>
+#include &lt;regex&gt;
+#include &lt;iostream&gt;
+
+void replace_demo() {
+    std::string text = "name=Alice age=30 city=NYC";
+
+    // Replace key=value pairs: reorder using capture groups
+    std::string result = std::regex_replace(text,
+        std::regex(R"((\w+)=(\w+))"),
+        "$2 ($1)");
+    // "Alice (name) 30 (age) NYC (city)"
+
+    std::cout &lt;&lt; result &lt;&lt; "\n";
+
+    // format_first_only: replace only the first match
+    std::string first_only = std::regex_replace(text,
+        std::regex(R"(\w+=\w+)"),
+        "REDACTED",
+        std::regex_constants::format_first_only);
+    // "REDACTED age=30 city=NYC"
+
+    std::cout &lt;&lt; first_only &lt;&lt; "\n";
+}
+</pre>
+
+<p>Regular expressions pair naturally with <a href="../basics/std-string.html">std::string</a> for parsing and with <a href="file-streams.html">file streams</a> for processing structured text files. For formatting output, see <a href="string-formatting.html">string formatting</a>. For bulk text transformation using <a href="stl-algorithms.html">STL algorithms</a>, consider <code>std::transform</code> as a simpler alternative.</p>
+
+<div class="nav"><a href="file-streams.html">&larr; File Streams</a><a href="chrono-time.html">Chrono &amp; Time &rarr;</a></div>
+</body>
+</html>

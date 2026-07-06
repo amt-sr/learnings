@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Encapsulation &amp; Abstraction — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; }
+  .breadcrumb a { color: #8b949e; }
+  .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; }
+  .callout.red { border-left-color: #f85149; }
+  .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; }
+  th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#1">1 Basics</a> / <a href="../index.html#1">1.2 Object-Oriented Programming</a> / 1.2.5 Encapsulation &amp; Abstraction</div>
+<div class="meta"><span class="tag basic">BASIC</span></div>
+<h1>1.2.5 Encapsulation &amp; Abstraction</h1>
+
+<p>Encapsulation and abstraction are two fundamental principles of object-oriented design. <strong>Encapsulation</strong> bundles data and methods into a single unit while restricting direct access to internal details. <strong>Abstraction</strong> hides complex implementation details behind a simple interface. Together, they make code more maintainable, robust, and easier to reason about.</p>
+
+<h2>What is Encapsulation</h2>
+
+<p>Encapsulation is the practice of keeping data (member variables) <code>private</code> or <code>protected</code> and providing controlled access through <code>public</code> member functions. This prevents external code from putting the object into an invalid state:</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+class BankAccount {
+private:                    // data is hidden
+    std::string owner;
+    double balance;
+    int account_number;
+
+public:                     // behavior is exposed
+    BankAccount(const std::string&amp; name, int acc_num, double initial)
+        : owner(name), account_number(acc_num), balance(initial) {
+        if (balance &lt; 0) balance = 0;
+    }
+
+    // Controlled access: no one can set a negative balance
+    void deposit(double amount) {
+        if (amount &gt; 0) {
+            balance += amount;
+        }
+    }
+
+    bool withdraw(double amount) {
+        if (amount &gt; 0 &amp;&amp; amount &lt;= balance) {
+            balance -= amount;
+            return true;
+        }
+        return false;
+    }
+
+    double get_balance() const { return balance; }
+    std::string get_owner() const { return owner; }
+};
+
+int main() {
+    BankAccount acc{"Alice", 12345, 1000.0};
+
+    acc.deposit(500.0);
+    bool ok = acc.withdraw(200.0);
+
+    // acc.balance = -9999;  // ERROR: private, cannot access directly
+    // acc.balance += 1000000;  // ERROR: no direct manipulation possible
+
+    std::cout &lt;&lt; acc.get_owner() &lt;&lt; ": $" &lt;&lt; acc.get_balance() &lt;&lt; std::endl;
+
+    return 0;
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Benefit:</strong> The <code>BankAccount</code> class enforces invariants: the balance can never go negative through its public interface. If the internal representation changes (e.g., tracking transactions), the public interface remains unchanged.</p>
+</div>
+
+<h2>Data Hiding with private and protected</h2>
+
+<table>
+  <tr><th>Access Level</th><th>Who Can Access</th><th>Typical Use</th></tr>
+  <tr><td><code>private</code></td><td>Only the class itself</td><td>Internal implementation details</td></tr>
+  <tr><td><code>protected</code></td><td>The class and its derived classes</td><td>Details needed by <a href="inheritance.html">derived classes</a></td></tr>
+  <tr><td><code>public</code></td><td>Anyone</td><td>The interface the outside world uses</td></tr>
+</table>
+
+<pre>
+class Device {
+private:
+    int internal_id;          // only Device can access
+    void internal_reset() {}  // internal helper
+
+protected:
+    bool is_active;           // derived classes can access
+    void log_status() {}      // shared utility for derived classes
+
+public:
+    void start() { is_active = true; internal_reset(); }
+    void stop()  { is_active = false; }
+};
+</pre>
+
+<h2>Getters and Setters</h2>
+
+<p>Getters and setters provide controlled read and write access to private member variables. They allow you to add validation, logging, or compute values on the fly:</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+class Temperature {
+private:
+    double celsius;  // internal: always stored in Celsius
+
+public:
+    // Constructor with validation
+    Temperature(double c) : celsius(c) {
+        // Absolute zero is -273.15 C
+        if (celsius &lt; -273.15) celsius = -273.15;
+    }
+
+    // Getter: read access
+    double get_celsius() const { return celsius; }
+    double get_fahrenheit() const { return celsius * 9.0 / 5.0 + 32.0; }
+    double get_kelvin() const { return celsius + 273.15; }
+
+    // Setter: write access with validation
+    void set_celsius(double c) {
+        if (c &gt;= -273.15) celsius = c;
+    }
+
+    void set_fahrenheit(double f) {
+        double c = (f - 32.0) * 5.0 / 9.0;
+        if (c &gt;= -273.15) celsius = c;
+    }
+
+    void display() const {
+        std::cout &lt;&lt; celsius &lt;&lt; " C / "
+                  &lt;&lt; get_fahrenheit() &lt;&lt; " F / "
+                  &lt;&lt; get_kelvin() &lt;&lt; " K" &lt;&lt; std::endl;
+    }
+};
+
+int main() {
+    Temperature t{100.0};
+    t.display();  // 100 C / 212 F / 373.15 K
+
+    t.set_fahrenheit(32.0);
+    t.display();  // 0 C / 32 F / 273.15 K
+
+    t.set_celsius(-300.0);  // rejected (below absolute zero)
+    t.display();            // still 0 C (validation prevented change)
+
+    return 0;
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>Avoid trivial getters/setters:</strong> If a getter or setter does nothing except return or set a value without validation or computation, consider whether the member should simply be <code>public</code>. However, in practice, trivial accessors are common because they preserve the ability to add validation later without changing the interface.</p>
+</div>
+
+<h2>Abstraction vs Encapsulation</h2>
+
+<p>While often confused, encapsulation and abstraction address different concerns:</p>
+
+<table>
+  <tr><th>Aspect</th><th>Encapsulation</th><th>Abstraction</th></tr>
+  <tr><td>Goal</td><td>Protect data from unauthorized access</td><td>Hide complexity behind a simple interface</td></tr>
+  <tr><td>Mechanism</td><td><code>private</code>/<code>protected</code> access + getters/setters</td><td>Abstract classes, interfaces, pure virtual functions</td></tr>
+  <tr><td>Focus</td><td>Data integrity and invariants</td><td>Simplifying how clients use a component</td></tr>
+  <tr><td>Analogy</td><td>A safe with a locked door</td><td>A steering wheel that hides the engine</td></tr>
+</table>
+
+<h2>Interface vs Implementation</h2>
+
+<p>Abstraction separates the <strong>interface</strong> (what a class does) from the <strong>implementation</strong> (how it does it). Clients of a class only need to know the public interface:</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+#include &lt;memory&gt;
+
+// Interface (abstract class)
+class DataStore {
+public:
+    virtual void store(const std::string&amp; key, const std::string&amp; value) = 0;
+    virtual std::string retrieve(const std::string&amp; key) const = 0;
+    virtual ~DataStore() = default;
+};
+
+// Implementation 1: in-memory map
+class InMemoryStore : public DataStore {
+    // Private implementation details hidden from the user
+    std::vector&lt;std::pair&lt;std::string, std::string&gt;&gt; data;
+public:
+    void store(const std::string&amp; key, const std::string&amp; value) override {
+        data.push_back({key, value});
+    }
+    std::string retrieve(const std::string&amp; key) const override {
+        for (const auto&amp; p : data) {
+            if (p.first == key) return p.second;
+        }
+        return "";
+    }
+};
+
+// Implementation 2: could be a file-based store, database, etc.
+// class FileStore : public DataStore { ... };
+
+int main() {
+    // User code depends only on the interface
+    DataStore* store = new InMemoryStore{};
+
+    store-&gt;store("name", "Alice");
+    store-&gt;store("role", "Engineer");
+
+    std::cout &lt;&lt; "name: " &lt;&lt; store-&gt;retrieve("name") &lt;&lt; std::endl;
+    std::cout &lt;&lt; "role: " &lt;&lt; store-&gt;retrieve("role") &lt;&lt; std::endl;
+
+    delete store;
+    return 0;
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Benefit:</strong> The <code>DataStore</code> interface lets you swap implementations (in-memory, file, database) without changing client code. This is a key advantage of abstraction for testability and maintainability.</p>
+</div>
+
+<h2>Practical Guidelines</h2>
+
+<ul>
+  <li>Make all member variables <code>private</code> by default. Use <code>protected</code> only when derived classes genuinely need direct access.</li>
+  <li>Expose only the minimum necessary interface through <code>public</code> methods.</li>
+  <li>Validate inputs in setters and constructors to enforce invariants.</li>
+  <li>Prefer <code>const</code> member functions for any method that does not modify the object's state.</li>
+  <li>Use <a href="namespaces.html">namespaces</a> to group related classes and prevent name collisions at a higher level.</li>
+  <li>Use <a href="../intermediate/friend-functions.html">friend functions</a> only when two classes are tightly coupled and need direct access to each other's internals.</li>
+</ul>
+
+<div class="callout">
+  <p><strong>Next Steps:</strong> Learn how <a href="namespaces.html">Namespaces</a> provide another form of encapsulation at the module level.</p>
+</div>
+
+<div class="nav">
+  <a href="polymorphism.html">&larr; Polymorphism</a>
+  <a href="namespaces.html">Namespaces &rarr;</a>
+</div>
+</body>
+</html>

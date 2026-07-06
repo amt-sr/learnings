@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multiple Inheritance — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / Multiple Inheritance</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>Multiple Inheritance</h1>
+
+<p>C++ allows a class to inherit from multiple base classes. While powerful, multiple inheritance introduces complexity: the <strong>diamond problem</strong>, ambiguity in member access, and complications with virtual function dispatch. Understanding these issues is essential for designing robust class hierarchies.</p>
+
+<h2>Basic Multiple Inheritance</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+class Printable {
+public:
+    virtual ~Printable() = default;
+    virtual void print() const = 0;
+};
+
+class Storable {
+public:
+    virtual ~Storable() = default;
+    virtual void save() const = 0;
+    virtual void load() = 0;
+};
+
+// Document inherits from both Printable and Storable
+class Document : public Printable, public Storable {
+    std::string content_;
+public:
+    explicit Document(std::string content) : content_(std::move(content)) {}
+
+    void print() const override {
+        std::cout &lt;&lt; content_ &lt;&lt; "\n";
+    }
+
+    void save() const override {
+        std::cout &lt;&lt; "Saving: " &lt;&lt; content_ &lt;&lt; "\n";
+    }
+
+    void load() override {
+        content_ = "loaded content";
+        std::cout &lt;&lt; "Loaded document\n";
+    }
+};
+
+void basic_mi_demo() {
+    Document doc("Hello, Multiple Inheritance!");
+    doc.print();
+    doc.save();
+
+    // Interface-based MI is generally safe and well-accepted
+    Printable&amp; p = doc;
+    Storable&amp; s = doc;
+    p.print();
+    s.save();
+}
+</pre>
+
+<h2>The Diamond Problem</h2>
+
+<p>The diamond problem occurs when a class inherits from two classes that both inherit from the same base class.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+//     Person
+//     /     \
+// Student   Employee
+//     \     /
+//   TeachingAssistant
+
+class Person {
+protected:
+    std::string name_;
+public:
+    explicit Person(std::string name) : name_(std::move(name)) {
+        std::cout &lt;&lt; "Person(" &lt;&lt; name_ &lt;&lt; ") constructed\n";
+    }
+    virtual ~Person() = default;
+
+    void greet() const { std::cout &lt;&lt; "I am " &lt;&lt; name_ &lt;&lt; "\n"; }
+};
+
+class Student : public Person {
+public:
+    explicit Student(const std::string&amp; name) : Person(name) {
+        std::cout &lt;&lt; "Student(" &lt;&lt; name &lt;&lt; ") constructed\n";
+    }
+};
+
+class Employee : public Person {
+public:
+    explicit Employee(const std::string&amp; name) : Person(name) {
+        std::cout &lt;&lt; "Employee(" &lt;&lt; name &lt;&lt; ") constructed\n";
+    }
+};
+
+// WITHOUT virtual inheritance — diamond problem
+class TeachingAssistant : public Student, public Employee {
+public:
+    TeachingAssistant(const std::string&amp; name)
+        : Student(name), Employee(name) {
+        // Two separate Person subobjects exist!
+        // name_ is ambiguous
+    }
+
+    void introduce() {
+        // greet();  // ERROR: ambiguous — Student::Person::greet or Employee::Person::greet?
+        Student::greet();   // OK: specify which
+        Employee::greet();  // OK: specify which
+    }
+};
+
+void diamond_problem_demo() {
+    TeachingAssistant ta("Alice");
+    // Output:
+    //   Person(Alice) constructed    (Student's Person)
+    //   Student(Alice) constructed
+    //   Person(Alice) constructed     (Employee's Person)
+    //   Employee(Alice) constructed
+
+    // ta.greet();  // ERROR: ambiguous
+    ta.Student::greet();     // "I am Alice"
+    ta.Employee::greet();    // "I am Alice"
+
+    // Two separate name_ members — wasteful and confusing
+}
+</pre>
+
+<h2>Virtual Inheritance — Solving the Diamond</h2>
+
+<pre>
+// With virtual inheritance — only ONE Person subobject
+class Person2 {
+protected:
+    std::string name_;
+public:
+    explicit Person2(std::string name) : name_(std::move(name)) {
+        std::cout &lt;&lt; "Person2(" &lt;&lt; name_ &lt;&lt; ") constructed\n";
+    }
+    virtual ~Person2() = default;
+
+    void greet() const { std::cout &lt;&lt; "I am " &lt;&lt; name_ &lt;&lt; "\n"; }
+};
+
+class Student2 : virtual public Person2 {
+public:
+    explicit Student2(const std::string&amp; name) : Person2(name) {
+        std::cout &lt;&lt; "Student2(" &lt;&lt; name &lt;&lt; ") constructed\n";
+    }
+};
+
+class Employee2 : virtual public Person2 {
+public:
+    explicit Employee2(const std::string&amp; name) : Person2(name) {
+        std::cout &lt;&lt; "Employee2(" &lt;&lt; name &lt;&lt; ") constructed\n";
+    }
+};
+
+class TeachingAssistant2 : public Student2, public Employee2 {
+public:
+    // Most-derived class constructs the virtual base
+    explicit TeachingAssistant2(const std::string&amp; name)
+        : Person2(name), Student2(name), Employee2(name) {
+        // Only ONE Person2 subobject exists
+        std::cout &lt;&lt; "TA2(" &lt;&lt; name &lt;&lt; ") constructed\n";
+    }
+
+    void introduce() {
+        greet();  // No ambiguity — only one Person2::greet
+    }
+};
+
+void virtual_inheritance_demo() {
+    TeachingAssistant2 ta2("Bob");
+    // Output:
+    //   Person2(Bob) constructed      (only once!)
+    //   Student2(Bob) constructed
+    //   Employee2(Bob) constructed
+    //   TA2(Bob) constructed
+
+    ta2.greet();  // No ambiguity: "I am Bob"
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>Virtual inheritance cost:</strong> Virtual inheritance adds an extra level of indirection (a virtual base pointer) to access the shared base subobject. The most-derived class is responsible for constructing the virtual base. This adds complexity and slight runtime overhead. Use it only when you actually need it.</p>
+</div>
+
+<h2>Ambiguity Resolution</h2>
+
+<pre>
+class A {
+public:
+    void do_work() { std::cout &lt;&lt; "A::do_work\n"; }
+    void process() { std::cout &lt;&lt; "A::process\n"; }
+};
+
+class B : public A {
+public:
+    void do_work() override { std::cout &lt;&lt; "B::do_work\n"; }
+};
+
+class C : public A {
+public:
+    void do_work() override { std::cout &lt;&lt; "C::do_work\n"; }
+};
+
+class D : public B, public C {
+public:
+    void call_both() {
+        B::do_work();   // calls A::do_work as overridden by B
+        C::do_work();   // calls A::do_work as overridden by C
+
+        // process() — inherited only through B and C, but B's and C's
+        // process() both refer to A::process, so this is ambiguous:
+        // process();  // ERROR: ambiguous
+
+        B::process();  // OK
+        C::process();  // OK — same function, different paths
+    }
+};
+</pre>
+
+<h2>Multiple Inheritance Design Guidelines</h2>
+
+<div class="callout green">
+  <p><strong>Safe uses of multiple inheritance:</strong></p>
+  <ul>
+    <li><strong>Interface inheritance</strong> — inheriting from multiple pure abstract classes (no data members). This is the most common and recommended pattern.</li>
+    <li><strong>Mixins</strong> — small classes providing a specific capability (e.g., <code>Serializable</code>, <code>Observer</code>).</li>
+  </ul>
+</div>
+
+<div class="callout red">
+  <p><strong>Risky uses of multiple inheritance:</strong></p>
+  <ul>
+    <li>Multiple base classes with data members (stateful bases)</li>
+    <li>Deep inheritance hierarchies with virtual inheritance</li>
+    <li>Frameworks where you cannot control all base classes</li>
+  </ul>
+</div>
+
+<pre>
+// Safe: Interface-only MI
+class ISerializable {
+public:
+    virtual ~ISerializable() = default;
+    virtual std::string serialize() const = 0;
+};
+
+class IObservable {
+public:
+    virtual ~IObservable() = default;
+    virtual void notify() = 0;
+};
+
+class Widget : public ISerializable, public IObservable {
+    // Concrete implementation
+    std::string serialize() const override { return "widget_data"; }
+    void notify() override { std::cout &lt;&lt; "Widget changed\n"; }
+};
+</pre>
+
+<h2>Alternative: Composition</h2>
+
+<pre>
+// Instead of inheriting from multiple base classes, consider composition
+class Logger {
+public:
+    void log(const std::string&amp; msg) { std::cout &lt;&lt; "[LOG] " &lt;&lt; msg &lt;&lt; "\n"; }
+};
+
+class Timer {
+public:
+    void start() { std::cout &lt;&lt; "Timer started\n"; }
+    void stop() { std::cout &lt;&lt; "Timer stopped\n"; }
+};
+
+class Service {
+    Logger logger_;
+    Timer timer_;
+public:
+    void run() {
+        timer_.start();
+        logger_.log("Service running");
+        // do work
+        logger_.log("Service done");
+        timer_.stop();
+    }
+};
+// Composition: less coupling, no ambiguity, easier to test and modify
+</pre>
+
+<p>Multiple inheritance is most commonly used with <a href="abstract-classes.html">abstract classes</a> (interface inheritance). It can also involve <a href="operator-overloading.html">operator overloading</a> complexities when base classes define the same operators. Next, we explore <a href="operator-overloading.html">operator overloading</a>.</p>
+
+<div class="nav"><a href="abstract-classes.html">&larr; Abstract Classes</a><a href="operator-overloading.html">Operator Overloading &rarr;</a></div>
+</body>
+</html>

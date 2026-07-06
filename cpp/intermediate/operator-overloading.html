@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Operator Overloading — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / Operator Overloading</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>Operator Overloading</h1>
+
+<p>Operator overloading allows user-defined types to work with C++ operators (<code>+</code>, <code>==</code>, <code>&lt;&lt;</code>, <code>[]</code>, etc.) in a natural way. When done correctly, overloaded operators make custom types behave like built-in types, enabling intuitive APIs.</p>
+
+<h2>Rules and Guidelines</h2>
+
+<div class="callout warning">
+  <p><strong>Rules:</strong></p>
+  <ul>
+    <li>You cannot invent new operators (no <code>**</code>, <code>%%</code>, etc.)</li>
+    <li>You cannot change the arity (number of operands) of an operator</li>
+    <li><code>?:</code>, <code>::</code>, <code>.</code>, <code>.*</code>, and <code>sizeof</code> cannot be overloaded</li>
+    <li>The precedence and associativity of operators cannot be changed</li>
+    <li>At least one operand must be a user-defined type</li>
+  </ul>
+</div>
+
+<h2>Arithmetic Operators</h2>
+
+<pre>
+#include &lt;iostream&gt;
+
+class Money {
+    long dollars_;
+    int cents_;
+public:
+    Money(long d = 0, int c = 0) : dollars_(d), cents_(c) {
+        normalize();
+    }
+
+    // Binary + operator (member function)
+    Money operator+(const Money&amp; other) const {
+        return Money(dollars_ + other.dollars_, cents_ + other.cents_);
+    }
+
+    // Compound assignment +=
+    Money&amp; operator+=(const Money&amp; other) {
+        dollars_ += other.dollars_;
+        cents_ += other.cents_;
+        normalize();
+        return *this;
+    }
+
+    // Unary - operator
+    Money operator-() const {
+        return Money(-dollars_, -cents_);
+    }
+
+    // Binary - operator
+    Money operator-(const Money&amp; other) const {
+        return *this + (-other);
+    }
+
+    // Comparison operators
+    bool operator==(const Money&amp; other) const {
+        return dollars_ == other.dollars_ &amp;&amp; cents_ == other.cents_;
+    }
+
+    bool operator!=(const Money&amp; other) const {
+        return !(*this == other);
+    }
+
+    bool operator&lt;(const Money&amp; other) const {
+        return (dollars_ &lt; other.dollars_) ||
+               (dollars_ == other.dollars_ &amp;&amp; cents_ &lt; other.cents_);
+    }
+
+    friend std::ostream&amp; operator&lt;&lt;(std::ostream&amp; os, const Money&amp; m);
+
+private:
+    void normalize() {
+        if (cents_ &gt;= 100) { dollars_ += cents_ / 100; cents_ %= 100; }
+        else if (cents_ &lt; 0) { dollars_ -= 1; cents_ += 100; }
+    }
+};
+
+void arithmetic_demo() {
+    Money a(10, 50);   // $10.50
+    Money b(3, 75);     // $3.75
+
+    Money sum = a + b;       // $14.25
+    Money diff = a - b;      // $6.75
+
+    a += b;                  // a is now $14.25
+    std::cout &lt;&lt; "a: " &lt;&lt; a &lt;&lt; "\n";   // $14.25
+    std::cout &lt;&lt; "sum: " &lt;&lt; sum &lt;&lt; "\n";  // $14.25
+    std::cout &lt;&lt; (a == sum) &lt;&lt; "\n";     // 1 (true)
+}
+</pre>
+
+<h2>Stream Operators (&lt;&lt; and &gt;&gt;)</h2>
+
+<p>Stream operators must be overloaded as non-member (free) functions because the left operand is <code>std::ostream</code>/<code>std::istream</code>, not your type.</p>
+
+<pre>
+// Must be a non-member function (left operand is ostream)
+std::ostream&amp; operator&lt;&lt;(std::ostream&amp; os, const Money&amp; m) {
+    os &lt;&lt; "$" &lt;&lt; m.dollars_ &lt;&lt; "."
+       &lt;&lt; (m.cents_ &lt; 10 ? "0" : "") &lt;&lt; m.cents_;
+    return os;
+}
+
+// Input operator (left operand is istream)
+std::istream&amp; operator&gt;&gt;(std::istream&amp; is, Money&amp; m) {
+    long d;
+    int c;
+    char dot;
+    is &gt;&gt; d &gt;&gt; dot &gt;&gt; c;
+    m = Money(d, c);
+    return is;
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Convention:</strong> Return a reference to the stream from <code>operator&lt;&lt;</code> and <code>operator&gt;&gt;</code> so they can be chained: <code>std::cout &lt;&lt; a &lt;&lt; " + " &lt;&lt; b &lt;&lt; "\n"</code>.</p>
+</div>
+
+<h2>Subscript Operator</h2>
+
+<pre>
+#include &lt;vector&gt;
+#include &lt;stdexcept&gt;
+#include &lt;iostream&gt;
+
+class Matrix {
+    std::vector&lt;std::vector&lt;double&gt;&gt; data_;
+    size_t rows_, cols_;
+public:
+    Matrix(size_t rows, size_t cols, double init = 0.0)
+        : rows_(rows), cols_(cols), data_(rows, std::vector&lt;double&gt;(cols, init)) {}
+
+    // const access
+    const double&amp; operator()(size_t row, size_t col) const {
+        return data_.at(row).at(col);
+    }
+
+    // mutable access
+    double&amp; operator()(size_t row, size_t col) {
+        return data_.at(row).at(col);
+    }
+
+    // Single subscript — returns row (useful for expression templates, etc.)
+    const std::vector&lt;double&gt;&amp; operator[](size_t row) const {
+        return data_.at(row);
+    }
+
+    std::vector&lt;double&gt;&amp; operator[](size_t row) {
+        return data_.at(row);
+    }
+};
+
+void matrix_demo() {
+    Matrix m(3, 3, 0.0);
+    m(0, 0) = 1.0;
+    m(1, 1) = 2.0;
+    m(2, 2) = 3.0;
+
+    std::cout &lt;&lt; m(0, 0) &lt;&lt; " " &lt;&lt; m(1, 1) &lt;&lt; " " &lt;&lt; m(2, 2) &lt;&lt; "\n";  // 1 2 3
+
+    const Matrix cm = m;
+    // cm(0, 0) = 5.0;  // ERROR: const version returns const reference
+}
+</pre>
+
+<h2>Comparison Operators</h2>
+
+<pre>
+// C++20 provides spaceship operator &lt;=&gt; for defaulting all comparisons.
+// Before C++20, you need to define each operator or use a helper base class.
+
+#include &lt;iostream&gt;
+
+class Version {
+    int major_, minor_, patch_;
+public:
+    Version(int maj, int min, int pat) : major_(maj), minor_(min), patch_(pat) {}
+
+    // Implement all six comparison operators
+    bool operator==(const Version&amp; o) const {
+        return std::tie(major_, minor_, patch_) == std::tie(o.major_, o.minor_, o.patch_);
+    }
+    bool operator!=(const Version&amp; o) const { return !(*this == o); }
+    bool operator&lt;(const Version&amp; o) const {
+        return std::tie(major_, minor_, patch_) &lt; std::tie(o.major_, o.minor_, o.patch_);
+    }
+    bool operator&lt;=(const Version&amp; o) const { return !(o &lt; *this); }
+    bool operator&gt;(const Version&amp; o) const { return o &lt; *this; }
+    bool operator&gt;=(const Version&amp; o) const { return !(*this &lt; o); }
+};
+
+void comparison_demo() {
+    Version v1(1, 0, 0);
+    Version v2(2, 0, 0);
+    Version v3(1, 0, 0);
+
+    std::cout &lt;&lt; std::boolalpha;
+    std::cout &lt;&lt; (v1 == v3) &lt;&lt; "\n";  // true
+    std::cout &lt;&lt; (v1 &lt; v2) &lt;&lt; "\n";   // true
+    std::cout &lt;&lt; (v2 &gt; v1) &lt;&lt; "\n";   // true
+}
+</pre>
+
+<h2>Member vs Non-Member</h2>
+
+<table>
+  <tr><th>Operator</th><th>Must be Member</th><th>Should be Non-Member</th></tr>
+  <tr><td><code>=</code>, <code>[]</code>, <code>()</code>, <code>-&gt;</code>, <code>-&gt;*</code></td><td>Yes</td><td>—</td></tr>
+  <tr><td><code>+=</code>, <code>-=</code>, <code>*=</code>, etc.</td><td>Yes (modifies left operand)</td><td>—</td></tr>
+  <tr><td><code>==</code>, <code>!=</code>, <code>&lt;</code>, <code>&gt;</code></td><td>—</td><td>Yes (symmetric operands)</td></tr>
+  <tr><td><code>+</code>, <code>-</code>, <code>*</code>, <code>/</code></td><td>—</td><td>Yes (symmetric; allows implicit conversions on left)</td></tr>
+  <tr><td><code>&lt;&lt;</code>, <code>&gt;&gt;</code></td><td>—</td><td>Yes (left operand is stream)</td></tr>
+</table>
+
+<div class="callout">
+  <p><strong>Tip:</strong> Define binary operators that don't modify the left operand as non-member friends. This allows implicit conversions on both sides. For <code>+</code>, implement <code>+=</code> as a member and define <code>+</code> in terms of it as a non-member.</p>
+</div>
+
+<pre>
+// Canonical pattern: implement compound assignment as member, binary as non-member
+class Vec2 {
+    double x_, y_;
+public:
+    Vec2(double x, double y) : x_(x), y_(y) {}
+
+    Vec2&amp; operator+=(const Vec2&amp; rhs) {
+        x_ += rhs.x_;
+        y_ += rhs.y_;
+        return *this;
+    }
+};
+
+// Non-member operator+ implemented in terms of operator+=
+Vec2 operator+(Vec2 lhs, const Vec2&amp; rhs) {  // pass lhs by value
+    lhs += rhs;
+    return lhs;
+}
+</pre>
+
+<p>Operator overloading works closely with <a href="friend-functions.html">friend functions</a> for non-member operators that need access to private members. It also relates to <a href="multiple-inheritance.html">multiple inheritance</a> where ambiguous operators between base classes can cause issues.</p>
+
+<div class="nav"><a href="multiple-inheritance.html">&larr; Multiple Inheritance</a><a href="friend-functions.html">Friend Functions &rarr;</a></div>
+</body>
+</html>

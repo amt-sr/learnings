@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Class Templates — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; }
+  .breadcrumb a { color: #8b949e; }
+  .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; }
+  .callout.red { border-left-color: #f85149; }
+  .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; }
+  th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#1">1 Basics</a> / 1.4.2 Class Templates</div>
+<div class="meta"><span class="tag basic">BASIC</span></div>
+<h1>1.4.2 Class Templates</h1>
+
+<p>Class templates let you define a class that works with any data type. The entire STL (Standard Template Library) is built on class templates &mdash; <code>std::vector&lt;int&gt;</code>, <code>std::map&lt;string, int&gt;</code>, and <code>std::pair&lt;double, string&gt;</code> are all class template instantiations.</p>
+
+<h2>Template Class Syntax</h2>
+
+<p>A class template is declared with <code>template&lt;typename T&gt;</code> before the class definition. Member functions defined outside the class need their own <code>template&lt;typename T&gt;</code> prefix.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+// A generic Pair class that holds two values of any type
+template &lt;typename T&gt;
+class Pair {
+private:
+    T first_;
+    T second_;
+
+public:
+    Pair(T first, T second) : first_{first}, second_{second} {}
+
+    T get_first() const { return first_; }
+    T get_second() const { return second_; }
+
+    T sum() const { return first_ + second_; }
+
+    void print() const {
+        std::cout &lt;&lt; "(" &lt;&lt; first_ &lt;&lt; ", " &lt;&lt; second_ &lt;&lt; ")" &lt;&lt; std::endl;
+    }
+};
+
+int main() {
+    Pair&lt;int&gt; nums(10, 20);
+    nums.print();           // (10, 20)
+    std::cout &lt;&lt; "Sum: " &lt;&lt; nums.sum() &lt;&lt; std::endl;  // 30
+
+    Pair&lt;double&gt; decimals(3.14, 2.71);
+    decimals.print();       // (3.14, 2.71)
+    std::cout &lt;&lt; "Sum: " &lt;&lt; decimals.sum() &lt;&lt; std::endl;  // 5.85
+
+    return 0;
+}
+</pre>
+
+<h2>Generic Stack Container</h2>
+
+<p>Here is a practical example: a stack data structure that works with any element type.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;stdexcept&gt;
+
+template &lt;typename T&gt;
+class Stack {
+private:
+    static const int MAX_SIZE = 100;
+    T data_[MAX_SIZE];
+    int top_;
+
+public:
+    Stack() : top_{-1} {}
+
+    void push(const T&amp; value) {
+        if (top_ &gt;= MAX_SIZE - 1) {
+            throw std::overflow_error("Stack overflow");
+        }
+        data_[++top_] = value;
+    }
+
+    T pop() {
+        if (top_ &lt; 0) {
+            throw std::underflow_error("Stack underflow");
+        }
+        return data_[top_--];
+    }
+
+    T&amp; top() {
+        if (top_ &lt; 0) {
+            throw std::underflow_error("Stack is empty");
+        }
+        return data_[top_];
+    }
+
+    bool empty() const { return top_ &lt; 0; }
+    int size() const { return top_ + 1; }
+};
+
+int main() {
+    Stack&lt;int&gt; int_stack;
+    int_stack.push(10);
+    int_stack.push(20);
+    int_stack.push(30);
+
+    std::cout &lt;&lt; "Size: " &lt;&lt; int_stack.size() &lt;&lt; std::endl;  // 3
+    std::cout &lt;&lt; "Top: " &lt;&lt; int_stack.top() &lt;&lt; std::endl;    // 30
+    std::cout &lt;&lt; "Pop: " &lt;&lt; int_stack.pop() &lt;&lt; std::endl;      // 30
+    std::cout &lt;&lt; "Pop: " &lt;&lt; int_stack.pop() &lt;&lt; std::endl;      // 20
+
+    // Same stack with strings
+    Stack&lt;std::string&gt; str_stack;
+    str_stack.push("hello");
+    str_stack.push("world");
+    std::cout &lt;&lt; str_stack.pop() &lt;&lt; std::endl;  // world
+
+    return 0;
+}
+</pre>
+
+<div class="callout">
+  <p><strong>Note:</strong> This example uses a fixed-size array for simplicity. In production, <code>std::vector</code> would be used internally for dynamic resizing. See <a href="vector.html">std::vector</a> for the standard library's dynamic array container.</p>
+</div>
+
+<h2>Multiple Type Parameters</h2>
+
+<p>Class templates can have multiple type parameters, just like function templates.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+// A Pair with two different types
+template &lt;typename K, typename V&gt;
+class KeyValuePair {
+private:
+    K key_;
+    V value_;
+
+public:
+    KeyValuePair(K key, V value) : key_{key}, value_{value} {}
+
+    K get_key() const { return key_; }
+    V get_value() const { return value_; }
+
+    void print() const {
+        std::cout &lt;&lt; key_ &lt;&lt; " =&gt; " &lt;&lt; value_ &lt;&lt; std::endl;
+    }
+};
+
+int main() {
+    KeyValuePair&lt;std::string, int&gt; age{"Alice", 30};
+    age.print();  // Alice =&gt; 30
+
+    KeyValuePair&lt;int, std::string&gt; code{200, "OK"};
+    code.print();  // 200 =&gt; OK
+
+    KeyValuePair&lt;std::string, double&gt; temp{"CPU", 67.5};
+    temp.print();  // CPU =&gt; 67.5
+
+    return 0;
+}
+</pre>
+
+<h2>Non-Type Template Parameters</h2>
+
+<p>Templates can accept values (not just types) as parameters. These are called <strong>non-type template parameters</strong> and must be compile-time constants.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;array&gt;
+
+// Array wrapper with a compile-time size
+template &lt;typename T, std::size_t N&gt;
+class FixedArray {
+private:
+    T data_[N];
+
+public:
+    T&amp; operator[](std::size_t index) { return data_[index]; }
+    const T&amp; operator[](std::size_t index) const { return data_[index]; }
+
+    std::size_t size() const { return N; }
+
+    void fill(const T&amp; value) {
+        for (std::size_t i = 0; i &lt; N; ++i) {
+            data_[i] = value;
+        }
+    }
+
+    void print() const {
+        std::cout &lt;&lt; "[";
+        for (std::size_t i = 0; i &lt; N; ++i) {
+            std::cout &lt;&lt; data_[i];
+            if (i + 1 &lt; N) std::cout &lt;&lt; ", ";
+        }
+        std::cout &lt;&lt; "]" &lt;&lt; std::endl;
+    }
+};
+
+int main() {
+    FixedArray&lt;int, 5&gt; arr;
+    arr.fill(42);
+    arr[2] = 100;
+    arr.print();  // [42, 42, 100, 42, 42]
+    std::cout &lt;&lt; "Size: " &lt;&lt; arr.size() &lt;&lt; std::endl;  // 5
+
+    FixedArray&lt;double, 3&gt; darr;
+    darr[0] = 1.1;
+    darr[1] = 2.2;
+    darr[2] = 3.3;
+    darr.print();  // [1.1, 2.2, 3.3]
+
+    return 0;
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Tip:</strong> <code>std::array&lt;T, N&gt;</code> in the standard library is essentially this pattern &mdash; a fixed-size container parameterized by element type and count. Non-type parameters must be integral types, enumerations, or pointers/references. Floating-point values and class types are not allowed.</p>
+</div>
+
+<h2>Default Type Parameters</h2>
+
+<p>You can provide default types for template parameters, making them optional at the point of instantiation.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+// Default type: if not specified, uses double
+template &lt;typename T = double&gt;
+class NumericValue {
+private:
+    T value_;
+
+public:
+    NumericValue(T val) : value_{val} {}
+
+    T get() const { return value_; }
+    void set(T val) { value_ = val; }
+
+    void print() const {
+        std::cout &lt;&lt; "Value: " &lt;&lt; value_ &lt;&lt; std::endl;
+    }
+};
+
+int main() {
+    // Explicit type
+    NumericValue&lt;int&gt; n1{42};
+    n1.print();  // Value: 42
+
+    // Uses default type (double)
+    NumericValue&lt;&gt; n2{3.14};
+    n2.print();  // Value: 3.14
+
+    return 0;
+}
+</pre>
+
+<h2>Member Function Definitions Outside the Class</h2>
+
+<p>When defining member functions outside the class body, each function needs the template declaration prefix and the class name must include the type parameter.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+template &lt;typename T&gt;
+class Box {
+private:
+    T contents_;
+
+public:
+    Box(T contents);
+    T get() const;
+    void set(T contents);
+    void print() const;
+};
+
+// Outside definition: note the template prefix and Box&lt;T&gt; syntax
+template &lt;typename T&gt;
+Box&lt;T&gt;::Box(T contents) : contents_{contents} {}
+
+template &lt;typename T&gt;
+T Box&lt;T&gt;::get() const { return contents_; }
+
+template &lt;typename T&gt;
+void Box&lt;T&gt;::set(T contents) { contents_ = contents; }
+
+template &lt;typename T&gt;
+void Box&lt;T&gt;::print() const {
+    std::cout &lt;&lt; "Box contains: " &lt;&lt; contents_ &lt;&lt; std::endl;
+}
+
+int main() {
+    Box&lt;std::string&gt; b{"treasure"};
+    b.print();  // Box contains: treasure
+    b.set("gold");
+    b.print();  // Box contains: gold
+
+    return 0;
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>Note:</strong> As with function templates, class template definitions must be in the header file (or included from the header). The compiler needs the full definition to instantiate the template. Common approaches: define everything in the .h file, or use a .hpp / .inl file included at the bottom of the header.</p>
+</div>
+
+<h2>Related Topics</h2>
+
+<ul>
+  <li><a href="function-templates.html">Function Templates</a> &mdash; Templates applied to functions</li>
+  <li><a href="classes-objects.html">Classes &amp; Objects</a> &mdash; Non-template class fundamentals</li>
+  <li><a href="../intermediate/template-specialization.html">Template Specialization</a> &mdash; Custom implementations for specific types</li>
+  <li><a href="../intermediate/variadic-templates.html">Variadic Templates</a> &mdash; Templates with variable parameter counts</li>
+  <li><a href="vector.html">std::vector</a> &mdash; A prime example of a class template</li>
+</ul>
+
+<div class="nav">
+  <a href="function-templates.html">&larr; Function Templates</a>
+  <a href="stl-overview.html">STL Overview &rarr;</a>
+</div>
+</body>
+</html>

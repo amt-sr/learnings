@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Exception Handling — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / <a href="../index.html#2.5">2.5 Error Handling</a> / 2.5.1 Exception Handling</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>Exception Handling</h1>
+
+<p>Exceptions provide a structured mechanism for handling runtime errors. When something goes wrong (file not found, out of memory, invalid argument), a function can <strong>throw</strong> an exception instead of returning an error code. The exception propagates up the call stack until it is <strong>caught</strong> by a matching handler. This separates error-handling code from normal flow.</p>
+
+<h2>try / catch / throw Basics</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;stdexcept&gt;
+#include &lt;vector&gt;
+
+double safe_divide(double a, double b) {
+    if (b == 0.0) {
+        throw std::invalid_argument("Division by zero");
+    }
+    return a / b;
+}
+
+int element_at(const std::vector&lt;int&gt;&amp; v, size_t idx) {
+    if (idx &gt;= v.size()) {
+        throw std::out_of_range("Index " + std::to_string(idx)
+            + " out of range (size: " + std::to_string(v.size()) + ")");
+    }
+    return v[idx];
+}
+
+void exception_basics() {
+    try {
+        std::cout &lt;&lt; safe_divide(10.0, 3.0) &lt;&lt; "\n";  // 3.33333
+        std::cout &lt;&lt; safe_divide(10.0, 0.0) &lt;&lt; "\n";  // throws
+    }
+    catch (const std::invalid_argument&amp; e) {
+        std::cerr &lt;&lt; "Invalid argument: " &lt;&lt; e.what() &lt;&lt; "\n";
+    }
+    catch (const std::exception&amp; e) {
+        std::cerr &lt;&lt; "Standard exception: " &lt;&lt; e.what() &lt;&lt; "\n";
+    }
+    catch (...) {
+        std::cerr &lt;&lt; "Unknown exception\n";
+    }
+}
+</pre>
+
+<h2>std::exception Hierarchy</h2>
+
+<table>
+  <tr><th>Exception Class</th><th>Header</th><th>Typical Use</th></tr>
+  <tr><td><code>std::exception</code></td><td>&lt;exception&gt;</td><td>Base class for all standard exceptions</td></tr>
+  <tr><td><code>std::runtime_error</code></td><td>&lt;stdexcept&gt;</td><td>Errors detectable at runtime</td></tr>
+  <tr><td><code>std::logic_error</code></td><td>&lt;stdexcept&gt;</td><td>Violations of preconditions (programming bugs)</td></tr>
+  <tr><td><code>std::invalid_argument</code></td><td>&lt;stdexcept&gt;</td><td>Invalid function argument</td></tr>
+  <tr><td><code>std::out_of_range</code></td><td>&lt;stdexcept&gt;</td><td>Index/container out of range</td></tr>
+  <tr><td><code>std::length_error</code></td><td>&lt;stdexcept&gt;</td><td>Attempt to resize beyond max_size</td></tr>
+  <tr><td><code>std::bad_alloc</code></td><td>&lt;new&gt;</td><td>new fails (out of memory)</td></tr>
+  <tr><td><code>std::bad_cast</code></td><td>&lt;typeinfo&gt;</td><td>Failed dynamic_cast&lt;&gt;</td></tr>
+</table>
+
+<h2>Catch by Reference</h2>
+
+<div class="callout red">
+  <p><strong>Always catch by reference:</strong> <code>catch (std::exception&amp; e)</code> -- not by value (slicing) and not by pointer (memory management). Catching by reference avoids object slicing when derived exceptions are thrown, preserves polymorphic behavior, and avoids unnecessary copies.</p>
+</div>
+
+<pre>
+// BAD: catch by value — derived exceptions are sliced
+catch (std::exception e) { ... }
+
+// BAD: catch by pointer — you must manage lifetime
+catch (std::exception* e) { ... }
+
+// GOOD: catch by reference
+catch (const std::exception&amp; e) { ... }
+
+// GOOD: catch by const reference (preferred)
+catch (const std::runtime_error&amp; e) { ... }
+</pre>
+
+<h2>Custom Exceptions</h2>
+
+<pre>
+#include &lt;stdexcept&gt;
+#include &lt;string&gt;
+#include &lt;iostream&gt;
+
+class NetworkError : public std::runtime_error {
+    int error_code_;
+public:
+    explicit NetworkError(const std::string&amp; msg, int code)
+        : std::runtime_error(msg), error_code_(code) {}
+
+    int error_code() const noexcept { return error_code_; }
+};
+
+class ValidationError : public std::logic_error {
+    std::string field_name_;
+public:
+    explicit ValidationError(const std::string&amp; msg, const std::string&amp; field)
+        : std::logic_error(msg), field_name_(field) {}
+
+    const std::string&amp; field() const noexcept { return field_name_; }
+};
+
+void custom_exception_demo() {
+    try {
+        throw NetworkError("Connection refused", 10061);
+    }
+    catch (const NetworkError&amp; e) {
+        std::cerr &lt;&lt; "Network error " &lt;&lt; e.error_code()
+                  &lt;&lt; ": " &lt;&lt; e.what() &lt;&lt; "\n";
+    }
+    catch (const std::exception&amp; e) {
+        std::cerr &lt;&lt; "Error: " &lt;&lt; e.what() &lt;&lt; "\n";
+    }
+}
+</pre>
+
+<h2>Stack Unwinding</h2>
+
+<p>When an exception is thrown and not caught in the current function, the function exits. All local objects in that function are destroyed (their destructors called) in reverse order of construction. This process continues up the call stack until a matching <code>catch</code> is found.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+class ResourceGuard {
+    std::string name_;
+public:
+    explicit ResourceGuard(const std::string&amp; name) : name_(name) {
+        std::cout &lt;&lt; "Acquire " &lt;&lt; name_ &lt;&lt; "\n";
+    }
+    ~ResourceGuard() {
+        std::cout &lt;&lt; "Release " &lt;&lt; name_ &lt;&lt; "\n";
+    }
+};
+
+void inner_function() {
+    ResourceGuard r3("inner");
+    throw std::runtime_error("Something went wrong");
+    // r3 is destroyed during stack unwinding
+}
+
+void outer_function() {
+    ResourceGuard r1("outer-1");
+    ResourceGuard r2("outer-2");
+    inner_function();  // throws
+    // r2 destroyed first, then r1
+}
+
+void stack_unwind_demo() {
+    try {
+        outer_function();
+    } catch (const std::exception&amp; e) {
+        std::cout &lt;&lt; "Caught: " &lt;&lt; e.what() &lt;&lt; "\n";
+    }
+}
+// Output:
+//   Acquire outer-1
+//   Acquire outer-2
+//   Acquire inner
+//   Release inner
+//   Release outer-2
+//   Release outer-1
+//   Caught: Something went wrong
+</pre>
+
+<div class="callout green">
+  <p><strong>RAII + exceptions:</strong> This is why <a href="raii.html">RAII</a> is so important. If resources are managed by RAII objects (smart pointers, file handles, locks), stack unwinding automatically releases them. No explicit cleanup code is needed in catch blocks.</p>
+</div>
+
+<h2>Exception Safety Levels</h2>
+
+<table>
+  <tr><th>Level</th><th>Guarantee</th><th>Example</th></tr>
+  <tr><td><strong>No guarantee</strong></td><td>May leak resources or leave objects invalid</td><td>Raw pointer + throw</td></tr>
+  <tr><td><strong>Basic guarantee</strong></td><td>No resource leaks, objects are in valid state</td><td>std::vector::push_back</td></tr>
+  <tr><td><strong>Strong guarantee</strong></td><td>Operation succeeds completely or has no effect</td><td>std::vector::insert (single element)</td></tr>
+  <tr><td><strong>Nothrow guarantee</strong></td><td>Will never throw</td><td>Destructors, swap, move</td></tr>
+</table>
+
+<p>Exception handling works alongside <a href="noexcept.html">noexcept</a> for functions that guarantee not to throw, and <a href="assert-static-assert.html">assert/static_assert</a> for catching logic errors early.</p>
+
+<div class="nav"><a href="function-bind.html">&larr; Function / Bind</a><a href="noexcept.html">noexcept &rarr;</a></div>
+</body>
+</html>

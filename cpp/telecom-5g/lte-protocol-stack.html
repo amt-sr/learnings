@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LTE Protocol Stack — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#4">4 Telecom &amp; 5G/4G Networking</a> / 4G LTE Concepts / 4.3.3</div>
+<div class="meta"><span class="tag medium">Medium</span></div>
+<h1>LTE Protocol Stack</h1>
+
+<p>The LTE protocol stack defines how user and control data traverse the radio interface (Uu). It consists of two planes: the User Plane (data) and the Control Plane (signaling). Each layer has specific responsibilities in processing, from physical modulation to application-level protocol handling.</p>
+
+<h2>Control Plane Stack</h2>
+
+<pre>
+  Control Plane (Signaling):
+  +-----------+
+  | RRC       |  Radio Resource Control
+  +-----------+
+  | PDCP      |  Ciphering, integrity protection
+  +-----------+
+  | RLC       |  Segmentation, ARQ (AM mode)
+  +-----------+
+  | MAC       |  Logical channels, HARQ, scheduling
+  +-----------+
+  | PHY       |  OFDMA, channel coding, modulation
+  +-----------+
+    (carried over SRB0/SRB1/SRB2)
+    RRC uses RLC AM; Initial RRC (SRB0) uses RLC TM
+</pre>
+
+<h2>User Plane Stack</h2>
+
+<pre>
+  User Plane (Data):
+  +-----------+
+  | IP / SDP  |  Application / Transport (TCP/UDP)
+  +-----------+
+  | PDCP      |  ROHC header compression, ciphering
+  +-----------+
+  | RLC       |  Segmentation, ARQ
+  +-----------+
+  | MAC       |  Multiplexing, HARQ retransmission
+  +-----------+
+  | PHY       |  OFDMA transmission
+  +-----------+
+    (carried over DRB)
+</pre>
+
+<h2>Layer Responsibilities</h2>
+
+<table>
+  <tr><th>Layer</th><th>Control Plane</th><th>User Plane</th><th>Key Functions</th></tr>
+  <tr><td>PHY (L1)</td><td>DCI/UCI encoding/decoding</td><td>Data modulation/coding</td><td>OFDMA, MIMO, power control</td></tr>
+  <tr><td>MAC (L2)</td><td>SRB scheduling, RACH</td><td>DRB scheduling, HARQ</td><td>Logical-to-transport ch mapping</td></tr>
+  <tr><td>RLC (L2)</td><td>SRB segmentation (AM)</td><td>DRB segmentation (AM/UM)</td><td>ARQ, reassembly, duplication</td></tr>
+  <tr><td>PDCP (L2)</td><td>Ciphering + integrity</td><td>Ciphering + ROHC</td><td>Seq numbering, handover</td></tr>
+  <tr><td>RRC (L3)</td><td>Connection management, measurements</td><td>N/A</td><td>Bearer config, mobility</td></tr>
+  <tr><td>NAS</td><td>Registration, auth, security</td><td>N/A</td><td>UE <-> Core signaling</td></tr>
+</table>
+
+<h2>LTE vs 5G Protocol Stack</h2>
+
+<pre>
+  LTE:
+  IP -> PDCP -> RLC -> MAC -> PHY
+  RRC -> PDCP -> RLC -> MAC -> PHY
+
+  5G NR (SDAP added):
+  IP -> SDAP -> PDCP -> RLC -> MAC -> PHY
+  RRC -> PDCP -> RLC -> MAC -> PHY
+
+  SDAP is new in 5G. It provides QoS flow -> DRB mapping.
+  In LTE, QoS mapping happens at the eNodeB without a
+  dedicated protocol layer.
+</pre>
+
+<div class="callout green">
+  <p><strong>SDAP addition:</strong> 5G introduces SDAP between IP and PDCP. This is the only new protocol layer added to the radio stack. It enables fine-grained QoS flow management and reflective QoS mapping, which was not possible in LTE.</p>
+</div>
+
+<h2>C++ Layer Struct Hierarchy</h2>
+
+<pre>
+#include &lt;memory&gt;
+#include &lt;functional&gt;
+#include &lt;cstdint&gt;
+#include &lt;vector&gt;
+
+// Generic layer interface
+class IProtocolLayer {
+public:
+    virtual ~IProtocolLayer() = default;
+
+    // Upper layer sends data down
+    virtual void sendDataDown(uint8_t channel_id,
+                               const uint8_t* data, size_t len) = 0;
+
+    // Lower layer sends data up
+    virtual void receiveDataUp(uint8_t channel_id,
+                                const uint8_t* data, size_t len) = 0;
+
+    // Configuration callback (from RRC)
+    virtual void configure(const void* cfg) = 0;
+};
+
+// PHY layer (lowest)
+class PhyLayer : public IProtocolLayer {
+public:
+    void sendDataDown(uint8_t, const uint8_t* data, size_t len) override {
+        // Modulate, encode, transmit over air
+        transmitOverAir(data, len);
+    }
+
+    void receiveDataUp(uint8_t, const uint8_t* data, size_t len) override {
+        // Demodulate, decode, pass to MAC
+        if (upper_layer_) {
+            upper_layer_->receiveDataUp(0, data, len);
+        }
+    }
+
+    void setUpperLayer(IProtocolLayer* upper) { upper_layer_ = upper; }
+private:
+    IProtocolLayer* upper_layer_{nullptr};
+    void transmitOverAir(const uint8_t*, size_t) {}
+};
+
+// MAC layer
+class MacLayer : public IProtocolLayer {
+public:
+    void sendDataDown(uint8_t lcid, const uint8_t* data, size_t len) override {
+        // Multiplex logical channels, add MAC header
+        // Perform HARQ, schedule resources
+        if (lower_layer_) {
+            uint8_t pdu[4096];
+            size_t pdu_len = addMacHeader(pdu, lcid, data, len);
+            lower_layer_->sendDataDown(lcid, pdu, pdu_len);
+        }
+    }
+
+    void receiveDataUp(uint8_t, const uint8_t* pdu, size_t len) override {
+        // Parse MAC header, demultiplex to logical channels
+        uint8_t lcid; const uint8_t* payload; size_t payload_len;
+        parseMacHeader(pdu, len, lcid, payload, payload_len);
+        if (upper_layer_) {
+            upper_layer_->receiveDataUp(lcid, payload, payload_len);
+        }
+    }
+
+    void setLowerLayer(IProtocolLayer* lower) { lower_layer_ = lower; }
+    void setUpperLayer(IProtocolLayer* upper) { upper_layer_ = upper; }
+
+private:
+    IProtocolLayer* lower_layer_{nullptr};
+    IProtocolLayer* upper_layer_{nullptr};
+    size_t addMacHeader(uint8_t*, uint8_t, const uint8_t*, size_t);
+    void parseMacHeader(const uint8_t*, size_t, uint8_t&amp;,
+                         const uint8_t*&, size_t&amp;);
+};
+
+// RLC layer
+class RlcLayer : public IProtocolLayer {
+public:
+    // Same pattern: sendDataDown -> add RLC header, segment
+    // receiveDataUp -> reassemble, remove RLC header
+    void setLowerLayer(IProtocolLayer* lower) { lower_layer_ = lower; }
+    void setUpperLayer(IProtocolLayer* upper) { upper_layer_ = upper; }
+    void sendDataDown(uint8_t ch, const uint8_t* data, size_t len) override;
+    void receiveDataUp(uint8_t ch, const uint8_t* data, size_t len) override;
+    void configure(const void* cfg) override {}
+private:
+    IProtocolLayer* lower_layer_{nullptr};
+    IProtocolLayer* upper_layer_{nullptr};
+};
+
+// Build the stack (composition)
+class ProtocolStack {
+public:
+    void init() {
+        phy_.setUpperLayer(&amp;mac_);
+        mac_.setLowerLayer(&amp;phy_);
+        mac_.setUpperLayer(&amp;rlc_);
+        rlc_.setLowerLayer(&amp;mac_);
+    }
+
+    PhyLayer&amp; phy() { return phy_; }
+    MacLayer&amp; mac() { return mac_; }
+    RlcLayer&amp; rlc() { return rlc_; }
+
+private:
+    PhyLayer  phy_;
+    MacLayer  mac_;
+    RlcLayer  rlc_;
+    // PDCP and SDAP would follow the same pattern above RLC
+};
+</pre>
+
+<h2>Cross-References</h2>
+
+<ul>
+  <li><a href="phy-layer.html">PHY Layer</a> -- Physical layer details, OFDM, resource grid.</li>
+  <li><a href="mac-layer.html">MAC Layer</a> -- HARQ, scheduling, logical channels.</li>
+  <li><a href="rlc-layer.html">RLC Layer</a> -- Segmentation, ARQ, AM/UM/TM modes.</li>
+  <li><a href="pdcp-layer.html">PDCP Layer</a> -- Ciphering, ROHC, sequence numbers.</li>
+  <li><a href="rrc-layer.html">RRC Layer</a> -- Control plane, connection management.</li>
+  <li><a href="sdap-layer.html">SDAP Layer</a> -- 5G QoS flow mapping (not in LTE).</li>
+</ul>
+
+<div class="nav"><a href="s1-x2-interfaces.html">&larr; S1/X2 Interfaces</a><a href="handover-procedures.html">Handover Procedures &rarr;</a></div>
+</body>
+</html>

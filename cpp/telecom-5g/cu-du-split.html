@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CU-DU Split — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#4">4 Telecom &amp; 5G/4G</a> / CU-DU Split</div>
+<div class="meta"><span class="tag medium">Medium</span></div>
+<h1>CU-DU Split</h1>
+
+<p>The Central Unit (CU) / Distributed Unit (DU) split is a key innovation in 5G that decouples higher-layer protocol functions into a centralized CU and lower-layer real-time functions into a distributed DU. This split is connected via the F1 interface and enables centralized resource management with distributed radio processing.</p>
+
+<h2>Functional Split Overview</h2>
+
+<pre>
+                    5G Core Network
+                         |
+                      NG-C / NG-U
+                         |
+                  +------+------+         Higher-Layer
+                  |   CU-CP  |  CU-UP   <-- Functions
+                  |  (RRC/   | (SDAP/
+                  |   NGAP)  | PDCP)
+                  +-----+----+----+
+                        |         |
+                     E1 |       F1-C   Control
+                        |         |    Plane
+                        |   F1-U  |    + User Plane
+                        |         |
+                  +-----+----+----+
+                  |    DU    |
+                  |  (RLC/   |
+                  |   MAC/   |
+                  |  Scheduler)
+                  +-----+----+
+                        |
+                     FR1/FR2
+                        |
+                  +-----+----+
+                  |    RU    |
+                  | (RF/FFT  |
+                  |  /ADC)   |
+                  +----------+
+</pre>
+
+<h2>Functional Split Options (3GPP TS 38.401)</h2>
+
+<p>The CU-DU split point determines which protocol functions reside in the CU versus the DU. Different split options trade off fronthaul bandwidth vs processing centralization:</p>
+
+<table>
+  <tr><th>Split Option</th><th>Split Point</th><th>CU Functions</th><th>DU Functions</th><th>Fronthaul BW</th></tr>
+  <tr><td>Option 1</td><td>RRC/PDCP</td><td>RRC</td><td>PDCP down</td><td>Very Low</td></tr>
+  <tr><td>Option 2</td><td>PDCP/RLC</td><td>RRC, PDCP</td><td>RLC, MAC, PHY</td><td>Low</td></tr>
+  <tr><td>Option 3</td><td>RLC (intra-PDCP)</td><td>RRC, PDCP, RLC ARQ</td><td>RLC segmentation, MAC, PHY</td><td>Low</td></tr>
+  <tr><td>Option 4</td><td>RLC/MAC</td><td>RRC, PDCP, RLC</td><td>MAC, PHY</td><td>Medium</td></tr>
+  <tr><td>Option 5</td><td>MAC (RLC header split)</td><td>RRC, PDCP, RLC, MAC sched</td><td>MAC HARQ, PHY</td><td>Medium</td></tr>
+  <tr><td>Option 6</td><td>MAC (HARQ/sched split)</td><td>RRC, PDCP, RLC, MAC</td><td>MAC HARQ, PHY</td><td>Medium</td></tr>
+  <tr><td>Option 7</td><td>MAC/PHY (split 7-1/7-2/7-3)</td><td>RRC, PDCP, RLC, MAC</td><td>PHY (partial)</td><td>High</td></tr>
+  <tr><td>Option 8</td><td>PHY (RF split)</td><td>All L1+</td><td>RF only</td><td>Very High</td></tr>
+</table>
+
+<div class="callout">
+  <p><strong>Key Point:</strong> 3GPP standardized <strong>Option 2</strong> (PDCP/RLC boundary) as the default CU-DU split. O-RAN uses a <strong>7-2 split</strong> (between precoding and FFT/CP insertion) for the O-DU/O-RU boundary. See <a href="oran-architecture.html">O-RAN Architecture</a> for details.</p>
+</div>
+
+<h2>C++ Split Point Configuration</h2>
+
+<pre>
+#include &lt;string&gt;
+#include &lt;array&gt;
+#include &lt;iostream&gt;
+
+// 3GPP TS 38.401 functional split options
+enum class FunctionalSplit : uint8_t {
+    SPLIT_1  = 1,  // RRC/PDCP boundary
+    SPLIT_2  = 2,  // PDCP/RLC boundary (3GPP default)
+    SPLIT_3  = 3,  // Intra-PDCP (higher PDCP / lower PDCP)
+    SPLIT_4  = 4,  // RLC/MAC boundary
+    SPLIT_5  = 5,  // Intra-MAC (RLC header)
+    SPLIT_6  = 6,  // Intra-MAC (HARQ/scheduler)
+    SPLIT_7a = 7,  // MAC/PHY (FFT/PRACH)
+    SPLIT_7b = 8,  // MAC/PHY (precoding) -- O-RAN 7-2x
+    SPLIT_7c = 9,  // MAC/PHY (CSI)
+    SPLIT_8  = 10  // PHY/RF boundary
+};
+
+struct SplitCharacteristics {
+    std::string name;
+    std::string split_point;
+    uint32_t    fronthaul_bw_mbps;  // Approximate per-cell
+    uint32_t    latency_tolerance_us;
+    bool        is_3gpp_standard;
+};
+
+class SplitOptionRegistry {
+public:
+    static constexpr size_t NUM_SPLITS = 10;
+
+    void registerSplit(FunctionalSplit split,
+                       const SplitCharacteristics&amp; chars) {
+        splits_[static_cast&lt;size_t&gt;(split)] = chars;
+    }
+
+    const SplitCharacteristics&amp; get(FunctionalSplit split) const {
+        return splits_[static_cast&lt;size_t&gt;(split)];
+    }
+
+    void printAll() const {
+        const char* names[] = {
+            "1: RRC/PDCP", "2: PDCP/RLC", "3: Intra-PDCP",
+            "4: RLC/MAC",  "5: Intra-MAC-RLC",
+            "6: Intra-MAC-HARQ", "7a: MAC/PHY-FFT",
+            "7b: MAC/PHY-Precoder", "7c: MAC/PHY-CSI",
+            "8: PHY/RF"
+        };
+        for (size_t i = 0; i &lt; NUM_SPLITS; ++i) {
+            std::cout &lt;&lt; "Split " &lt;&lt; names[i]
+                      &lt;&lt; " | BW: " &lt;&lt; splits_[i].fronthaul_bw_mbps
+                      &lt;&lt; " Mbps\n";
+        }
+    }
+
+private:
+    std::array&lt;SplitCharacteristics, NUM_SPLITS&gt; splits_{};
+};
+
+// Factory function to create CU/DU based on split option
+class ICentralUnit {
+public:
+    virtual ~ICentralUnit() = default;
+    virtual void handleRrcMessage(const uint8_t* data, size_t len) = 0;
+    virtual void handlePdcpPdu(const uint8_t* data, size_t len) = 0;
+    virtual void sendToDu(const uint8_t* data, size_t len) = 0;
+};
+
+class IDistributedUnit {
+public:
+    virtual ~IDistributedUnit() = default;
+    virtual void handleMacPdu(const uint8_t* data, size_t len) = 0;
+    virtual void scheduleResources() = 0;
+    virtual void sendToCu(const uint8_t* data, size_t len) = 0;
+};
+
+// Factory: creates CU and DU with correct protocol stacks
+// based on selected split point
+struct CuDuPair {
+    std::unique_ptr&lt;ICentralUnit&gt;    cu;
+    std::unique_ptr&lt;IDistributedUnit&gt; du;
+};
+
+CuDuPair createCuDu(FunctionalSplit split) {
+    CuDuPair pair;
+    switch (split) {
+        case FunctionalSplit::SPLIT_2:
+            // CU: RRC + PDCP, DU: RLC + MAC + PHY
+            pair.cu = std::make_unique&lt;CuSplit2&gt;();
+            pair.du = std::make_unique&lt;DuSplit2&gt;();
+            break;
+        case FunctionalSplit::SPLIT_7b:
+            // CU: RRC + PDCP + RLC + MAC, DU: PHY (partial)
+            pair.cu = std::make_unique&lt;CuSplit7b&gt;();
+            pair.du = std::make_unique&lt;DuSplit7b&gt;();
+            break;
+        default:
+            throw std::runtime_error("Unsupported split option");
+    }
+    return pair;
+}
+</pre>
+
+<h2>CU-CP and CU-UP Separation</h2>
+
+<p>The CU itself is further split into a control plane part (CU-CP) and a user plane part (CU-UP), connected via the E1 interface:</p>
+
+<pre>
+               +----------+          +----------+
+               |  CU-CP   |--- E1 --&gt;|  CU-UP   |
+               | (RRC,    |          | (SDAP,   |
+               |  F1-C)   |&lt;-- E1 ---|  PDCP,   |
+               +----+-----+          |  F1-U)   |
+                    |                +-----+----+
+                 F1-C |                    | F1-U
+                    |                    |
+               +----+----+          +----+----+
+               |   DU    |          |   DU    |
+               | (RLC,   |          | (RLC,   |
+               |  MAC,   |          |  MAC,   |
+               |  sched) |          |  sched) |
+               +---------+          +---------+
+</pre>
+
+<h2>Fronthaul Bandwidth Requirements</h2>
+
+<table>
+  <tr><th>Split</th><th>DL Fronthaul (1 cell, 100 MHz)</th><th>UL Fronthaul</th><th>CPRI Equivalent</th></tr>
+  <tr><td>Option 2</td><td>~1-5 Gbps</td><td>~1-5 Gbps</td><td>Not CPRI-based</td></tr>
+  <tr><td>Option 7-2</td><td>~10-20 Gbps</td><td>~10-20 Gbps</td><td>eCPRI</td></tr>
+  <tr><td>Option 8</td><td>~40-80 Gbps</td><td>~40-80 Gbps</td><td>CPRI</td></tr>
+</table>
+
+<div class="callout warning">
+  <p><strong>Real-Time Consideration:</strong> Lower split options (closer to Option 2) require less fronthaul bandwidth but shift more processing to the DU. Higher split options (closer to Option 8) increase fronthaul load but centralize more processing. The choice impacts CPU allocation and <a href="thread-models-ran.html">thread model</a> design.</p>
+</div>
+
+<h2>Cross-References</h2>
+
+<ul>
+  <li><a href="../advanced/smart-pointers.html">Smart Pointers</a> -- <code>std::unique_ptr</code> used in the factory pattern for CU/DU creation.</li>
+  <li><a href="../advanced/factory-pattern.html">Factory Pattern</a> -- <code>createCuDu()</code> is a factory function returning protocol-stacked components.</li>
+  <li><a href="gnodeb-components.html">gNB Components</a> -- Detailed breakdown of CU-CP, CU-UP, DU, and RU.</li>
+  <li><a href="f1-interface.html">F1 Interface</a> -- The protocol connecting CU and DU.</li>
+  <li><a href="e1-interface.html">E1 Interface</a> -- The protocol connecting CU-CP and CU-UP.</li>
+  <li><a href="oran-architecture.html">O-RAN Architecture</a> -- The 7-2 split used by O-RAN between O-DU and O-RU.</li>
+</ul>
+
+<div class="nav"><a href="5g-ran-overview.html">&larr; 5G RAN Overview</a><a href="gnodeb-components.html">gNB Components &rarr;</a></div>
+</body>
+</html>

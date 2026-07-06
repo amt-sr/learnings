@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Singleton Pattern — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / Design Patterns / 3.5.1</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>Singleton Pattern</h1>
+
+<p>The Singleton pattern ensures a class has exactly one instance and provides a global point of access to it. While widely used (and often misused), the Singleton is one of the GoF creational patterns. In modern C++, there are several implementation strategies with different trade-offs in thread safety, lazy initialization, and lifetime management.</p>
+
+<div class="callout">
+<p><strong>Prerequisites:</strong> <a href="observer-pattern.html">Observer Pattern</a>, <a href="factory-pattern.html">Factory Pattern</a>, <a href="../intermediate/raii.html">RAII Pattern</a>, <a href="../intermediate/mutex-locks.html">Mutex &amp; Locks</a>.</p>
+</div>
+
+<h2>Implementation Strategies</h2>
+
+<table>
+<tr><th>Approach</th><th>Thread-Safe</th><th>Lazy Init</th><th>Notes</th></tr>
+<tr><td>Classic (raw pointer)</td><td>No (needs extra locking)</td><td>Yes</td><td>Manual new/delete — error-prone</td></tr>
+<tr><td>Meyer's Singleton</td><td>Yes (C++11 guaranteed)</td><td>Yes</td><td>Simplest, recommended</td></tr>
+<tr><td><code>call_once</code></td><td>Yes</td><td>Yes</td><td>Explicit control, works with dynamic init</td></tr>
+<tr><td>Static member</td><td>Yes</td><td>No (at program start)</td><td>Eager initialization</td></tr>
+</table>
+
+<h2>Meyer's Singleton (Recommended)</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+#include &lt;mutex&gt;
+
+// Meyer's Singleton: thread-safe in C++11+
+// The compiler generates guard variables with atomic checks
+class Logger {
+    std::string name_;
+    int log_count_ = 0;
+
+    // Private constructor — prevents external instantiation
+    Logger() : name_("GlobalLogger") {
+        std::cout &lt;&lt; "Logger initialized\n";
+    }
+
+public:
+    // Delete copy and move operations
+    Logger(const Logger&amp;) = delete;
+    Logger&amp; operator=(const Logger&amp;) = delete;
+    Logger(Logger&amp;&amp;) = delete;
+    Logger&amp; operator=(Logger&amp;&amp;) = delete;
+
+    // The static local variable is initialized on first call
+    // C++11 guarantees this is thread-safe (magic statics)
+    static Logger&amp; instance() {
+        static Logger logger;
+        return logger;
+    }
+
+    void log(const std::string&amp; msg) {
+        ++log_count_;
+        std::cout &lt;&lt; "[" &lt;&lt; log_count_ &lt;&lt; "] " &lt;&lt; name_ &lt;&lt; ": " &lt;&lt; msg &lt;&lt; "\n";
+    }
+
+    int count() const { return log_count_; }
+};
+
+int main() {
+    Logger::instance().log("Application started");
+    Logger::instance().log("Processing data");
+    Logger::instance().log("Application finished");
+
+    std::cout &lt;&lt; "Total logs: " &lt;&lt; Logger::instance().count() &lt;&lt; "\n";
+}
+</pre>
+
+<h2>Thread-Safe Singleton with call_once</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;mutex&gt;
+
+class Config {
+    int max_connections_ = 100;
+    int timeout_ms_ = 5000;
+    bool debug_mode_ = false;
+
+    static Config* instance_;
+    static std::once_flag init_flag_;
+
+    Config() = default;
+public:
+    Config(const Config&amp;) = delete;
+    Config&amp; operator=(const Config&amp;) = delete;
+
+    static Config&amp; instance() {
+        std::call_once(init_flag_, []() {
+            instance_ = new Config();
+            // Register atexit for cleanup
+            std::atexit([]() { delete instance_; });
+        });
+        return *instance_;
+    }
+
+    // Getters/setters
+    int max_connections() const { return max_connections_; }
+    void set_max_connections(int n) { max_connections_ = n; }
+};
+
+Config* Config::instance_ = nullptr;
+std::once_flag Config::init_flag_;
+
+int main() {
+    // Safe to call from multiple threads
+    Config::instance().set_max_connections(200);
+    std::cout &lt;&lt; "Max connections: " &lt;&lt; Config::instance().max_connections() &lt;&lt; "\n";
+}
+</pre>
+
+<h2>Singleton Pros and Cons</h2>
+
+<h3>Advantages</h3>
+<ul>
+<li>Controlled access to a single instance — no accidental duplicates</li>
+<li>Lazy initialization — created only when first needed</li>
+<li>Global access point without global variables</li>
+<li>Can be subclassed (though this is rarely done)</li>
+</ul>
+
+<h3>Disadvantages</h3>
+<ul>
+<li><strong>Hidden dependencies:</strong> Functions that use Singleton::instance() hide their dependency on the global state</li>
+<li><strong>Testing difficulty:</strong> Cannot easily substitute a mock instance in unit tests</li>
+<li><strong>Global state:</strong> Shared mutable state makes concurrent reasoning harder</li>
+<li><strong>Initialization order:</strong> Static destruction order is the reverse of construction — singletons may be destroyed before other objects that depend on them</li>
+<li><strong>Violates dependency injection:</strong> Better to pass dependencies explicitly</li>
+</ul>
+
+<div class="callout red">
+<p><strong>Testing difficulty:</strong> Singletons make unit testing hard because tests share the same global instance. If test A modifies the singleton, test B sees the modification. Use dependency injection instead — pass the singleton as a reference parameter or use an interface with <a href="factory-pattern.html">Factory Pattern</a> for test doubles.</p>
+</div>
+
+<div class="callout green">
+<p><strong>When to use Singleton:</strong> True singletons in a system are rare. Good candidates: a logging subsystem, a hardware device wrapper, or a configuration manager. Bad candidates: objects that happen to have one instance "for now" but may need multiple instances later. See <a href="../practice-questions/singleton-pattern.html">Singleton Pattern Practice</a> for exercises.</p>
+</div>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="observer-pattern.html">Observer Pattern</a> (event systems often use singletons), <a href="factory-pattern.html">Factory Pattern</a> (alternative to singleton for creating objects), <a href="../intermediate/raii.html">RAII</a> (resource management for singletons), <a href="../intermediate/mutex-locks.html">Mutex &amp; Locks</a> (thread-safe initialization), <a href="../practice-questions/singleton-pattern.html">Singleton Practice</a>.</p>
+</div>
+
+<div class="nav"><a href="memory-mapped-files.html">&larr; Memory-Mapped Files</a><a href="observer-pattern.html">Observer Pattern &rarr;</a></div>
+</body>
+</html>

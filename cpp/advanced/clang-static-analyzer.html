@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clang Static Analyzer — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / <a href="../index.html#3.6">3.6 Static Analysis &amp; Code Quality</a> / 3.6.4</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>Clang Static Analyzer</h1>
+
+<p>The Clang Static Analyzer is a path-sensitive analysis tool built into the Clang compiler infrastructure. Unlike <a href="clang-tidy.html">clang-tidy</a> (which performs AST-based pattern matching), the analyzer performs symbolic execution -- it explores execution paths through the program, tracking symbolic values to find bugs that only manifest under specific conditions.</p>
+
+<h2>What Makes It Different</h2>
+
+<p>Path-sensitive analysis means the analyzer tracks the state of the program along each possible execution path. It can determine that a bug is reachable only if a specific branch is taken:</p>
+
+<pre>
+void process(int* ptr) {
+    if (!ptr) {
+        // Path 1: ptr is null
+        return;  // returns early -- safe
+    }
+    // Path 2: ptr is non-null -- analyzer knows ptr != nullptr here
+    int value = *ptr;  // no warning on this path
+
+    if (value &lt; 0) {
+        // Path 2a: value is negative
+        log_error(value);  // Path-specific reasoning
+    }
+    // Path 2b: value is non-negative -- analyzer tracks this
+}
+</pre>
+
+<h2>Running the Analyzer with scan-build</h2>
+
+<pre>
+# Basic analysis (replaces the compiler invocation)
+scan-build cmake --build build
+
+# Run with specific checks enabled
+scan-build -enable-checker core,unix,osx cmake --build build
+
+# Run with specific checks disabled
+scan-build -disable-checker deadcode.DeadStores cmake --build build
+
+# Keep analyzer results even if build succeeds
+scan-build -keep-cc cmake --build build
+
+# View results in browser
+scan-view /tmp/scan-build-2024-01-15-123456-1234-1/
+</pre>
+
+<h2>scan-view: Interactive Result Browser</h2>
+
+<pre>
+# After scan-build completes, it prints the report directory:
+scan-build: Analysis complete.
+scan-build: 3 bugs found.
+Run 'scan-view /tmp/scan-build-2024-01-15-123456-1234-1' to examine.
+
+# scan-view opens a web interface showing:
+# - Each bug with its source location
+# - The full execution path that leads to the bug
+# - Exploded graph visualization (inter-procedural analysis)
+</pre>
+
+<h2>Checker Categories</h2>
+
+<table>
+<tr><th>Category</th><th>Checks</th><th>What It Finds</th></tr>
+<tr><td>core</td><td>CallAndMessage, DivZero, DynamicTypePropagation, NullDereference, StackAddrEscape, UndefResult, UninitializedObject</td><td>Null dereferences, division by zero, undefined results, stack address leaks</td></tr>
+<tr><td>unix</td><td>Malloc, MallocSizeof, Stream, Mutex</td><td>Memory leaks (malloc/free), misuse of C streams, mutex locking issues</td></tr>
+<tr><td>cplusplus</td><td>NewDelete, NewDeleteLeaks, SelfAssignment, SmartPtr</td><td>new/delete mismatches, memory leaks, self-assignment, smart pointer issues</td></tr>
+<tr><td>osx</td><td>ObjCProperty, Cocoa, OSAtomic</td><td>Objective-C specific issues (macOS/iOS only)</td></tr>
+<tr><td>deadcode</td><td>DeadStores, UnreachableCode</td><td>Unused assignments, code that can never execute</td></tr>
+<tr><td>security</td><td>ArrayBound, FloatCast, IntegerDiv, MallocOverflow, Stack</td><td>Buffer overflows, unsafe casts, integer overflows, stack overflows</td></tr>
+</table>
+
+<h3>Enabling Specific Checkers</h3>
+
+<pre>
+# Run only core null dereference and memory leak checks
+scan-build \
+  -enable-checker core.NullDereference \
+  -enable-checker cplusplus.NewDeleteLeaks \
+  cmake --build build
+
+# Run all checkers in a category
+scan-build -enable-checker core \
+  -enable-checker security \
+  cmake --build build
+</pre>
+
+<h2>Integration with CMake</h2>
+
+<pre>
+# CMakeLists.txt -- configure CMAKE_CXX_COMPILER_LAUNCHER
+# Method 1: Using scan-build wrapper
+# Run: scan-build cmake -B build && scan-build cmake --build build
+
+# Method 2: CMake option to enable analyzer
+option(ENABLE_ANALYZER "Run Clang Static Analyzer" OFF)
+
+if(ENABLE_ANALYZER)
+    find_program(SCAN_BUILD scan-build)
+    if(SCAN_BUILD)
+        set(CMAKE_C_COMPILER "${SCAN_BUILD}" "${CMAKE_C_COMPILER}")
+        set(CMAKE_CXX_COMPILER "${SCAN_BUILD}" "${CMAKE_CXX_COMPILER}")
+    endif()
+endif()
+</pre>
+
+<div class="callout warning">
+<p><strong>Performance note:</strong> The analyzer is significantly slower than <a href="cppcheck.html">cppcheck</a> or <a href="clang-tidy.html">clang-tidy</a> because it performs deep path-sensitive analysis. Expect analysis times of 2-10x the normal build time. Run it on CI, not on every local build.</p>
+</div>
+
+<div class="callout green">
+<p><strong>Strengths:</strong> The Clang Static Analyzer excels at finding bugs that require tracking state across function calls -- use-after-return, double-free, null pointer propagation through conditionals, and inter-procedural memory leaks. These are exactly the kinds of bugs that <a href="undefined-behavior.html">undefined behavior</a> detection tools complement.</p>
+</div>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="static-analysis-overview.html">Static Analysis Overview</a>, <a href="cppcheck.html">cppcheck</a>, <a href="clang-tidy.html">clang-tidy</a>, <a href="cmake.html">CMake</a>, <a href="undefined-behavior.html">Undefined Behavior</a>.</p>
+</div>
+
+<div class="nav"><a href="clang-tidy.html">&larr; clang-tidy</a><a href="address-sanitizer-tools.html">AddressSanitizer &amp; Tools &rarr;</a></div>
+</body>
+</html>

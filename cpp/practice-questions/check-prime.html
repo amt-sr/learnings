@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Check Prime — C++ Practice</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.easy { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  .question { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; }
+  .question h3 { color: #f0f6fc; margin-top: 0; }
+  .solution-toggle { cursor: pointer; user-select: none; }
+  .solution-toggle h3 { color: #3fb950; display: inline; }
+  .solution-content { display: none; margin-top: 1rem; }
+  .solution-content.visible { display: block; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+  .topics-covered { margin-bottom: 1rem; font-size: 0.85rem; color: #8b949e; }
+  .topics-covered a { color: #8b949e; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#5">5 Practice</a> / Easy Questions</div>
+<div class="meta"><span class="tag easy">Easy</span></div>
+<h1>Check if a Number is Prime</h1>
+
+<div class="topics-covered">
+  <strong>Topics Covered:</strong>
+  <a href="../loops.html">Loops</a>,
+  <a href="../operators.html">Operators</a>,
+  <a href="../functions.html">Functions</a>
+</div>
+
+<div class="question">
+  <h3>Problem Statement</h3>
+  <p>Write a function that determines whether a given integer is a prime number. A prime number is a natural number greater than 1 that has no positive divisors other than 1 and itself.</p>
+  <p><strong>Examples:</strong></p>
+  <ul>
+    <li><code>2</code> &rarr; <code>true</code> (smallest prime)</li>
+    <li><code>17</code> &rarr; <code>true</code></li>
+    <li><code>1</code> &rarr; <code>false</code></li>
+    <li><code>0</code> &rarr; <code>false</code></li>
+    <li><code>-7</code> &rarr; <code>false</code></li>
+    <li><code>25</code> &rarr; <code>false</code> (5 x 5)</li>
+  </ul>
+</div>
+
+<h2>Optimized Solution</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution1')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution1">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;cmath&gt;
+
+bool isPrime(int n) {
+    // Handle edge cases
+    if (n &lt;= 1) return false;   // 0, 1, and negatives are not prime
+    if (n &lt;= 3) return true;     // 2 and 3 are prime
+    if (n % 2 == 0) return false; // Eliminate even numbers quickly
+    if (n % 3 == 0) return false; // Eliminate multiples of 3
+
+    // Check divisors of the form 6k +/- 1 up to sqrt(n)
+    // All primes greater than 3 are of the form 6k +/- 1
+    for (int i = 5; i * i &lt;= n; i += 6) {
+        if (n % i == 0 || n % (i + 2) == 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+int main() {
+    std::cout &lt;&lt; std::boolalpha;
+    std::cout &lt;&lt; "isPrime(2)   = " &lt;&lt; isPrime(2) &lt;&lt; "\n";    // true
+    std::cout &lt;&lt; "isPrime(17)  = " &lt;&lt; isPrime(17) &lt;&lt; "\n";   // true
+    std::cout &lt;&lt; "isPrime(25)  = " &lt;&lt; isPrime(25) &lt;&lt; "\n";   // false
+    std::cout &lt;&lt; "isPrime(97)  = " &lt;&lt; isPrime(97) &lt;&lt; "\n";   // true
+    std::cout &lt;&lt; "isPrime(100) = " &lt;&lt; isPrime(100) &lt;&lt; "\n";  // false
+    std::cout &lt;&lt; "isPrime(1)   = " &lt;&lt; isPrime(1) &lt;&lt; "\n";    // false
+    std::cout &lt;&lt; "isPrime(0)   = " &lt;&lt; isPrime(0) &lt;&lt; "\n";    // false
+    std::cout &lt;&lt; "isPrime(-7)  = " &lt;&lt; isPrime(-7) &lt;&lt; "\n";   // false
+
+    // Print primes up to 50
+    std::cout &lt;&lt; "\nPrimes up to 50: ";
+    for (int i = 2; i &lt;= 50; ++i) {
+        if (isPrime(i)) {
+            std::cout &lt;&lt; i &lt;&lt; " ";
+        }
+    }
+    std::cout &lt;&lt; "\n";
+    // 2 3 5 7 11 13 17 19 23 29 31 37 41 43 47
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li>We handle edge cases first: numbers &lt;= 1 are not prime; 2 and 3 are prime.</li>
+      <li>We quickly eliminate all even numbers and multiples of 3 with two modulo checks.</li>
+      <li>For remaining numbers, we only need to check divisors up to <code>sqrt(n)</code>. If <code>n</code> has a factor larger than <code>sqrt(n)</code>, it must also have a corresponding factor smaller than <code>sqrt(n)</code>.</li>
+      <li>We use the <code>6k +/- 1</code> optimization: all primes greater than 3 are of the form <code>6k-1</code> or <code>6k+1</code>. This skips 2/3 of remaining candidates, checking only <code>i</code> and <code>i+2</code> per iteration.</li>
+      <li>We use <code>i * i &lt;= n</code> instead of <code>i &lt;= sqrt(n)</code> to avoid the overhead of computing square root on every iteration.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Progressive Optimization Walkthrough</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution2')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution2">
+    <pre>
+// Version 1: Naive - check all numbers from 2 to n-1
+// Time: O(n)
+bool isPrimeV1(int n) {
+    if (n &lt;= 1) return false;
+    for (int i = 2; i &lt; n; ++i) {
+        if (n % i == 0) return false;
+    }
+    return true;
+}
+
+// Version 2: Only check up to sqrt(n)
+// Time: O(sqrt(n))
+bool isPrimeV2(int n) {
+    if (n &lt;= 1) return false;
+    for (int i = 2; i * i &lt;= n; ++i) {
+        if (n % i == 0) return false;
+    }
+    return true;
+}
+
+// Version 3: Skip even numbers after checking 2
+// Time: O(sqrt(n) / 2)
+bool isPrimeV3(int n) {
+    if (n &lt;= 1) return false;
+    if (n == 2) return true;
+    if (n % 2 == 0) return false;
+    for (int i = 3; i * i &lt;= n; i += 2) {
+        if (n % i == 0) return false;
+    }
+    return true;
+}
+
+// Version 4: 6k +/- 1 optimization (shown above)
+// Time: O(sqrt(n) / 3) - checks fewest candidates
+    </pre>
+    <p><strong>Explanation of optimizations:</strong></p>
+    <ul>
+      <li><strong>V1 to V2:</strong> The key insight is that if <code>n = a * b</code> and <code>a &lt;= b</code>, then <code>a &lt;= sqrt(n)</code>. So we never need to check beyond <code>sqrt(n)</code>.</li>
+      <li><strong>V2 to V3:</strong> After checking for divisibility by 2, no even number can divide n. Skipping even candidates halves the iterations.</li>
+      <li><strong>V3 to V4:</strong> The <code>6k +/- 1</code> pattern exploits the fact that all integers can be expressed as <code>6k</code>, <code>6k+/-1</code>, <code>6k+2</code>, <code>6k+3</code>. Numbers of the form <code>6k</code>, <code>6k+2</code>, <code>6k+3</code> are divisible by 2 or 3, so we only need to test <code>6k-1</code> and <code>6k+1</code>.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout green">
+  <p><strong>Complexity Analysis:</strong></p>
+  <table>
+    <tr><th>Version</th><th>Time</th><th>Divisions for n=10^9</th></tr>
+    <tr><td>V1 (Naive)</td><td>O(n)</td><td>~10<sup>9</sup></td></tr>
+    <tr><td>V2 (sqrt)</td><td>O(sqrt(n))</td><td>~31,623</td></tr>
+    <tr><td>V3 (skip even)</td><td>O(sqrt(n)/2)</td><td>~15,811</td></tr>
+    <tr><td>V4 (6k+/-1)</td><td>O(sqrt(n)/3)</td><td>~10,541</td></tr>
+  </table>
+  <p>The optimization from V1 to V2 is the biggest leap &mdash; from billions of operations to tens of thousands. Subsequent optimizations offer incremental gains.</p>
+</div>
+
+<h2>Follow-up Questions</h2>
+
+<div class="question">
+  <h3>Variations to Try</h3>
+  <ol>
+    <li><strong>Sieve of Eratosthenes:</strong> Generate all primes up to N efficiently using the Sieve algorithm. Time complexity: O(n log log n).</li>
+    <li><strong>Prime factorization:</strong> Decompose a number into its prime factors. Example: <code>60 = 2^2 * 3^1 * 5^1</code>.</li>
+    <li><strong>Count primes:</strong> Given n, count how many primes are less than n. For large n, consider the Sieve or the Meissel-Lehmer algorithm.</li>
+    <li><strong>Miller-Rabin primality test:</strong> For very large numbers (hundreds of digits), implement the probabilistic Miller-Rabin test. This is used in cryptography (RSA key generation).</li>
+  </ol>
+</div>
+
+<div class="callout">
+  <p><strong>Key Takeaways:</strong></p>
+  <ul>
+    <li>Prime checking is an excellent exercise in understanding loop optimizations and mathematical properties.</li>
+    <li>The <code>sqrt(n)</code> bound is the single most important optimization: it reduces the problem from linear to square-root time.</li>
+    <li>The <code>i * i &lt;= n</code> idiom avoids computing <code>sqrt(n)</code> and is a common C++ pattern.</li>
+    <li>In real-world telecom/cryptography applications, the Miller-Rabin test is preferred for large numbers because deterministic methods are too slow.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="array-sum.html">&larr; Array Sum</a>
+  <a href="linked-list.html">Linked List &rarr;</a>
+</div>
+<script>
+function toggleSolution(id) {
+  document.getElementById(id).classList.toggle('visible');
+}
+</script>
+</body>
+</html>

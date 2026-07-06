@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pointers — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; }
+  .breadcrumb a { color: #8b949e; }
+  .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; }
+  .callout.red { border-left-color: #f85149; }
+  .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; }
+  th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#1">1 Basics</a> / <a href="../index.html#1">1.1 Getting Started</a> / 1.1.7 Pointers</div>
+<div class="meta"><span class="tag basic">BASIC</span></div>
+<h1>1.1.7 Pointers</h1>
+
+<p>A pointer is a variable that stores the <strong>memory address</strong> of another variable. Pointers are one of the most powerful and most dangerous features of C++. They enable dynamic memory allocation, efficient pass-by-reference semantics, and direct hardware access, but incorrect pointer usage is a leading source of crashes and security vulnerabilities.</p>
+
+<h2>Declaration Syntax</h2>
+
+<p>To declare a pointer, place an asterisk <code>*</code> after the type. The pointer type must match the type of the variable it points to:</p>
+
+<pre>
+int x = 42;
+int* ptr = &amp;x;    // ptr stores the address of x
+double* dptr;      // pointer to a double (uninitialized)
+char* cptr = nullptr;  // null pointer (safe default)
+</pre>
+
+<div class="callout green">
+  <p><strong>Style tip:</strong> The asterisk can go next to the type (<code>int* ptr</code>) or next to the variable (<code>int *ptr</code>). The first style emphasizes that <code>int*</code> is a "pointer-to-int" type. However, <code>int* a, b;</code> declares <code>a</code> as a pointer but <code>b</code> as a plain int, which surprises many beginners. Declare one pointer per line to avoid confusion.</p>
+</div>
+
+<h2>Address-of and Dereference Operators</h2>
+
+<table>
+  <tr><th>Operator</th><th>Symbol</th><th>Purpose</th></tr>
+  <tr><td>Address-of</td><td><code>&amp;</code></td><td>Get the memory address of a variable</td></tr>
+  <tr><td>Dereference</td><td><code>*</code></td><td>Access the value at the address a pointer holds</td></tr>
+</table>
+
+<pre>
+#include &lt;iostream&gt;
+
+int main() {
+    int value = 100;
+    int* ptr = &amp;value;    // ptr now holds the address of value
+
+    std::cout &lt;&lt; "Value:  " &lt;&lt; value &lt;&lt; std::endl;   // 100
+    std::cout &lt;&lt; "Address: " &lt;&lt; ptr &lt;&lt; std::endl;     // e.g. 0x7ffd...
+    std::cout &lt;&lt; "Deref:  " &lt;&lt; *ptr &lt;&lt; std::endl;      // 100
+
+    // Modify value through the pointer
+    *ptr = 200;
+    std::cout &lt;&lt; "Value after modification: " &lt;&lt; value &lt;&lt; std::endl; // 200
+
+    return 0;
+}
+</pre>
+
+<h2>Pointers vs Variables</h2>
+
+<p>Understanding the distinction between a variable and a pointer to that variable is essential:</p>
+
+<table>
+  <tr><th>Aspect</th><th>Variable</th><th>Pointer</th></tr>
+  <tr><td>Holds</td><td>The actual data value</td><td>The memory address of data</td></tr>
+  <tr><td>Access</td><td>Directly by name</td><td>Indirectly via dereference <code>*ptr</code></td></tr>
+  <tr><td>Size</td><td><code>sizeof(type)</code></td><td><code>sizeof(type*)</code> &mdash; typically 8 bytes on 64-bit</td></tr>
+  <tr><td>Assignment</td><td><code>x = 10;</code></td><td><code>ptr = &amp;x;</code></td></tr>
+  <tr><td>Default state</td><td>Contains garbage unless initialized</td><td>Contains garbage unless set to <code>nullptr</code></td></tr>
+</table>
+
+<h2>Pointer Arithmetic</h2>
+
+<p>Pointer arithmetic allows you to navigate through contiguous memory, which is especially useful with <a href="arrays-strings.html">arrays and strings</a>. When you add an integer <code>n</code> to a pointer of type <code>T*</code>, the address advances by <code>n * sizeof(T)</code> bytes:</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+int main() {
+    int arr[] = {10, 20, 30, 40, 50};
+    int* ptr = arr;  // points to arr[0]
+
+    std::cout &lt;&lt; *ptr &lt;&lt; std::endl;       // 10
+    std::cout &lt;&lt; *(ptr + 2) &lt;&lt; std::endl;   // 30
+    std::cout &lt;&lt; ptr[3] &lt;&lt; std::endl;        // 40 (ptr[i] is *(ptr + i))
+
+    ++ptr;  // now points to arr[1]
+    std::cout &lt;&lt; *ptr &lt;&lt; std::endl;         // 20
+
+    // Pointer difference: number of elements between two pointers
+    int* end = arr + 5;
+    std::cout &lt;&lt; (end - ptr) &lt;&lt; std::endl;  // 4 elements apart
+
+    return 0;
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>Warning:</strong> Pointer arithmetic is only well-defined within a single array (or one past the last element). Dereferencing a pointer that has been moved outside the bounds of its array results in <strong>undefined behavior</strong>.</p>
+</div>
+
+<h2>Null Pointers</h2>
+
+<p>A null pointer explicitly points to no valid memory location. In modern C++, always use <code>nullptr</code> (introduced in C++11) instead of <code>NULL</code> or <code>0</code>:</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+int main() {
+    int* ptr = nullptr;  // C++11 recommended
+
+    // Always check before dereferencing
+    if (ptr != nullptr) {
+        std::cout &lt;&lt; *ptr &lt;&lt; std::endl;
+    } else {
+        std::cout &lt;&lt; "Pointer is null" &lt;&lt; std::endl;
+    }
+
+    // Prefer this concise form
+    if (ptr) {
+        std::cout &lt;&lt; *ptr &lt;&lt; std::endl;
+    }
+
+    return 0;
+}
+</pre>
+
+<div class="callout red">
+  <p><strong>Danger:</strong> Dereferencing a null pointer causes <strong>undefined behavior</strong>, which on most systems results in a segmentation fault and program crash. Always check that a pointer is not null before dereferencing it.</p>
+</div>
+
+<h2>Pointers and const</h2>
+
+<p>Combining <code>const</code> with pointers creates several distinct semantics:</p>
+
+<table>
+  <tr><th>Declaration</th><th>Meaning</th></tr>
+  <tr><td><code>const int* p</code></td><td>Pointer to <strong>const int</strong> &mdash; cannot change the value via <code>*p</code></td></tr>
+  <tr><td><code>int* const p</code></td><td><strong>Const pointer</strong> to int &mdash; cannot change <code>p</code> itself</td></tr>
+  <tr><td><code>const int* const p</code></td><td>Const pointer to const int &mdash; neither can change</td></tr>
+</table>
+
+<pre>
+#include &lt;iostream&gt;
+
+int main() {
+    int x = 10, y = 20;
+
+    const int* p1 = &amp;x;   // can change p1, but not *p1
+    p1 = &amp;y;               // OK
+    // *p1 = 30;             // ERROR: cannot modify const value
+
+    int* const p2 = &amp;x;     // can change *p2, but not p2
+    *p2 = 30;               // OK
+    // p2 = &amp;y;             // ERROR: cannot reassign const pointer
+
+    const int* const p3 = &amp;x; // cannot change p3 or *p3
+
+    std::cout &lt;&lt; "x = " &lt;&lt; x &lt;&lt; ", y = " &lt;&lt; y &lt;&lt; std::endl;
+    return 0;
+}
+</pre>
+
+<h2>Common Pitfalls</h2>
+
+<h3>Dangling Pointers</h3>
+
+<p>A dangling pointer points to memory that has been freed or has gone out of scope. Accessing it is undefined behavior:</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+int* dangling_example() {
+    int local = 42;
+    return &amp;local;  // WARNING: returning address of a local variable
+} // local is destroyed here, ptr returned is dangling
+
+int main() {
+    int* ptr = dangling_example();
+    // *ptr is undefined behavior &mdash; the variable no longer exists
+    // The memory may have been reused for something else
+    std::cout &lt;&lt; *ptr &lt;&lt; std::endl;  // DANGEROUS
+    return 0;
+}
+</pre>
+
+<h3>Wild Pointers</h3>
+
+<p>A wild pointer is an uninitialized pointer that holds a garbage address. Dereferencing it can corrupt arbitrary memory:</p>
+
+<pre>
+int* wild;          // uninitialized &mdash; points to a random address
+// *wild = 100;     // DANGEROUS: writes to unknown memory location
+</pre>
+
+<div class="callout red">
+  <p><strong>Rule:</strong> Always initialize pointers. If you do not have a valid address yet, set the pointer to <code>nullptr</code>. Uninitialized pointers are the root cause of countless bugs, memory corruption, and security vulnerabilities. See <a href="memory-layout.html">Memory Layout</a> for how memory is organized.</p>
+</div>
+
+<h2>Pointers with Dynamic Memory</h2>
+
+<p>Pointers are the mechanism for accessing dynamically allocated memory on the <a href="stack-vs-heap.html">heap</a>:</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+int main() {
+    // Allocate a single int on the heap
+    int* p = new int(42);
+    std::cout &lt;&lt; *p &lt;&lt; std::endl;  // 42
+    delete p;  // must free when done
+    p = nullptr;  // prevent dangling pointer
+
+    // Allocate an array on the heap
+    int* arr = new int[10];
+    for (int i = 0; i &lt; 10; ++i) {
+        arr[i] = i * i;
+    }
+    delete[] arr;  // use delete[] for arrays
+    arr = nullptr;
+
+    return 0;
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Best practice:</strong> In modern C++, prefer <a href="../intermediate/smart-pointers.html">smart pointers</a> (<code>std::unique_ptr</code>, <code>std::shared_ptr</code>) over raw <code>new</code>/<code>delete</code>. Smart pointers automatically manage lifetime and prevent memory leaks. See <a href="new-delete.html">new &amp; delete</a> for the full details on dynamic allocation.</p>
+</div>
+
+<div class="callout">
+  <p><strong>Next Steps:</strong> Compare pointers with <a href="references.html">References</a> to understand when each is appropriate, then continue to <a href="references.html">References</a> for the next topic.</p>
+</div>
+
+<div class="nav">
+  <a href="arrays-strings.html">&larr; Arrays &amp; Strings</a>
+  <a href="references.html">References &rarr;</a>
+</div>
+</body>
+</html>

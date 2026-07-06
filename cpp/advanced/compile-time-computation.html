@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Compile-Time Computation — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / Template Metaprogramming / 3.3.3</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>Compile-Time Computation</h1>
+
+<p>Compile-time computation moves work from runtime to build time, producing zero-overhead results baked into the binary. C++ supports two primary mechanisms: <code>constexpr</code>/<code>consteval</code> functions and <strong>template metaprogramming</strong> (TMP). Both achieve the same goal but with different trade-offs in readability, expressiveness, and compilation speed.</p>
+
+<div class="callout">
+<p><strong>Prerequisites:</strong> <a href="constexpr-deep.html">Advanced constexpr</a>, <a href="crtp.html">CRTP</a>, <a href="type-erasure.html">Type Erasure</a>, <a href="../intermediate/templates.html">Templates</a>.</p>
+</div>
+
+<h2>constexpr Functions vs Template Metaprogramming</h2>
+
+<table>
+<tr><th>Aspect</th><th>constexpr Functions</th><th>Template Metaprogramming</th></tr>
+<tr><td>Syntax</td><td>Normal function syntax with <code>constexpr</code></td><td>Struct templates with specializations</td></tr>
+<tr><td>Readability</td><td>High — looks like regular code</td><td>Low — recursive instantiation</td></tr>
+<tr><td>Error messages</td><td>Clear, points to line</td><td>Deep template backtrace</td></tr>
+<tr><td>Compilation speed</td><td>Faster (evaluated once)</td><td>Slower (template instantiation)</td></tr>
+<tr><td>Flexibility</td><td>Cannot operate on types</td><td>Can manipulate types</td></tr>
+<tr><td>Loop support</td><td>Native loops (C++14+)</td><td>Recursion only</td></tr>
+<tr><td>Best for</td><td>Value computation</td><td>Type computation (SFINAE, traits)</td></tr>
+</table>
+
+<h2>Compile-Time Fibonacci</h2>
+
+<h3>constexpr Approach (Recommended)</h3>
+
+<pre>
+#include &lt;iostream&gt;
+
+// C++14 constexpr — full control flow, loops
+constexpr long long fibonacci(int n) {
+    if (n &lt;= 1) return n;
+    long long a = 0, b = 1;
+    for (int i = 2; i &lt;= n; ++i) {
+        long long c = a + b;
+        a = b;
+        b = c;
+    }
+    return b;
+}
+
+// Values computed at compile time
+constexpr long long fib10 = fibonacci(10);   // 55
+constexpr long long fib20 = fibonacci(20);   // 6765
+constexpr long long fib50 = fibonacci(50);  // 12586269025
+
+int main() {
+    // These are compile-time constants — no runtime cost
+    std::cout &lt;&lt; "fib(10) = " &lt;&lt; fib10 &lt;&lt; "\n";
+    std::cout &lt;&lt; "fib(20) = " &lt;&lt; fib20 &lt;&lt; "\n";
+    std::cout &lt;&lt; "fib(50) = " &lt;&lt; fib50 &lt;&lt; "\n";
+
+    // fibonacci() can also be called at runtime
+    int n;
+    std::cin &gt;&gt; n;
+    std::cout &lt;&lt; "fib(" &lt;&lt; n &lt;&lt; ") = " &lt;&lt; fibonacci(n) &lt;&lt; "\n";
+}
+</pre>
+
+<h3>Template Metaprogramming Approach (Legacy)</h3>
+
+<pre>
+// Classic TMP: recursive template instantiation
+template&lt;int N&gt;
+struct Fibonacci {
+    // Compile-time recursion
+    static constexpr long long value =
+        Fibonacci&lt;N - 1&gt;::value + Fibonacci&lt;N - 2&gt;::value;
+};
+
+// Base cases via template specialization
+template&lt;&gt; struct Fibonacci&lt;0&gt; { static constexpr long long value = 0; };
+template&lt;&gt; struct Fibonacci&lt;1&gt; { static constexpr long long value = 1; };
+
+// Usage
+constexpr long long fib10 = Fibonacci&lt;10&gt;::value;  // 55
+
+// Note: O(N^2) instantiations — slow compile for large N
+</pre>
+
+<div class="callout warning">
+<p><strong>Compilation cost:</strong> Template Fibonacci instantiates O(2^N) templates (with memoization it becomes O(N), but the compiler cache is not guaranteed). The constexpr approach is O(N) with minimal compile overhead. Prefer constexpr for value computation.</p>
+</div>
+
+<h2>Compile-Time Factorial</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;type_traits&gt;
+
+// constexpr factorial
+constexpr unsigned long long factorial(unsigned int n) {
+    unsigned long long result = 1;
+    for (unsigned int i = 2; i &lt;= n; ++i) {
+        result *= i;
+    }
+    return result;
+}
+
+// Template factorial (type-safe, can be used as template parameter)
+template&lt;unsigned int N&gt;
+struct Factorial {
+    static constexpr unsigned long long value = N * Factorial&lt;N - 1&gt;::value;
+};
+template&lt;&gt; struct Factorial&lt;0&gt; { static constexpr unsigned long long value = 1; };
+
+// Generate compile-time array of factorials
+template&lt;std::size_t... Is&gt;
+constexpr auto make_factorial_table(std::index_sequence&lt;Is...&gt;) {
+    return std::array&lt;unsigned long long, sizeof...(Is)&gt;{
+        {factorial(Is)...}
+    };
+}
+
+constexpr auto factorials = make_factorial_table(
+    std::make_index_sequence&lt;21&gt;{}  // 0! through 20!
+);
+
+int main() {
+    for (std::size_t i = 0; i &lt; factorials.size(); ++i) {
+        std::cout &lt;&lt; i &lt;&lt; "! = " &lt;&lt; factorials[i] &lt;&lt; "\n";
+    }
+}
+</pre>
+
+<h2>Compile-Time String Processing</h2>
+
+<pre>
+#include &lt;array&gt;
+#include &lt;string_view&gt;
+#include &lt;algorithm&gt;
+
+// Fixed-size compile-time string
+template&lt;std::size_t N&gt;
+struct CompileTimeString {
+    char data[N]{};
+
+    constexpr CompileTimeString(const char (&str)[N]) {
+        for (std::size_t i = 0; i &lt; N; ++i)
+            data[i] = str[i];
+    }
+
+    constexpr std::size_t size() const { return N - 1; }
+    constexpr std::string_view view() const { return {data, N - 1}; }
+};
+
+// Compile-time string concatenation
+template&lt;std::size_t N1, std::size_t N2&gt;
+constexpr auto ct_concat(const char (&a)[N1], const char (&b)[N2]) {
+    std::array&lt;char, N1 + N2 - 1&gt; result{};
+    for (std::size_t i = 0; i &lt; N1 - 1; ++i) result[i] = a[i];
+    for (std::size_t i = 0; i &lt; N2 - 1; ++i) result[N1 - 1 + i] = b[i];
+    return result;
+}
+
+// Compile-time CRC32 table generation
+constexpr std::uint32_t crc32_table(std::size_t index) {
+    std::uint32_t crc = static_cast&lt;std::uint32_t&gt;(index);
+    for (int i = 0; i &lt; 8; ++i) {
+        if (crc &amp; 1)
+            crc = (crc &gt;&gt; 1) ^ 0xEDB88320u;
+        else
+            crc &gt;&gt;= 1;
+    }
+    return crc;
+}
+
+template&lt;std::size_t N = 256&gt;
+struct CRC32Table {
+    std::array&lt;std::uint32_t, N&gt; table{};
+
+    constexpr CRC32Table() {
+        for (std::size_t i = 0; i &lt; N; ++i)
+            table[i] = crc32_table(i);
+    }
+
+    constexpr std::uint32_t operator()(std::string_view data) const {
+        std::uint32_t crc = 0xFFFFFFFF;
+        for (char c : data) {
+            crc = (crc &gt;&gt; 8) ^ table[(crc ^ static_cast&lt;std::uint32_t&gt;(c)) &amp; 0xFF];
+        }
+        return crc ^ 0xFFFFFFFF;
+    }
+};
+
+// Entire CRC table computed at compile time
+constexpr CRC32Table crc32{};
+
+// Compile-time string hashing
+constexpr std::uint64_t fnv1a(const char* str, std::uint64_t hash = 14695981039346656037ull) {
+    return *str ? fnv1a(str + 1, (hash ^ static_cast&lt;std::uint64_t&gt;(*str)) * 1099511628211ull) : hash;
+}
+
+// Use as template parameter for type dispatch
+template&lt;auto Hash&gt;
+struct MessageType {};
+
+void process(MessageType&lt;fnv1a("RRC_SETUP")&gt;) { /* ... */ }
+void process(MessageType&lt;fnv1a("RRC_RELEASE")&gt;) { /* ... */ }
+</pre>
+
+<h2>Compile-Time Type Lists</h2>
+
+<pre>
+// Type list — a fundamental TMP building block
+template&lt;typename... Ts&gt;
+struct TypeList {};
+
+// Count types in a list
+template&lt;typename TList&gt;
+struct TypeCount;
+
+template&lt;typename... Ts&gt;
+struct TypeCount&lt;TypeList&lt;Ts...&gt;&gt; {
+    static constexpr std::size_t value = sizeof...(Ts);
+};
+
+// Find index of a type in a type list
+template&lt;typename T, typename TList&gt;
+struct TypeIndex;
+
+template&lt;typename T, typename... Ts&gt;
+struct TypeIndex&lt;T, TypeList&lt;T, Ts...&gt;&gt; {
+    static constexpr std::size_t value = 0;
+};
+
+template&lt;typename T, typename Head, typename... Tail&gt;
+struct TypeIndex&lt;T, TypeList&lt;Head, Tail...&gt;&gt; {
+    static constexpr std::size_t value = 1 + TypeIndex&lt;T, TypeList&lt;Tail...&gt;&gt;::value;
+};
+
+// Usage
+using MyTypes = TypeList&lt;int, double, char, std::string&gt;;
+static_assert(TypeCount&lt;MyTypes&gt;::value == 4);
+static_assert(TypeIndex&lt;double, MyTypes&gt;::value == 1);
+static_assert(TypeIndex&lt;std::string, MyTypes&gt;::value == 3);
+</pre>
+
+<h2>When to Use TMP Over constexpr</h2>
+
+<ul>
+<li><strong>Use constexpr</strong> for computing values (Fibonacci, CRC tables, hash functions, mathematical constants)</li>
+<li><strong>Use TMP</strong> for type manipulation (selecting types, building type lists, conditional type selection)</li>
+<li><strong>Use <a href="concepts.html">concepts</a></strong> (C++20) for type constraints instead of SFINAE-based TMP</li>
+<li><strong>Use <code>if constexpr</code></strong> for compile-time branching within constexpr functions</li>
+</ul>
+
+<div class="callout green">
+<p><strong>Best practice:</strong> Modern C++ (C++14+) makes constexpr the default choice for compile-time value computation. Reserve template metaprogramming for operations on types themselves. The C++20 <code>consteval</code> keyword enforces compile-time-only evaluation when you need a hard guarantee.</p>
+</div>
+
+<div class="callout red">
+<p><strong>Watch out:</strong> Large constexpr computations can exceed the compiler's default step limit. GCC defaults to 33554432 steps. Increase with <code>-fconstexpr-ops-limit=N</code> or <code>-fconstexpr-loop-limit=N</code> if needed. excessively deep template recursion will produce extremely long error messages.</p>
+</div>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="constexpr-deep.html">Advanced constexpr</a> (constexpr/consteval deep dive), <a href="crtp.html">CRTP</a> (static polymorphism via templates), <a href="type-erasure.html">Type Erasure</a> (runtime type hiding), <a href="sfinae-advanced.html">SFINAE Advanced</a> (compile-time type selection), <a href="concepts.html">C++20 Concepts</a> (modern type constraints).</p>
+</div>
+
+<div class="nav"><a href="type-erasure.html">&larr; Type Erasure</a><a href="sfinae-advanced.html">SFINAE Advanced &rarr;</a></div>
+</body>
+</html>

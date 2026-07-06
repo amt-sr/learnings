@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Advanced constexpr — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / Advanced constexpr</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>Advanced constexpr</h1>
+
+<p><code>constexpr</code> tells the compiler to evaluate expressions at compile time. Since C++14, constexpr functions can contain loops, local variables, and conditionals. C++20 added <code>constexpr</code> allocators, vector, string, and more. C++23 introduces <code>consteval</code> (immediate functions) that <em>must</em> execute at compile time. This topic follows <a href="cache-oriented-programming.html">Cache-Oriented Programming</a> and leads into <a href="crtp.html">CRTP</a>.</p>
+
+<h2>constexpr Evolution</h2>
+
+<table>
+<tr><th>Standard</th><th>New Capabilities</th></tr>
+<tr><td>C++11</td><td>Basic constexpr (single return statement, no loops)</td></tr>
+<tr><td>C++14</td><td>Loops, local variables, multiple statements, mutable locals</td></tr>
+<tr><td>C++17</td><td>constexpr if, constexpr lambda, inline variables</td></tr>
+<tr><td>C++20</td><td>constexpr <code>std::vector</code>, <code>std::string</code>, <code>new</code>/<code>delete</code>, unions, try/catch</td></tr>
+<tr><td>C++23</td><td><code>consteval</code>, constexpr <code>std::unique_ptr</code>, more <code>constexpr</code> in &lt;algorithm&gt;</td></tr>
+</table>
+
+<h2>Compile-Time Computation</h2>
+
+<pre>
+// C++14: constexpr functions with full control flow
+constexpr int fibonacci(int n) {
+    if (n &lt;= 1) return n;
+    int a = 0, b = 1;
+    for (int i = 2; i &lt;= n; ++i) {
+        int c = a + b;
+        a = b;
+        b = c;
+    }
+    return b;
+}
+
+// Computed at compile time
+constexpr int fib20 = fibonacci(20);  // 6765
+
+// Compile-time string hashing (for switch/case on strings)
+constexpr std::uint32_t djb2_hash(const char* str) {
+    std::uint32_t hash = 5381;
+    while (*str) {
+        hash = hash * 33 + static_cast&lt;std::uint32_t&gt;(*str);
+        ++str;
+    }
+    return hash;
+}
+
+// Use in switch statement (impossible with std::string)
+void dispatch(const char* command) {
+    switch (djb2_hash(command)) {
+        case djb2_hash("start"):  handle_start();  break;
+        case djb2_hash("stop"):   handle_stop();   break;
+        case djb2_hash("reset"):  handle_reset();  break;
+        default:                  handle_unknown();
+    }
+}
+</pre>
+
+<h2>constexpr Containers (C++20)</h2>
+
+<pre>
+#include &lt;array&gt;
+#include &lt;string_view&gt;
+#include &lt;algorithm&gt;
+
+// Compile-time lookup table
+template&lt;typename K, typename V, std::size_t N&gt;
+struct ConstexprMap {
+    std::array&lt;std::pair&lt;K, V&gt;, N&gt; data;
+
+    constexpr ConstexprMap(std::array&lt;std::pair&lt;K, V&gt;, N&gt; init) : data(init) {}
+
+    constexpr V at(const K&amp; key) const {
+        for (const auto&amp; [k, v] : data) {
+            if (k == key) return v;
+        }
+        throw "Key not found";  // compile-time error if not found
+    }
+
+    constexpr bool contains(const K&amp; key) const {
+        return std::find_if(data.begin(), data.end(),
+            [&amp;key](const auto&amp; pair) { return pair.first == key; }) != data.end();
+    }
+};
+
+// Protocol message type lookup — fully compile-time
+constexpr auto message_types = ConstexprMap{
+    std::array&lt;std::pair&lt;int, std::string_view&gt;, 4&gt;{{
+        {1, "RRC Setup Request"},
+        {2, "RRC Setup Response"},
+        {3, "RRC Release"},
+        {4, "RRC Reconfiguration"},
+    }}
+};
+
+// This is evaluated at compile time
+constexpr auto msg_name = message_types.at(2);  // "RRC Release"
+
+// Compile-time sieve of Eratosthenes
+constexpr std::size_t kMax = 1000;
+
+constexpr auto generate_primes() {
+    std::array&lt;bool, kMax&gt; sieve{};
+    for (std::size_t i = 2; i &lt; kMax; ++i) sieve[i] = true;
+
+    for (std::size_t i = 2; i * i &lt; kMax; ++i) {
+        if (sieve[i]) {
+            for (std::size_t j = i * i; j &lt; kMax; j += i) {
+                sieve[j] = false;
+            }
+        }
+    }
+    return sieve;
+}
+
+constexpr auto primes = generate_primes();  // computed at compile time
+</pre>
+
+<h2>consteval — Immediate Functions (C++23)</h2>
+
+<p><code>consteval</code> (also called "immediate functions") <em>must</em> be evaluated at compile time. If the compiler cannot evaluate them at compile time, it is a hard error (not a fallback to runtime like constexpr):</p>
+
+<pre>
+// C++23: consteval — MUST execute at compile time
+consteval int square(int x) {
+    return x * x;
+}
+
+constexpr int cube(int x) {
+    return x * x * x;
+}
+
+int main() {
+    constexpr int a = square(5);       // OK: compile-time context
+    int runtime_val = 10;
+    constexpr int b = square(runtime_val);  // ERROR: not a constant expression
+    int c = square(runtime_val);              // ERROR: square is consteval, not const
+
+    // But this works: square() result is a compile-time constant
+    int d = square(10);              // OK: argument is a constant
+
+    // constexpr CAN fall back to runtime:
+    int e = cube(runtime_val);        // OK: evaluated at runtime
+}
+</pre>
+
+<h3>Compile-Time Assertions with consteval</h3>
+
+<pre>
+// C++23 consteval: enforce compile-time checks
+consteval void validate_config(int max_ue, int max_bearers) {
+    if (max_ue &lt;= 0 || max_ue &gt; 65536) {
+        throw "Invalid max_ue configuration";
+    }
+    if (max_bearers &lt;= 0 || max_bearers &gt; 8) {
+        throw "Invalid bearer configuration";
+    }
+    if (max_bearers * max_ue &gt; 524288) {
+        throw "Resource budget exceeded";
+    }
+}
+
+// This runs at compile time — errors become compilation errors
+int main() {
+    validate_config(1000, 4);  // OK: validated at compile time
+    // validate_config(0, 4);  // ERROR: "Invalid max_ue configuration"
+}
+</pre>
+
+<h2>constexpr String Processing</h2>
+
+<pre>
+#include &lt;array&gt;
+#include &lt;string_view&gt;
+
+// Compile-time string parsing
+template&lt;std::size_t N&gt;
+struct FixedString {
+    char data[N]{};
+
+    constexpr FixedString(const char (&str)[N]) {
+        for (std::size_t i = 0; i &lt; N; ++i) {
+            data[i] = str[i];
+        }
+    }
+
+    constexpr std::size_t size() const { return N - 1; }
+    constexpr std::string_view view() const { return {data, N - 1}; }
+
+    constexpr bool starts_with(std::string_view prefix) const {
+        return view().starts_with(prefix);
+    }
+
+    constexpr bool contains(char c) const {
+        for (std::size_t i = 0; i &lt; size(); ++i) {
+            if (data[i] == c) return true;
+        }
+        return false;
+    }
+};
+
+// Compile-time format validation
+template&lt;FixedString fmt&gt;
+consteval bool valid_format_string() {
+    int open_braces = 0;
+    for (std::size_t i = 0; i &lt; fmt.size(); ++i) {
+        if (fmt.data[i] == '{') ++open_braces;
+        if (fmt.data[i] == '}') --open_braces;
+    }
+    return open_braces == 0;
+}
+
+// Usage
+static_assert(valid_format_string&lt;"Hello {}"&gt;());
+static_assert(!valid_format_string&lt;"Hello {"&gt;());  // unbalanced
+</pre>
+
+<h2>Telecom Relevance</h2>
+
+<ul>
+<li><strong>Protocol tables:</strong> LTE/5G protocol message types, cause codes, and IE identifiers can be stored in constexpr maps — zero runtime initialization, no heap allocation.</li>
+<li><strong>Configuration validation:</strong> <code>consteval</code> validates system configuration (max UEs, bearer limits, timer values) at compile time, catching misconfiguration before deployment.</li>
+<li><strong>Lookup tables:</strong> CRC tables, bit-reversal tables, and encoding tables computed at compile time avoid startup overhead in real-time systems.</li>
+<li><strong>String hashing:</strong> Compile-time string hashing enables efficient message dispatch without string comparison at runtime.</li>
+</ul>
+
+<div class="callout green">
+<p><strong>Best practice:</strong> Mark lookup tables and configuration structs as <code>constexpr</code> whenever possible. Use <code>consteval</code> for validation functions that must never have runtime overhead. Remember that <code>constexpr</code> evaluation has a default step limit (typically 33554432 for GCC) to prevent compilation hangs.</p>
+</div>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="compile-time-computation.html">Compile-Time Computation</a> (template metaprogramming), <a href="sfinae-advanced.html">SFINAE Advanced</a> (compile-time type deduction), <a href="crtp.html">CRTP</a> (static polymorphism), <a href="concepts.html">C++20 Concepts</a> (compile-time constraints), <a href="../basics/constants-literals.html">Constants &amp; Literals</a>.</p>
+</div>
+
+<div class="nav"><a href="cache-oriented-programming.html">&larr; Cache-Oriented Programming</a><a href="crtp.html">CRTP &rarr;</a></div>
+</body>
+</html>

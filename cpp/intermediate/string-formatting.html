@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>String Formatting — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / 2.7 File I/O &amp; Utilities / 2.7.4 String Formatting</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>String Formatting</h1>
+
+<p>C++ has evolved through several approaches to string formatting: from C-style <code>printf</code> through <code>std::stringstream</code> to the modern C++20 <code>std::format</code>. Each approach has tradeoffs in safety, performance, and ergonomics. This topic covers them all, building on <a href="../basics/std-string.html">std::string</a> fundamentals and <a href="../basics/variables-data-types.html">data types</a>.</p>
+
+<h2>C-style printf/sprintf (Legacy)</h2>
+
+<p>Inherited from C, <code>printf</code> and <code>sprintf</code> use format specifiers but offer no type safety.</p>
+
+<pre>
+#include &lt;cstdio&gt;
+#include &lt;string&gt;
+
+void printf_demo() {
+    int age = 30;
+    double score = 95.5;
+    const char* name = "Alice";
+
+    // Print to stdout
+    printf("Name: %s, Age: %d, Score: %.1f\n", name, age, score);
+
+    // Write to buffer (DANGEROUS — buffer overflow risk)
+    char buf[128];
+    snprintf(buf, sizeof(buf), "Name: %s, Age: %d", name, age);
+    // Always use snprintf, never sprintf
+}
+</pre>
+
+<div class="callout red">
+  <p><strong>Why avoid printf:</strong> Format specifiers must match argument types exactly. Mismatched types cause <strong>undefined behavior</strong> at runtime. The compiler cannot check these, making bugs easy to introduce and hard to find. Prefer C++ alternatives.</p>
+</div>
+
+<h3>Format Specifiers (Reference)</h3>
+
+<table>
+  <tr><th>Specifier</th><th>Type</th><th>Example Output</th></tr>
+  <tr><td><code>%d</code></td><td><code>int</code></td><td><code>42</code></td></tr>
+  <tr><td><code>%f</code></td><td><code>double</code></td><td><code>3.140000</code></td></tr>
+  <tr><td><code>%.2f</code></td><td><code>double</code> (2 decimal places)</td><td><code>3.14</code></td></tr>
+  <tr><td><code>%s</code></td><td><code>const char*</code></td><td><code>hello</code></td></tr>
+  <tr><td><code>%x</code></td><td><code>unsigned int</code> (hex)</td><td><code>ff</code></td></tr>
+  <tr><td><code>%p</code></td><td><code>void*</code></td><td><code>0x7fff5a2c</code></td></tr>
+  <tr><td><code>%zu</code></td><td><code>size_t</code></td><td><code>1024</code></td></tr>
+  <tr><td><code>%ld</code></td><td><code>long</code></td><td><code>999999</code></td></tr>
+</table>
+
+<h2>std::stringstream</h2>
+
+<p>Type-safe and flexible, <code>std::stringstream</code> uses <code>operator&lt;&lt;</code> for formatting. The tradeoff is verbosity and runtime overhead.</p>
+
+<pre>
+#include &lt;sstream&gt;
+#include &lt;string&gt;
+#include &lt;iomanip&gt;
+
+void stringstream_demo() {
+    std::ostringstream oss;
+
+    int id = 42;
+    double value = 3.14159;
+    std::string name = "sensor";
+
+    oss &lt;&lt; "[" &lt;&lt; id &lt;&lt; "] " &lt;&lt; name
+        &lt;&lt; " = " &lt;&lt; std::fixed &lt;&lt; std::setprecision(2) &lt;&lt; value;
+
+    std::string result = oss.str();
+    // "[42] sensor = 3.14"
+
+    // Parsing with stringstream (input direction)
+    std::istringstream iss("42 3.14 hello");
+    int a; double b; std::string c;
+    iss &gt;&gt; a &gt;&gt; b &gt;&gt; c;
+    // a=42, b=3.14, c="hello"
+}
+</pre>
+
+<div class="callout">
+  <p><strong>Manipulators:</strong> <code>std::setw(n)</code> sets field width, <code>std::setprecision(n)</code> sets decimal precision, <code>std::hex</code> / <code>std::oct</code> change the base, and <code>std::boolalpha</code> prints booleans as text. Defined in <code>&lt;iomanip&gt;</code>.</p>
+</div>
+
+<h2>std::to_string</h2>
+
+<p>For simple numeric-to-string conversions, <code>std::to_string</code> is concise and efficient.</p>
+
+<pre>
+#include &lt;string&gt;
+
+void to_string_demo() {
+    int i = 42;
+    double d = 3.14;
+    float f = 2.718f;
+    long l = 9999999L;
+    unsigned long ul = 42UL;
+
+    std::string s1 = std::to_string(i);    // "42"
+    std::string s2 = std::to_string(d);    // "3.140000"
+    std::string s3 = std::to_string(f);    // "2.718000"
+    std::string s4 = std::to_string(l);    // "9999999"
+    std::string s5 = std::to_string(ul);   // "42"
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>Limitation:</strong> <code>std::to_string</code> uses fixed precision (6 decimal places for floating-point). For custom precision, use <code>std::format</code> (C++20) or <code>std::ostringstream</code>.</p>
+</div>
+
+<h2>C++20 std::format</h2>
+
+<p><code>std::format</code> (C++20, <code>&lt;format&gt;</code>) provides Python-style format strings with compile-time type checking. This is the recommended approach for all new code.</p>
+
+<pre>
+#include &lt;format&gt;
+#include &lt;string&gt;
+#include &lt;iostream&gt;
+
+void format_demo() {
+    std::string name = "Alice";
+    int age = 30;
+    double score = 95.675;
+
+    // Basic formatting
+    std::string s1 = std::format("Name: {}, Age: {}", name, age);
+    // "Name: Alice, Age: 30"
+
+    // Ordered arguments (positional)
+    std::string s2 = std::format("{0} is {1} years old. {0} scored {2:.1f}.",
+                                  name, age, score);
+    // "Alice is 30 years old. Alice scored 95.7."
+
+    // Width and alignment
+    std::string s3 = std::format("{:&gt;10}", name);   // "     Alice"
+    std::string s4 = std::format("{:&lt;10}", name);   // "Alice     "
+    std::string s5 = std::format("{:^10}", name);    // "  Alice   "
+
+    // Numeric formatting
+    std::string s6 = std::format("{:.2f}", score);   // "95.68"
+    std::string s7 = std::format("{:x}", 255);       // "ff" (hex)
+    std::string s8 = std::format("{:#x}", 255);      // "0xff"
+    std::string s9 = std::format("{:+d}", 42);       // "+42"
+    std::string s10 = std::format("{:08d}", 42);     // "00000042"
+
+    std::cout &lt;&lt; s1 &lt;&lt; "\n";
+}
+</pre>
+
+<h3>Format Specifier Syntax</h3>
+
+<pre>
+// Full format specifier grammar:
+// { [arg_index] [: [fill] align] [sign] [#] [0] [width] [.precision] [type] }
+
+std::string s = std::format(
+    "{1:&lt;+020.2f}",   // arg 1, left-align, sign, zero-pad, width 20, 2 decimals
+    "unused", 42.5
+);
+// "+000000000000042.50      "  (left-aligned within width 20)
+</pre>
+
+<h3>Type-Specific Format Types</h3>
+
+<table>
+  <tr><th>Type Specifier</th><th>Meaning</th><th>Example</th></tr>
+  <tr><td><code>s</code></td><td>String (default for strings)</td><td><code>{:s}</code></td></tr>
+  <tr><td><code>d</code></td><td>Decimal integer</td><td><code>{:d}</code> &rarr; <code>42</code></td></tr>
+  <tr><td><code>x</code> / <code>X</code></td><td>Hexadecimal</td><td><code>{:x}</code> &rarr; <code>ff</code></td></tr>
+  <tr><td><code>b</code> / <code>B</code></td><td>Binary (C++23)</td><td><code>{:b}</code> &rarr; <code>11111111</code></td></tr>
+  <tr><td><code>o</code></td><td>Octal</td><td><code>{:o}</code> &rarr; <code>377</code></td></tr>
+  <tr><td><code>f</code></td><td>Fixed-point float</td><td><code>{:.2f}</code> &rarr; <code>3.14</code></td></tr>
+  <tr><td><code>e</code></td><td>Scientific notation</td><td><code>{:e}</code> &rarr; <code>3.14e+00</code></td></tr>
+  <tr><td><code>g</code></td><td>General (shortest of f/e)</td><td><code>{:g}</code></td></tr>
+  <tr><td><code>p</code></td><td>Pointer</td><td><code>{:p}</code> &rarr; <code>0x7fff</code></td></tr>
+</table>
+
+<h2>Comparison of Approaches</h2>
+
+<table>
+  <tr><th>Feature</th><th><code>printf</code></th><th><code>stringstream</code></th><th><code>std::format</code></th></tr>
+  <tr><td>Type safety</td><td>No (UB on mismatch)</td><td>Yes</td><td>Yes (compile-time)</td></tr>
+  <tr><td>Performance</td><td>Fast</td><td>Slow (heap alloc)</td><td>Fast</td></tr>
+  <tr><td>Readability</td><td>Moderate</td><td>Verbose</td><td>Excellent</td></tr>
+  <tr><td>Custom types</td><td>No</td><td>Yes (<code>operator&lt;&lt;</code>)</td><td>Yes (<code>formatter</code> specialize)</td></tr>
+  <tr><td>Positional args</td><td>Yes (<code>%1$d</code>)</td><td>No</td><td>Yes (<code>{1}</code>)</td></tr>
+  <tr><td>Locale support</td><td>Limited</td><td>Yes</td><td>Yes (C++20)</td></tr>
+</table>
+
+<div class="callout green">
+  <p><strong>Recommendation:</strong> Use <code>std::format</code> for all new code (C++20+). For codebases stuck on C++17, <code>std::to_string</code> handles simple cases and <code>std::ostringstream</code> handles complex formatting. Avoid <code>printf</code>/<code>sprintf</code> in modern C++.</p>
+</div>
+
+<h2>Custom Type Formatting with std::format</h2>
+
+<pre>
+#include &lt;format&gt;
+#include &lt;string&gt;
+#include &lt;string_view&gt;
+
+struct Point3D {
+    double x, y, z;
+};
+
+// Specialize std::formatter for custom types
+template&lt;&gt;
+struct std::formatter&lt;Point3D&gt; : std::formatter&lt;std::string&gt; {
+    auto format(const Point3D&amp; p, format_context&amp; ctx) const {
+        return std::format_to(ctx.out(), "({:.2f}, {:.2f}, {:.2f})",
+                              p.x, p.y, p.z);
+    }
+};
+
+void custom_format_demo() {
+    Point3D p{1.0, 2.5, -3.75};
+    std::string s = std::format("Point: {}", p);
+    std::cout &lt;&lt; s &lt;&lt; "\n";  // "Point: (1.00, 2.50, -3.75)"
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>Compiler support:</strong> <code>std::format</code> requires GCC 13+, Clang 14+, or MSVC 19.29. For older compilers, use the <a href="https://github.com/fmtlib/fmt">fmt</a> library (the basis for std::format) as a drop-in replacement: <code>#include &lt;fmt/core.h&gt;</code> and <code>fmt::format(...)</code>.</p>
+</div>
+
+<h2>Common Formatting Patterns</h2>
+
+<pre>
+#include &lt;format&gt;
+
+void common_patterns() {
+    // Padding and alignment table
+    std::string header = std::format("{:&lt;15} {:&gt;8} {:&gt;10}", "Name", "Age", "Score");
+    std::string row    = std::format("{:&lt;15} {:&gt;8} {:&gt;10.1f}", "Alice", 30, 95.5);
+    std::string sep    = std::format("{:-&gt;35}", "");
+
+    // Thousands separator (C++23: std::format("{:Ld}", 1000000))
+    // Pre-C++23 workaround: manual insertion
+
+    // Percentage formatting
+    double ratio = 0.8567;
+    std::string pct = std::format("{:.1f}%", ratio * 100);  // "85.7%"
+
+    // Hex with prefix
+    std::string hex = std::format("0x{:04X}", 255);  // "0x00FF"
+
+    std::cout &lt;&lt; header &lt;&lt; "\n" &lt;&lt; sep &lt;&lt; "\n" &lt;&lt; row &lt;&lt; "\n";
+}
+</pre>
+
+<p>String formatting pairs naturally with <a href="../basics/std-string.html">std::string</a> operations and <a href="regular-expressions.html">regular expressions</a> for parsing. For type deduction of format arguments, <a href="auto-decltype.html">auto &amp; decltype</a> is relevant background. See also <a href="chrono-time.html">chrono &amp; time</a> for time-specific formatting.</p>
+
+<div class="nav"><a href="chrono-time.html">&larr; Chrono &amp; Time</a><a href="exception-handling.html">Exception Handling &rarr;</a></div>
+</body>
+</html>

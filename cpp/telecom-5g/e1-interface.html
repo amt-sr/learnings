@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>E1 Interface — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#4">4 Telecom &amp; 5G/4G</a> / E1 Interface</div>
+<div class="meta"><span class="tag advanced">Advanced</span></div>
+<h1>E1 Interface</h1>
+
+<p>The E1 interface connects the CU-CP (Central Unit Control Plane) and CU-UP (Central Unit User Plane) within the 5G gNB. Defined in 3GPP TS 38.460, E1 enables the separation of control and user plane processing in the CU, allowing independent scaling and deployment. The protocol is E1AP, carried over SCTP.</p>
+
+<h2>E1 Interface Architecture</h2>
+
+<pre>
+                  +------------------+
+                  |     CU-CP        |
+                  |  (RRC / NGAP)    |
+                  |  F1-C Management |
+                  +--------+---------+
+                           |
+                    E1-C (E1AP)
+                    SCTP Port: 38462
+                           |
+                  +--------+---------+
+                  |     CU-UP        |
+                  |  (SDAP / PDCP)   |
+                  |  F1-U Management |
+                  +--------+---------+
+                           |
+                    F1-U (GTP-U)
+                           |
+                  +--------+---------+
+                  |       DU          |
+                  |  (RLC / MAC / PHY)|
+                  +------------------+
+</pre>
+
+<h2>E1AP Procedures</h2>
+
+<table>
+  <tr><th>Procedure</th><th>Direction</th><th>Purpose</th></tr>
+  <tr><td>E1 Bearer Context Setup</td><td>CU-CP &rarr; CU-UP</td><td>Establish DRB context in CU-UP</td></tr>
+  <tr><td>E1 Bearer Context Modify</td><td>CU-CP &rarr; CU-UP</td><td>Modify DRB parameters (QoS, PDCP config)</td></tr>
+  <tr><td>E1 Bearer Context Release</td><td>CU-CP &rarr; CU-UP</td><td>Release DRB context</td></tr>
+  <tr><td>Bearer Context Inactivity Monitor</td><td>CU-CP &rarr; CU-UP</td><td>Configure inactivity timer</td></tr>
+  <tr><td>Data Forwarding Configuration</td><td>CU-CP &rarr; CU-UP</td><td>Setup forwarding for handover</td></tr>
+  <tr><td>Clock Info Transfer</td><td>CU-CP &harr; CU-UP</td><td>Synchronize timing</td></tr>
+  <tr><td>E1 Setup</td><td>CU-UP &rarr; CU-CP</td><td>CU-UP registers with CU-CP</td></tr>
+</table>
+
+<h2>C++ E1AP Bearer Context Management</h2>
+
+<pre>
+#include &lt;memory&gt;
+#include &lt;vector&gt;
+#include &lt;unordered_map&gt;
+#include &lt;cstdint&gt;
+#include &lt;string&gt;
+
+// E1 Bearer Type
+enum class E1BearerType : uint8_t {
+    DRB,             // Data Radio Bearer
+    MRB,             // Multicast Radio Bearer (MBS)
+    SRB_OVER_E1      // Signaling over E1 (rare)
+};
+
+// PDCP Configuration for a DRB
+struct PdcpConfig {
+    uint8_t  drb_id;
+    uint8_t  pdcp_sn_size;      // 12 or 18 bits
+    uint8_t  rlcmode;           // AM, UM, TM
+    uint16_t t_reordering;      // Reordering timer (ms)
+    bool     header_compression; // ROHC enabled
+    bool     ciphering;
+    bool     integrity;
+    uint8_t  ciphering_algorithm;  // AES, SNOW, ZUC
+    uint8_t  integrity_algorithm;
+};
+
+// E1 Bearer Context Setup Request
+struct E1BearerContextSetupRequest {
+    uint32_t gnb_cu_cp_ue_e1ap_id;
+    uint32_t gnb_cu_up_ue_e1ap_id;
+
+    // Bearer to setup
+    E1BearerType bearer_type;
+    PdcpConfig   pdcp_config;
+
+    // SDAP configuration
+    uint8_t  qfi;             // QoS Flow Identifier
+    uint8_t  qos_mapping_rule; // Reflective/non-reflective
+
+    // NG-U tunnel info (from CU-CP, learned from AMF)
+    uint32_t ngu_teid;        // UPF TEID
+    std::string upf_addr;     // UPF transport address
+
+    // F1-U tunnel (CU-UP assigns for F1-U to DU)
+    uint32_t f1u_teid;        // CU-UP side TEID for F1-U
+    std::string cu_up_addr;   // CU-UP transport address
+};
+
+// DRB context managed by CU-UP
+class DrbContext {
+public:
+    explicit DrbContext(uint8_t drb_id) : drb_id_(drb_id) {}
+
+    uint8_t getDrbId() const { return drb_id_; }
+    uint32_t getTeidUl() const { return teid_ul_; }
+    uint32_t getTeidDl() const { return teid_dl_; }
+    bool isActive() const { return active_; }
+
+    void activate(const PdcpConfig&amp; cfg,
+                  uint32_t ngu_teid, const std::string&amp; upf_addr) {
+        pdcp_config_ = cfg;
+        ngu_teid_ = ngu_teid;
+        upf_addr_ = upf_addr;
+        active_ = true;
+    }
+
+    void updatePdcp(const PdcpConfig&amp; new_cfg) {
+        pdcp_config_ = new_cfg;
+    }
+
+    void deactivate() { active_ = false; }
+
+private:
+    uint8_t    drb_id_;
+    bool       active_{false};
+    PdcpConfig pdcp_config_;
+    uint32_t   teid_ul_{0};
+    uint32_t   teid_dl_{0};
+    uint32_t   ngu_teid_{0};
+    std::string upf_addr_;
+};
+
+// CU-UP E1 interface handler
+class CuUpE1Handler {
+public:
+    // Handle E1 Bearer Context Setup Request from CU-CP
+    void onBearerContextSetup(const E1BearerContextSetupRequest&amp; req) {
+        auto&amp; drb = getOrCreateDrb(req.pdcp_config.drb_id);
+        drb.activate(req.pdcp_config, req.ngu_teid, req.upf_addr);
+
+        // Setup PDCP entity
+        setupPdcpEntity(drb);
+
+        // Create F1-U tunnel to DU
+        uint32_t f1u_teid = allocateTeid();
+        drb.setTeidDl(f1u_teid);
+
+        // Send E1 Bearer Context Setup Response
+        sendBearerContextResponse(req, f1u_teid);
+    }
+
+    void onBearerContextModify(uint8_t drb_id,
+                                const PdcpConfig&amp; new_config) {
+        auto it = drb_contexts_.find(drb_id);
+        if (it != drb_contexts_.end()) {
+            it-&gt;second.updatePdcp(new_config);
+            reconfigurePdcp(it-&gt;second);
+        }
+    }
+
+    void onBearerContextRelease(uint8_t drb_id) {
+        auto it = drb_contexts_.find(drb_id);
+        if (it != drb_contexts_.end()) {
+            releasePdcpEntity(it-&gt;second);
+            it-&gt;second.deactivate();
+        }
+    }
+
+private:
+    std::unordered_map&lt;uint8_t, DrbContext&gt; drb_contexts_;
+
+    DrbContext&amp; getOrCreateDrb(uint8_t drb_id) {
+        auto it = drb_contexts_.find(drb_id);
+        if (it != drb_contexts_.end()) {
+            return it-&gt;second;
+        }
+        auto [iter, _] = drb_contexts_.emplace(
+            drb_id, DrbContext(drb_id));
+        return iter-&gt;second;
+    }
+
+    uint32_t allocateTeid() {
+        static uint32_t next_teid = 1;
+        return next_teid++;
+    }
+
+    void setupPdcpEntity(DrbContext&amp; drb);
+    void reconfigurePdcp(DrbContext&amp; drb);
+    void releasePdcpEntity(DrbContext&amp; drb);
+    void sendBearerContextResponse(
+        const E1BearerContextSetupRequest&amp; req,
+        uint32_t f1u_teid);
+};
+</pre>
+
+<h2>E1 Data Forwarding for Handover</h2>
+
+<pre>
+// Data forwarding configuration for seamless handover
+struct E1DataForwardingConfig {
+    uint32_t source_gnb_cu_up_ue_e1ap_id;
+    uint32_t target_gnb_cu_up_ue_e1ap_id;
+
+    struct ForwardingBearer {
+        uint8_t  drb_id;
+        uint32_t target_teid;       // TEID at target CU-UP
+        std::string target_addr;    // Target CU-UP address
+        uint32_t count_dl;          // PDCP SN count (DL)
+        uint32_t count_ul;          // PDCP SN count (UL)
+    };
+    std::vector&lt;ForwardingBearer&gt; bearers;
+};
+</pre>
+
+<div class="callout warning">
+  <p><strong>Scalability:</strong> A single CU-CP can connect to multiple CU-UPs for scaling user plane throughput. Each CU-UP can handle 10-20 Gbps. The E1 interface must support hundreds of concurrent bearer contexts. Use <a href="memory-pools-telecom.html">memory pools</a> for DRB context allocation.</p>
+</div>
+
+<h2>Cross-References</h2>
+
+<ul>
+  <li><a href="gnodeb-components.html">gNB Components</a> -- CU-CP and CU-UP separation.</li>
+  <li><a href="f1-interface.html">F1 Interface</a> -- CU to DU interface (parallel to E1).</li>
+  <li><a href="pdcp-layer.html">PDCP Layer</a> -- PDCP configuration and management.</li>
+  <li><a href="sdap-layer.html">SDAP Layer</a> -- QoS flow to DRB mapping.</li>
+  <li><a href="handover-procedures.html">Handover</a> -- E1 bearer context release and forwarding.</li>
+  <li><a href="../advanced/unordered-map.html">std::unordered_map</a> -- DRB context lookup by DRB ID.</li>
+</ul>
+
+<div class="nav"><a href="x2-ng-x-interface.html">&larr; X2 / NG-X Interface</a><a href="phy-layer.html">PHY Layer &rarr;</a></div>
+</body>
+</html>

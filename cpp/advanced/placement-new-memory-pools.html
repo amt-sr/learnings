@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Placement New &amp; Memory Pools — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / Placement New &amp; Memory Pools</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>Placement New &amp; Memory Pools</h1>
+
+<p>Placement new allows you to construct an object at a specific memory address. Combined with memory pools (pre-allocated blocks of memory), this enables deterministic allocation, zero fragmentation, and precise control over object lifetimes. This is the low-level foundation beneath the <a href="custom-allocators.html">Custom Allocators</a> topic.</p>
+
+<h2>Placement New Syntax</h2>
+
+<pre>
+#include &lt;new&gt;
+
+// Regular new: allocates memory AND constructs the object
+MyClass* obj1 = new MyClass(args);
+
+// Placement new: constructs the object at a specific address (NO allocation)
+alignas(MyClass) char buffer[sizeof(MyClass)];
+MyClass* obj2 = new (buffer) MyClass(args);
+
+// IMPORTANT: must manually call destructor (do NOT delete placement-new'd objects)
+obj2-&gt;~MyClass();
+</pre>
+
+<div class="callout red">
+<p><strong>Critical rule:</strong> Never call <code>delete</code> on an object created with placement new. The memory was not allocated by <code>new</code>, so <code>delete</code> will try to free invalid memory. Always call the destructor explicitly instead.</p>
+</div>
+
+<h2>Basic Placement New Usage</h2>
+
+<pre>
+#include &lt;new&gt;
+#include &lt;iostream&gt;
+#include &lt;cstddef&gt;
+#include &lt;cstring&gt;
+
+struct RrcConnectionRequest {
+    std::uint64_t ue_id = 0;
+    std::uint8_t establishment_cause = 0;
+    std::uint8_t spare[2]{};
+
+    RrcConnectionRequest(std::uint64_t id, std::uint8_t cause)
+        : ue_id(id), establishment_cause(cause) {}
+
+    void print() const {
+        std::cout &lt;&lt; "UE ID: " &lt;&lt; ue_id
+                  &lt;&lt; ", Cause: " &lt;&lt; static_cast&lt;int&gt;(establishment_cause) &lt;&lt; "\n";
+    }
+};
+
+int main() {
+    // Pre-allocate raw memory buffer
+    alignas(RrcConnectionRequest) char buffer[sizeof(RrcConnectionRequest)];
+
+    // Construct object in the buffer using placement new
+    auto* req = new (buffer) RrcConnectionRequest(12345, 1);
+    req-&gt;print();  // UE ID: 12345, Cause: 1
+
+    // Manually call destructor
+    req-&gt;~RrcConnectionRequest();
+
+    // Buffer can now be reused for a different object
+    std::memset(buffer, 0, sizeof(buffer));
+    auto* req2 = new (buffer) RrcConnectionRequest(67890, 2);
+    req2-&gt;print();  // UE ID: 67890, Cause: 2
+    req2-&gt;~RrcConnectionRequest();
+
+    return 0;
+}
+</pre>
+
+<h2>Memory Pool Implementation</h2>
+
+<pre>
+#include &lt;cstddef&gt;
+#include &lt;new&gt;
+#include &lt;stack&gt;
+#include &lt;vector&gt;
+#include &lt;iostream&gt;
+#include &lt;stdexcept&gt;
+
+template&lt;typename T, std::size_t MaxObjects = 1024&gt;
+class MemoryPool {
+    alignas(alignof(T)) char buffer_[MaxObjects * sizeof(T)];
+    std::stack&lt;T*, std::vector&lt;T*&gt;&gt; free_stack_;
+    std::size_t allocated_count_ = 0;
+
+    void init() {
+        // Push all slots onto the free stack
+        for (std::size_t i = 0; i &lt; MaxObjects; ++i) {
+            free_stack_.push(reinterpret_cast&lt;T*&gt;(buffer_ + i * sizeof(T)));
+        }
+    }
+
+public:
+    MemoryPool() { init(); }
+
+    // Non-copyable
+    MemoryPool(const MemoryPool&amp;) = delete;
+    MemoryPool&amp; operator=(const MemoryPool&amp;) = delete;
+
+    template&lt;typename... Args&gt;
+    T* construct(Args&amp;&amp;... args) {
+        if (free_stack_.empty()) {
+            throw std::runtime_error("MemoryPool exhausted");
+        }
+        T* ptr = free_stack_.top();
+        free_stack_.pop();
+        ++allocated_count_;
+        return new (ptr) T(std::forward&lt;Args&gt;(args)...);
+    }
+
+    void destroy(T* ptr) {
+        if (!ptr) return;
+        ptr-&gt;~T();
+        free_stack_.push(ptr);
+        --allocated_count_;
+    }
+
+    [[nodiscard]] std::size_t available() const noexcept {
+        return free_stack_.size();
+    }
+
+    [[nodiscard]] std::size_t allocated() const noexcept {
+        return allocated_count_;
+    }
+};
+
+// Usage
+struct UeContext {
+    std::uint32_t ue_id = 0;
+    std::uint32_t cell_id = 0;
+    uint8_t state = 0;
+
+    UeContext(std::uint32_t uid, std::uint32_t cid)
+        : ue_id(uid), cell_id(cid) {}
+};
+
+int main() {
+    MemoryPool&lt;UeContext, 100&gt; pool;
+    std::cout &lt;&lt; "Available: " &lt;&lt; pool.available() &lt;&lt; "\n";  // 100
+
+    auto* ctx1 = pool.construct(1, 100);
+    auto* ctx2 = pool.construct(2, 100);
+    std::cout &lt;&lt; "Available: " &lt;&lt; pool.available() &lt;&lt; "\n";  // 98
+
+    pool.destroy(ctx1);
+    std::cout &lt;&lt; "Available after destroy: " &lt;&lt; pool.available() &lt;&lt; "\n";  // 99
+
+    // Object reuse — no heap allocation
+    auto* ctx3 = pool.construct(3, 101);  // reuses ctx1's slot
+}
+</pre>
+
+<h2>Object Reuse Patterns</h2>
+
+<p>In telecom systems, objects representing protocol contexts (UE sessions, bearer contexts, message buffers) are frequently created and destroyed. Memory pools allow object slots to be reused without heap allocation:</p>
+
+<pre>
+#include &lt;new&gt;
+#include &lt;optional&gt;
+#include &lt;functional&gt;
+
+// A generic object pool with RAII guard
+template&lt;typename T&gt;
+class ObjectPool {
+    struct Slot {
+        alignas(alignof(T)) char storage[sizeof(T)];
+        bool occupied = false;
+    };
+
+    std::vector&lt;Slot&gt; slots_;
+
+public:
+    explicit ObjectPool(std::size_t capacity) : slots_(capacity) {}
+
+    class Handle {
+        T* ptr_ = nullptr;
+        ObjectPool* pool_ = nullptr;
+        std::size_t index_ = 0;
+
+    public:
+        Handle(T* ptr, ObjectPool* pool, std::size_t idx)
+            : ptr_(ptr), pool_(pool), index_(idx) {}
+
+        ~Handle() {
+            if (ptr_ &amp;&amp; pool_) {
+                ptr_-&gt;~T();
+                pool_-&gt;slots_[index_].occupied = false;
+            }
+        }
+
+        // Non-copyable, movable
+        Handle(const Handle&amp;) = delete;
+        Handle&amp; operator=(const Handle&amp;) = delete;
+        Handle(Handle&amp;&amp; other) noexcept
+            : ptr_(other.ptr_), pool_(other.pool_), index_(other.index_) {
+            other.ptr_ = nullptr;
+            other.pool_ = nullptr;
+        }
+
+        T&amp; operator*() { return *ptr_; }
+        T* operator-&gt;() { return ptr_; }
+        explicit operator bool() const { return ptr_ != nullptr; }
+    };
+
+    template&lt;typename... Args&gt;
+    std::optional&lt;Handle&gt; acquire(Args&amp;&amp;... args) {
+        for (std::size_t i = 0; i &lt; slots_.size(); ++i) {
+            if (!slots_[i].occupied) {
+                T* ptr = new (slots_[i].storage) T(std::forward&lt;Args&gt;(args)...);
+                slots_[i].occupied = true;
+                return Handle(ptr, this, i);
+            }
+        }
+        return std::nullopt;
+    }
+
+    [[nodiscard]] std::size_t capacity() const { return slots_.size(); }
+    [[nodiscard]] std::size_t in_use() const {
+        return std::count_if(slots_.begin(), slots_.end(),
+                              [](const Slot&amp; s) { return s.occupied; });
+    }
+};
+
+// Usage: RAII handles automatically return objects to the pool
+void handle_ue_connection() {
+    ObjectPool&lt;UeContext&gt; pool(1000);
+
+    {
+        auto handle = pool.acquire(42, 100);
+        if (handle) {
+            handle-&gt;state = 1;
+            // handle's destructor returns the slot to the pool
+        }
+    }  // slot returned here
+
+    auto handle2 = pool.acquire(43, 101);
+    // Reuses the slot that was just returned
+}
+</pre>
+
+<h2>Telecom Relevance</h2>
+
+<p>5G base stations manage thousands of simultaneous UE contexts. Each context involves protocol state machines, timers, and buffer allocations. Creating these on the heap for every connection setup and tearing them down on release causes fragmentation and non-deterministic latency. Memory pools with placement new provide:</p>
+
+<ul>
+<li><strong>Deterministic allocation:</strong> Fixed-time allocation and deallocation, no OS involvement</li>
+<li><strong>Zero fragmentation:</strong> Fixed-size slots from pre-allocated memory</li>
+<li><strong>Cache locality:</strong> All objects in a pool are contiguous in memory (see <a href="cache-oriented-programming.html">Cache-Oriented Programming</a>)</li>
+<li><strong>Object reuse:</strong> Destroyed slots are immediately available for new connections</li>
+</ul>
+
+<div class="callout warning">
+<p><strong>Common mistake:</strong> Forgetting to call the destructor before reuse. If a slot's previous occupant had a non-trivial destructor (held a mutex, file handle, or allocated sub-resources), skipping destruction causes resource leaks. Always pair placement new with an explicit destructor call.</p>
+</div>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="custom-allocators.html">Custom Allocators</a> (STL-compatible wrappers), <a href="lock-free-programming.html">Lock-Free Programming</a> (lock-free pools), <a href="memory-model-atomics.html">Memory Model &amp; Atomics</a> (thread-safe pool access), <a href="cache-oriented-programming.html">Cache-Oriented Programming</a> (data layout).</p>
+</div>
+
+<div class="nav"><a href="custom-allocators.html">&larr; Custom Allocators</a><a href="cache-oriented-programming.html">Cache-Oriented Programming &rarr;</a></div>
+</body>
+</html>

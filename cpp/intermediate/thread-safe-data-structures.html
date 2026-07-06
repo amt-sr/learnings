@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Thread-Safe Data Structures — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / <a href="../index.html#2.6">2.6 Multithreading</a> / 2.6.5 Thread-Safe Data Structures</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>Thread-Safe Data Structures</h1>
+
+<p>When multiple threads access the same data concurrently, you need synchronization to prevent data races and undefined behavior. This page covers three approaches: thread-safe queue (mutex + condition variable), concurrent map (read-write lock), and lock-free basics using atomics.</p>
+
+<h2>Thread-Safe Queue (Mutex + Condition Variable)</h2>
+
+<pre>
+#include &lt;mutex&gt;
+#include &lt;condition_variable&gt;
+#include &lt;queue&gt;
+#include &lt;optional&gt;
+
+template&lt;typename T&gt;
+class ThreadSafeQueue {
+    mutable std::mutex mutex_;
+    std::condition_variable not_empty_;
+    std::queue&lt;T&gt; queue_;
+    bool shutdown_ = false;
+public:
+    ThreadSafeQueue() = default;
+
+    void push(T value) {
+        {
+            std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+            queue_.push(std::move(value));
+        }
+        not_empty_.notify_one();
+    }
+
+    // Blocking pop — waits until an element is available
+    T pop() {
+        std::unique_lock&lt;std::mutex&gt; lock(mutex_);
+        not_empty_.wait(lock, [this] {
+            return !queue_.empty() || shutdown_;
+        });
+        if (shutdown_ &amp;&amp; queue_.empty())
+            throw std::runtime_error("Queue shut down");
+        T value = std::move(queue_.front());
+        queue_.pop();
+        return value;
+    }
+
+    // Non-blocking pop using optional
+    std::optional&lt;T&gt; try_pop() {
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        if (queue_.empty()) return std::nullopt;
+        T value = std::move(queue_.front());
+        queue_.pop();
+        return value;
+    }
+
+    // Timed pop — waits up to timeout_ms
+    std::optional&lt;T&gt; pop_for(int timeout_ms) {
+        std::unique_lock&lt;std::mutex&gt; lock(mutex_);
+        if (!not_empty_.wait_for(lock,
+            std::chrono::milliseconds(timeout_ms),
+            [this] { return !queue_.empty() || shutdown_; })) {
+            return std::nullopt;  // timeout
+        }
+        if (queue_.empty()) return std::nullopt;
+        T value = std::move(queue_.front());
+        queue_.pop();
+        return value;
+    }
+
+    void shutdown() {
+        {
+            std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+            shutdown_ = true;
+        }
+        not_empty_.notify_all();
+    }
+
+    bool empty() const {
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        return queue_.empty();
+    }
+
+    size_t size() const {
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        return queue_.size();
+    }
+};
+</pre>
+
+<h2>Concurrent Map (Read-Write Lock)</h2>
+
+<p>A <code>std::shared_mutex</code> (C++14, upgraded to <code>std::shared_timed_mutex</code>) allows multiple concurrent readers but exclusive access for writers.</p>
+
+<pre>
+#include &lt;shared_mutex&gt;
+#include &lt;unordered_map&gt;
+#include &lt;string&gt;
+#include &lt;optional&gt;
+
+template&lt;typename Key, typename Value&gt;
+class ConcurrentMap {
+    mutable std::shared_mutex rw_mutex_;
+    std::unordered_map&lt;Key, Value&gt; map_;
+public:
+    // Read operations: shared (multiple readers allowed)
+    std::optional&lt;Value&gt; get(const Key&amp; key) const {
+        std::shared_lock lock(rw_mutex_);  // shared lock
+        auto it = map_.find(key);
+        if (it != map_.end()) return it-&gt;second;
+        return std::nullopt;
+    }
+
+    bool contains(const Key&amp; key) const {
+        std::shared_lock lock(rw_mutex_);
+        return map_.count(key) &gt; 0;
+    }
+
+    size_t size() const {
+        std::shared_lock lock(rw_mutex_);
+        return map_.size();
+    }
+
+    // Write operations: exclusive (only one writer)
+    void put(const Key&amp; key, const Value&amp; value) {
+        std::unique_lock lock(rw_mutex_);  // exclusive lock
+        map_[key] = value;
+    }
+
+    bool remove(const Key&amp; key) {
+        std::unique_lock lock(rw_mutex_);
+        return map_.erase(key) &gt; 0;
+    }
+
+    bool update(const Key&amp; key, const Value&amp; value) {
+        std::unique_lock lock(rw_mutex_);
+        auto it = map_.find(key);
+        if (it == map_.end()) return false;
+        it-&gt;second = value;
+        return true;
+    }
+};
+
+void concurrent_map_demo() {
+    ConcurrentMap&lt;std::string, int&gt; db;
+
+    // Writer thread
+    std::thread writer([&amp;]() {
+        db.put("Alice", 30);
+        db.put("Bob", 25);
+        db.put("Charlie", 35);
+    });
+
+    // Reader threads (can run concurrently with each other)
+    std::thread reader1([&amp;]() {
+        if (auto val = db.get("Alice"))
+            std::cout &lt;&lt; "Alice: " &lt;&lt; *val &lt;&lt; "\n";
+    });
+    std::thread reader2([&amp;]() {
+        if (auto val = db.get("Bob"))
+            std::cout &lt;&lt; "Bob: " &lt;&lt; *val &lt;&lt; "\n";
+    });
+
+    writer.join();
+    reader1.join();
+    reader2.join();
+}
+</pre>
+
+<h2>Lock-Free Counter (Atomics)</h2>
+
+<p>For simple data structures, <code>std::atomic</code> provides lock-free synchronization using hardware atomic instructions. No mutex is needed.</p>
+
+<pre>
+#include &lt;atomic&gt;
+#include &lt;iostream&gt;
+#include &lt;thread&gt;
+#include &lt;vector&gt;
+
+class LockFreeCounter {
+    std::atomic&lt;int&gt; count_{0};
+public:
+    void increment() {
+        // fetch_add is an atomic RMW operation
+        count_.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    void decrement() {
+        count_.fetch_sub(1, std::memory_order_relaxed);
+    }
+
+    int get() const {
+        return count_.load(std::memory_order_relaxed);
+    }
+
+    int exchange(int new_val) {
+        return count_.exchange(new_val);
+    }
+
+    bool compare_and_swap(int expected, int desired) {
+        return count_.compare_exchange_strong(expected, desired);
+    }
+};
+
+void lock_free_counter_demo() {
+    LockFreeCounter counter;
+    std::vector&lt;std::thread&gt; threads;
+
+    for (int i = 0; i &lt; 10; ++i) {
+        threads.emplace_back([&amp;counter]() {
+            for (int j = 0; j &lt; 10000; ++j) {
+                counter.increment();
+            }
+        });
+    }
+
+    for (auto&amp; t : threads) t.join();
+    std::cout &lt;&lt; "Lock-free counter: " &lt;&lt; counter.get() &lt;&lt; "\n";
+    // Output: 100000
+}
+</pre>
+
+<h2>Comparison: Approaches to Thread Safety</h2>
+
+<table>
+  <tr><th>Approach</th><th>Pros</th><th>Cons</th><th>Best For</th></tr>
+  <tr><td><strong>Mutex + condvar</strong></td><td>General-purpose, blocking wait</td><td>Kernel syscall overhead</td><td>General data structures, waiting</td></tr>
+  <tr><td><strong>Shared mutex</strong></td><td>Multiple readers, single writer</td><td>Writer starvation possible</td><td>Read-heavy maps/dictionaries</td></tr>
+  <tr><td><strong>Atomics (lock-free)</strong></td><td>No kernel overhead, no deadlock</td><td>Limited to simple operations</td><td>Counters, flags, simple state</td></tr>
+  <tr><td><strong>Thread-local storage</strong></td><td>No synchronization needed</td><td>No sharing between threads</td><td>Per-thread caches, RNG state</td></tr>
+</table>
+
+<div class="callout warning">
+  <p><strong>Granularity matters:</strong> Fine-grained locking (one lock per bucket/node) allows more concurrency but adds complexity and deadlock risk. Coarse-grained locking (one lock for the whole structure) is simpler but limits throughput. Choose based on your access pattern.</p>
+</div>
+
+<h2>Thread-Local Storage</h2>
+
+<pre>
+#include &lt;thread&gt;
+#include &lt;iostream&gt;
+
+// Each thread gets its own copy
+thread_local int thread_id = -1;
+
+void thread_local_demo() {
+    thread_id = 42;
+    std::cout &lt;&lt; "Thread " &lt;&lt; std::this_thread::get_id()
+              &lt;&lt; " has thread_id = " &lt;&lt; thread_id &lt;&lt; "\n";
+}
+</pre>
+
+<p>These patterns build on <a href="mutex-locks.html">mutexes/locks</a> and <a href="condition-variable.html">condition variables</a>. For deeper lock-free techniques, see <a href="../advanced/lock-free-programming.html">lock-free programming</a> and <a href="../practice-questions/thread-safe-queue.html">thread-safe queue practice</a>.</p>
+
+<div class="nav"><a href="async-futures.html">&larr; Async / Futures</a><a href="../index.html">Back to Index &rarr;</a></div>
+</body>
+</html>

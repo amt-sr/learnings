@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Factory Pattern — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / Design Patterns / 3.5.3</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>Factory Pattern</h1>
+
+<p>The Factory pattern encapsulates object creation behind an interface, separating the "what to create" decision from the "how to use" code. It decouples client code from concrete classes, making it easy to introduce new types without modifying existing code. C++ offers several factory variants with different levels of abstraction.</p>
+
+<div class="callout">
+<p><strong>Prerequisites:</strong> <a href="singleton-pattern.html">Singleton Pattern</a>, <a href="observer-pattern.html">Observer Pattern</a>, <a href="strategy-pattern.html">Strategy Pattern</a>, <a href="../intermediate/virtual-functions-vtable.html">Virtual Functions &amp; vtable</a>, <a href="../intermediate/abstract-classes.html">Abstract Classes</a>.</p>
+</div>
+
+<h2>Factory Variants</h2>
+
+<table>
+<tr><th>Pattern</th><th>Structure</th><th>When to Use</th></tr>
+<tr><td>Simple Factory</td><td>One function/object creates different types</td><td>Few types, simple logic</td></tr>
+<tr><td>Factory Method</td><td>Virtual method in base class, overridden by derived</td><td>Each subclass creates its own product</td></tr>
+<tr><td>Abstract Factory</td><td>Interface for families of related objects</td><td>Multiple product families (e.g., UI themes)</td></tr>
+</table>
+
+<h2>Simple Factory</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;memory&gt;
+#include &lt;string&gt;
+#include &lt;stdexcept&gt;
+
+// Product interface
+class Message {
+public:
+    virtual ~Message() = default;
+    virtual std::string encode() const = 0;
+    virtual std::string type() const = 0;
+};
+
+// Concrete products
+class RrcSetup : public Message {
+public:
+    std::string encode() const override { return "RRC_SETUP_REQ"; }
+    std::string type() const override { return "RRC"; }
+};
+
+class NasAttach : public Message {
+public:
+    std::string encode() const override { return "NAS_ATTACH_REQ"; }
+    std::string type() const override { return "NAS"; }
+};
+
+class NgapInitial : public Message {
+public:
+    std::string encode() const override { return "NGAP_INITIAL_UE"; }
+    std::string type() const override { return "NGAP"; }
+};
+
+// Simple factory — one function decides what to create
+class MessageFactory {
+public:
+    static std::unique_ptr&lt;Message&gt; create(const std::string&amp; type) {
+        if (type == "rrc") return std::make_unique&lt;RrcSetup&gt;();
+        if (type == "nas") return std::make_unique&lt;NasAttach&gt;();
+        if (type == "ngap") return std::make_unique&lt;NgapInitial&gt;();
+        throw std::invalid_argument("Unknown message type: " + type);
+    }
+};
+
+int main() {
+    auto msg1 = MessageFactory::create("rrc");
+    auto msg2 = MessageFactory::create("nas");
+
+    std::cout &lt;&lt; msg1-&gt;type() &lt;&lt; ": " &lt;&lt; msg1-&gt;encode() &lt;&lt; "\n";
+    std::cout &lt;&lt; msg2-&gt;type() &lt;&lt; ": " &lt;&lt; msg2-&gt;encode() &lt;&lt; "\n";
+}
+</pre>
+
+<h2>Factory Method</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;memory&gt;
+
+// Product interface
+class Serializer {
+public:
+    virtual ~Serializer() = default;
+    virtual void serialize(const std::string&amp; data) = 0;
+    virtual std::string format() const = 0;
+};
+
+// Concrete products
+class JsonSerializer : public Serializer {
+public:
+    void serialize(const std::string&amp; data) override {
+        std::cout &lt;&lt; "{\"data\": \"" &lt;&lt; data &lt;&lt; "\"}\n";
+    }
+    std::string format() const override { return "JSON"; }
+};
+
+class XmlSerializer : public Serializer {
+public:
+    void serialize(const std::string&amp; data) override {
+        std::cout &lt;&lt; "&lt;data&gt;" &lt;&lt; data &lt;&lt; "&lt;/data&gt;\n";
+    }
+    std::string format() const override { return "XML"; }
+};
+
+class ProtobufSerializer : public Serializer {
+public:
+    void serialize(const std::string&amp; data) override {
+        std::cout &lt;&lt; "protobuf: " &lt;&lt; data.size() &lt;&lt; " bytes\n";
+    }
+    std::string format() const override { return "Protobuf"; }
+};
+
+// Creator (base class) — defines the factory method
+class MessageHandler {
+public:
+    virtual ~MessageHandler() = default;
+
+    // The factory method — derived classes decide what to create
+    virtual std::unique_ptr&lt;Serializer&gt; create_serializer() = 0;
+
+    void process(const std::string&amp; data) {
+        auto serializer = create_serializer();
+        std::cout &lt;&lt; "Using " &lt;&lt; serializer-&gt;format() &lt;&lt; ":\n";
+        serializer-&gt;serialize(data);
+    }
+};
+
+// Concrete creators — each creates a specific serializer
+class RestHandler : public MessageHandler {
+public:
+    std::unique_ptr&lt;Serializer&gt; create_serializer() override {
+        return std::make_unique&lt;JsonSerializer&gt;();
+    }
+};
+
+class SoapHandler : public MessageHandler {
+public:
+    std::unique_ptr&lt;Serializer&gt; create_serializer() override {
+        return std::make_unique&lt;XmlSerializer&gt;();
+    }
+};
+
+class GrpcHandler : public MessageHandler {
+public:
+    std::unique_ptr&lt;Serializer&gt; create_serializer() override {
+        return std::make_unique&lt;ProtobufSerializer&gt;();
+    }
+};
+
+int main() {
+    RestHandler rest;
+    SoapHandler soap;
+    GrpcHandler grpc;
+
+    rest.process("hello");    // JSON
+    soap.process("hello");    // XML
+    grpc.process("hello");    // Protobuf
+}
+</pre>
+
+<h2>Abstract Factory</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;memory&gt;
+
+// Abstract products: two related families
+class Encoder { public: virtual ~Encoder() = default; virtual void encode() = 0; };
+class Decoder { public: virtual ~Decoder() = default; virtual void decode() = 0; };
+
+// 4G LTE family
+class LteEncoder : public Encoder { void encode() override { std::cout &lt;&lt; "LTE encode\n"; } };
+class LteDecoder : public Decoder { void decode() override { std::cout &lt;&lt; "LTE decode\n"; } };
+
+// 5G NR family
+class NrEncoder : public Encoder { void encode() override { std::cout &lt;&lt; "NR encode\n"; } };
+class NrDecoder : public Decoder { void decode() override { std::cout &lt;&lt; "NR decode\n"; } };
+
+// Abstract factory — creates a family of related products
+class ProtocolFactory {
+public:
+    virtual ~ProtocolFactory() = default;
+    virtual std::unique_ptr&lt;Encoder&gt; create_encoder() = 0;
+    virtual std::unique_ptr&lt;Decoder&gt; create_decoder() = 0;
+};
+
+// Concrete factories
+class LteFactory : public ProtocolFactory {
+    std::unique_ptr&lt;Encoder&gt; create_encoder() override { return std::make_unique&lt;LteEncoder&gt;(); }
+    std::unique_ptr&lt;Decoder&gt; create_decoder() override { return std::make_unique&lt;LteDecoder&gt;(); }
+};
+
+class NrFactory : public ProtocolFactory {
+    std::unique_ptr&lt;Encoder&gt; create_encoder() override { return std::make_unique&lt;NrEncoder&gt;(); }
+    std::unique_ptr&lt;Decoder&gt; create_decoder() override { return std::make_unique&lt;NrDecoder&gt;(); }
+};
+
+void process(ProtocolFactory&amp; factory) {
+    auto encoder = factory.create_encoder();
+    auto decoder = factory.create_decoder();
+    encoder-&gt;encode();
+    decoder-&gt;decode();
+}
+
+int main() {
+    LteFactory lte;
+    NrFactory nr;
+
+    process(lte);  // LTE encode, LTE decode
+    process(nr);   // NR encode, NR decode
+}
+</pre>
+
+<div class="callout green">
+<p><strong>Choosing a factory variant:</strong> Use Simple Factory when you have a small number of types and the creation logic is straightforward. Use Factory Method when subclasses should choose their own creation strategy. Use Abstract Factory when you need families of related objects (e.g., different protocol stacks that must be consistent).</p>
+</div>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="singleton-pattern.html">Singleton Pattern</a> (factory as singleton), <a href="observer-pattern.html">Observer Pattern</a> (factory notifies on creation), <a href="strategy-pattern.html">Strategy Pattern</a> (inject strategies via factory), <a href="../intermediate/virtual-functions-vtable.html">Virtual Functions</a> (polymorphic dispatch), <a href="../intermediate/abstract-classes.html">Abstract Classes</a> (product interfaces).</p>
+</div>
+
+<div class="nav"><a href="observer-pattern.html">&larr; Observer Pattern</a><a href="strategy-pattern.html">Strategy Pattern &rarr;</a></div>
+</body>
+</html>

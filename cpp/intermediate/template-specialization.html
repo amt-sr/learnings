@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Template Specialization — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / Template Specialization</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>Template Specialization</h1>
+
+<p>Template specialization allows you to provide alternative implementations for specific types or patterns of template arguments. There are two forms: <strong>full (explicit) specialization</strong> which provides a complete replacement for a specific type, and <strong>partial specialization</strong> which provides an alternative for a subset of types.</p>
+
+<h2>Full Specialization</h2>
+
+<p>Full specialization replaces the entire primary template for one specific set of template arguments.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+#include &lt;cstring&gt;
+
+// Primary template — generic for all types
+template&lt;typename T&gt;
+class Serializer {
+public:
+    static std::string serialize(const T&amp; value) {
+        return std::to_string(value);
+    }
+};
+
+// Full specialization for std::string
+template&lt;&gt;
+class Serializer&lt;std::string&gt; {
+public:
+    static std::string serialize(const std::string&amp; value) {
+        return "\"" + value + "\"";  // Add quotes around strings
+    }
+};
+
+// Full specialization for bool
+template&lt;&gt;
+class Serializer&lt;bool&gt; {
+public:
+    static std::string serialize(bool value) {
+        return value ? "true" : "false";  // Textual true/false
+    }
+};
+
+void full_specialization_demo() {
+    std::cout &lt;&lt; Serializer&lt;int&gt;::serialize(42) &lt;&lt; "\n";          // "42"
+    std::cout &lt;&lt; Serializer&lt;double&gt;::serialize(3.14) &lt;&lt; "\n";      // "3.140000"
+    std::cout &lt;&lt; Serializer&lt;std::string&gt;::serialize("hello") &lt;&lt; "\n"; // "\"hello\""
+    std::cout &lt;&lt; Serializer&lt;bool&gt;::serialize(true) &lt;&lt; "\n";       // "true"
+}
+</pre>
+
+<h2>Function Template Specialization</h2>
+
+<div class="callout warning">
+  <p><strong>Note:</strong> Function template specialization has limitations. You cannot partially specialize function templates (only class templates). For functions, prefer overloading instead of specialization.</p>
+</div>
+
+<pre>
+// Primary function template
+template&lt;typename T&gt;
+T get_default();
+
+// Full specializations
+template&lt;&gt;
+int get_default&lt;int&gt;() { return 0; }
+
+template&lt;&gt;
+double get_default&lt;double&gt;() { return 0.0; }
+
+template&lt;&gt;
+std::string get_default&lt;std::string&gt;() { return ""; }
+
+// Better approach: use overloading instead of specialization for functions
+void print_value(const std::string&amp; s) { std::cout &lt;&lt; "string: " &lt;&lt; s &lt;&lt; "\n"; }
+void print_value(int n) { std::cout &lt;&lt; "int: " &lt;&lt; n &lt;&lt; "\n"; }
+void print_value(double d) { std::cout &lt;&lt; "double: " &lt;&lt; d &lt;&lt; "\n"; }
+</pre>
+
+<h2>Partial Specialization</h2>
+
+<p>Partial specialization is only available for class templates. It allows you to specialize for a category of types rather than a single specific type.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;type_traits&gt;
+
+// Primary template
+template&lt;typename T&gt;
+class TypeInfo {
+public:
+    static std::string name() { return "unknown"; }
+    static bool is_numeric() { return false; }
+};
+
+// Partial specialization for all pointer types
+template&lt;typename T&gt;
+class TypeInfo&lt;T*&gt; {
+public:
+    static std::string name() { return TypeInfo&lt;T&gt;::name() + "*"; }
+    static bool is_numeric() { return false; }
+};
+
+// Partial specialization for all integral types (C++11)
+template&lt;typename T&gt;
+class TypeInfo&lt;std::enable_if_t&lt;std::is_integral_v&lt;T&gt;, T&gt;&gt; {
+public:
+    static std::string name() { return "integral"; }
+    static bool is_numeric() { return true; }
+};
+
+// Partial specialization for all floating-point types
+template&lt;typename T&gt;
+class TypeInfo&lt;std::enable_if_t&lt;std::is_floating_point_v&lt;T&gt;, T&gt;&gt; {
+public:
+    static std::string name() { return "floating_point"; }
+    static bool is_numeric() { return true; }
+};
+
+// Partial specialization for all array types
+template&lt;typename T, size_t N&gt;
+class TypeInfo&lt;T[N]&gt; {
+public:
+    static std::string name() {
+        return TypeInfo&lt;T&gt;::name() + "[" + std::to_string(N) + "]";
+    }
+    static bool is_numeric() { return TypeInfo&lt;T&gt;::is_numeric(); }
+};
+
+void partial_specialization_demo() {
+    std::cout &lt;&lt; TypeInfo&lt;int&gt;::name() &lt;&lt; "\n";           // "integral"
+    std::cout &lt;&lt; TypeInfo&lt;double&gt;::name() &lt;&lt; "\n";        // "floating_point"
+    std::cout &lt;&lt; TypeInfo&lt;std::string&gt;::name() &lt;&lt; "\n";  // "unknown"
+    std::cout &lt;&lt; TypeInfo&lt;int*&gt;::name() &lt;&lt; "\n";          // "integral*"
+    std::cout &lt;&lt; TypeInfo&lt;int[5]&gt;::name() &lt;&lt; "\n";       // "integral[5]"
+}
+</pre>
+
+<h2>Practical Example: Custom Type Traits</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+#include &lt;complex&gt;
+
+// Primary template: not serializable by default
+template&lt;typename T&gt;
+struct is_serializable : std::false_type {};
+
+// Partial specialization: all arithmetic types are serializable
+template&lt;typename T&gt;
+struct is_serializable&lt;std::enable_if_t&lt;std::is_arithmetic_v&lt;T&gt;, T&gt;&gt;
+    : std::true_type {};
+
+// Full specialization: std::string is serializable
+template&lt;&gt;
+struct is_serializable&lt;std::string&gt; : std::true_type {};
+
+// Conditional serializer based on type trait
+template&lt;typename T&gt;
+std::string smart_serialize(const T&amp; value) {
+    if constexpr (is_serializable&lt;T&gt;::value) {
+        return std::to_string(value);
+    } else {
+        return "[non-serializable: " + std::string(typeid(T).name()) + "]";
+    }
+}
+
+void trait_specialization_demo() {
+    std::cout &lt;&lt; smart_serialize(42) &lt;&lt; "\n";           // "42"
+    std::cout &lt;&lt; smart_serialize(3.14) &lt;&lt; "\n";         // "3.14..."
+    std::cout &lt;&lt; smart_serialize(std::string("hi")) &lt;&lt; "\n";  // "hi..."
+    // std::cout &lt;&lt; smart_serialize(std::complex&lt;double&gt;(1,2)) &lt;&lt; "\n";
+    // "[non-serializable: ...]"
+}
+</pre>
+
+<h2>Specialization for Container Types</h2>
+
+<pre>
+#include &lt;vector&gt;
+#include &lt;map&gt;
+#include &lt;iostream&gt;
+
+// Primary template
+template&lt;typename T&gt;
+struct container_info {
+    static void print_info() {
+        std::cout &lt;&lt; "Not a container\n";
+    }
+};
+
+// Partial specialization for std::vector
+template&lt;typename T, typename Alloc&gt;
+struct container_info&lt;std::vector&lt;T, Alloc&gt;&gt; {
+    static void print_info() {
+        std::cout &lt;&lt; "std::vector of " &lt;&lt; typeid(T).name() &lt;&lt; "\n";
+    }
+};
+
+// Partial specialization for std::map
+template&lt;typename K, typename V, typename Comp, typename Alloc&gt;
+struct container_info&lt;std::map&lt;K, V, Comp, Alloc&gt;&gt; {
+    static void print_info() {
+        std::cout &lt;&lt; "std::map&lt;" &lt;&lt; typeid(K).name() &lt;&lt; ", "
+                  &lt;&lt; typeid(V).name() &lt;&lt; "&gt;\n";
+    }
+};
+
+void container_specialization_demo() {
+    container_info&lt;int&gt;::print_info();                                    // Not a container
+    container_info&lt;std::vector&lt;int&gt;&gt;::print_info();                     // std::vector of int
+    container_info&lt;std::map&lt;std::string, int&gt;&gt;::print_info();           // std::map&lt;...&gt;
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Choosing specialization vs overloading:</strong> For classes, use specialization. For functions, use overloading (it interacts better with <a href="sfinae.html">SFINAE</a>). Partial specialization is essential for <a href="type-traits.html">type traits</a> and is used by the standard library extensively.</p>
+</div>
+
+<p>Template specialization is a stepping stone to <a href="variadic-templates.html">variadic templates</a> and <a href="sfinae.html">SFINAE</a>, where you will learn more advanced template metaprogramming techniques.</p>
+
+<div class="nav"><a href="copy-elision.html">&larr; Copy Elision</a><a href="variadic-templates.html">Variadic Templates &rarr;</a></div>
+</body>
+</html>

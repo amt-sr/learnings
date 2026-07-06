@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tuple / Pair — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / <a href="../index.html#2.4">2.4 STL Deep Dive</a> / 2.4.4 Tuple / Pair</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>Tuple / Pair</h1>
+
+<p><code>std::pair</code> holds exactly two values of possibly different types. <code>std::tuple</code> (C++11) generalizes this to an arbitrary number of values. Both are lightweight value types with no heap allocation, commonly used as function return types and for grouping related data.</p>
+
+<h2>std::pair</h2>
+
+<pre>
+#include &lt;utility&gt;
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+void pair_basics() {
+    // Construction
+    std::pair&lt;std::string, int&gt; person1{"Alice", 30};
+    auto person2 = std::make_pair("Bob", 25);  // preferred — type deduction
+
+    // Access members
+    std::cout &lt;&lt; person1.first &lt;&lt; " is " &lt;&lt; person1.second &lt;&lt; "\n";
+
+    // Structured bindings (C++17)
+    auto [name, age] = person2;
+    std::cout &lt;&lt; name &lt;&lt; " is " &lt;&lt; age &lt;&lt; "\n";
+
+    // Comparison — lexicographic (first, then second)
+    std::cout &lt;&lt; (person1 &lt; person2) &lt;&lt; "\n";  // 1 (Alice &lt; Bob)
+
+    // swap
+    person1.swap(person2);
+}
+</pre>
+
+<h2>std::tuple</h2>
+
+<pre>
+#include &lt;tuple&gt;
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+void tuple_basics() {
+    // Construction
+    auto t1 = std::make_tuple("Alice", 30, 5.5);
+    std::tuple&lt;std::string, int, double&gt; t2{"Bob", 25, 4.0};
+
+    // Access with std::get (compile-time index)
+    std::cout &lt;&lt; std::get&lt;0&gt;(t1) &lt;&lt; "\n";  // Alice
+    std::cout &lt;&lt; std::get&lt;1&gt;(t1) &lt;&lt; "\n";  // 30
+
+    // Access by type (only if type is unique in the tuple)
+    std::cout &lt;&lt; std::get&lt;std::string&gt;(t1) &lt;&lt; "\n";  // Alice
+
+    // Structured bindings (C++17) — cleanest access
+    auto [name, age, score] = t1;
+    std::cout &lt;&lt; name &lt;&lt; ", " &lt;&lt; age &lt;&lt; ", " &lt;&lt; score &lt;&lt; "\n";
+
+    // Tuple size and element type
+    constexpr size_t sz = std::tuple_size_v&lt;decltype(t1)&gt;;  // 3
+    using SecondType = std::tuple_element_t&lt;1, decltype(t1)&gt;;  // int
+}
+</pre>
+
+<h2>Structured Bindings with Tuple</h2>
+
+<p>C++17 structured bindings make tuples much more ergonomic, eliminating the need for <code>std::get</code> in most cases.</p>
+
+<pre>
+#include &lt;tuple&gt;
+#include &lt;iostream&gt;
+
+// Return multiple values cleanly
+std::tuple&lt;int, int&gt; divide(int numerator, int denominator) {
+    return {numerator / denominator, numerator % denominator};
+}
+
+auto parse_name(const std::string&amp; full) -&gt; std::tuple&lt;std::string, std::string&gt; {
+    auto space = full.find(' ');
+    if (space == std::string::npos)
+        return {full, ""};
+    return {full.substr(0, space), full.substr(space + 1)};
+}
+
+void structured_binding_demo() {
+    auto [quotient, remainder] = divide(17, 5);
+    std::cout &lt;&lt; quotient &lt;&lt; " remainder " &lt;&lt; remainder &lt;&lt; "\n";
+    // Output: 3 remainder 2
+
+    auto [first, last] = parse_name("John Doe");
+    std::cout &lt;&lt; first &lt;&lt; " | " &lt;&lt; last &lt;&lt; "\n";
+    // Output: John | Doe
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Best practice:</strong> Prefer structured bindings over <code>std::get</code> for readability. Use <code>std::make_tuple</code> instead of explicit tuple construction for type deduction. Avoid using <code>std::tie</code> with structured bindings available.</p>
+</div>
+
+<h2>tuple_cat and Comparison</h2>
+
+<pre>
+#include &lt;tuple&gt;
+#include &lt;iostream&gt;
+
+void tuple_operations() {
+    auto t1 = std::make_tuple(1, 2.0);
+    auto t2 = std::make_tuple("hello", 'x');
+
+    // Concatenate tuples
+    auto combined = std::tuple_cat(t1, t2);
+    // combined is tuple&lt;int, double, const char*, char&gt;
+    std::cout &lt;&lt; std::get&lt;0&gt;(combined) &lt;&lt; "\n";   // 1
+    std::cout &lt;&lt; std::get&lt;2&gt;(combined) &lt;&lt; "\n";   // hello
+
+    // Comparison — lexicographic
+    auto a = std::make_tuple(1, 2, 3);
+    auto b = std::make_tuple(1, 2, 4);
+    std::cout &lt;&lt; (a &lt; b) &lt;&lt; "\n";  // 1 (true)
+
+    // Equality
+    auto c = std::make_tuple(1, 2, 3);
+    std::cout &lt;&lt; (a == c) &lt;&lt; "\n";  // 1 (true)
+}
+</pre>
+
+<h2>Pair vs Tuple</h2>
+
+<table>
+  <tr><th>Feature</th><th>std::pair</th><th>std::tuple</th></tr>
+  <tr><td>Number of elements</td><td>Exactly 2</td><td>Any (0 to N)</td></tr>
+  <tr><td>Access</td><td>.first, .second</td><td>std::get&lt;N&gt;(), structured bindings</td></tr>
+  <tr><td>Factory</td><td>std::make_pair</td><td>std::make_tuple</td></tr>
+  <tr><td>Headers</td><td>&lt;utility&gt;</td><td>&lt;tuple&gt;</td></tr>
+  <tr><td>Use case</td><td>Key-value, two related items</td><td>Multi-value returns, data grouping</td></tr>
+</table>
+
+<div class="callout">
+  <p><strong>Memory layout:</strong> Both <code>pair</code> and <code>tuple</code> are stack-allocated aggregates. They contain no heap allocation and no vtable. The size is the sum of member sizes plus any alignment padding. This makes them very efficient for passing groups of values.</p>
+</div>
+
+<h2>Practical: Function Returning Multiple Values</h2>
+
+<pre>
+#include &lt;tuple&gt;
+#include &lt;string&gt;
+#include &lt;optional&gt;
+#include &lt;iostream&gt;
+
+struct Stats {
+    double mean;
+    double stddev;
+    size_t count;
+};
+
+auto compute_stats(const std::vector&lt;double&gt;&amp; data) {
+    if (data.empty()) return std::nullopt;
+
+    double sum = 0;
+    for (double v : data) sum += v;
+    double mean = sum / data.size();
+
+    double sq_sum = 0;
+    for (double v : data) sq_sum += (v - mean) * (v - mean);
+    double stddev = std::sqrt(sq_sum / data.size());
+
+    return std::make_tuple(mean, stddev, data.size());
+}
+
+void stats_demo() {
+    std::vector&lt;double&gt; data = {1.0, 2.0, 3.0, 4.0, 5.0};
+    auto result = compute_stats(data);
+    if (result) {
+        auto [mean, stddev, count] = *result;
+        std::cout &lt;&lt; "Mean: " &lt;&lt; mean &lt;&lt; ", StdDev: " &lt;&lt; stddev
+                  &lt;&lt; ", Count: " &lt;&lt; count &lt;&lt; "\n";
+    }
+}
+</pre>
+
+<p>Tuples pair naturally with <a href="structured-bindings.html">structured bindings</a> for clean unpacking. For more flexible type-safe unions, see <a href="optional-variant.html">optional/variant</a>. The <a href="auto-decltype.html">auto/decltype</a> page covers type deduction used with tuple factory functions.</p>
+
+<div class="nav"><a href="list-forward-list.html">&larr; List / Forward List</a><a href="optional-variant.html">Optional / Variant &rarr;</a></div>
+</body>
+</html>

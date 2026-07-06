@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STL Overview — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; }
+  .breadcrumb a { color: #8b949e; }
+  .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; }
+  .callout.red { border-left-color: #f85149; }
+  .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; }
+  th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#1">1 Basics</a> / 1.5.1 STL Overview</div>
+<div class="meta"><span class="tag basic">BASIC</span></div>
+<h1>1.5.1 STL Overview</h1>
+
+<p>The <strong>Standard Template Library (STL)</strong> is a collection of generic, reusable data structures and algorithms that are part of the C++ standard library. It is one of the most powerful features of C++, providing production-ready components for common programming tasks.</p>
+
+<h2>The Four Components of STL</h2>
+
+<table>
+  <tr><th>Component</th><th>Purpose</th><th>Example</th></tr>
+  <tr><td><strong>Containers</strong></td><td>Store and organize data</td><td><code>std::vector</code>, <code>std::map</code>, <code>std::string</code></td></tr>
+  <tr><td><strong>Iterators</strong></td><td>Provide uniform access to container elements</td><td><code>begin()</code>, <code>end()</code>, <code>rbegin()</code></td></tr>
+  <tr><td><strong>Algorithms</strong></td><td>Operate on ranges of elements</td><td><code>std::sort</code>, <code>std::find</code>, <code>std::transform</code></td></tr>
+  <tr><td><strong>Functors</strong></td><td>Function objects used by algorithms</td><td><code>std::less</code>, <code>std::greater</code>, lambdas</td></tr>
+</table>
+
+<h2>Containers</h2>
+
+<p>Containers are objects that store collections of elements. The STL provides several categories of containers, each optimized for different use cases.</p>
+
+<h3>Sequence Containers</h3>
+
+<p>Elements are stored in a linear order, accessed by position.</p>
+
+<table>
+  <tr><th>Container</th><th>Header</th><th>Characteristics</th></tr>
+  <tr><td><code>std::vector</code></td><td><code>&lt;vector&gt;</code></td><td>Dynamic array, fast random access, amortized O(1) push_back</td></tr>
+  <tr><td><code>std::deque</code></td><td><code>&lt;deque&gt;</code></td><td>Double-ended queue, fast insert at both ends</td></tr>
+  <tr><td><code>std::list</code></td><td><code>&lt;list&gt;</code></td><td>Doubly-linked list, fast insert/remove anywhere</td></tr>
+  <tr><td><code>std::forward_list</code></td><td><code>&lt;forward_list&gt;</code></td><td>Singly-linked list, minimal memory overhead</td></tr>
+  <tr><td><code>std::array</code></td><td><code>&lt;array&gt;</code></td><td>Fixed-size array, stack-allocated, no dynamic growth</td></tr>
+</table>
+
+<h3>Associative Containers</h3>
+
+<p>Elements stored as key-value pairs, ordered by key for fast lookup.</p>
+
+<table>
+  <tr><th>Container</th><th>Header</th><th>Characteristics</th></tr>
+  <tr><td><code>std::set</code></td><td><code>&lt;set&gt;</code></td><td>Unique elements, ordered, O(log n) lookup</td></tr>
+  <tr><td><code>std::map</code></td><td><code>&lt;map&gt;</code></td><td>Key-value pairs, ordered by key, O(log n)</td></tr>
+  <tr><td><code>std::multiset</code></td><td><code>&lt;set&gt;</code></td><td>Like set, allows duplicates</td></tr>
+  <tr><td><code>std::multimap</code></td><td><code>&lt;map&gt;</code></td><td>Like map, allows duplicate keys</td></tr>
+</table>
+
+<h3>Unordered Associative Containers</h3>
+
+<p>Hash table based, providing average O(1) lookup.</p>
+
+<table>
+  <tr><th>Container</th><th>Header</th><th>Characteristics</th></tr>
+  <tr><td><code>std::unordered_set</code></td><td><code>&lt;unordered_set&gt;</code></td><td>Unique elements, hash table, avg O(1) lookup</td></tr>
+  <tr><td><code>std::unordered_map</code></td><td><code>&lt;unordered_map&gt;</code></td><td>Key-value, hash table, avg O(1) lookup</td></tr>
+</table>
+
+<h3>Container Adaptors</h3>
+
+<p>Wrappers around existing containers providing a specific interface.</p>
+
+<table>
+  <tr><th>Adaptor</th><th>Header</th><th>Default underlying container</th></tr>
+  <tr><td><code>std::stack</code></td><td><code>&lt;stack&gt;</code></td><td><code>std::deque</code></td></tr>
+  <tr><td><code>std::queue</code></td><td><code>&lt;queue&gt;</code></td><td><code>std::deque</code></td></tr>
+  <tr><td><code>std::priority_queue</code></td><td><code>&lt;queue&gt;</code></td><td><code>std::vector</code> + <code>std::less</code></td></tr>
+</table>
+
+<h2>Iterators</h2>
+
+<p>Iterators provide a uniform way to traverse any container. They generalize the concept of a pointer: you can dereference an iterator to access the element it points to, and increment it to move to the next element.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+#include &lt;algorithm&gt;
+
+int main() {
+    std::vector&lt;int&gt; nums = {5, 2, 8, 1, 9, 3};
+
+    // Forward iteration with iterators
+    std::cout &lt;&lt; "Forward: ";
+    for (std::vector&lt;int&gt;::iterator it = nums.begin();
+         it != nums.end(); ++it) {
+        std::cout &lt;&lt; *it &lt;&lt; " ";
+    }
+    std::cout &lt;&lt; std::endl;
+
+    // Reverse iteration
+    std::cout &lt;&lt; "Reverse: ";
+    for (auto rit = nums.rbegin(); rit != nums.rend(); ++rit) {
+        std::cout &lt;&lt; *rit &lt;&lt; " ";
+    }
+    std::cout &lt;&lt; std::endl;
+
+    return 0;
+}
+</pre>
+
+<div class="callout">
+  <p><strong>See also:</strong> <a href="iterators-basics.html">Iterators Basics</a> for a full discussion of iterator categories and usage patterns.</p>
+</div>
+
+<h2>Algorithms</h2>
+
+<p>The <code>&lt;algorithm&gt;</code> header provides 100+ generic algorithms that operate on iterator ranges. These include sorting, searching, transforming, and numeric operations.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+#include &lt;algorithm&gt;
+#include &lt;numeric&gt;
+
+int main() {
+    std::vector&lt;int&gt; nums = {5, 2, 8, 1, 9, 3};
+
+    // Sort
+    std::sort(nums.begin(), nums.end());
+
+    // Search
+    auto it = std::find(nums.begin(), nums.end(), 8);
+    if (it != nums.end()) {
+        std::cout &lt;&lt; "Found 8 at position "
+                  &lt;&lt; (it - nums.begin()) &lt;&lt; std::endl;
+    }
+
+    // Count
+    int count = std::count(nums.begin(), nums.end(), 5);
+    std::cout &lt;&lt; "Count of 5: " &lt;&lt; count &lt;&lt; std::endl;
+
+    // Accumulate
+    int sum = std::accumulate(nums.begin(), nums.end(), 0);
+    std::cout &lt;&lt; "Sum: " &lt;&lt; sum &lt;&lt; std::endl;
+
+    // Print sorted result
+    for (int n : nums) std::cout &lt;&lt; n &lt;&lt; " ";
+    std::cout &lt;&lt; std::endl;
+
+    return 0;
+}
+</pre>
+
+<h2>Functors and Lambdas</h2>
+
+<p>Functors (function objects) and lambda expressions allow you to customize algorithm behavior. A lambda is a concise way to create an inline function object.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+#include &lt;algorithm&gt;
+
+int main() {
+    std::vector&lt;int&gt; nums = {5, 2, 8, 1, 9, 3};
+
+    // Sort descending using a lambda
+    std::sort(nums.begin(), nums.end(), [](int a, int b) {
+        return a &gt; b;
+    });
+
+    // Count elements greater than 5
+    int big = std::count_if(nums.begin(), nums.end(), [](int x) {
+        return x &gt; 5;
+    });
+    std::cout &lt;&lt; "Elements &gt; 5: " &lt;&lt; big &lt;&lt; std::endl;
+
+    // Transform: multiply each element by 2
+    std::for_each(nums.begin(), nums.end(), [](int&amp; x) {
+        x *= 2;
+    });
+
+    for (int n : nums) std::cout &lt;&lt; n &lt;&lt; " ";
+    std::cout &lt;&lt; std::endl;
+
+    return 0;
+}
+</pre>
+
+<h2>Common Headers Quick Reference</h2>
+
+<table>
+  <tr><th>Header</th><th>Provides</th></tr>
+  <tr><td><code>&lt;vector&gt;</code></td><td><code>std::vector</code></td></tr>
+  <tr><td><code>&lt;map&gt;</code></td><td><code>std::map</code>, <code>std::multimap</code></td></tr>
+  <tr><td><code>&lt;unordered_map&gt;</code></td><td><code>std::unordered_map</code>, <code>std::unordered_multimap</code></td></tr>
+  <tr><td><code>&lt;set&gt;</code></td><td><code>std::set</code>, <code>std::multiset</code></td></tr>
+  <tr><td><code>&lt;unordered_set&gt;</code></td><td><code>std::unordered_set</code>, <code>std::unordered_multiset</code></td></tr>
+  <tr><td><code>&lt;string&gt;</code></td><td><code>std::string</code></td></tr>
+  <tr><td><code>&lt;algorithm&gt;</code></td><td><code>std::sort</code>, <code>std::find</code>, <code>std::transform</code>, etc.</td></tr>
+  <tr><td><code>&lt;numeric&gt;</code></td><td><code>std::accumulate</code>, <code>std::partial_sum</code></td></tr>
+  <tr><td><code>&lt;iterator&gt;</code></td><td><code>std::begin</code>, <code>std::end</code>, iterator utilities</td></tr>
+  <tr><td><code>&lt;deque&gt;</code></td><td><code>std::deque</code></td></tr>
+  <tr><td><code>&lt;list&gt;</code></td><td><code>std::list</code>, <code>std::forward_list</code></td></tr>
+  <tr><td><code>&lt;array&gt;</code></td><td><code>std::array</code></td></tr>
+  <tr><td><code>&lt;stack&gt;</code></td><td><code>std::stack</code>, <code>std::queue</code>, <code>std::priority_queue</code></td></tr>
+</table>
+
+<h2>Why STL Matters</h2>
+
+<div class="callout green">
+  <p><strong>Productivity:</strong> The STL saves you from reimplementing common data structures and algorithms. Need a sorted dictionary? Use <code>std::map</code>. Need to find an element? Use <code>std::find</code>. Each component is thoroughly tested, optimized, and standardized.</p>
+</div>
+
+<ul>
+  <li><strong>Type safety:</strong> Templates ensure containers and algorithms work with the correct types at compile time.</li>
+  <li><strong>Performance:</strong> STL components are highly optimized. <code>std::vector</code> and <code>std::sort</code> often match or beat hand-written alternatives.</li>
+  <li><strong>Correctness:</strong> Standardized behavior means portable, predictable results across compilers and platforms.</li>
+  <li><strong>Uniformity:</strong> All containers use iterators, so algorithms work seamlessly with any container.</li>
+</ul>
+
+<h2>Related Topics</h2>
+
+<ul>
+  <li><a href="vector.html">std::vector</a> &mdash; The most-used STL container: dynamic array</li>
+  <li><a href="map-unordered-map.html">std::map &amp; std::unordered_map</a> &mdash; Key-value associative containers</li>
+  <li><a href="iterators-basics.html">Iterators Basics</a> &mdash; Iterator categories and usage patterns</li>
+  <li><a href="../intermediate/stl-algorithms.html">STL Algorithms</a> &mdash; Deep dive into &lt;algorithm&gt;</li>
+  <li><a href="std-string.html">std::string</a> &mdash; The string container and its operations</li>
+  <li><a href="../intermediate/set-unordered-set.html">std::set &amp; std::unordered_set</a> &mdash; Unique element containers</li>
+</ul>
+
+<div class="nav">
+  <a href="class-templates.html">&larr; Class Templates</a>
+  <a href="vector.html">std::vector &rarr;</a>
+</div>
+</body>
+</html>

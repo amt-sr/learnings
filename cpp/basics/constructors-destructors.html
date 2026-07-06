@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Constructors &amp; Destructors — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; }
+  .breadcrumb a { color: #8b949e; }
+  .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; }
+  .callout.red { border-left-color: #f85149; }
+  .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; }
+  th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#1">1 Basics</a> / <a href="../index.html#1">1.2 Object-Oriented Programming</a> / 1.2.2 Constructors &amp; Destructors</div>
+<div class="meta"><span class="tag basic">BASIC</span></div>
+<h1>1.2.2 Constructors &amp; Destructors</h1>
+
+<p>Constructors and destructors are special member functions that manage the lifecycle of <a href="classes-objects.html">objects</a>. A constructor initializes an object when it is created. A destructor cleans up resources when an object is destroyed. Together, they form the basis of the <a href="../intermediate/raii.html">RAII</a> (Resource Acquisition Is Initialization) pattern.</p>
+
+<h2>Default Constructor</h2>
+
+<p>A default constructor takes no arguments (or all arguments have defaults). It is called when an object is created without explicit initialization:</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+class Counter {
+private:
+    int count;
+
+public:
+    // Default constructor
+    Counter() : count(0) {
+        std::cout &lt;&lt; "Default constructor called" &lt;&lt; std::endl;
+    }
+
+    void increment() { ++count; }
+    int get() const { return count; }
+};
+
+int main() {
+    Counter c1;           // calls default constructor
+    Counter c2{};         // also calls default constructor (C++11)
+    Counter c3 = Counter{}; // calls default constructor
+
+    std::cout &lt;&lt; "c1.count = " &lt;&lt; c1.get() &lt;&lt; std::endl;  // 0
+
+    return 0;
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>Note:</strong> If you define any constructor explicitly, the compiler no longer generates a default constructor automatically. If you need objects to be default-constructible, you must define the default constructor yourself or use <code>= default</code>.</p>
+</div>
+
+<h2>Parameterized Constructor</h2>
+
+<p>A parameterized constructor accepts arguments to initialize the object with specific values:</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+class Student {
+private:
+    std::string name;
+    double gpa;
+
+public:
+    // Parameterized constructor
+    Student(const std::string&amp; n, double g) : name(n), gpa(g) {
+        std::cout &lt;&lt; "Parameterized constructor: " &lt;&lt; name &lt;&lt; std::endl;
+    }
+
+    // Constructor with default arguments (serves as both default and parameterized)
+    Student(const std::string&amp; n = "Unknown", double g = 0.0)
+        : name(n), gpa(g) {}
+
+    void display() const {
+        std::cout &lt;&lt; name &lt;&lt; " (GPA: " &lt;&lt; gpa &lt;&lt; ")" &lt;&lt; std::endl;
+    }
+};
+</pre>
+
+<div class="callout red">
+  <p><strong>Warning:</strong> You cannot have both a default constructor and a constructor with all-default arguments at the same time &mdash; this would create ambiguity. Use one or the other.</p>
+</div>
+
+<h2>Copy Constructor</h2>
+
+<p>The copy constructor creates a new object as a copy of an existing object. It is called when an object is passed by value, returned by value, or explicitly copied:</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+class Buffer {
+private:
+    int* data;
+    int size;
+
+public:
+    // Parameterized constructor
+    Buffer(int s) : size(s), data(new int[s]) {
+        for (int i = 0; i &lt; size; ++i) data[i] = 0;
+        std::cout &lt;&lt; "Constructor: allocated " &lt;&lt; size &lt;&lt; " ints" &lt;&lt; std::endl;
+    }
+
+    // Copy constructor (deep copy)
+    Buffer(const Buffer&amp; other) : size(other.size), data(new int[other.size]) {
+        for (int i = 0; i &lt; size; ++i) data[i] = other.data[i];
+        std::cout &lt;&lt; "Copy constructor: deep copied " &lt;&lt; size &lt;&lt; " ints" &lt;&lt; std::endl;
+    }
+
+    // Destructor
+    ~Buffer() {
+        delete[] data;
+        std::cout &lt;&lt; "Destructor: freed memory" &lt;&lt; std::endl;
+    }
+
+    int&amp; operator[](int i) { return data[i]; }
+};
+
+int main() {
+    Buffer buf1{5};
+    buf1[2] = 42;
+
+    Buffer buf2 = buf1;  // calls copy constructor
+    std::cout &lt;&lt; "buf2[2] = " &lt;&lt; buf2[2] &lt;&lt; std::endl;  // 42
+
+    return 0;
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Tip:</strong> The compiler generates a default copy constructor that performs a <strong>shallow copy</strong> (member-wise copy). If your class manages resources (raw pointers, file handles, network sockets), you must write a custom copy constructor to perform a <strong>deep copy</strong>. See <a href="../intermediate/copy-elision.html">Copy Elision &amp; RVO</a> for how the compiler optimizes copies away.</p>
+</div>
+
+<h2>Destructor</h2>
+
+<p>The destructor is called automatically when an object goes out of scope or is deleted. It has no parameters and no return type. Its name is prefixed with a tilde <code>~</code>:</p>
+
+<pre>
+class Logger {
+private:
+    std::string filename;
+
+public:
+    Logger(const std::string&amp; fname) : filename(fname) {
+        std::cout &lt;&lt; "Opening log file: " &lt;&lt; filename &lt;&lt; std::endl;
+    }
+
+    ~Logger() {
+        std::cout &lt;&lt; "Closing log file: " &lt;&lt; filename &lt;&lt; std::endl;
+        // Clean up resources here (close files, release memory, etc.)
+    }
+
+    void log(const std::string&amp; message) const {
+        std::cout &lt;&lt; "[" &lt;&lt; filename &lt;&lt; "] " &lt;&lt; message &lt;&lt; std::endl;
+    }
+};
+
+void process() {
+    Logger logger{"app.log"};
+    logger.log("Processing started");
+    // logger's destructor called automatically here
+}
+
+int main() {
+    process();
+    std::cout &lt;&lt; "Back in main" &lt;&lt; std::endl;
+    return 0;
+}
+// Output:
+// Opening log file: app.log
+// [app.log] Processing started
+// Closing log file: app.log
+// Back in main
+</pre>
+
+<h2>Constructor Initialization List</h2>
+
+<p>Member initialization lists are the preferred way to initialize members in a constructor. They are more efficient than assignment in the constructor body because members are initialized directly rather than being default-constructed and then assigned:</p>
+
+<pre>
+class Vector3D {
+private:
+    double x, y, z;
+
+public:
+    // Preferred: initialization list
+    Vector3D(double x, double y, double z) : x(x), y(y), z(z) {}
+
+    // Also works but less efficient for class-type members
+    // Vector3D(double x, double y, double z) {
+    //     this-&gt;x = x;  // members default-constructed first, then assigned
+    //     this-&gt;y = y;
+    //     this-&gt;z = z;
+    // }
+
+    void print() const {
+        std::cout &lt;&lt; "(" &lt;&lt; x &lt;&lt; ", " &lt;&lt; y &lt;&lt; ", " &lt;&lt; z &lt;&lt; ")" &lt;&lt; std::endl;
+    }
+};
+</pre>
+
+<div class="callout">
+  <p><strong>Required:</strong> <code>const</code> members and reference members <strong>must</strong> be initialized in the initialization list. They cannot be assigned in the constructor body because they must be initialized at the point of creation.</p>
+</div>
+
+<pre>
+class Required {
+private:
+    const int id;          // must be in init list
+    int&amp; ref;              // must be in init list
+    std::string name;
+
+public:
+    Required(int i, int&amp; r, const std::string&amp; n)
+        : id(i), ref(r), name(n) {}  // initialization list is required
+};
+</pre>
+
+<h2>Order of Construction and Destruction</h2>
+
+<p>Members are initialized in the order they are <strong>declared</strong> in the class, not the order they appear in the initialization list. Destruction happens in the reverse order:</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+class A {
+public:
+    A()  { std::cout &lt;&lt; "A constructed" &lt;&lt; std::endl; }
+    ~A() { std::cout &lt;&lt; "A destroyed" &lt;&lt; std::endl; }
+};
+
+class B {
+public:
+    B()  { std::cout &lt;&lt; "B constructed" &lt;&lt; std::endl; }
+    ~B() { std::cout &lt;&lt; "B destroyed" &lt;&lt; std::endl; }
+};
+
+class Container {
+private:
+    A a;  // constructed first (declared first)
+    B b;  // constructed second (declared second)
+
+public:
+    Container() {
+        std::cout &lt;&lt; "Container constructed" &lt;&lt; std::endl;
+    }
+    ~Container() {
+        std::cout &lt;&lt; "Container destroyed" &lt;&lt; std::endl;
+    }
+};
+
+int main() {
+    Container c;
+    return 0;
+}
+// Output:
+// A constructed
+// B constructed
+// Container constructed
+// Container destroyed
+// B destroyed       (reverse order)
+// A destroyed
+</pre>
+
+<div class="callout warning">
+  <p><strong>Warning:</strong> Always match your initialization list order to the declaration order to avoid confusion. Compilers will warn if the order differs (enable with <code>-Wall</code>).</p>
+</div>
+
+<div class="callout">
+  <p><strong>Further reading:</strong> For move constructors and move assignment operators, see <a href="../intermediate/move-semantics.html">Move Semantics</a>. For resource management patterns using constructors and destructors, see <a href="../intermediate/raii.html">RAII</a> and <a href="../intermediate/smart-pointers.html">Smart Pointers</a>.</p>
+</div>
+
+<div class="nav">
+  <a href="classes-objects.html">&larr; Classes &amp; Objects</a>
+  <a href="inheritance.html">Inheritance &rarr;</a>
+</div>
+</body>
+</html>

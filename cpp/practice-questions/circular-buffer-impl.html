@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lock-Free Ring Buffer — C++ Practice</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.easy { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  .question { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; }
+  .question h3 { color: #f0f6fc; margin-top: 0; }
+  .solution-toggle { cursor: pointer; user-select: none; }
+  .solution-toggle h3 { color: #3fb950; display: inline; }
+  .solution-content { display: none; margin-top: 1rem; }
+  .solution-content.visible { display: block; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+  .topics-covered { margin-bottom: 1rem; font-size: 0.85rem; color: #8b949e; }
+  .topics-covered a { color: #8b949e; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#5">5 Practice</a> / Telecom Practice</div>
+<div class="meta"><span class="tag medium">Medium</span></div>
+<h1>Lock-Free Ring Buffer</h1>
+
+<div class="topics-covered">
+  <strong>Topics Covered:</strong>
+  <a href="../circular-buffers.html">Circular Buffers</a>,
+  <a href="../atomics.html">Atomics</a>,
+  <a href="../templates.html">Templates</a>
+</div>
+
+<div class="question">
+  <h3>Problem Statement</h3>
+  <p>Implement a lock-free Single Producer Single Consumer (SPSC) ring buffer template class. The buffer must:</p>
+  <ul>
+    <li>Support <code>push</code> (write) from a single producer thread and <code>pop</code> (read) from a single consumer thread.</li>
+    <li>Be completely lock-free: use only <code>std::atomic</code> operations, no mutexes.</li>
+    <li>Use power-of-two capacity for efficient modulo via bitmask.</li>
+    <li>Handle buffer full and buffer empty conditions gracefully.</li>
+    <li>Be generic over the element type T.</li>
+  </ul>
+</div>
+
+<div class="callout warning">
+  <p><strong>Important:</strong> This is an SPSC (single producer, single consumer) ring buffer. A multi-producer/multi-consumer (MPMC) lock-free ring buffer is significantly more complex and requires CAS loops on both head and tail.</p>
+</div>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution1')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution1">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;atomic&gt;
+#include &lt;vector&gt;
+#include &lt;cstddef&gt;
+#include &lt;optional&gt;
+#include &lt;thread&gt;
+#include &lt;chrono&gt;
+
+template&lt;typename T, std::size_t Capacity&gt;
+class SPSCRingBuffer {
+    static_assert((Capacity &amp; (Capacity - 1)) == 0,
+        "Capacity must be a power of 2");
+
+    static constexpr std::size_t Mask = Capacity - 1;
+
+public:
+    SPSCRingBuffer()
+        : buffer_(Capacity), head_(0), tail_(0) {}
+
+    // Non-copyable, non-movable
+    SPSCRingBuffer(const SPSCRingBuffer&amp;) = delete;
+    SPSCRingBuffer&amp; operator=(const SPSCRingBuffer&amp;) = delete;
+
+    // Push: called by single producer thread
+    bool push(const T&amp; item) {
+        const auto currentHead = head_.load(std::memory_order_relaxed);
+        const auto nextHead = currentHead + 1;
+
+        // Check if buffer is full
+        // Buffer is full when (head - tail) == Capacity
+        if (nextHead - tail_.load(std::memory_order_acquire) &gt; Capacity) {
+            return false;  // Buffer full
+        }
+
+        buffer_[currentHead &amp; Mask] = item;
+        head_.store(nextHead, std::memory_order_release);
+        return true;
+    }
+
+    bool push(T&amp;&amp; item) {
+        const auto currentHead = head_.load(std::memory_order_relaxed);
+        const auto nextHead = currentHead + 1;
+
+        if (nextHead - tail_.load(std::memory_order_acquire) &gt; Capacity) {
+            return false;
+        }
+
+        buffer_[currentHead &amp; Mask] = std::move(item);
+        head_.store(nextHead, std::memory_order_release);
+        return true;
+    }
+
+    // Pop: called by single consumer thread
+    std::optional&lt;T&gt; pop() {
+        const auto currentTail = tail_.load(std::memory_order_relaxed);
+
+        // Check if buffer is empty
+        if (currentTail == head_.load(std::memory_order_acquire)) {
+            return std::nullopt;  // Buffer empty
+        }
+
+        T item = std::move(buffer_[currentTail &amp; Mask]);
+        tail_.store(currentTail + 1, std::memory_order_release);
+        return item;
+    }
+
+    // Query methods
+    bool empty() const {
+        return tail_.load(std::memory_order_acquire) ==
+               head_.load(std::memory_order_acquire);
+    }
+
+    bool full() const {
+        return (head_.load(std::memory_order_acquire) -
+                tail_.load(std::memory_order_acquire)) == Capacity;
+    }
+
+    std::size_t size() const {
+        return head_.load(std::memory_order_acquire) -
+               tail_.load(std::memory_order_acquire);
+    }
+
+    std::size_t capacity() const { return Capacity; }
+
+private:
+    std::vector&lt;T&gt; buffer_;
+    // head is written by producer, read by consumer
+    std::atomic&lt;std::size_t&gt; head_;
+    // tail is written by consumer, read by producer
+    std::atomic&lt;std::size_t&gt; tail_;
+};
+
+// --- Demo ---
+
+int main() {
+    constexpr std::size_t BUF_SIZE = 16;  // Must be power of 2
+    SPSCRingBuffer&lt;int, BUF_SIZE&gt; buffer;
+
+    std::cout &lt;&lt; "Capacity: " &lt;&lt; buffer.capacity() &lt;&lt; "\n";
+    std::cout &lt;&lt; "Initial empty: " &lt;&lt; buffer.empty() &lt;&lt; "\n\n";
+
+    // Producer thread
+    std::thread producer([&amp;]() {
+        for (int i = 1; i &lt;= 25; ++i) {
+            while (!buffer.push(i)) {
+                // Buffer full, spin-wait (or could yield/sleep)
+                std::this_thread::yield();
+            }
+            std::cout &lt;&lt; "  Produced: " &lt;&lt; i
+                      &lt;&lt; " (size=" &lt;&lt; buffer.size() &lt;&lt; ")\n";
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        std::cout &lt;&lt; "Producer done\n";
+    });
+
+    // Consumer thread
+    std::thread consumer([&amp;]() {
+        int received = 0;
+        int expected = 1;
+        while (received &lt; 25) {
+            auto item = buffer.pop();
+            if (item) {
+                ++received;
+                if (*item != expected++) {
+                    std::cerr &lt;&lt; "MISMATCH! Expected " &lt;&lt; expected - 1
+                              &lt;&lt; " got " &lt;&lt; *item &lt;&lt; "\n";
+                }
+                std::cout &lt;&lt; "  Consumed: " &lt;&lt; *item
+                          &lt;&lt; " (size=" &lt;&lt; buffer.size() &lt;&lt; ")\n";
+            } else {
+                std::this_thread::yield();
+            }
+        }
+        std::cout &lt;&lt; "Consumer done (received " &lt;&lt; received &lt;&lt; " items)\n";
+    });
+
+    producer.join();
+    consumer.join();
+
+    std::cout &lt;&lt; "\nFinal state: empty=" &lt;&lt; buffer.empty()
+              &lt;&lt; ", size=" &lt;&lt; buffer.size() &lt;&lt; "\n";
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><strong>Power-of-two capacity:</strong> Allows <code>index &amp; (Capacity - 1)</code> instead of <code>index % Capacity</code>. Bitmask is a single CPU instruction vs. division which is expensive.</li>
+      <li><strong>Monotonic counters:</strong> <code>head_</code> and <code>tail_</code> never wrap around. They are monotonically increasing <code>size_t</code> values. The actual buffer index is obtained via <code>&amp; Mask</code>.</li>
+      <li><strong>Memory ordering:</strong>
+        <ul>
+          <li>Producer writes data, then does <code>release</code> store on <code>head_</code>. Consumer does <code>acquire</code> load on <code>head_</code> before reading data. This ensures the producer's writes are visible to the consumer.</li>
+          <li>Similarly for <code>tail_</code>: consumer does <code>release</code>, producer does <code>acquire</code>.</li>
+          <li>Within the same thread, <code>relaxed</code> ordering is sufficient for the initial load of the local counter.</li>
+        </ul>
+      </li>
+      <li><strong>SPSC guarantee:</strong> Only one thread writes <code>head_</code> (producer) and only one thread writes <code>tail_</code> (consumer). No CAS loop is needed for either, making it truly lock-free.</li>
+      <li><strong>Full/Empty detection:</strong> Full when <code>(head - tail) == Capacity</code>. Empty when <code>head == tail</code>. The monotonic counters make this comparison correct regardless of overflow.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout green">
+  <p><strong>Complexity Analysis:</strong></p>
+  <table>
+    <tr><th>Operation</th><th>Time</th><th>Contention</th></tr>
+    <tr><td>push</td><td>O(1)</td><td>No contention (single producer)</td></tr>
+    <tr><td>pop</td><td>O(1)</td><td>No contention (single consumer)</td></tr>
+    <tr><td>empty/full</td><td>O(1)</td><td>Cross-thread atomic read</td></tr>
+    <tr><td>Memory overhead</td><td>sizeof(T) * N + 2 atomics</td><td></td></tr>
+  </table>
+</div>
+
+<h2>Follow-up Questions</h2>
+
+<div class="question">
+  <h3>Variations to Try</h3>
+  <ol>
+    <li><strong>MPMC ring buffer:</strong> Extend to support multiple producers and multiple consumers using CAS (compare-and-swap) loops on both head and tail. This is significantly more complex.</li>
+    <li><strong>Bulk push/pop:</strong> Add methods to push/pop multiple items at once, reducing atomic operations per item.</li>
+    <li><strong>Overwrite mode:</strong> When full, overwrite the oldest item instead of rejecting. Useful for telemetry/logging buffers.</li>
+    <li><strong>Cache-line padding:</strong> Pad the head and tail atomics to separate cache lines (using <code>alignas(64)</code>) to avoid false sharing between producer and consumer threads.</li>
+    <li><strong>Fixed-size byte buffer:</strong> Implement a ring buffer for raw bytes (not typed elements) with variable-length push/pop, suitable for network packet buffers.</li>
+  </ol>
+</div>
+
+<div class="callout red">
+  <p><strong>Common Pitfalls:</strong></p>
+  <ul>
+    <li><strong>False sharing:</strong> If <code>head_</code> and <code>tail_</code> are on the same cache line, the producer and consumer constantly invalidate each other's cache. Use <code>alignas(64)</code> to separate them.</li>
+    <li><strong>Memory ordering bugs:</strong> Using <code>relaxed</code> ordering everywhere can lead to data races. The release/acquire pattern is essential for cross-thread visibility.</li>
+    <li><strong>Non-power-of-two capacity:</strong> The bitmask optimization only works for powers of two. For arbitrary sizes, use <code>% Capacity</code>.</li>
+    <li><strong>SPSC assumption violation:</strong> If multiple threads call <code>push</code> or <code>pop</code>, the SPSC buffer produces data races. Use a mutex or MPMC implementation instead.</li>
+  </ul>
+</div>
+
+<div class="callout">
+  <p><strong>Real-World Applications:</strong></p>
+  <ul>
+    <li>5G base stations use ring buffers for inter-thread communication between the PHY layer and MAC layer.</li>
+    <li>Audio processing pipelines use lock-free ring buffers between the audio callback thread and the processing thread.</li>
+    <li>The <strong>Disruptor</strong> pattern (LMAX) is a high-performance ring buffer used in financial trading systems.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="packet-parser.html">&larr; 5G Packet Parser</a>
+  <a href="fixed-point-arith-impl.html">Fixed-Point Arithmetic &rarr;</a>
+</div>
+<script>
+function toggleSolution(id) {
+  document.getElementById(id).classList.toggle('visible');
+}
+</script>
+</body>
+</html>

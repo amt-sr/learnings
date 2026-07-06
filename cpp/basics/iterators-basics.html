@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Iterators Basics — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; }
+  .breadcrumb a { color: #8b949e; }
+  .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; }
+  .callout.red { border-left-color: #f85149; }
+  .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; }
+  th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#1">1 Basics</a> / 1.5.5 Iterators Basics</div>
+<div class="meta"><span class="tag basic">BASIC</span></div>
+<h1>1.5.5 Iterators Basics</h1>
+
+<p>Iterators are the glue that connects STL containers to algorithms. An iterator is a generalization of a pointer: it provides a way to <strong>access</strong>, <strong>traverse</strong>, and <strong>modify</strong> elements within a container. Every STL container provides its own iterator type, and all STL algorithms operate on iterator ranges.</p>
+
+<h2>What Iterators Provide</h2>
+
+<p>At its core, an iterator supports these operations:</p>
+
+<ul>
+  <li><strong>Dereference:</strong> <code>*it</code> accesses the element the iterator points to.</li>
+  <li><strong>Increment:</strong> <code>++it</code> moves to the next element.</li>
+  <li><strong>Compare:</strong> <code>it == end</code> checks if we have reached the end of the range.</li>
+  <li><strong>Arrow:</strong> <code>it-&gt;member</code> accesses a member of the pointed-to object.</li>
+</ul>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+
+int main() {
+    std::vector&lt;int&gt; nums = {10, 20, 30, 40, 50};
+
+    // Obtain iterators to the beginning and past-the-end
+    auto it = nums.begin();   // Points to nums[0] (10)
+    auto end = nums.end();     // Points past nums[4] (one past last)
+
+    // Traverse using iterators
+    while (it != end) {
+        std::cout &lt;&lt; *it &lt;&lt; " ";
+        ++it;
+    }
+    std::cout &lt;&lt; std::endl;
+    // Output: 10 20 30 40 50
+
+    return 0;
+}
+</pre>
+
+<h2>Iterator Categories</h2>
+
+<p>Not all iterators support the same operations. The STL defines five categories, from weakest to strongest. More powerful iterators support all operations of weaker ones.</p>
+
+<table>
+  <tr><th>Category</th><th>Operations</th><th>Containers</th></tr>
+  <tr><td><strong>Input Iterator</strong></td><td>Read (*it), increment (++it), compare (==)</td><td><code>std::istream_iterator</code></td></tr>
+  <tr><td><strong>Output Iterator</strong></td><td>Write (*it = val), increment (++it)</td><td><code>std::ostream_iterator</code></td></tr>
+  <tr><td><strong>Forward Iterator</strong></td><td>Input + multi-pass (can revisit)</td><td><code>std::forward_list</code>, <code>std::unordered_map</code></td></tr>
+  <tr><td><strong>Bidirectional Iterator</strong></td><td>Forward + decrement (--it)</td><td><code>std::list</code>, <code>std::map</code>, <code>std::set</code></td></tr>
+  <tr><td><strong>Random Access Iterator</strong></td><td>Bidirectional + arithmetic (it + n, it - n, it[n])</td><td><code>std::vector</code>, <code>std::deque</code>, <code>std::array</code></td></tr>
+</table>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+#include &lt;list&gt;
+
+int main() {
+    // Random access iterator: supports +, -, [], &lt;, &gt;
+    std::vector&lt;int&gt; v = {10, 20, 30, 40, 50};
+    auto vit = v.begin();
+    vit += 3;                   // Jump 3 positions
+    std::cout &lt;&lt; *vit &lt;&lt; std::endl;   // 40
+    std::cout &lt;&lt; vit[1] &lt;&lt; std::endl;  // 50 (offset from current position)
+
+    // Bidirectional iterator: supports -- but not +, -, []
+    std::list&lt;int&gt; lst = {10, 20, 30, 40, 50};
+    auto lit = lst.end();
+    --lit;                      // Move back one position
+    std::cout &lt;&lt; *lit &lt;&lt; std::endl;    // 50
+    // lit + 2;  // ERROR: list iterator does not support +
+
+    return 0;
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>Note:</strong> The iterator category determines which algorithms you can use with a given container. For example, <code>std::sort</code> requires random access iterators, so it works with <code>std::vector</code> but not with <code>std::list</code>. Use <code>lst.sort()</code> (member function) for lists instead.</p>
+</div>
+
+<h2>begin() / end() and rbegin() / rend()</h2>
+
+<p>Every container provides <code>begin()</code>/<code>end()</code> for forward iteration and <code>rbegin()</code>/<code>rend()</code> for reverse iteration.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+
+int main() {
+    std::vector&lt;int&gt; nums = {1, 2, 3, 4, 5};
+
+    // Forward: begin() to end()
+    std::cout &lt;&lt; "Forward:  ";
+    for (auto it = nums.begin(); it != nums.end(); ++it) {
+        std::cout &lt;&lt; *it &lt;&lt; " ";
+    }
+    std::cout &lt;&lt; std::endl;  // Forward:  1 2 3 4 5
+
+    // Reverse: rbegin() to rend()
+    std::cout &lt;&lt; "Reverse:  ";
+    for (auto rit = nums.rbegin(); rit != nums.rend(); ++rit) {
+        std::cout &lt;&lt; *rit &lt;&lt; " ";
+    }
+    std::cout &lt;&lt; std::endl;  // Reverse:  5 4 3 2 1
+
+    // Const iterators (cbegin/cend): read-only access
+    std::cout &lt;&lt; "Const:    ";
+    for (auto cit = nums.cbegin(); cit != nums.cend(); ++cit) {
+        std::cout &lt;&lt; *cit &lt;&lt; " ";
+        // *cit = 99;  // ERROR: cannot modify through const_iterator
+    }
+    std::cout &lt;&lt; std::endl;
+
+    return 0;
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Tip:</strong> Use <code>cbegin()</code>/<code>cend()</code> (C++11) when you only need to read elements. This prevents accidental modification and makes your intent clear. Use <code>auto</code> to let the compiler deduce the correct iterator type.</p>
+</div>
+
+<h2>Using Iterators with Algorithms</h2>
+
+<p>STL algorithms work on <strong>half-open ranges</strong> <code>[begin, end)</code> &mdash; the range includes <code>begin</code> but excludes <code>end</code>. This convention is used everywhere in the STL.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+#include &lt;algorithm&gt;
+#include &lt;numeric&gt;
+
+int main() {
+    std::vector&lt;int&gt; nums = {5, 2, 8, 1, 9, 3};
+
+    // Sort: random access iterators required
+    std::sort(nums.begin(), nums.end());
+    for (int n : nums) std::cout &lt;&lt; n &lt;&lt; " ";
+    std::cout &lt;&lt; std::endl;  // 1 2 3 5 8 9
+
+    // Reverse: bidirectional iterators sufficient
+    std::reverse(nums.begin(), nums.end());
+    for (int n : nums) std::cout &lt;&lt; n &lt;&lt; " ";
+    std::cout &lt;&lt; std::endl;  // 9 8 5 3 2 1
+
+    // Find: input iterators sufficient
+    auto it = std::find(nums.begin(), nums.end(), 5);
+    if (it != nums.end()) {
+        std::cout &lt;&lt; "Found 5 at index: " &lt;&lt; (it - nums.begin()) &lt;&lt; std::endl;
+    }
+
+    // Count_if with lambda
+    int big = std::count_if(nums.begin(), nums.end(), [](int x) {
+        return x &gt; 5;
+    });
+    std::cout &lt;&lt; "Elements &gt; 5: " &lt;&lt; big &lt;&lt; std::endl;  // 3
+
+    // Accumulate
+    int sum = std::accumulate(nums.begin(), nums.end(), 0);
+    std::cout &lt;&lt; "Sum: " &lt;&lt; sum &lt;&lt; std::endl;  // 28
+
+    return 0;
+}
+</pre>
+
+<h2>Iterator Types</h2>
+
+<p>Containers provide both mutable and const iterator types. The <code>auto</code> keyword is your friend here.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+
+int main() {
+    std::vector&lt;int&gt; v = {1, 2, 3, 4, 5};
+
+    // Mutable iterator (can modify elements)
+    std::vector&lt;int&gt;::iterator mut_it = v.begin();
+    *mut_it = 100;  // OK: v[0] is now 100
+
+    // Const iterator (read-only)
+    std::vector&lt;int&gt;::const_iterator const_it = v.cbegin();
+    std::cout &lt;&lt; *const_it &lt;&lt; std::endl;  // 100
+    // *const_it = 99;  // ERROR: cannot modify
+
+    // Using auto (preferred in modern C++)
+    for (auto it = v.begin(); it != v.end(); ++it) {
+        *it += 10;  // OK: begin() returns mutable iterator
+    }
+
+    for (auto it = v.cbegin(); it != v.cend(); ++it) {
+        std::cout &lt;&lt; *it &lt;&lt; " ";  // Read-only
+    }
+    std::cout &lt;&lt; std::endl;  // 110 12 13 14 15
+
+    return 0;
+}
+</pre>
+
+<h2>Range-Based For (Under the Hood)</h2>
+
+<p>The range-based <code>for</code> loop (C++11) is syntactic sugar over iterators. These two loops are equivalent:</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+
+int main() {
+    std::vector&lt;int&gt; v = {10, 20, 30};
+
+    // Range-based for (modern, preferred)
+    for (const auto&amp; elem : v) {
+        std::cout &lt;&lt; elem &lt;&lt; " ";
+    }
+    std::cout &lt;&lt; std::endl;
+
+    // Equivalent using iterators (what the compiler generates)
+    for (auto it = v.begin(); it != v.end(); ++it) {
+        const auto&amp; elem = *it;
+        std::cout &lt;&lt; elem &lt;&lt; " ";
+    }
+    std::cout &lt;&lt; std::endl;
+
+    return 0;
+}
+</pre>
+
+<div class="callout">
+  <p><strong>See also:</strong> <a href="../intermediate/range-based-for.html">Range-Based For</a> for more details on range-based loops, <a href="../advanced/ranges.html">Ranges</a> (C++20) for composable range views, and <a href="../intermediate/stl-algorithms.html">STL Algorithms</a> for the full set of algorithms that operate on iterator ranges.</p>
+</div>
+
+<h2>Common Iterator Pitfalls</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+
+int main() {
+    std::vector&lt;int&gt; v = {1, 2, 3, 4, 5, 6};
+
+    // PITFALL: Modifying container while iterating
+    // This can invalidate iterators!
+    // BAD:
+    // for (auto it = v.begin(); it != v.end(); ++it) {
+    //     if (*it % 2 == 0) v.erase(it);  // Undefined behavior!
+    // }
+
+    // CORRECT: erase returns iterator to next element
+    for (auto it = v.begin(); it != v.end(); ) {
+        if (*it % 2 == 0) {
+            it = v.erase(it);  // erase returns next valid iterator
+        } else {
+            ++it;
+        }
+    }
+    for (int n : v) std::cout &lt;&lt; n &lt;&lt; " ";
+    std::cout &lt;&lt; std::endl;  // 1 3 5
+
+    return 0;
+}
+</pre>
+
+<div class="callout red">
+  <p><strong>Warning:</strong> Inserting into or erasing from a <code>std::vector</code> can invalidate all iterators at or after the modification point (because the vector may reallocate). Always use the return value of <code>insert()</code> or <code>erase()</code> to get a valid iterator after modification. See <a href="vector.html">std::vector</a> for vector-specific iterator invalidation rules.</p>
+</div>
+
+<h2>Related Topics</h2>
+
+<ul>
+  <li><a href="stl-overview.html">STL Overview</a> &mdash; Introduction to all STL components</li>
+  <li><a href="vector.html">std::vector</a> &mdash; The most-used container and its random-access iterators</li>
+  <li><a href="../intermediate/range-based-for.html">Range-Based For</a> &mdash; Modern loop syntax built on iterators</li>
+  <li><a href="../advanced/ranges.html">Ranges</a> &mdash; C++20 composable range views</li>
+  <li><a href="../intermediate/stl-algorithms.html">STL Algorithms</a> &mdash; Full reference for &lt;algorithm&gt; header</li>
+</ul>
+
+<div class="nav">
+  <a href="std-string.html">&larr; std::string</a>
+  <a href="../index.html">Back to Index &rarr;</a>
+</div>
+</body>
+</html>

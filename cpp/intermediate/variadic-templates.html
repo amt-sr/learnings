@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Variadic Templates — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / <a href="../index.html#2.3">2.3 Templates Advanced</a> / 2.3.2 Variadic Templates</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>Variadic Templates</h1>
+
+<p>Variadic templates allow templates to accept an arbitrary number of arguments of any type. Introduced in C++11, they are the foundation for many modern C++ features including <code>std::tuple</code>, <code>std::variant</code>, and type-safe formatting. With C++17, <strong>fold expressions</strong> simplified variadic template code significantly.</p>
+
+<h2>Parameter Packs</h2>
+
+<p>A parameter pack is a template parameter that accepts zero or more arguments. There are two kinds: <strong>type parameter packs</strong> (<code>typename... Ts</code>) and <strong>non-type parameter packs</strong> (<code>int... Is</code>).</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+// Type parameter pack
+template&lt;typename... Ts&gt;
+void print_types() {
+    std::cout &lt;&lt; sizeof...(Ts) &lt;&lt; " types\n";  // sizeof... gives pack size
+}
+
+// Function parameter pack
+template&lt;typename... Ts&gt;
+void print_all(const Ts&amp;... args) {
+    // pack expansion: args expands to arg1, arg2, ...
+    // but we need a way to iterate over them...
+}
+</pre>
+
+<h2>Pack Expansion</h2>
+
+<p>Pack expansion uses the <code>...</code> operator to expand a pattern over each element in the pack. The pattern is evaluated once for each element.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+// Expand with a function call
+template&lt;typename... Ts&gt;
+void print_all(const Ts&amp;... args) {
+    // C++17 fold expression (see below for details)
+    (std::cout &lt;&lt; ... &lt;&lt; args) &lt;&lt; "\n";
+}
+
+// Expand into a container initializer
+template&lt;typename... Ts&gt;
+auto make_vector(const Ts&amp;... args) {
+    return std::vector&lt;std::common_type_t&lt;Ts...&gt;&gt;{args...};
+}
+</pre>
+
+<div class="callout">
+  <p><strong>Expansion contexts:</strong> Pack expansion works inside: function arguments, initializer lists, template argument lists, base class lists, lambda captures, and more. The <code>...</code> must follow the pattern containing the pack.</p>
+</div>
+
+<h2>Recursive Variadic Templates</h2>
+
+<p>Before C++17 fold expressions, recursion was the primary way to process parameter packs. The pattern: a base case (zero args) plus a recursive case (peel one arg, recurse on the rest).</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+// Base case: no arguments
+void print() {
+    std::cout &lt;&lt; "\n";
+}
+
+// Recursive case: print first arg, recurse on rest
+template&lt;typename T, typename... Ts&gt;
+void print(const T&amp; first, const Ts&amp;... rest) {
+    std::cout &lt;&lt; first;
+    if constexpr (sizeof...(rest) &gt; 0) {
+        std::cout &lt;&lt; ", ";
+    }
+    print(rest...);  // expand pack into recursive call
+}
+
+void recursive_demo() {
+    print(1, "hello", 3.14, 'X');
+    // Output: 1, hello, 3.14, X
+}
+</pre>
+
+<h2>C++17 Fold Expressions</h2>
+
+<p>Fold expressions eliminate the need for recursive template boilerplate when you need to apply a binary operator across all pack elements.</p>
+
+<table>
+  <tr><th>Form</th><th>Syntax</th><th>Expansion</th></tr>
+  <tr><td>Unary right fold</td><td>(pack op ...)</td><td>((a1 op a2) op a3) op ...</td></tr>
+  <tr><td>Unary left fold</td><td>(... op pack)</td><td>a1 op (a2 op (a3 op ...))</td></tr>
+  <tr><td>Binary right fold</td><td>(pack op ... op init)</td><td>((a1 op a2) op ...) op init</td></tr>
+  <tr><td>Binary left fold</td><td>(init op ... op pack)</td><td>init op (a1 op (a2 op ...))</td></tr>
+</table>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+// Type-safe printf using fold expressions
+template&lt;typename... Args&gt;
+void safe_printf(const char* fmt, const Args&amp;... args) {
+    std::cout &lt;&lt; fmt &lt;&lt; ": ";
+    // Right fold: (cout &lt;&lt; arg1) &lt;&lt; arg2 &lt;&lt; arg3 ...
+    (std::cout &lt;&lt; ... &lt;&lt; args) &lt;&lt; "\n";
+}
+
+void fold_demo() {
+    safe_printf("Result", 42, " items", 3.14);
+    // Output: Result: 42 items3.14
+
+    // Sum all arguments with a left fold
+    auto sum = [](auto... vals) {
+        return (... + vals);
+    };
+    std::cout &lt;&lt; "Sum: " &lt;&lt; sum(1, 2, 3, 4, 5) &lt;&lt; "\n";  // 15
+
+    // Comma fold to execute actions in order
+    auto actions = [](auto&amp;... args) {
+        ((std::cout &lt;&lt; args &lt;&lt; " "), ...);
+    };
+    actions(std::cout, "hello", "world");
+    // Output: hello world
+}
+
+// All elements satisfy a condition (unary left fold with &&amp;)
+template&lt;typename... Args&gt;
+bool all_positive(const Args&amp;... args) {
+    return (... &amp;&amp; (args &gt; 0));
+}
+
+// Any element satisfies a condition (unary right fold with ||)
+template&lt;typename... Args&gt;
+bool any_negative(const Args&amp;... args) {
+    return (... || (args &lt; 0));
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Best practice:</strong> Prefer C++17 fold expressions over manual recursion. They are simpler, more readable, and often generate better code. The recursive approach is still useful for complex cases where fold expressions do not apply.</p>
+</div>
+
+<h2>Type-Safe printf</h2>
+
+<p>A practical variadic template: a type-safe <code>printf</code> replacement that avoids format string vulnerabilities inherent in C's <code>printf</code>.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+#include &lt;sstream&gt;
+
+// Helper: convert any type to string
+template&lt;typename T&gt;
+std::string to_string_arg(const T&amp; val) {
+    if constexpr (std::is_same_v&lt;T, std::string&gt;) {
+        return val;
+    } else if constexpr (std::is_arithmetic_v&lt;T&gt;) {
+        return std::to_string(val);
+    } else {
+        std::ostringstream oss;
+        oss &lt;&lt; val;
+        return oss.str();
+    }
+}
+
+// Base case
+void format_impl(std::ostringstream&amp; oss) {}
+
+// Recursive case with placeholders
+template&lt;typename T, typename... Ts&gt;
+void format_impl(std::ostringstream&amp; oss, const T&amp; first, const Ts&amp;&amp;... rest) {
+    oss &lt;&lt; to_string_arg(first);
+    if constexpr (sizeof...(rest) &gt; 0) {
+        oss &lt;&lt; ", ";
+    }
+    format_impl(oss, rest...);
+}
+
+template&lt;typename... Ts&gt;
+std::string format(const Ts&amp;&amp;... args) {
+    std::ostringstream oss;
+    format_impl(oss, args...);
+    return oss.str();
+}
+
+void printf_demo() {
+    std::cout &lt;&lt; format("user:", 42, 3.14, "active") &lt;&lt; "\n";
+    // Output: user:, 42, 3.14, active
+}
+</pre>
+
+<h2>Variadic Class Templates</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;typeinfo&gt;
+
+// Variadic class template
+template&lt;typename... Types&gt;
+class TypeList {};
+
+// Specialization to get the head type
+template&lt;typename Head, typename... Tail&gt;
+class TypeList&lt;Head, Tail...&gt; {
+public:
+    using head = Head;
+    using tail = TypeList&lt;Tail...&gt;;
+    static constexpr size_t size = 1 + sizeof...(Tail);
+};
+
+void class_demo() {
+    using MyTypes = TypeList&lt;int, double, std::string&gt;;
+    std::cout &lt;&lt; "Size: " &lt;&lt; MyTypes::size &lt;&lt; "\n";  // 3
+    std::cout &lt;&lt; "Head is int: "
+              &lt;&lt; std::is_same_v&lt;MyTypes::head, int&gt; &lt;&lt; "\n";  // 1
+}
+</pre>
+
+<h2>Comparison: Recursion vs Fold Expressions</h2>
+
+<table>
+  <tr><th>Aspect</th><th>Recursive</th><th>Fold Expression (C++17)</th></tr>
+  <tr><td>Verbosity</td><td>Base case + recursive case</td><td>Single expression</td></tr>
+  <tr><td>Operator support</td><td>Any operation</td><td>Binary operators only</td></tr>
+  <tr><td>Complexity</td><td>Deep recursion possible</td><td>Flat, no recursion depth</td></tr>
+  <tr><td>Best for</td><td>Complex per-element logic</td><td>Simple reductions (sum, print, etc.)</td></tr>
+</table>
+
+<div class="callout warning">
+  <p><strong>Compilation cost:</strong> Variadic templates instantiate a separate function for each recursive step (in the recursive approach). With many parameters, this increases compile time and binary size. Fold expressions are more efficient in this regard.</p>
+</div>
+
+<p>Variadic templates are the backbone of advanced template metaprogramming. They interact closely with <a href="template-specialization.html">template specialization</a> and <a href="sfinae.html">SFINAE</a> for conditional compilation. See <a href="type-traits.html">type traits</a> for compile-time type inspection used within variadic templates.</p>
+
+<div class="nav"><a href="template-specialization.html">&larr; Template Specialization</a><a href="sfinae.html">SFINAE &rarr;</a></div>
+</body>
+</html>

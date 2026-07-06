@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Namespaces — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; }
+  .breadcrumb a { color: #8b949e; }
+  .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; }
+  .callout.red { border-left-color: #f85149; }
+  .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; }
+  th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#1">1 Basics</a> / <a href="../index.html#1">1.2 Object-Oriented Programming</a> / 1.2.6 Namespaces</div>
+<div class="meta"><span class="tag basic">BASIC</span></div>
+<h1>1.2.6 Namespaces</h1>
+
+<p>Namespaces provide a way to group related declarations (classes, functions, variables) under a named scope. They prevent name collisions when different libraries or modules define entities with the same name. Every name in the C++ standard library lives inside the <code>std</code> namespace.</p>
+
+<h2>What Namespaces Are</h2>
+
+<p>A namespace is a declarative region that provides a scope to the identifiers inside it. You have already been using the <code>std</code> namespace since the first <a href="hello-world.html">Hello World</a> program:</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+// Defining a custom namespace
+namespace math {
+    constexpr double PI = 3.14159265358979;
+
+    double square(double x) {
+        return x * x;
+    }
+
+    double circle_area(double radius) {
+        return PI * square(radius);
+    }
+}
+
+int main() {
+    // Use fully qualified name
+    std::cout &lt;&lt; "PI = " &lt;&lt; math::PI &lt;&lt; std::endl;
+    std::cout &lt;&lt; "square(5) = " &lt;&lt; math::square(5.0) &lt;&lt; std::endl;
+    std::cout &lt;&lt; "circle_area(3) = " &lt;&lt; math::circle_area(3.0) &lt;&lt; std::endl;
+
+    return 0;
+}
+</pre>
+
+<h2>Using Directive vs Using Declaration</h2>
+
+<p>C++ provides two mechanisms to avoid repeating the namespace prefix. They differ significantly in scope:</p>
+
+<table>
+  <tr><th>Feature</th><th><code>using namespace</code> (directive)</th><th><code>using</code> (declaration)</th></tr>
+  <tr><td>Syntax</td><td><code>using namespace math;</code></td><td><code>using math::square;</code></td></tr>
+  <tr><td>Scope</td><td>Imports <strong>all</strong> names from the namespace</td><td>Imports only <strong>one</strong> specific name</td></tr>
+  <tr><td>Collision risk</td><td>High &mdash; all names are visible</td><td>Low &mdash; only the selected name is visible</td></tr>
+  <tr><td>Recommended</td><td>Rarely &mdash; only in small .cpp files</td><td>Yes &mdash; preferred approach</td></tr>
+</table>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+
+namespace util {
+    void print(const std::string&amp; msg) {
+        std::cout &lt;&lt; "[util] " &lt;&lt; msg &lt;&lt; std::endl;
+    }
+}
+
+namespace logging {
+    void print(const std::string&amp; msg) {
+        std::cout &lt;&lt; "[log] " &lt;&lt; msg &lt;&lt; std::endl;
+    }
+}
+
+int main() {
+    // Using declaration: import only what you need
+    using util::print;
+    print("Hello");       // calls util::print
+
+    // Qualified call: always unambiguous
+    logging::print("World");  // calls logging::print
+
+    // using namespace util;  // DANGEROUS: would hide logging::print
+    // using namespace logging;  // DANGEROUS: conflicts with util::print
+
+    return 0;
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Best practice:</strong> Prefer <code>using</code> declarations for specific names over <code>using namespace</code> directives. This makes it clear exactly which names you are importing and avoids unexpected collisions.</p>
+</div>
+
+<h2>Nested Namespaces</h2>
+
+<p>Namespaces can be nested to organize code hierarchically. C++17 introduced a cleaner syntax for nested namespaces:</p>
+
+<pre>
+// C++11 style (pre-C++17)
+namespace telecom {
+    namespace ran {
+        namespace cu {
+            class CellConfig {
+            public:
+                int cell_id;
+                double frequency;
+            };
+        }
+    }
+}
+
+// C++17 style (much cleaner)
+namespace telecom::ran::du {
+    class PrachConfig {
+    public:
+        int preamble;
+        double power;
+    };
+}
+
+int main() {
+    telecom::ran::cu::CellConfig cu_config{101, 3.5e9};
+    telecom::ran::du::PrachConfig du_config{64, -80.0};
+
+    // Using declaration for a deeply nested type
+    using PrachConfig = telecom::ran::du::PrachConfig;
+    PrachConfig prach{64, -85.0};
+
+    return 0;
+}
+</pre>
+
+<h2>Anonymous Namespaces</h2>
+
+<p>An anonymous (unnamed) namespace restricts visibility to the current translation unit (the <code>.cpp</code> file). It is the C++ equivalent of C's <code>static</code> for file-level linkage:</p>
+
+<pre>
+// config.cpp
+#include &lt;iostream&gt;
+
+namespace {
+    // These are only visible within this file
+    const int MAX_RETRIES = 3;
+    const std::string DEFAULT_HOST = "localhost";
+
+    void log_internal(const std::string&amp; msg) {
+        std::cout &lt;&lt; "[internal] " &lt;&lt; msg &lt;&lt; std::endl;
+    }
+}
+
+void connect() {
+    log_internal("Connecting to " + DEFAULT_HOST);
+    // MAX_RETRIES is accessible here
+    for (int i = 0; i &lt; MAX_RETRIES; ++i) {
+        // retry logic
+    }
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Tip:</strong> Use anonymous namespaces in <code>.cpp</code> files for helper functions and constants that should not be visible outside the file. This provides better encapsulation than making them <code>static</code> and works for types as well (anonymous namespaces can contain classes, whereas <code>static</code> cannot be applied to class definitions).</p>
+</div>
+
+<h2>Namespace Aliasing</h2>
+
+<p>Namespace aliases create short names for long namespace paths, improving readability:</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+namespace company {
+    namespace project {
+        namespace subsystem {
+            void process() {
+                std::cout &lt;&lt; "Processing..." &lt;&lt; std::endl;
+            }
+        }
+    }
+}
+
+// Create a short alias
+namespace cps = company::project::subsystem;
+
+int main() {
+    cps::process();  // much shorter than the full path
+
+    // Aliases are also useful for std library types
+    using StringVec = std::vector&lt;std::string&gt;;
+
+    return 0;
+}
+</pre>
+
+<h2>Why using namespace std in Headers is Bad</h2>
+
+<p>This is one of the most important namespace rules in C++:</p>
+
+<div class="callout red">
+  <p><strong>Never put <code>using namespace std;</code> (or any <code>using namespace</code> directive) in a header file.</code></strong> A header file is included into every translation unit that uses it. A <code>using namespace</code> directive in a header pollutes the global namespace of every file that includes it, causing potentially hard-to-debug name collisions.</p>
+</div>
+
+<pre>
+// BAD: header file with using directive
+// utils.h
+#pragma once
+using namespace std;   // NEVER DO THIS in a header
+
+void print(const string&amp; msg);  // 'string' pollutes every includer's namespace
+
+
+// GOOD: header file with explicit qualification
+// utils.h
+#pragma once
+#include &lt;string&gt;
+
+void print(const std::string&amp; msg);  // explicit and safe
+
+
+// Acceptable: using directive in a .cpp file
+// utils.cpp
+#include "utils.h"
+#include &lt;iostream&gt;
+
+using namespace std;  // OK in .cpp (still not ideal but acceptable)
+
+void print(const string&amp; msg) {
+    cout &lt;&lt; msg &lt;&lt; endl;
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>Example of collision:</strong> Imagine your project defines a function called <code>distance</code> and includes a third-party header that has <code>using namespace std;</code>. If <code>std::distance</code> leaks into the global namespace, it could silently shadow or conflict with your <code>distance</code> function. These bugs are extremely difficult to track down.</p>
+</div>
+
+<h2>Namespaces and Classes</h2>
+
+<p>Namespaces and <a href="classes-objects.html">classes</a> both provide scoping, but they serve different purposes:</p>
+
+<table>
+  <tr><th>Feature</th><th>Namespace</th><th>Class</th></tr>
+  <tr><td>Purpose</td><td>Group related entities, prevent name collisions</td><td>Define a type with data and behavior</td></tr>
+  <tr><td>Can contain</td><td>Classes, functions, variables, typedefs</td><td>Member variables, member functions, typedefs</td></tr>
+  <tr><td>Instance</td><td>Cannot create instances</td><td>Can create objects</td></tr>
+  <tr><td>Access control</td><td>No private/protected (all public)</td><td>Yes: public, protected, private</td></tr>
+  <tr><td>Inheritance</td><td>No</td><td>Yes</td></tr>
+  <tr><td>Closing brace</td><td>No semicolon needed</td><td>Semicolon required</td></tr>
+</table>
+
+<div class="callout">
+  <p><strong>Further reading:</strong> For how namespaces interact with STL containers and iterators, see <a href="iterators-basics.html">Iterators Basics</a> and <a href="stl-overview.html">STL Overview</a>.</p>
+</div>
+
+<div class="nav">
+  <a href="encapsulation-abstraction.html">&larr; Encapsulation &amp; Abstraction</a>
+  <a href="stack-vs-heap.html">Stack vs Heap &rarr;</a>
+</div>
+</body>
+</html>

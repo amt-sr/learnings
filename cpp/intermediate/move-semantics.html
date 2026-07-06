@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Move Semantics — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / Move Semantics</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>Move Semantics</h1>
+
+<p>Move semantics is one of the most important features introduced in C++11. It allows resources (heap memory, file handles, network sockets) to be <strong>transferred</strong> from one object to another instead of being copied. This eliminates unnecessary deep copies and dramatically improves performance for objects that manage resources.</p>
+
+<h2>Lvalues vs Rvalues</h2>
+
+<p>Understanding move semantics requires understanding value categories:</p>
+
+<table>
+  <tr><th>Category</th><th>Definition</th><th>Examples</th></tr>
+  <tr><td><strong>Lvalue</strong></td><td>Has a name, persists beyond a single expression</td><td><code>int x = 5;</code> — <code>x</code> is an lvalue</td></tr>
+  <tr><td><strong>Rvalue</strong></td><td>Temporary, expires at end of expression</td><td><code>42</code>, <code>x + y</code>, <code>std::string("hi")</code></td></tr>
+</table>
+
+<pre>
+int x = 10;           // x is lvalue, 10 is rvalue
+int&amp; lr = x;          // lvalue reference — binds to lvalues
+int&amp;&amp; rr = 10;         // rvalue reference — binds to rvalues (C++11)
+// int&amp;&amp; rr2 = x;     // ERROR: cannot bind rvalue ref to lvalue
+int&amp;&amp; rr3 = x + 10;  // OK: x + 10 is an rvalue
+</pre>
+
+<h2>std::move</h2>
+
+<p><code>std::move</code> does not move anything. It is an unconditional cast to an rvalue reference. It tells the compiler: "I am done with this object; you may steal its resources."</p>
+
+<pre>
+#include &lt;utility&gt;
+#include &lt;string&gt;
+#include &lt;iostream&gt;
+
+void move_basics() {
+    std::string a = "Hello, World!";
+    std::string b = std::move(a);  // a's internal buffer is transferred to b
+
+    std::cout &lt;&lt; "a: '" &lt;&lt; a &lt;&lt; "' (likely empty or in valid but unspecified state)\n";
+    std::cout &lt;&lt; "b: '" &lt;&lt; b &lt;&lt; "'\n";
+
+    // After move, 'a' is in a valid but unspecified state.
+    // It can be assigned to or destroyed, but don't assume its value.
+    a = "New value";  // OK: assign to moved-from object
+    std::cout &lt;&lt; "a after reassignment: '" &lt;&lt; a &lt;&lt; "'\n";
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>Common misconception:</strong> <code>std::move</code> does not guarantee a move will occur. It merely casts to rvalue reference. Whether a move actually happens depends on whether a move constructor/move assignment operator exists and is selected by overload resolution.</p>
+</div>
+
+<h2>Move Constructor and Move Assignment</h2>
+
+<p>Custom classes managing resources should define move operations. The move constructor steals resources from the source; the move assignment operator does the same after cleaning up existing resources.</p>
+
+<pre>
+#include &lt;cstring&gt;
+#include &lt;utility&gt;
+#include &lt;iostream&gt;
+
+class Buffer {
+    char* data_;
+    size_t size_;
+public:
+    // Constructor
+    explicit Buffer(size_t size) : size_(size), data_(new char[size]) {
+        std::cout &lt;&lt; "Allocated " &lt;&lt; size_ &lt;&lt; " bytes\n";
+    }
+
+    // Destructor
+    ~Buffer() {
+        delete[] data_;
+        std::cout &lt;&lt; "Freed buffer (" &lt;&lt; size_ &lt;&lt; " bytes)\n";
+    }
+
+    // Move constructor — steal resources from other
+    Buffer(Buffer&amp;&amp; other) noexcept
+        : data_(other.data_), size_(other.size_) {
+        other.data_ = nullptr;  // leave source in valid state
+        other.size_ = 0;
+        std::cout &lt;&lt; "Move-constructed (" &lt;&lt; size_ &lt;&lt; " bytes)\n";
+    }
+
+    // Move assignment operator
+    Buffer&amp; operator=(Buffer&amp;&amp; other) noexcept {
+        if (this != &amp;other) {
+            delete[] data_;          // free our existing resource
+            data_ = other.data_;      // steal from source
+            size_ = other.size_;
+            other.data_ = nullptr;   // leave source in valid state
+            other.size_ = 0;
+            std::cout &lt;&lt; "Move-assigned (" &lt;&lt; size_ &lt;&lt; " bytes)\n";
+        }
+        return *this;
+    }
+
+    // Delete copy operations (this class exclusively owns its buffer)
+    Buffer(const Buffer&amp;) = delete;
+    Buffer&amp; operator=(const Buffer&amp;) = delete;
+
+    size_t size() const { return size_; }
+};
+
+void move_constructor_demo() {
+    Buffer a(1024);             // "Allocated 1024 bytes"
+    Buffer b = std::move(a);    // "Move-constructed (1024 bytes)"
+    // a's data_ is now nullptr — safe to destroy
+    std::cout &lt;&lt; "b.size() = " &lt;&lt; b.size() &lt;&lt; "\n";  // 1024
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Rule of Five:</strong> If a class defines any of: destructor, copy constructor, copy assignment, move constructor, or move assignment — it should usually define all five. Alternatively, if copying makes no sense, delete the copy operations and default the move operations (see <a href="raii.html">RAII</a>).</p>
+</div>
+
+<h2>Move Semantics with std::vector</h2>
+
+<pre>
+#include &lt;vector&gt;
+#include &lt;string&gt;
+#include &lt;iostream&gt;
+
+void vector_move_demo() {
+    std::vector&lt;std::string&gt; source = {"alpha", "beta", "gamma", "delta"};
+    std::cout &lt;&lt; "source size: " &lt;&lt; source.size() &lt;&lt; "\n";  // 4
+
+    // Move the entire vector — O(1), just swaps internal pointers
+    std::vector&lt;std::string&gt; dest = std::move(source);
+    std::cout &lt;&lt; "source size after move: " &lt;&lt; source.size() &lt;&lt; "\n";  // 0
+    std::cout &lt;&lt; "dest size: " &lt;&lt; dest.size() &lt;&lt; "\n";  // 4
+
+    // Insert via move — avoids copying the string
+    std::string temp = "epsilon";
+    dest.push_back(std::move(temp));  // temp is moved into the vector
+}
+</pre>
+
+<h2>Perfect Forwarding</h2>
+
+<p>Perfect forwarding allows a function template to pass its arguments to another function with their original value categories (lvalue/rvalue) and const qualifications preserved. It uses <code>std::forward</code>.</p>
+
+<pre>
+#include &lt;utility&gt;
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+class Logger {
+    std::string name_;
+public:
+    explicit Logger(std::string name) : name_(std::move(name)) {
+        std::cout &lt;&lt; "Logger '" &lt;&lt; name_ &lt;&lt; "' created\n";
+    }
+};
+
+// Factory using perfect forwarding
+template&lt;typename T&gt;
+Logger make_logger(T&amp;&amp; arg) {
+    // std::forward preserves whether arg was an lvalue or rvalue
+    return Logger(std::forward&lt;T&gt;(arg));
+}
+
+void perfect_forwarding_demo() {
+    std::string name = "main";
+
+    // Passing an lvalue — forwarded as lvalue, Logger copies it
+    auto l1 = make_logger(name);
+    std::cout &lt;&lt; "name after lvalue pass: '" &lt;&lt; name &lt;&lt; "'\n";  // still "main"
+
+    // Passing an rvalue — forwarded as rvalue, Logger moves it
+    auto l2 = make_logger(std::string("temp"));
+}
+</pre>
+
+<h3>How std::forward Works</h3>
+
+<pre>
+// When T is deduced from an lvalue:
+//   T = std::string&amp;  (lvalue reference)
+//   T&amp;&amp; collapses to std::string&amp; (lvalue reference)
+//   std::forward&lt;T&gt; returns an lvalue reference
+
+// When T is deduced from an rvalue:
+//   T = std::string    (plain type)
+//   T&amp;&amp; = std::string&amp;&amp; (rvalue reference)
+//   std::forward&lt;T&gt; returns an rvalue reference
+</pre>
+
+<h2>When to Use Move</h2>
+
+<div class="callout">
+  <p><strong>Move candidates:</strong></p>
+  <ul>
+    <li>Returning large local objects by value (or rely on <a href="copy-elision.html">copy elision</a>)</li>
+    <li>Passing objects to functions that will take ownership (e.g., <a href="smart-pointers.html">unique_ptr</a>)</li>
+    <li>Swapping objects (always use <code>std::swap</code> which uses moves)</li>
+    <li>Inserting into containers: <code>vec.push_back(std::move(obj))</code></li>
+  </ul>
+</div>
+
+<div class="callout red">
+  <p><strong>Do not move:</strong></p>
+  <ul>
+    <li>Objects you still need to use afterward</li>
+    <li><code>const</code> objects — <code>std::move</code> on a const object produces a <code>const T&amp;&amp;</code>, which will fall back to copy</li>
+    <li>Small types like <code>int</code>, <code>float</code> — copying is cheaper than moving</li>
+  </ul>
+</div>
+
+<p>Move semantics are used extensively by <a href="smart-pointers.html">smart pointers</a> and come into play with <a href="lambda-expressions.html">lambda expressions</a> that capture by move (C++14). Next, we explore lambda expressions and their advanced capture modes.</p>
+
+<div class="nav"><a href="smart-pointers.html">&larr; Smart Pointers</a><a href="lambda-expressions.html">Lambda Expressions &rarr;</a></div>
+</body>
+</html>

@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coroutines — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / Coroutines</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>Coroutines (C++20)</h1>
+
+<p>Coroutines are functions that can be suspended and resumed. Unlike regular functions, which run to completion before returning, coroutines yield control back to the caller at designated points, preserving their local state across suspensions. C++20 provides language-level coroutine support through three keywords: <code>co_await</code>, <code>co_yield</code>, and <code>co_return</code>.</p>
+
+<div class="callout warning">
+<p><strong>C++20 vs C++23:</strong> C++20 coroutines are low-level — you must write your own promise type and task/promise machinery. C++23 adds <code>std::generator</code> as a minimal built-in coroutine type. The patterns below show C++20 with manual promise types for full understanding.</p>
+</div>
+
+<h2>The Three Coroutine Keywords</h2>
+
+<table>
+<tr><th>Keyword</th><th>Purpose</th><th>Used In</th></tr>
+<tr><td><code>co_await</code></td><td>Suspend until an asynchronous operation completes</td><td>Async tasks, I/O</td></tr>
+<tr><td><code>co_yield</code></td><td>Suspend and produce a value (generator pattern)</td><td>Generators, streams</td></tr>
+<tr><td><code>co_return</code></td><td>Complete the coroutine and return a value</td><td>All coroutines</td></tr>
+</table>
+
+<h2>Coroutine Anatomy</h2>
+
+<p>A coroutine in C++20 requires several cooperating parts:</p>
+
+<pre>
+#include &lt;coroutine&gt;
+#include &lt;memory&gt;
+
+// 1. The coroutine return type
+struct Generator {
+    // 2. The promise type (controls coroutine behavior)
+    struct promise_type {
+        int current_value = 0;
+
+        Generator get_return_object() {
+            return Generator{std::coroutine_handle&lt;promise_type&gt;::from_promise(*this)};
+        }
+        std::suspend_never initial_suspend() noexcept { return {}; }
+        std::suspend_always final_suspend() noexcept { return {}; }
+        void return_void() {}
+        void unhandled_exception() { throw; }
+
+        // Called on co_yield expr
+        std::suspend_always yield_value(int value) {
+            current_value = value;
+            return {};
+        }
+    };
+
+    // 3. The coroutine handle (manages the coroutine frame)
+    std::coroutine_handle&lt;promise_type&gt; handle;
+
+    explicit Generator(std::coroutine_handle&lt;promise_type&gt; h) : handle(h) {}
+
+    ~Generator() {
+        if (handle) handle.destroy();
+    }
+
+    // Non-copyable
+    Generator(const Generator&amp;) = delete;
+    Generator&amp; operator=(const Generator&amp;) = delete;
+
+    // Movable
+    Generator(Generator&amp;&amp; other) noexcept : handle(other.handle) {
+        other.handle = nullptr;
+    }
+    Generator&amp; operator=(Generator&amp;&amp; other) noexcept {
+        if (this != &amp;other) {
+            if (handle) handle.destroy();
+            handle = other.handle;
+            other.handle = nullptr;
+        }
+        return *this;
+    }
+
+    int next() {
+        handle.resume();
+        return handle.promise().current_value;
+    }
+
+    bool done() const {
+        return handle.done();
+    }
+};
+</pre>
+
+<h2>Using the Generator</h2>
+
+<pre>
+// A coroutine that yields a range of integers
+Generator range(int start, int end) {
+    for (int i = start; i &lt; end; ++i) {
+        co_yield i;
+    }
+}
+
+// A coroutine that generates Fibonacci numbers (lazy, infinite)
+Generator fibonacci() {
+    int a = 0, b = 1;
+    while (true) {
+        co_yield a;
+        int tmp = a + b;
+        a = b;
+        b = tmp;
+    }
+}
+
+int main() {
+    std::cout &lt;&lt; "Range [5, 10):\n";
+    auto gen = range(5, 10);
+    while (!gen.done()) {
+        std::cout &lt;&lt; gen.next() &lt;&lt; " ";  // 5 6 7 8 9
+    }
+
+    std::cout &lt;&lt; "\nFibonacci (first 10):\n";
+    auto fib = fibonacci();
+    for (int i = 0; i &lt; 10; ++i) {
+        std::cout &lt;&lt; fib.next() &lt;&lt; " ";  // 0 1 1 2 3 5 8 13 21 34
+    }
+}
+</pre>
+
+<h2>Async Task with co_await</h2>
+
+<pre>
+#include &lt;coroutine&gt;
+#include &lt;utility&gt;
+#include &lt;iostream&gt;
+
+struct AsyncTask {
+    struct promise_type {
+        int value = 0;
+
+        AsyncTask get_return_object() {
+            return AsyncTask{std::coroutine_handle&lt;promise_type&gt;::from_promise(*this)};
+        }
+        std::suspend_never initial_suspend() noexcept { return {}; }
+        std::suspend_always final_suspend() noexcept { return {}; }
+        void return_value(int v) { value = v; }
+        void unhandled_exception() { throw; }
+    };
+
+    std::coroutine_handle&lt;promise_type&gt; handle;
+
+    explicit AsyncTask(std::coroutine_handle&lt;promise_type&gt; h) : handle(h) {}
+    ~AsyncTask() { if (handle) handle.destroy(); }
+    AsyncTask(const AsyncTask&amp;) = delete;
+    AsyncTask&amp; operator=(const AsyncTask&amp;) = delete;
+
+    int result() const { return handle.promise().value; }
+    bool done() const { return handle.done(); }
+    void resume() { handle.resume(); }
+};
+
+// A simple awaitable: always suspends and resumes immediately
+struct ImmediateAwaiter {
+    bool await_ready() const noexcept { return false; }
+    void await_suspend(std::coroutine_handle&lt;&gt;) noexcept {}
+    void await_resume() noexcept {}
+};
+
+AsyncTask compute(int x) {
+    co_await ImmediateAwaiter{};  // suspend here
+    int result = x * x + 2 * x + 1;  // runs on resume
+    co_return result;
+}
+
+int main() {
+    auto task = compute(10);
+    while (!task.done()) {
+        task.resume();
+    }
+    std::cout &lt;&lt; "Result: " &lt;&lt; task.result() &lt;&lt; "\n";  // 121
+}
+</pre>
+
+<h2>Custom Awaitable Types</h2>
+
+<p>The <code>co_await</code> expression requires an awaitable type. Any type with these three methods is awaitable:</p>
+
+<pre>
+struct MyAwaitable {
+    // 1. Should we suspend? Return true to skip suspension
+    bool await_ready() const noexcept {
+        return false;  // always suspend
+    }
+
+    // 2. Called before suspension. Return void or a coroutine_handle
+    //    to transfer execution to another coroutine
+    void await_suspend(std::coroutine_handle&lt;&gt; handle) noexcept {
+        // Schedule continuation — e.g., post to an event loop
+        // handle.resume();  // would resume immediately
+    }
+
+    // 3. Value produced by co_await expression
+    int await_resume() noexcept {
+        return 42;  // this is what co_await returns
+    }
+};
+
+AsyncTask use_awaitable() {
+    int value = co_await MyAwaitable{};  // value = 42
+    co_return value;
+}
+</pre>
+
+<h2>Coroutine Handle Operations</h2>
+
+<table>
+<tr><th>Operation</th><th>Description</th></tr>
+<tr><td><code>handle.done()</code></td><td>Check if coroutine reached final_suspend</td></tr>
+<tr><td><code>handle.resume()</code></td><td>Resume a suspended coroutine</td></tr>
+<tr><td><code>handle.destroy()</code></td><td>Destroy coroutine frame and free memory</td></tr>
+<tr><td><code>handle.promise()</code></td><td>Access the promise object</td></tr>
+<tr><td><code>handle.address()</code></td><td>Raw pointer to coroutine frame</td></tr>
+</table>
+
+<div class="callout red">
+<p><strong>Lifetime danger:</strong> Never call <code>resume()</code> on a done coroutine — it is undefined behavior. Always check <code>done()</code> first. Never call <code>destroy()</code> twice or after the handle has been moved from.</p>
+</div>
+
+<h2>Memory Allocation of Coroutine Frames</h2>
+
+<p>By default, <code>operator new</code> allocates the coroutine frame on the heap. You can customize this via the promise type:</p>
+
+<pre>
+struct CustomAllocator {
+    static constexpr std::size_t max_size = 1024;
+    alignas(std::max_align_t) char buffer[max_size];
+    std::size_t offset = 0;
+
+    void* operator new(std::size_t size) {
+        if (offset + size &gt; max_size) throw std::bad_alloc{};
+        void* ptr = buffer + offset;
+        offset += size;
+        return ptr;
+    }
+
+    void operator delete(void*) {
+        // Arena allocator — no individual deallocation
+    }
+};
+</pre>
+
+<div class="callout">
+<p><strong>Related:</strong> See <a href="custom-allocators.html">Custom Allocators</a> and <a href="placement-new-memory-pools.html">Placement New &amp; Memory Pools</a> for allocation strategies and <a href="placement-new-memory-pools.html">memory pool patterns</a> that complement coroutine frame allocation.</p>
+</div>
+
+<h2>Telecom Use Cases</h2>
+
+<ul>
+<li><strong>Async message processing:</strong> A coroutine per UE (User Equipment) context, yielding when waiting for network I/O, resuming when data arrives.</li>
+<li><strong>Protocol state machines:</strong> RRC connection states can be modeled as coroutines that suspend at each state transition.</li>
+<li><strong>Event generators:</strong> Measurement reporting can be modeled as a coroutine yielding periodic metrics.</li>
+<li><strong>Pipeline processing:</strong> Stage 1 co_yields data to stage 2, which transforms and co_yields to stage 3.</li>
+</ul>
+
+<div class="callout green">
+<p><strong>Best practice:</strong> For production use, consider using an established library like <code>&lt;cppcoro&gt;</code> (Lewis Baker) or the C++23 <code>std::generator</code> rather than writing raw promise types. Raw C++20 coroutines are powerful but require careful memory management.</p>
+</div>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="ranges.html">Ranges</a> (lazy data pipelines), <a href="producer-consumer-pattern.html">Producer-Consumer Pattern</a> (coroutine-based pipelines), <a href="modules.html">Modules</a> (organizing coroutine code), <a href="../telecom-5g/5g-ran-overview.html">5G RAN Overview</a>.</p>
+</div>
+
+<div class="nav"><a href="ranges.html">&larr; Ranges</a><a href="modules.html">Modules &rarr;</a></div>
+</body>
+</html>

@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Embedded C++ Constraints — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#4">4 Telecom &amp; 5G/4G Networking</a> / Telecom C++ Techniques / 4.4.11</div>
+<div class="meta"><span class="tag medium">Medium</span></div>
+<h1>Embedded C++ Constraints</h1>
+
+<p>Telecom embedded systems (BBU, RRH, ASIC firmware) operate under strict constraints that differ from general-purpose software. Determinism, limited resources, and safety requirements force developers to use a constrained subset of C++ features. This topic covers what is allowed and what is restricted in telecom embedded code.</p>
+
+<h2>No Exceptions in Telecom</h2>
+
+<div class="callout red">
+  <p><strong>Exceptions banned:</strong> Exception handling in C++ requires unwinding the stack, which involves non-deterministic memory allocation and execution time. In real-time telecom code, a thrown exception could miss a deadline. All telecom coding standards (MISRA, CERT, JSF) either ban or strongly discourage exceptions in the data path.</p>
+</div>
+
+<pre>
+// BAD: Using exceptions in data path
+void processData(uint8_t* data, size_t len) {
+    if (len &lt; MIN_SIZE) throw std::runtime_error("Too short");
+    if (len &gt; MAX_SIZE) throw std::length_error("Too long");
+    // ...
+}
+
+// GOOD: Return error codes or use std::expected (C++23)
+// or error codes with constexpr
+enum class ErrorCode : uint8_t {
+    SUCCESS = 0,
+    BUFFER_TOO_SHORT,
+    BUFFER_TOO_LONG,
+    INVALID_PARAMETER
+};
+
+ErrorCode processData(uint8_t* data, size_t len) {
+    if (len &lt; MIN_SIZE) return ErrorCode::BUFFER_TOO_SHORT;
+    if (len &gt; MAX_SIZE) return ErrorCode::BUFFER_TOO_LONG;
+    // ... processing ...
+    return ErrorCode::SUCCESS;
+}
+
+// C++23 alternative (if available):
+// std::expected&lt;void, ErrorCode&gt; processData(uint8_t*, size_t);
+</pre>
+
+<h2>Limited STL Usage</h2>
+
+<p>Standard library containers may use heap allocation internally. In the data path, you must either avoid them or use them with custom allocators backed by pre-allocated memory pools.</p>
+
+<h2>Allowed vs Restricted C++ Features</h2>
+
+<table>
+  <tr><th>Feature</th><th>Status</th><th>Reason</th></tr>
+  <tr><td><code>new</code>/<code>delete</code> (data path)</td><td class="tag basic" style="font-size:0.7rem;">RESTRICTED</td><td>Non-deterministic, fragmentation</td></tr>
+  <tr><td>Exceptions</td><td class="tag advanced" style="font-size:0.7rem;">BANNED</td><td>Non-deterministic unwinding</td></tr>
+  <tr><td>RTTI (<code>dynamic_cast</code>)</td><td class="tag advanced" style="font-size:0.7rem;">BANNED</td><td>Runtime overhead, indirect call cost</td></tr>
+  <tr><td><code>std::vector</code> (with pool alloc)</td><td class="tag medium" style="font-size:0.7rem;">ALLOWED</td><td>Use custom allocator, pre-reserved</td></tr>
+  <tr><td><code>std::array</code></td><td class="tag basic" style="font-size:0.7rem;">ALLOWED</td><td>Stack-only, no allocation</td></tr>
+  <tr><td><code>std::unordered_map</code></td><td class="tag medium" style="font-size:0.7rem;">CAUTION</td><td>Control plane only (heap alloc)</td></tr>
+  <tr><td>Templates</td><td class="tag basic" style="font-size:0.7rem;">ALLOWED</td><td>Compile-time, zero runtime cost</td></tr>
+  <tr><td><code>constexpr</code></td><td class="tag basic" style="font-size:0.7rem;">ALLOWED</td><td>Compile-time computation</td></tr>
+  <tr><td>Lambdas</td><td class="tag basic" style="font-size:0.7rem;">ALLOWED</td><td>No capture-by-ref in data path</td></tr>
+  <tr><td>Smart pointers (data path)</td><td class="tag medium" style="font-size:0.7rem;">CAUTION</td><td>Use pools or custom deleters</td></tr>
+  <tr><td><code>std::string</code></td><td class="tag advanced" style="font-size:0.7rem;">BANNED</td><td>Heap allocation, use char arrays</td></tr>
+  <tr><td><code>std::string_view</code></td><td class="tag basic" style="font-size:0.7rem;">ALLOWED</td><td>No allocation, read-only view</td></tr>
+  <tr><td>Virtual functions</td><td class="tag medium" style="font-size:0.7rem;">CAUTION</td><td>V-table overhead, use CRTP if needed</td></tr>
+  <tr><td>Multiple inheritance</td><td class="tag advanced" style="font-size:0.7rem;">BANNED</td><td>Complex, MISRA violation</td></tr>
+  <tr><td>Inheritance</td><td class="tag medium" style="font-size:0.7rem;">CAUTION</td><td>Prefer composition over inheritance</td></tr>
+  <tr><td>Threads (data path)</td><td class="tag medium" style="font-size:0.7rem;">CAUTION</td><td>Pre-created, pinned; no dynamic spawning</td></tr>
+  <tr><td>Atomics</td><td class="tag basic" style="font-size:0.7rem;">ALLOWED</td><td>Lock-free data path</td></tr>
+</table>
+
+<h2>No Dynamic Allocation in Data Path</h2>
+
+<pre>
+// Data path buffer handling (CORRECT):
+// All buffers come from pre-allocated pools
+class DataPathProcessor {
+public:
+    // Initialize with pre-allocated buffers (at startup)
+    void init(MemoryPool&amp; pool) {
+        // Reserve fixed work buffers
+        work_buffer_ = pool.allocate();
+        output_buffer_ = pool.allocate();
+    }
+
+    // Process: all allocation already done
+    ErrorCode process(const uint8_t* input, size_t len) {
+        // Use pre-allocated buffers only
+        memcpy(work_buffer_->data, input, len);
+        work_buffer_->length = len;
+
+        // Process in-place or to output buffer
+        transform(work_buffer_, output_buffer_);
+
+        return ErrorCode::SUCCESS;
+    }
+
+private:
+    PacketBuffer* work_buffer_{nullptr};
+    PacketBuffer* output_buffer_{nullptr};
+
+    void transform(PacketBuffer* src, PacketBuffer* dst) {}
+};
+</pre>
+
+<h2>Coding Standards</h2>
+
+<table>
+  <tr><th>Standard</th><th>Origin</th><th>Focus</th></tr>
+  <tr><td><strong>MISRA C++</strong></td><td>Motor Industry (automotive)</td><td>Safety-critical, widely adopted in telecom</td></tr>
+  <tr><td><strong>CERT C++</strong></td><td>Carnegie Mellon (SEI)</td><td>Security, safe coding practices</td></tr>
+  <tr><td><strong>JSF C++</strong></td><td>Joint Strike Fighter</td><td>Defense/aviation, very strict</td></tr>
+  <tr><td><strong>HIC++</strong></td><td>High Integrity C++</td><td>Subset of MISRA with extensions</td></tr>
+</table>
+
+<div class="callout green">
+  <p><strong>Static analysis:</strong> In production telecom code, static analysis tools (cppcheck, clang-tidy, Coverity, Polyspace) are run as part of CI/CD. These tools catch violations of coding standards, memory leaks, undefined behavior, and concurrency bugs before code reaches production.</p>
+</div>
+
+<h2>Deterministic Behavior</h2>
+
+<pre>
+// Deterministic loop: fixed iteration count
+void processSlot(const uint8_t* symbols, size_t n_symbols) {
+    for (size_t i = 0; i &lt; n_symbols; ++i) {  // Fixed bound
+        processSymbol(symbols + i * SYMBOL_SIZE);
+    }
+}
+
+// Non-deterministic: variable iteration
+void processData(const uint8_t* data) {
+    while (*data != 0xFF) {  // Unpredictable termination
+        data++;
+    }
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>Key principle:</strong> In real-time telecom, the execution time of every function in the data path must be bounded and predictable. Avoid: unbounded loops, dynamic allocation, recursive functions (stack overflow risk), and system calls that may block.</p>
+</div>
+
+<h2>Cross-References</h2>
+
+<ul>
+  <li><a href="../intermediate/exception-handling.html">Exception Handling</a> -- Why it is banned in telecom.</li>
+  <li><a href="../intermediate/stl-overview.html">STL Overview</a> -- Which containers are safe for data path.</li>
+  <li><a href="../advanced/static-analysis-overview.html">Static Analysis</a> -- Tools for enforcing coding standards.</li>
+  <li><a href="real-time-processing.html">Real-Time Processing</a> -- Latency constraints driving these rules.</li>
+  <li><a href="../intermediate/raii.html">RAII</a> -- Resource management without exceptions.</li>
+  <li><a href="../intermediate/constexpr.html">constexpr</a> -- Compile-time computation for embedded.</li>
+</ul>
+
+<div class="nav"><a href="signal-processing-basics.html">&larr; Signal Processing Basics</a><a href="5g-ran-overview.html">5G RAN Overview &rarr;</a></div>
+</body>
+</html>

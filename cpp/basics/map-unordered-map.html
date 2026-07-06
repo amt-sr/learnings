@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>std::map &amp; std::unordered_map — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; }
+  .breadcrumb a { color: #8b949e; }
+  .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; }
+  .callout.red { border-left-color: #f85149; }
+  .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; }
+  th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#1">1 Basics</a> / 1.5.3 std::map &amp; std::unordered_map</div>
+<div class="meta"><span class="tag basic">BASIC</span></div>
+<h1>1.5.3 std::map &amp; std::unordered_map</h1>
+
+<p>Maps are associative containers that store key-value pairs. <code>std::map</code> keeps elements sorted by key (using a red-black tree), while <code>std::unordered_map</code> uses a hash table for average O(1) access. Choosing the right one depends on whether you need ordering, peak lookup speed, or predictable worst-case performance.</p>
+
+<h2>std::map (Ordered Map)</h2>
+
+<p><code>std::map</code> is implemented as a balanced binary search tree (typically a red-black tree). Elements are always sorted by key, and lookup, insertion, and deletion are O(log n).</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;map&gt;
+#include &lt;string&gt;
+
+int main() {
+    // Create an ordered map (string keys, int values)
+    std::map&lt;std::string, int&gt; ages;
+
+    // Insert elements
+    ages["Alice"] = 30;
+    ages["Bob"] = 25;
+    ages["Charlie"] = 35;
+
+    // Insert using emplace (more efficient)
+    ages.emplace("Diana", 28);
+
+    // Insert using insert (won't overwrite existing key)
+    ages.insert({"Eve", 22});
+
+    // Accessing values
+    std::cout &lt;&lt; "Alice's age: " &lt;&lt; ages["Alice"] &lt;&lt; std::endl;  // 30
+    std::cout &lt;&lt; "Bob's age:   " &lt;&lt; ages.at("Bob") &lt;&lt; std::endl;    // 25
+
+    // Iterate -- elements are in alphabetical order by key
+    std::cout &lt;&lt; "\nAll entries (sorted by key):" &lt;&lt; std::endl;
+    for (const auto&amp; [name, age] : ages) {
+        std::cout &lt;&lt; "  " &lt;&lt; name &lt;&lt; ": " &lt;&lt; age &lt;&lt; std::endl;
+    }
+
+    return 0;
+}
+</pre>
+
+<h2>std::unordered_map (Hash Map)</h2>
+
+<p><code>std::unordered_map</code> is implemented as a hash table. It provides average O(1) lookup, insertion, and deletion, but elements have no defined order.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;unordered_map&gt;
+#include &lt;string&gt;
+
+int main() {
+    std::unordered_map&lt;std::string, int&gt; scores;
+
+    scores["Team A"] = 95;
+    scores["Team B"] = 82;
+    scores["Team C"] = 91;
+    scores["Team D"] = 78;
+
+    // Average O(1) lookup
+    std::cout &lt;&lt; "Team A score: " &lt;&lt; scores["Team A"] &lt;&lt; std::endl;
+
+    // Check if key exists
+    std::string key = "Team E";
+    if (scores.find(key) != scores.end()) {
+        std::cout &lt;&lt; key &lt;&lt; " exists" &lt;&lt; std::endl;
+    } else {
+        std::cout &lt;&lt; key &lt;&lt; " not found" &lt;&lt; std::endl;
+    }
+
+    // Iterate -- order is undefined
+    std::cout &lt;&lt; "\nAll entries:" &lt;&lt; std::endl;
+    for (const auto&amp; [team, score] : scores) {
+        std::cout &lt;&lt; "  " &lt;&lt; team &lt;&lt; ": " &lt;&lt; score &lt;&lt; std::endl;
+    }
+
+    // Size and erase
+    std::cout &lt;&lt; "Size: " &lt;&lt; scores.size() &lt;&lt; std::endl;  // 4
+    scores.erase("Team B");
+    std::cout &lt;&lt; "After erase: " &lt;&lt; scores.size() &lt;&lt; std::endl;  // 3
+
+    return 0;
+}
+</pre>
+
+<h2>Comparison Table</h2>
+
+<table>
+  <tr><th>Property</th><th><code>std::map</code></th><th><code>std::unordered_map</code></th></tr>
+  <tr><td><strong>Underlying structure</strong></td><td>Red-black tree</td><td>Hash table</td></tr>
+  <tr><td><strong>Lookup</strong></td><td>O(log n)</td><td>Average O(1), worst O(n)</td></tr>
+  <tr><td><strong>Insertion</strong></td><td>O(log n)</td><td>Average O(1), worst O(n)</td></tr>
+  <tr><td><strong>Deletion</strong></td><td>O(log n)</td><td>Average O(1), worst O(n)</td></tr>
+  <tr><td><strong>Ordered iteration</strong></td><td>Yes (sorted by key)</td><td>No (undefined order)</td></tr>
+  <tr><td><strong>Key requirements</strong></td><td><code>operator&lt;</code> must be defined</td><td>Hashable + equality comparable</td></tr>
+  <tr><td><strong>Memory overhead</strong></td><td>Higher (tree node pointers)</td><td>Lower, but varies with load factor</td></tr>
+  <tr><td><strong>Cache locality</strong></td><td>Poor (pointer chasing)</td><td>Moderate (bucket-based)</td></tr>
+  <tr><td><strong>Header</strong></td><td><code>&lt;map&gt;</code></td><td><code>&lt;unordered_map&gt;</code></td></tr>
+</table>
+
+<h2>Common Operations</h2>
+
+<table>
+  <tr><th>Operation</th><th>Description</th></tr>
+  <tr><td><code>m[key]</code></td><td>Access value (creates default if key missing)</td></tr>
+  <tr><td><code>m.at(key)</code></td><td>Access value (throws if key missing)</td></tr>
+  <tr><td><code>m.find(key)</code></td><td>Returns iterator to pair, or <code>end()</code> if not found</td></tr>
+  <tr><td><code>m.count(key)</code></td><td>Returns 0 or 1 (number of elements with this key)</td></tr>
+  <tr><td><code>m.insert({key, val})</code></td><td>Inserts pair (no effect if key exists)</td></tr>
+  <tr><td><code>m.emplace(key, val)</code></td><td>Constructs pair in-place</td></tr>
+  <tr><td><code>m.erase(key)</code></td><td>Removes element by key</td></tr>
+  <tr><td><code>m.size()</code></td><td>Number of key-value pairs</td></tr>
+  <tr><td><code>m.empty()</code></td><td>True if no elements</td></tr>
+  <tr><td><code>m.contains(key)</code></td><td>True if key exists (C++20)</td></tr>
+</table>
+
+<h2>Checking for Key Existence</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;unordered_map&gt;
+#include &lt;string&gt;
+
+int main() {
+    std::unordered_map&lt;std::string, int&gt; dict = {
+        {"hello", 1}, {"world", 2}
+    };
+
+    std::string word = "hello";
+
+    // Method 1: find() -- idiomatic, safe
+    auto it = dict.find(word);
+    if (it != dict.end()) {
+        std::cout &lt;&lt; it-&gt;first &lt;&lt; ": " &lt;&lt; it-&gt;second &lt;&lt; std::endl;
+    }
+
+    // Method 2: count() -- simple boolean check
+    if (dict.count(word) &gt; 0) {
+        std::cout &lt;&lt; "Found: " &lt;&lt; dict[word] &lt;&lt; std::endl;
+    }
+
+    // Method 3: contains() -- C++20, most readable
+    if (dict.contains(word)) {
+        std::cout &lt;&lt; "Contains: " &lt;&lt; dict[word] &lt;&lt; std::endl;
+    }
+
+    // Method 4: [] -- DANGEROUS for checking! Creates entry if missing
+    // if (dict["missing"] &gt; 0) { ... }
+    // This inserts "missing" with value 0 into the map!
+
+    return 0;
+}
+</pre>
+
+<div class="callout red">
+  <p><strong>Warning:</strong> Using <code>m[key]</code> to check for existence is a common bug. If the key does not exist, <code>operator[]</code> <strong>inserts</strong> it with a default value (0 for integers, empty string for strings). This silently grows your map. Use <code>find()</code>, <code>count()</code>, or <code>contains()</code> instead.</p>
+</div>
+
+<h2>Practical Example: Word Frequency Counter</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;unordered_map&gt;
+#include &lt;string&gt;
+#include &lt;sstream&gt;
+
+int main() {
+    std::string text = "the cat sat on the mat the cat";
+
+    std::unordered_map&lt;std::string, int&gt; freq;
+    std::istringstream iss(text);
+    std::string word;
+
+    while (iss &gt;&gt; word) {
+        freq[word]++;  // [] returns reference, increment in place
+    }
+
+    std::cout &lt;&lt; "Word frequencies:" &lt;&lt; std::endl;
+    for (const auto&amp; [w, count] : freq) {
+        std::cout &lt;&lt; "  " &lt;&lt; w &lt;&lt; ": " &lt;&lt; count &lt;&lt; std::endl;
+    }
+
+    return 0;
+}
+// Output (order may vary):
+//   the: 3
+//   cat: 2
+//   sat: 1
+//   on: 1
+//   mat: 1
+</pre>
+
+<h2>When to Use Which</h2>
+
+<div class="callout green">
+  <p><strong>Default choice:</strong> Use <code>std::unordered_map</code> unless you have a specific reason to use <code>std::map</code>. Unordered maps are faster for lookups and use less memory in most cases.</p>
+</div>
+
+<p><strong>Use <code>std::map</code> when:</strong></p>
+<ul>
+  <li>You need elements iterated in sorted key order.</li>
+  <li>You frequently need range queries (e.g., "all keys between A and M").</li>
+  <li>Your key type does not have a good hash function but supports <code>operator&lt;</code>.</li>
+  <li>You need guaranteed O(log n) worst-case performance (no hash collisions).</li>
+</ul>
+
+<p><strong>Use <code>std::unordered_map</code> when:</strong></p>
+<ul>
+  <li>You primarily need fast point lookups by key.</li>
+  <li>Iteration order does not matter.</li>
+  <li>Your key type has a good hash function (built-in types, <code>std::string</code>).</li>
+  <li>Performance is critical and average O(1) is sufficient.</li>
+</ul>
+
+<h2>Related Topics</h2>
+
+<ul>
+  <li><a href="stl-overview.html">STL Overview</a> &mdash; Introduction to all STL components</li>
+  <li><a href="../intermediate/set-unordered-set.html">std::set &amp; std::unordered_set</a> &mdash; Unique-element containers (similar tradeoffs)</li>
+  <li><a href="vector.html">std::vector</a> &mdash; The most-used sequence container</li>
+  <li><a href="iterators-basics.html">Iterators Basics</a> &mdash; Iterating over containers</li>
+</ul>
+
+<div class="nav">
+  <a href="vector.html">&larr; std::vector</a>
+  <a href="std-string.html">std::string &rarr;</a>
+</div>
+</body>
+</html>

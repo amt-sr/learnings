@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASN.1 BER-TLV Encoder/Decoder — C++ Practice</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.easy { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  .question { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; }
+  .question h3 { color: #f0f6fc; margin-top: 0; }
+  .solution-toggle { cursor: pointer; user-select: none; }
+  .solution-toggle h3 { color: #3fb950; display: inline; }
+  .solution-content { display: none; margin-top: 1rem; }
+  .solution-content.visible { display: block; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+  .topics-covered { margin-bottom: 1rem; font-size: 0.85rem; color: #8b949e; }
+  .topics-covered a { color: #8b949e; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#5">5 Practice</a> / Telecom Practice</div>
+<div class="meta"><span class="tag medium">Medium</span></div>
+<h1>BER-TLV Encoder/Decoder</h1>
+
+<div class="topics-covered">
+  <strong>Topics Covered:</strong>
+  <a href="../encoding.html">ASN.1</a>,
+  <a href="../byte-manipulation.html">Byte Manipulation</a>,
+  <a href="../buffers.html">Buffers</a>
+</div>
+
+<div class="question">
+  <h3>Problem Statement</h3>
+  <p>Implement a BER-TLV (Basic Encoding Rules - Tag Length Value) encoder and decoder for a simple telecom message. BER-TLV is the encoding format used in SIM card communication, UICC, and various telecom protocols.</p>
+  <p>A BER-TLV data object consists of three parts:</p>
+  <ul>
+    <li><strong>Tag:</strong> Identifies the type of data (1 byte for simple tags, or multi-byte for extended).</li>
+    <li><strong>Length:</strong> Number of bytes in the value field. Uses variable-length encoding.</li>
+    <li><strong>Value:</strong> The actual data payload.</li>
+  </ul>
+</div>
+
+<div class="callout">
+  <p><strong>BER-TLV Format Reference:</strong></p>
+  <table>
+    <tr><th>Length byte</th><th>Meaning</th></tr>
+    <tr><td>0x00 - 0x7F</td><td>Short form: value is the length itself (0-127 bytes)</td></tr>
+    <tr><td>0x81</td><td>Long form: next 1 byte is the length</td></tr>
+    <tr><td>0x82</td><td>Long form: next 2 bytes (big-endian) are the length</td></tr>
+    <tr><td>0x83</td><td>Long form: next 3 bytes (big-endian) are the length</td></tr>
+    <tr><td>0x84</td><td>Long form: next 4 bytes (big-endian) are the length</td></tr>
+  </table>
+</div>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution1')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution1">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+#include &lt;cstdint&gt;
+#include &lt;string&gt;
+#include &lt;sstream&gt;
+#include &lt;iomanip&gt;
+#include &lt;stdexcept&gt;
+#include &lt;map&gt;
+
+// ---- TLV Data Structure ----
+
+struct TlvElement {
+    uint8_t tag = 0;
+    std::vector&lt;uint8_t&gt; value;
+
+    std::size_t totalSize() const {
+        return 1 + encodeLengthSize(value.size()) + value.size();
+    }
+
+    // Convenience: interpret value as integer (first 4 bytes, big-endian)
+    uint32_t toUint32() const {
+        if (value.empty()) return 0;
+        uint32_t result = 0;
+        for (auto b : value) {
+            result = (result &lt;&lt; 8) | b;
+        }
+        return result;
+    }
+
+    // Convenience: interpret value as ASCII string
+    std::string toString() const {
+        return std::string(value.begin(), value.end());
+    }
+};
+
+// ---- BER-TLV Encoder ----
+
+class BerTlvEncoder {
+public:
+    // Encode a single TLV element into a byte buffer
+    static std::vector&lt;uint8_t&gt; encode(const TlvElement&amp; tlv) {
+        std::vector&lt;uint8_t&gt; buffer;
+        buffer.push_back(tlv.tag);                    // Tag (1 byte)
+        encodeLength(buffer, tlv.value.size());        // Length
+        buffer.insert(buffer.end(),
+                      tlv.value.begin(),
+                      tlv.value.end());                // Value
+        return buffer;
+    }
+
+    // Encode multiple TLV elements into a single buffer
+    static std::vector&lt;uint8_t&gt; encodeAll(
+        const std::vector&lt;TlvElement&gt;&amp; elements) {
+        std::vector&lt;uint8_t&gt; buffer;
+        for (const auto&amp; elem : elements) {
+            auto encoded = encode(elem);
+            buffer.insert(buffer.end(), encoded.begin(), encoded.end());
+        }
+        return buffer;
+    }
+
+    // Helper: create TLV from integer (big-endian)
+    static TlvElement fromUint8(uint8_t tag, uint8_t val) {
+        return TlvElement{tag, {val}};
+    }
+
+    static TlvElement fromUint16(uint8_t tag, uint16_t val) {
+        return TlvElement{tag, {
+            static_cast&lt;uint8_t&gt;((val &gt;&gt; 8) &amp; 0xFF),
+            static_cast&lt;uint8_t&gt;(val &amp; 0xFF)
+        }};
+    }
+
+    static TlvElement fromUint32(uint8_t tag, uint32_t val) {
+        return TlvElement{tag, {
+            static_cast&lt;uint8_t&gt;((val &gt;&gt; 24) &amp; 0xFF),
+            static_cast&lt;uint8_t&gt;((val &gt;&gt; 16) &amp; 0xFF),
+            static_cast&lt;uint8_t&gt;((val &gt;&gt; 8) &amp; 0xFF),
+            static_cast&lt;uint8_t&gt;(val &amp; 0xFF)
+        }};
+    }
+
+    // Helper: create TLV from string
+    static TlvElement fromString(uint8_t tag, const std::string&amp; str) {
+        return TlvElement{tag,
+            std::vector&lt;uint8_t&gt;(str.begin(), str.end())};
+    }
+
+private:
+    static void encodeLength(std::vector&lt;uint8_t&gt;&amp; buffer, std::size_t length) {
+        if (length &lt; 0x80) {
+            // Short form: single byte
+            buffer.push_back(static_cast&lt;uint8_t&gt;(length));
+        } else if (length &lt;= 0xFF) {
+            // Long form: 1 byte length
+            buffer.push_back(0x81);
+            buffer.push_back(static_cast&lt;uint8_t&gt;(length));
+        } else if (length &lt;= 0xFFFF) {
+            // Long form: 2 byte length (big-endian)
+            buffer.push_back(0x82);
+            buffer.push_back(static_cast&lt;uint8_t&gt;((length &gt;&gt; 8) &amp; 0xFF));
+            buffer.push_back(static_cast&lt;uint8_t&gt;(length &amp; 0xFF));
+        } else {
+            throw std::length_error("Length too large for simple BER encoding");
+        }
+    }
+
+    static std::size_t encodeLengthSize(std::size_t length) {
+        if (length &lt; 0x80) return 1;
+        if (length &lt;= 0xFF) return 2;
+        if (length &lt;= 0xFFFF) return 3;
+        return 5;
+    }
+};
+
+// ---- BER-TLV Decoder ----
+
+class BerTlvDecoder {
+public:
+    // Parse all TLV elements from a buffer
+    static std::vector&lt;TlvElement&gt; decode(
+        const uint8_t* data, std::size_t length) {
+        std::vector&lt;TlvElement&gt; result;
+        std::size_t offset = 0;
+
+        while (offset &lt; length) {
+            if (offset &gt;= length) {
+                throw std::runtime_error("Incomplete TLV at offset " +
+                    std::to_string(offset));
+            }
+
+            TlvElement tlv;
+            tlv.tag = data[offset++];  // Read tag
+
+            // Read length
+            std::size_t valueLength = 0;
+            if (offset &gt;= length) {
+                throw std::runtime_error("Missing length at offset " +
+                    std::to_string(offset));
+            }
+
+            uint8_t firstLenByte = data[offset++];
+            if (firstLenByte &lt; 0x80) {
+                // Short form
+                valueLength = firstLenByte;
+            } else if (firstLenByte == 0x81) {
+                // Long form: 1 byte
+                if (offset &gt;= length) throw std::runtime_error("Incomplete length");
+                valueLength = data[offset++];
+            } else if (firstLenByte == 0x82) {
+                // Long form: 2 bytes (big-endian)
+                if (offset + 1 &gt; length) throw std::runtime_error("Incomplete length");
+                valueLength = (static_cast&lt;std::size_t&gt;(data[offset]) &lt;&lt; 8) |
+                              static_cast&lt;std::size_t&gt;(data[offset + 1]);
+                offset += 2;
+            } else {
+                throw std::runtime_error("Unsupported length encoding: 0x" +
+                    std::to_string(firstLenByte));
+            }
+
+            // Read value
+            if (offset + valueLength &gt; length) {
+                throw std::runtime_error("Incomplete value: need " +
+                    std::to_string(valueLength) + " bytes at offset " +
+                    std::to_string(offset) + " but only " +
+                    std::to_string(length - offset) + " available");
+            }
+
+            tlv.value.assign(data + offset, data + offset + valueLength);
+            offset += valueLength;
+
+            result.push_back(tlv);
+        }
+
+        return result;
+    }
+
+    // Find a specific TLV by tag
+    static std::optional&lt;TlvElement&gt; findByTag(
+        const std::vector&lt;TlvElement&gt;&amp; elements, uint8_t tag) {
+        for (const auto&amp; elem : elements) {
+            if (elem.tag == tag) return elem;
+        }
+        return std::nullopt;
+    }
+};
+
+// ---- Hex dump helper ----
+
+std::string hexDump(const std::vector&lt;uint8_t&gt;&amp; data) {
+    std::ostringstream oss;
+    for (auto b : data) {
+        oss &lt;&lt; std::hex &lt;&lt; std::setw(2) &lt;&lt; std::setfill('0')
+            &lt;&lt; static_cast&lt;int&gt;(b) &lt;&lt; " ";
+    }
+    return oss.str();
+}
+
+// ---- Demo ----
+
+int main() {
+    // Define tag names for readability
+    // Example: a simple telecom message
+    constexpr uint8_t TAG_IMSI          = 0x01;  // IMSI (string)
+    constexpr uint8_t TAG_KSI           = 0x02;  // Key Set Identifier
+    constexpr uint8_t TAG_SEQUENCE      = 0x03;  // Sequence number
+    constexpr uint8_t TAG_AUTH_STATUS   = 0x04;  // Authentication status
+
+    // Build a message
+    std::vector&lt;TlvElement&gt; message;
+    message.push_back(BerTlvEncoder::fromString(TAG_IMSI, "310260000000001"));
+    message.push_back(BerTlvEncoder::fromUint8(TAG_KSI, 7));
+    message.push_back(BerTlvEncoder::fromUint16(TAG_SEQUENCE, 42));
+    message.push_back(BerTlvEncoder::fromUint8(TAG_AUTH_STATUS, 1));
+
+    // Encode
+    auto encoded = BerTlvEncoder::encodeAll(message);
+
+    std::cout &lt;&lt; "=== BER-TLV Encoder/Decoder Demo ===\n\n";
+    std::cout &lt;&lt; "Encoded (" &lt;&lt; encoded.size() &lt;&lt; " bytes):\n  ";
+    std::cout &lt;&lt; hexDump(encoded) &lt;&lt; "\n\n";
+
+    // Decode
+    auto decoded = BerTlvDecoder::decode(encoded.data(), encoded.size());
+
+    std::cout &lt;&lt; "Decoded " &lt;&lt; decoded.size() &lt;&lt; TLV elements:\n";
+    for (const auto&amp; elem : decoded) {
+        std::cout &lt;&lt; "  Tag 0x" &lt;&lt; std::hex &lt;&lt; std::setw(2) &lt;&lt; std::setfill('0')
+                  &lt;&lt; static_cast&lt;int&gt;(elem.tag) &lt;&lt; std::dec;
+        std::cout &lt;&lt; ", Length=" &lt;&lt; elem.value.size();
+        std::cout &lt;&lt; ", Value: ";
+
+        // Try to display as string or integer
+        if (elem.tag == TAG_IMSI) {
+            std::cout &lt;&lt; "\"" &lt;&lt; elem.toString() &lt;&lt; "\"";
+        } else {
+            std::cout &lt;&lt; elem.toUint32();
+        }
+        std::cout &lt;&lt; "\n";
+    }
+
+    // Find by tag
+    std::cout &lt;&lt; "\nLookup by tag:\n";
+    auto ksi = BerTlvDecoder::findByTag(decoded, TAG_KSI);
+    if (ksi) {
+        std::cout &lt;&lt; "  KSI: " &lt;&lt; ksi-&gt;toUint32() &lt;&lt; "\n";
+    }
+
+    auto missing = BerTlvDecoder::findByTag(decoded, 0xFF);
+    if (!missing) {
+        std::cout &lt;&lt; "  Tag 0xFF: not found (as expected)\n";
+    }
+
+    // Round-trip: encode decoded back and compare
+    auto reencoded = BerTlvEncoder::encodeAll(decoded);
+    std::cout &lt;&lt; "\nRound-trip match: "
+              &lt;&lt; (encoded == reencoded ? "YES" : "NO") &lt;&lt; "\n";
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><strong>Tag:</strong> Single byte identifying the data type. In full BER-TLV, tags can be multi-byte with class bits, constructed/primitive flag, and tag number. We use simple single-byte tags here.</li>
+      <li><strong>Length encoding:</strong> Short form (1 byte, 0-127) and long form (first byte = 0x81/0x82/..., followed by 1-4 length bytes in big-endian). This is the BER-LER (Length Encoding Rules).</li>
+      <li><strong>Encoder:</strong> Takes <code>TlvElement</code> structs, serializes each into Tag + Length + Value bytes, and concatenates them.</li>
+      <li><strong>Decoder:</strong> Parses a byte buffer by reading Tag, decoding Length, then extracting Value bytes. Repeats until the buffer is consumed.</li>
+      <li><strong>Bounds checking:</strong> Every read verifies sufficient data remains, throwing descriptive exceptions on malformed input.</li>
+      <li><strong>Round-trip:</strong> Encode then decode produces identical data, verifying correctness.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout green">
+  <p><strong>Complexity Analysis:</strong></p>
+  <ul>
+    <li><strong>Encode:</strong> O(n) where n is total bytes in all values (single pass).</li>
+    <li><strong>Decode:</strong> O(n) single pass through the buffer.</li>
+    <li><strong>Find by tag:</strong> O(k) where k is the number of TLV elements (linear scan).</li>
+  </ul>
+</div>
+
+<h2>Follow-up Questions</h2>
+
+<div class="question">
+  <h3>Variations to Try</h3>
+  <ol>
+    <li><strong>Nested TLV:</strong> Support constructed TLV where the value contains further TLV elements (recursive parsing). Tag bit 6 (constructed flag) = 1.</li>
+    <li><strong>Multi-byte tags:</strong> Support 2-byte tags where the first byte is 0xFF, indicating the tag number is in the next byte.</li>
+    <li><strong>DER encoding:</strong> Implement Distinguished Encoding Rules (DER) &mdash; a strict subset of BER that requires the shortest possible length encoding (no 0x82 for lengths that fit in 0x81).</li>
+    <li><strong>Template-based TLV builder:</strong> Create a fluent API for building TLV messages: <code>message.add(IMSI, "310...").add(KSI, 7).build()</code>.</li>
+    <li><strong>Sim File System:</strong> Implement a parser for SIM EF (Elementary File) structures which use BER-TLV encoding extensively.</li>
+  </ol>
+</div>
+
+<div class="callout">
+  <p><strong>Real-World Context:</strong></p>
+  <ul>
+    <li>BER-TLV is the standard encoding for <strong>SIM/USIM card communication</strong> (APDUs), defined in TS 31.101 and TS 31.102.</li>
+    <li>5G SUPI (Subscription Permanent Identifier) uses BCD encoding within TLV structures.</li>
+    <li>The <strong>UICC</strong> file system uses BER-TLV for file attributes and data objects.</li>
+    <li>Understanding TLV encoding is essential for any work involving SIM cards, smart cards, or telecom network signaling (MAP, CAP).</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="fixed-point-arith-impl.html">&larr; Fixed-Point Arithmetic</a>
+  <a href="thread-pool-ran.html">Thread Pool for RAN &rarr;</a>
+</div>
+<script>
+function toggleSolution(id) {
+  document.getElementById(id).classList.toggle('visible');
+}
+</script>
+</body>
+</html>

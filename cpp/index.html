@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.6;
+    padding: 2rem;
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 2rem;
+    color: #f0f6fc;
+    border-bottom: 2px solid #30363d;
+    padding-bottom: 0.75rem;
+    margin-bottom: 1.5rem;
+  }
+  .section { margin-bottom: 2rem; }
+  .section-header {
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: #58a6ff;
+    margin-bottom: 0.5rem;
+    padding: 0.35rem 0;
+    border-left: 3px solid #58a6ff;
+    padding-left: 0.75rem;
+  }
+  .subsection { margin-bottom: 1.25rem; margin-left: 1rem; }
+  .subsection-header {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #8b949e;
+    margin-bottom: 0.25rem;
+  }
+  .topics { margin-left: 1rem; }
+  .topic-list { list-style: none; }
+  .topic-list li { padding: 0.1rem 0; }
+  .topic-list a {
+    color: #c9d1d9;
+    text-decoration: none;
+    display: inline-block;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    transition: background 0.15s, color 0.15s;
+  }
+  .topic-list a:hover {
+    background: #1f6feb22;
+    color: #58a6ff;
+  }
+  a:visited { color: #c9d1d9; }
+  a:visited:hover { color: #58a6ff; }
+  .top-level { margin-left: 1rem; }
+  .top-level .topic-list li { padding: 0.15rem 0; }
+  .num {
+    color: #8b949e;
+    margin-right: 0.5em;
+    font-variant-numeric: tabular-nums;
+    user-select: none;
+  }
+  /* Difficulty tags */
+  .tag {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    margin-left: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    vertical-align: middle;
+  }
+  .tag.easy { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  /* Legend */
+  .legend {
+    display: flex;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+    padding: 0.75rem 1rem;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    font-size: 0.85rem;
+  }
+  .legend-item { display: flex; align-items: center; gap: 0.4rem; }
+  .description {
+    margin-top: 1rem;
+    padding: 1rem 1.25rem;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    color: #8b949e;
+    line-height: 1.7;
+  }
+  .description strong { color: #c9d1d9; }
+</style>
+</head>
+<body>
+
+<h1>C++ Learning Path</h1>
+
+<div class="legend">
+  <div class="legend-item"><span class="tag basic">BASIC</span> Fundamentals</div>
+  <div class="legend-item"><span class="tag medium">MEDIUM</span> Intermediate</div>
+  <div class="legend-item"><span class="tag advanced">ADVANCED</span> Expert Level</div>
+</div>
+
+<div class="description">
+  <strong>Complete C++ learning path from basics to advanced, with topics relevant to 5G RAN, CCDU, CU/DU, static code analysis, code scanning, and 4G/5G networking.</strong><br>
+  Each topic includes explanations, code examples, and cross-references to related topics. Practice questions are included at Easy and Medium difficulty levels.
+</div>
+
+<!-- 1 Basics -->
+<div class="section">
+  <div class="section-header"><span class="num">1</span> Basics</div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">1.1</span> Getting Started</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="basics/hello-world.html"><span class="num">1.1.1</span> Hello World &amp; Compilation</a><span class="tag basic">BASIC</span></li>
+        <li><a href="basics/variables-data-types.html"><span class="num">1.1.2</span> Variables &amp; Data Types</a><span class="tag basic">BASIC</span></li>
+        <li><a href="basics/operators.html"><span class="num">1.1.3</span> Operators</a><span class="tag basic">BASIC</span></li>
+        <li><a href="basics/control-flow.html"><span class="num">1.1.4</span> Control Flow (if/else/switch/loops)</a><span class="tag basic">BASIC</span></li>
+        <li><a href="basics/functions.html"><span class="num">1.1.5</span> Functions</a><span class="tag basic">BASIC</span></li>
+        <li><a href="basics/arrays-strings.html"><span class="num">1.1.6</span> Arrays &amp; Strings</a><span class="tag basic">BASIC</span></li>
+        <li><a href="basics/pointers.html"><span class="num">1.1.7</span> Pointers</a><span class="tag basic">BASIC</span></li>
+        <li><a href="basics/references.html"><span class="num">1.1.8</span> References</a><span class="tag basic">BASIC</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">1.2</span> Object-Oriented Programming</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="basics/classes-objects.html"><span class="num">1.2.1</span> Classes &amp; Objects</a><span class="tag basic">BASIC</span></li>
+        <li><a href="basics/constructors-destructors.html"><span class="num">1.2.2</span> Constructors &amp; Destructors</a><span class="tag basic">BASIC</span></li>
+        <li><a href="basics/inheritance.html"><span class="num">1.2.3</span> Inheritance</a><span class="tag basic">BASIC</span></li>
+        <li><a href="basics/polymorphism.html"><span class="num">1.2.4</span> Polymorphism</a><span class="tag basic">BASIC</span></li>
+        <li><a href="basics/encapsulation-abstraction.html"><span class="num">1.2.5</span> Encapsulation &amp; Abstraction</a><span class="tag basic">BASIC</span></li>
+        <li><a href="basics/namespaces.html"><span class="num">1.2.6</span> Namespaces</a><span class="tag basic">BASIC</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">1.3</span> Memory Basics</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="basics/stack-vs-heap.html"><span class="num">1.3.1</span> Stack vs Heap</a><span class="tag basic">BASIC</span></li>
+        <li><a href="basics/new-delete.html"><span class="num">1.3.2</span> new &amp; delete</a><span class="tag basic">BASIC</span></li>
+        <li><a href="basics/memory-layout.html"><span class="num">1.3.3</span> Memory Layout of a Program</a><span class="tag basic">BASIC</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">1.4</span> Templates Introduction</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="basics/function-templates.html"><span class="num">1.4.1</span> Function Templates</a><span class="tag basic">BASIC</span></li>
+        <li><a href="basics/class-templates.html"><span class="num">1.4.2</span> Class Templates</a><span class="tag basic">BASIC</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">1.5</span> STL Basics</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="basics/stl-overview.html"><span class="num">1.5.1</span> STL Overview</a><span class="tag basic">BASIC</span></li>
+        <li><a href="basics/vector.html"><span class="num">1.5.2</span> std::vector</a><span class="tag basic">BASIC</span></li>
+        <li><a href="basics/map-unordered-map.html"><span class="num">1.5.3</span> std::map &amp; std::unordered_map</a><span class="tag basic">BASIC</span></li>
+        <li><a href="basics/std-string.html"><span class="num">1.5.4</span> std::string</a><span class="tag basic">BASIC</span></li>
+        <li><a href="basics/iterators-basics.html"><span class="num">1.5.5</span> Iterators Basics</a><span class="tag basic">BASIC</span></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- 2 Intermediate -->
+<div class="section">
+  <div class="section-header"><span class="num">2</span> Intermediate</div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">2.1</span> Modern C++ Core</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="intermediate/smart-pointers.html"><span class="num">2.1.1</span> Smart Pointers (unique_ptr, shared_ptr, weak_ptr)</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="intermediate/move-semantics.html"><span class="num">2.1.2</span> Move Semantics &amp; Rvalue References</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="intermediate/lambda-expressions.html"><span class="num">2.1.3</span> Lambda Expressions</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="intermediate/auto-decltype.html"><span class="num">2.1.4</span> auto &amp; decltype</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="intermediate/constexpr.html"><span class="num">2.1.5</span> constexpr</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="intermediate/range-based-for.html"><span class="num">2.1.6</span> Range-based For Loops</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="intermediate/enum-class.html"><span class="num">2.1.7</span> Enum Class</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="intermediate/structured-bindings.html"><span class="num">2.1.8</span> Structured Bindings (C++17)</a><span class="tag medium">MEDIUM</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">2.2</span> OOP Deep Dive</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="intermediate/virtual-functions-vtable.html"><span class="num">2.2.1</span> Virtual Functions &amp; vtable</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="intermediate/abstract-classes.html"><span class="num">2.2.2</span> Pure Virtual &amp; Abstract Classes</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="intermediate/multiple-inheritance.html"><span class="num">2.2.3</span> Multiple Inheritance &amp; Diamond Problem</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="intermediate/operator-overloading.html"><span class="num">2.2.4</span> Operator Overloading</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="intermediate/friend-functions.html"><span class="num">2.2.5</span> Friend Functions &amp; Classes</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="intermediate/raii.html"><span class="num">2.2.6</span> RAII Pattern</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="intermediate/copy-elision.html"><span class="num">2.2.7</span> Copy Elision &amp; RVO</a><span class="tag medium">MEDIUM</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">2.3</span> Templates Advanced</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="intermediate/template-specialization.html"><span class="num">2.3.1</span> Template Specialization</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="intermediate/variadic-templates.html"><span class="num">2.3.2</span> Variadic Templates</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="intermediate/sfinae.html"><span class="num">2.3.3</span> SFINAE Basics</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="intermediate/type-traits.html"><span class="num">2.3.4</span> Type Traits</a><span class="tag medium">MEDIUM</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">2.4</span> STL Deep Dive</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="intermediate/set-unordered-set.html"><span class="num">2.4.1</span> std::set &amp; std::unordered_set</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="intermediate/deque.html"><span class="num">2.4.2</span> std::deque</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="intermediate/list-forward-list.html"><span class="num">2.4.3</span> std::list &amp; std::forward_list</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="intermediate/tuple-pair.html"><span class="num">2.4.4</span> std::tuple &amp; std::pair</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="intermediate/optional-variant.html"><span class="num">2.4.5</span> std::optional &amp; std::variant</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="intermediate/stl-algorithms.html"><span class="num">2.4.6</span> STL Algorithms</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="intermediate/function-bind.html"><span class="num">2.4.7</span> std::function &amp; std::bind</a><span class="tag medium">MEDIUM</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">2.5</span> Error Handling</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="intermediate/exception-handling.html"><span class="num">2.5.1</span> Exception Handling (try/catch/throw)</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="intermediate/noexcept.html"><span class="num">2.5.2</span> noexcept</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="intermediate/assert-static-assert.html"><span class="num">2.5.3</span> assert &amp; static_assert</a><span class="tag medium">MEDIUM</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">2.6</span> Multithreading</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="intermediate/std-thread.html"><span class="num">2.6.1</span> std::thread</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="intermediate/mutex-locks.html"><span class="num">2.6.2</span> std::mutex &amp; Locks</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="intermediate/condition-variable.html"><span class="num">2.6.3</span> std::condition_variable</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="intermediate/async-futures.html"><span class="num">2.6.4</span> std::async &amp; Futures</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="intermediate/thread-safe-data-structures.html"><span class="num">2.6.5</span> Thread-Safe Data Structures</a><span class="tag medium">MEDIUM</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">2.7</span> File I/O &amp; Utilities</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="intermediate/file-streams.html"><span class="num">2.7.1</span> File Streams (fstream)</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="intermediate/regular-expressions.html"><span class="num">2.7.2</span> Regular Expressions</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="intermediate/chrono-time.html"><span class="num">2.7.3</span> Chrono &amp; Time</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="intermediate/string-formatting.html"><span class="num">2.7.4</span> String Formatting (C++20 std::format)</a><span class="tag medium">MEDIUM</span></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- 3 Advanced -->
+<div class="section">
+  <div class="section-header"><span class="num">3</span> Advanced</div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">3.1</span> C++20 &amp; Beyond</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="advanced/concepts.html"><span class="num">3.1.1</span> Concepts</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="advanced/ranges.html"><span class="num">3.1.2</span> Ranges</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="advanced/coroutines.html"><span class="num">3.1.3</span> Coroutines</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="advanced/modules.html"><span class="num">3.1.4</span> Modules</a><span class="tag advanced">ADVANCED</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">3.2</span> Memory &amp; Performance</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="advanced/memory-model-atomics.html"><span class="num">3.2.1</span> Memory Model &amp; Atomics</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="advanced/lock-free-programming.html"><span class="num">3.2.2</span> Lock-Free Programming</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="advanced/custom-allocators.html"><span class="num">3.2.3</span> Custom Allocators</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="advanced/placement-new-memory-pools.html"><span class="num">3.2.4</span> Placement New &amp; Memory Pools</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="advanced/cache-oriented-programming.html"><span class="num">3.2.5</span> Cache-Oriented Programming</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="advanced/constexpr-deep.html"><span class="num">3.2.6</span> constexpr Deep Dive</a><span class="tag advanced">ADVANCED</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">3.3</span> Template Metaprogramming</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="advanced/crtp.html"><span class="num">3.3.1</span> CRTP (Curiously Recurring Template Pattern)</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="advanced/type-erasure.html"><span class="num">3.3.2</span> Type Erasure</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="advanced/compile-time-computation.html"><span class="num">3.3.3</span> Compile-Time Computation</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="advanced/sfinae-advanced.html"><span class="num">3.3.4</span> SFINAE &amp; enable_if Advanced</a><span class="tag advanced">ADVANCED</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">3.4</span> Networking &amp; IPC</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="advanced/socket-programming.html"><span class="num">3.4.1</span> Socket Programming</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="advanced/shared-memory-ipc.html"><span class="num">3.4.2</span> Shared Memory &amp; IPC</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="advanced/signal-handling.html"><span class="num">3.4.3</span> Signal Handling</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="advanced/memory-mapped-files.html"><span class="num">3.4.4</span> Memory-Mapped Files</a><span class="tag advanced">ADVANCED</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">3.5</span> Design Patterns in C++</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="advanced/singleton-pattern.html"><span class="num">3.5.1</span> Singleton Pattern</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="advanced/observer-pattern.html"><span class="num">3.5.2</span> Observer Pattern</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="advanced/factory-pattern.html"><span class="num">3.5.3</span> Factory Pattern</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="advanced/strategy-pattern.html"><span class="num">3.5.4</span> Strategy Pattern</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="advanced/producer-consumer-pattern.html"><span class="num">3.5.5</span> Producer-Consumer Pattern</a><span class="tag advanced">ADVANCED</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">3.6</span> Static Analysis &amp; Code Quality</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="advanced/static-analysis-overview.html"><span class="num">3.6.1</span> Static Code Analysis Overview</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="advanced/cppcheck.html"><span class="num">3.6.2</span> cppcheck</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="advanced/clang-tidy.html"><span class="num">3.6.3</span> Clang-Tidy</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="advanced/clang-static-analyzer.html"><span class="num">3.6.4</span> Clang Static Analyzer</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="advanced/address-sanitizer-tools.html"><span class="num">3.6.5</span> AddressSanitizer &amp; Tools</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="advanced/undefined-behavior.html"><span class="num">3.6.6</span> Undefined Behavior &amp; Pitfalls</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="advanced/code-scanning-best-practices.html"><span class="num">3.6.7</span> Code Scanning Best Practices</a><span class="tag advanced">ADVANCED</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">3.7</span> Build Systems &amp; Tooling</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="advanced/cmake.html"><span class="num">3.7.1</span> CMake</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="advanced/make-build.html"><span class="num">3.7.2</span> Make &amp; Build Process</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="advanced/gdb-debugging.html"><span class="num">3.7.3</span> GDB &amp; Debugging</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="advanced/valgrind.html"><span class="num">3.7.4</span> Valgrind</a><span class="tag advanced">ADVANCED</span></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- 4 Telecom & 5G/4G Networking -->
+<div class="section">
+  <div class="section-header"><span class="num">4</span> Telecom &amp; 5G/4G Networking</div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">4.1</span> 5G RAN Architecture</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="telecom-5g/5g-ran-overview.html"><span class="num">4.1.1</span> 5G RAN Overview</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="telecom-5g/cu-du-split.html"><span class="num">4.1.2</span> CU/DU Split Architecture</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="telecom-5g/gnodeb-components.html"><span class="num">4.1.3</span> gNodeB (gNB) Components</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="telecom-5g/ccdu.html"><span class="num">4.1.4</span> CCDU (Centralized/Distributed Unit)</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="telecom-5g/oran-architecture.html"><span class="num">4.1.5</span> O-RAN Architecture</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="telecom-5g/f1-interface.html"><span class="num">4.1.6</span> F1 Interface</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="telecom-5g/x2-ng-x-interface.html"><span class="num">4.1.7</span> X2/NG-X Interface</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="telecom-5g/e1-interface.html"><span class="num">4.1.8</span> E1 Interface</a><span class="tag advanced">ADVANCED</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">4.2</span> 5G Protocol Stack (C++ Implementation)</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="telecom-5g/phy-layer.html"><span class="num">4.2.1</span> PHY Layer Processing</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="telecom-5g/mac-layer.html"><span class="num">4.2.2</span> MAC Layer</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="telecom-5g/rlc-layer.html"><span class="num">4.2.3</span> RLC Layer</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="telecom-5g/pdcp-layer.html"><span class="num">4.2.4</span> PDCP Layer</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="telecom-5g/rrc-layer.html"><span class="num">4.2.5</span> RRC Layer</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="telecom-5g/sdap-layer.html"><span class="num">4.2.6</span> SDAP Layer</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="telecom-5g/nas-layer.html"><span class="num">4.2.7</span> NAS Layer</a><span class="tag medium">MEDIUM</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">4.3</span> 4G LTE Concepts</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="telecom-5g/lte-architecture.html"><span class="num">4.3.1</span> LTE Architecture (eNodeB/EPC)</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="telecom-5g/s1-x2-interfaces.html"><span class="num">4.3.2</span> S1/X2 Interfaces</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="telecom-5g/lte-protocol-stack.html"><span class="num">4.3.3</span> LTE Protocol Stack</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="telecom-5g/handover-procedures.html"><span class="num">4.3.4</span> Handover Procedures</a><span class="tag medium">MEDIUM</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">4.4</span> Telecom C++ Techniques</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="telecom-5g/real-time-processing.html"><span class="num">4.4.1</span> Real-Time Processing</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="telecom-5g/packet-processing-dpdk.html"><span class="num">4.4.2</span> Packet Processing &amp; DPDK</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="telecom-5g/fixed-point-arithmetic.html"><span class="num">4.4.3</span> Fixed-Point Arithmetic</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="telecom-5g/asn1-encoding.html"><span class="num">4.4.4</span> ASN.1 &amp; BER/PER Encoding</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="telecom-5g/memory-pools-telecom.html"><span class="num">4.4.5</span> Memory Pools for Telecom</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="telecom-5g/bit-level-operations.html"><span class="num">4.4.6</span> Bit-Level Operations</a><span class="tag basic">BASIC</span></li>
+        <li><a href="telecom-5g/circular-buffers.html"><span class="num">4.4.7</span> Circular Buffers</a><span class="tag basic">BASIC</span></li>
+        <li><a href="telecom-5g/thread-models-ran.html"><span class="num">4.4.8</span> Thread Models for RAN</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="telecom-5g/sr-iov-pcie.html"><span class="num">4.4.9</span> SR-IOV &amp; PCIe</a><span class="tag advanced">ADVANCED</span></li>
+        <li><a href="telecom-5g/signal-processing-basics.html"><span class="num">4.4.10</span> Signal Processing Basics</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="telecom-5g/embedded-cpp-constraints.html"><span class="num">4.4.11</span> Embedded C++ Constraints</a><span class="tag medium">MEDIUM</span></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- 5 Practice Questions -->
+<div class="section">
+  <div class="section-header"><span class="num">5</span> Practice Questions</div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">5.1</span> Easy Questions</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="practice-questions/reverse-string.html"><span class="num">5.1.1</span> Reverse a String</a><span class="tag easy">EASY</span></li>
+        <li><a href="practice-questions/fibonacci.html"><span class="num">5.1.2</span> Fibonacci Series</a><span class="tag easy">EASY</span></li>
+        <li><a href="practice-questions/palindrome.html"><span class="num">5.1.3</span> Palindrome Check</a><span class="tag easy">EASY</span></li>
+        <li><a href="practice-questions/find-max.html"><span class="num">5.1.4</span> Find Max Element</a><span class="tag easy">EASY</span></li>
+        <li><a href="practice-questions/swap-numbers.html"><span class="num">5.1.5</span> Swap Two Numbers</a><span class="tag easy">EASY</span></li>
+        <li><a href="practice-questions/factorial.html"><span class="num">5.1.6</span> Factorial</a><span class="tag easy">EASY</span></li>
+        <li><a href="practice-questions/array-sum.html"><span class="num">5.1.7</span> Array Sum</a><span class="tag easy">EASY</span></li>
+        <li><a href="practice-questions/check-prime.html"><span class="num">5.1.8</span> Check Prime</a><span class="tag easy">EASY</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">5.2</span> Medium Questions</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="practice-questions/linked-list.html"><span class="num">5.2.1</span> Linked List Implementation</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="practice-questions/thread-safe-queue.html"><span class="num">5.2.2</span> Thread-Safe Queue</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="practice-questions/smart-pointer-patterns.html"><span class="num">5.2.3</span> Smart Pointer Patterns</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="practice-questions/singleton-pattern.html"><span class="num">5.2.4</span> Singleton Pattern</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="practice-questions/observer-pattern.html"><span class="num">5.2.5</span> Observer Pattern</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="practice-questions/memory-leak-detection.html"><span class="num">5.2.6</span> Memory Leak Detection</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="practice-questions/custom-allocator.html"><span class="num">5.2.7</span> Custom Allocator</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="practice-questions/template-metaprogramming.html"><span class="num">5.2.8</span> Template Metaprogramming</a><span class="tag medium">MEDIUM</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="subsection">
+    <div class="subsection-header"><span class="num">5.3</span> Telecom Practice</div>
+    <div class="topics">
+      <ul class="topic-list">
+        <li><a href="practice-questions/packet-parser.html"><span class="num">5.3.1</span> Packet Parser (5G MAC PDU)</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="practice-questions/circular-buffer-impl.html"><span class="num">5.3.2</span> Circular Buffer Implementation</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="practice-questions/fixed-point-arith-impl.html"><span class="num">5.3.3</span> Fixed-Point Arithmetic</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="practice-questions/asn1-encoder.html"><span class="num">5.3.4</span> ASN.1 Message Encoder</a><span class="tag medium">MEDIUM</span></li>
+        <li><a href="practice-questions/thread-pool-ran.html"><span class="num">5.3.5</span> Thread Pool for RAN</a><span class="tag advanced">ADVANCED</span></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

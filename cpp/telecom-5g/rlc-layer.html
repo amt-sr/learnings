@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RLC Layer — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#4">4 Telecom &amp; 5G/4G</a> / RLC Layer</div>
+<div class="meta"><span class="tag medium">Medium</span></div>
+<h1>RLC Layer</h1>
+
+<p>The RLC (Radio Link Control) layer provides segmentation, reassembly, and error correction services. It operates in three modes: Transparent Mode (TM), Unacknowledged Mode (UM), and Acknowledged Mode (AM). RLC sits between PDCP (above) and MAC (below) in the protocol stack.</p>
+
+<h2>RLC Mode Comparison</h2>
+
+<table>
+  <tr><th>Feature</th><th>TM</th><th>UM</th><th>AM</th></tr>
+  <tr><td>Header</td><td>None</td><td>2-3 bytes (fixed)</td><td>2-3 bytes (fixed)</td></tr>
+  <tr><td>Segmentation</td><td>No</td><td>Yes</td><td>Yes</td></tr>
+  <tr><td>ARQ Retransmission</td><td>No</td><td>No</td><td>Yes (RLC status PDU)</td></tr>
+  <tr><td>Reassembly</td><td>No</td><td>Yes (in-order)</td><td>Yes (in-order)</td></tr>
+  <tr><td>Use Case</td><td>BCCH, PCCH</td><td>VoIP, video</td><td>Internet data, signaling (SRB)</td></tr>
+  <tr><td>SN Size</td><td>N/A</td><td>6 or 12 bits</td><td>12 or 18 bits</td></tr>
+  <tr><td>Typical Bearers</td><td>SRB0, BCCH</td><td>DRB for real-time</td><td>SRB1/2, DRB for data</td></tr>
+</table>
+
+<h2>RLC PDU Structure</h2>
+
+<pre>
+  RLC AM Data PDU (16-bit SN):
+  +-------+-----+-------+-------+-------+---+
+  | D/C=1 | P   | SN(12) | SO(16)|  Data |   |
+  | 1 bit |1bit | 12 bits| 16bits|       |   |
+  +-------+-----+-------+-------+-------+---+
+  D/C = Data/Control (1=Data PDU)
+  P   = Poll bit (request STATUS from peer)
+  SN  = Sequence Number (12 or 18 bits)
+  SO  = Segment Offset
+
+  RLC UM Data PDU (12-bit SN):
+  +-------+-----+-------+-------+-------+
+  | D/C=1 | FI  | SN(12)| SO(16)|  Data |
+  | 1 bit |2bit | 12bits| 16bits|       |
+  +-------+-----+-------+-------+-------+
+  FI  = Framing Info (first/last byte segmentation status)
+
+  RLC Status PDU (AM only):
+  +-------+--------+--------+------+
+  | D/C=0 | CPT=0  | ACK_SN | NACK |
+  | 1 bit |  3 bits| 12bits | bits |
+  +-------+--------+--------+------+
+</pre>
+
+<h2>C++ RLC Entity Implementation</h2>
+
+<pre>
+#include &lt;queue&gt;
+#include &lt;vector&gt;
+#include &lt;unordered_map&gt;
+#include &lt;memory&gt;
+#include &lt;cstdint&gt;
+
+// RLC operating mode
+enum class RlcMode : uint8_t {
+    TRANSPARENT,
+    UNACKNOWLEDGED,
+    ACKNOWLEDGED
+};
+
+// RLC SDU received from PDCP (upper layer)
+struct RlcSdu {
+    uint32_t    channel_id;
+    uint32_t    sdu_size;
+    std::vector&lt;uint8_t&gt; data;
+};
+
+// RLC PDU to send to MAC (lower layer)
+struct RlcPdu {
+    uint32_t    channel_id;
+    bool        is_data;        // true = data PDU, false = control PDU
+    uint16_t    byte_size;      // Total PDU size including header
+    std::vector&lt;uint8_t&gt; data;
+};
+
+// RLC segment buffer entry (for AM retransmission)
+struct RlcAmSegment {
+    uint32_t    sn;             // Sequence number
+    uint16_t    so;             // Segment offset
+    uint16_t    segment_size;
+    bool        acked;
+    uint8_t     retx_count;
+    std::vector&lt;uint8_t&gt; data;
+};
+
+// Abstract RLC entity base
+class RlcEntity {
+public:
+    virtual ~RlcEntity() = default;
+
+    virtual void handleSduFromUpper(const RlcSdu&amp; sdu) = 0;
+    virtual void handlePduFromLower(const uint8_t* pdu, size_t len) = 0;
+
+    // MAC requests data for transmission
+    virtual size_t getPduSize(uint32_t grant_bytes) = 0;
+    virtual bool buildPdu(uint8_t* buffer, uint32_t max_len,
+                          uint32_t&amp; pdu_len) = 0;
+};
+
+// RLC AM Entity (most complex, with ARQ)
+class RlcAmEntity : public RlcEntity {
+public:
+    explicit RlcAmEntity(uint32_t channel_id, uint16_t sn_modulus = 4096)
+        : channel_id_(channel_id), sn_modulus_(sn_modulus) {}
+
+    void handleSduFromUpper(const RlcSdu&amp; sdu) override {
+        // Buffer SDU for segmentation
+        tx_buffer_.push(sdu);
+    }
+
+    void handlePduFromLower(const uint8_t* pdu, size_t len) override {
+        // Parse RLC PDU header
+        bool is_data = (pdu[0] &amp; 0x80) != 0;
+        if (!is_data) {
+            handleStatusPdu(pdu, len);
+        } else {
+            handleDataPdu(pdu, len);
+        }
+    }
+
+    size_t getPduSize(uint32_t grant_bytes) override {
+        // Calculate how much data can fit in the grant
+        if (pending_retx_.empty() &amp;&amp; tx_buffer_.empty())
+            return 0;
+        uint32_t header_size = 4;  // AM header
+        return std::min(grant_bytes, header_size + getMaxPayload(grant_bytes - header_size));
+    }
+
+    bool buildPdu(uint8_t* buffer, uint32_t max_len,
+                  uint32_t&amp; pdu_len) override {
+        // Priority: 1) retransmissions, 2) new segments
+        if (!pending_retx_.empty()) {
+            return buildRetxPdu(buffer, max_len, pdu_len);
+        }
+        if (!tx_buffer_.empty()) {
+            return buildNewSegment(buffer, max_len, pdu_len);
+        }
+        return false;
+    }
+
+    // Process received status PDU (ACK/NACK from peer)
+    void handleStatusPdu(const uint8_t* pdu, size_t len) {
+        // Parse ACK_SN -- mark all PDU with SN &lt; ACK_SN as acked
+        uint16_t ack_sn = parseAckSn(pdu, len);
+        for (auto&amp; seg : tx_segments_) {
+            if (seg.sn &lt; ack_sn) {
+                seg.acked = true;
+            }
+        }
+        // Handle NACK entries -- retransmit specific segments
+        parseAndHandleNacks(pdu, len);
+    }
+
+    // Process received data PDU
+    void handleDataPdu(const uint8_t* pdu, size_t len) {
+        // Parse header: SN, SO
+        uint16_t sn = parseSn(pdu);
+        uint16_t so = parseSo(pdu);
+
+        // Place in reassembly buffer
+        auto&amp; entry = rx_buffer_[sn];
+        entry.segments.push_back({so, len - getHeaderSize(pdu)});
+
+        // Check if complete SDU can be reassembled
+        if (isComplete(sn)) {
+            reassembleAndDeliver(sn);
+        }
+
+        // Send status report if needed (missing segments)
+        if (hasGaps(sn)) {
+            sendStatusReport(sn);
+        }
+    }
+
+    uint32_t nextTxSn() const { return tx_next_; }
+
+private:
+    uint32_t channel_id_;
+    uint16_t sn_modulus_;
+    uint32_t tx_next_{0};          // Next SN to transmit
+    uint32_t tx_ack_{0};           // Highest ACKed SN
+    uint32_t rx_next_{0};          // Next expected SN (receive)
+
+    std::queue&lt;RlcSdu&gt;               tx_buffer_;       // SDUs awaiting segmentation
+    std::vector&lt;RlcAmSegment&gt;       tx_segments_;     // Segments sent (for retx)
+    std::deque&lt;RlcAmSegment&gt;        pending_retx_;    // Pending retransmissions
+
+    struct RxReassemblyEntry {
+        std::vector&lt;std::pair&lt;uint16_t, uint16_t&gt;&gt; segments; // (offset, length)
+    };
+    std::unordered_map&lt;uint32_t, RxReassemblyEntry&gt; rx_buffer_;
+
+    bool buildNewSegment(uint8_t* buf, uint32_t max_len, uint32_t&amp; pdu_len);
+    bool buildRetxPdu(uint8_t* buf, uint32_t max_len, uint32_t&amp; pdu_len);
+    uint16_t parseAckSn(const uint8_t* pdu, size_t len);
+    uint16_t parseSn(const uint8_t* pdu);
+    uint16_t parseSo(const uint8_t* pdu);
+    bool isComplete(uint32_t sn);
+    bool hasGaps(uint32_t sn);
+    void reassembleAndDeliver(uint32_t sn);
+    void sendStatusReport(uint32_t nack_sn);
+    void parseAndHandleNacks(const uint8_t* pdu, size_t len);
+    uint32_t getMaxPayload(uint32_t available);
+};
+</pre>
+
+<h2>RLC Buffer Management</h2>
+
+<div class="callout green">
+  <p><strong>Buffer Tips:</strong> RLC entities maintain transmit and receive buffers that must handle bursty traffic patterns. Use <a href="memory-pools-telecom.html">memory pools</a> to pre-allocate buffer space and avoid dynamic allocation in the real-time path. The reassembly buffer needs a timer for discarding incomplete SDUs (t-Reassembly timer).</p>
+</div>
+
+<h2>Cross-References</h2>
+
+<ul>
+  <li><a href="mac-layer.html">MAC Layer</a> -- MAC provides transport block grants to RLC; RLC provides PDUs to MAC.</li>
+  <li><a href="pdcp-layer.html">PDCP Layer</a> -- RLC SDUs come from PDCP; RLC PDUs go to PDCP for reassembly.</li>
+  <li><a href="memory-pools-telecom.html">Memory Pools</a> -- Pre-allocated buffer management for RLC entities.</li>
+  <li><a href="bit-level-operations.html">Bit Operations</a> -- RLC header parsing requires bit-level extraction.</li>
+  <li><a href="../basics/queues.html">Queue/Deque</a> -- Used for TX buffer and retransmission queues.</li>
+</ul>
+
+<div class="nav"><a href="mac-layer.html">&larr; MAC Layer</a><a href="pdcp-layer.html">PDCP Layer &rarr;</a></div>
+</body>
+</html>

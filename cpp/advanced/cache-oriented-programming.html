@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cache-Oriented Programming — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / Cache-Oriented Programming</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>Cache-Oriented Programming</h1>
+
+<p>Modern CPUs can execute instructions far faster than they can fetch data from main memory. The CPU cache hierarchy (L1, L2, L3) bridges this gap, but only if your data access patterns are cache-friendly. Cache-oriented programming structures data and code to maximize cache hit rates and minimize cache misses, false sharing, and unnecessary cache line transfers. This topic follows <a href="placement-new-memory-pools.html">Placement New &amp; Memory Pools</a> and leads into <a href="constexpr-deep.html">Advanced constexpr</a>.</p>
+
+<h2>Cache Hierarchy</h2>
+
+<table>
+<tr><th>Level</th><th>Typical Size</th><th>Latency (cycles)</th><th>Bandwidth</th></tr>
+<tr><td>Registers</td><td>&lt; 1 KB</td><td>0-1</td><td>Infinite (per core)</td></tr>
+<tr><td>L1 Cache</td><td>32-64 KB</td><td>3-5</td><td>Very high</td></tr>
+<tr><td>L2 Cache</td><td>256 KB - 1 MB</td><td>10-20</td><td>High</td></tr>
+<tr><td>L3 Cache</td><td>4-64 MB (shared)</td><td>40-80</td><td>Moderate</td></tr>
+<tr><td>Main Memory (DRAM)</td><td>GBs</td><td>200-400</td><td>Limited by bus</td></tr>
+</table>
+
+<div class="callout">
+<p><strong>Key principle:</strong> A cache miss to main memory costs 200-400 cycles. In that time, the CPU could have executed 100-200 instructions from L1 cache. Structure your data so that hot paths hit L1/L2, not main memory.</p>
+</div>
+
+<h2>Cache Lines</h2>
+
+<p>Memory is transferred between CPU caches and main memory in fixed-size units called <strong>cache lines</strong> (typically 64 bytes on x86-64, 128 bytes on some ARM). The entire cache line is loaded even if you only read one byte.</p>
+
+<pre>
+#include &lt;cstddef&gt;
+
+// A typical cache line size
+static constexpr std::size_t CACHE_LINE = 64;
+
+// Padding to prevent false sharing
+template&lt;typename T&gt;
+struct CacheLinePadded {
+    alignas(CACHE_LINE) T value{};
+    char padding[CACHE_LINE - ((sizeof(T) + CACHE_LINE - 1) % CACHE_LINE)];
+};
+</pre>
+
+<h2>False Sharing</h2>
+
+<p>False sharing occurs when two threads modify independent variables that happen to reside on the same cache line. The hardware cache coherency protocol (MESI) treats the entire line as a single unit, causing the line to bounce between cores:</p>
+
+<pre>
+#include &lt;atomic&gt;
+#include &lt;thread&gt;
+#include &lt;vector&gt;
+#include &lt;iostream&gt;
+#include &lt;chrono&gt;
+
+// BAD: Both counters likely on the same cache line
+struct CountersBad {
+    std::atomic&lt;int64_t&gt; counter_a{0};  // offset 0
+    std::atomic&lt;int64_t&gt; counter_b{0};  // offset 8 (same cache line!)
+};
+
+// GOOD: Each counter on its own cache line
+struct alignas(64) CountersGood {
+    std::atomic&lt;int64_t&gt; counter_a{0};
+    char pad_a[64 - sizeof(std::atomic&lt;int64_t&gt;)];  // padding
+    std::atomic&lt;int64_t&gt; counter_b{0};
+    char pad_b[64 - sizeof(std::atomic&lt;int64_t&gt;)];  // padding
+};
+
+template&lt;typename C&gt;
+void benchmark(const char* name, int iterations) {
+    C counters;
+    constexpr int N = 1'000'000;
+
+    auto start = std::chrono::high_resolution_clock::now();
+
+    std::thread t1([&]() {
+        for (int i = 0; i &lt; N; ++i) counters.counter_a.fetch_add(1, std::memory_order_relaxed);
+    });
+    std::thread t2([&]() {
+        for (int i = 0; i &lt; N; ++i) counters.counter_b.fetch_add(1, std::memory_order_relaxed);
+    });
+    t1.join();
+    t2.join();
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto ms = std::chrono::duration_cast&lt;std::chrono::microseconds&gt;(end - start).count();
+    std::cout &lt;&lt; name &lt;&lt; ": " &lt;&lt; ms &lt;&lt; " us\n";
+}
+
+int main() {
+    benchmark&lt;CountersBad&gt;("False sharing (bad) ", 0);
+    benchmark&lt;CountersGood&gt;("Padded (good)       ", 0);
+    // Padded version is typically 3-10x faster
+}
+</pre>
+
+<h2>Data Layout Optimization</h2>
+
+<h3>Array of Structs (AoS) vs Struct of Arrays (SoA)</h3>
+
+<pre>
+#include &lt;vector&gt;
+#include &lt;cstddef&gt;
+
+constexpr std::size_t N = 10'000'000;
+
+// AoS: Cache-friendly for accessing all fields of one object
+struct ParticleAoS {
+    float x, y, z;    // position
+    float vx, vy, vz;  // velocity
+    float mass;
+};
+std::vector&lt;ParticleAoS&gt; particles_aos(N);
+
+// SoA: Cache-friendly for accessing one field of many objects
+struct ParticleSoA {
+    std::vector&lt;float&gt; x, y, z;      // position arrays
+    std::vector&lt;float&gt; vx, vy, vz;   // velocity arrays
+    std::vector&lt;float&gt; mass;
+};
+ParticleSoA particles_soa;
+particles_soa.x.resize(N); particles_soa.y.resize(N); particles_soa.z.resize(N);
+particles_soa.vx.resize(N); particles_soa.vy.resize(N); particles_soa.vz.resize(N);
+particles_soa.mass.resize(N);
+
+// When updating only velocities (not positions), SoA is much faster:
+// - AoS: loads entire ParticleAoS (28 bytes, spanning ~0.5 cache lines per particle)
+// - SoA: loads only vx, vy, vz (12 bytes, fits in one cache line for ~5 particles)
+
+void update_velocities_aos() {
+    for (auto&amp; p : particles_aos) {
+        p.vx += p.ax * dt;  // loads x, y, z, vx, vy, vz, mass — wastes bandwidth
+        p.vy += p.ay * dt;
+        p.vz += p.az * dt;
+    }
+}
+
+void update_velocities_soa() {
+    for (std::size_t i = 0; i &lt; N; ++i) {
+        particles_soa.vx[i] += ax * dt;  // loads only vx, vy, vz — tight loop
+        particles_soa.vy[i] += ay * dt;
+        particles_soa.vz[i] += az * dt;
+    }
+}
+</pre>
+
+<div class="callout green">
+<p><strong>Rule:</strong> Use AoS when you access most/all fields of each object together. Use SoA when you process one field across all objects. In telecom: per-UE processing is typically AoS; per-metric aggregation across all UEs benefits from SoA.</p>
+</div>
+
+<h2>Prefetching</h2>
+
+<pre>
+#include &lt;cstddef&gt;
+
+// Manual prefetch hint (compiler-specific, x86 example)
+#if defined(__x86_64__)
+#include &lt;x86intrin.h&gt;
+#define PREFETCH(addr) _mm_prefetch(reinterpret_cast&lt;const char*&gt;(addr), _MM_HINT_T0)
+#elif defined(__aarch64__)
+#define PREFETCH(addr) __builtin_prefetch(addr, 1, 3)
+#else
+#define PREFETCH(addr)
+#endif
+
+// Example: prefetching in a linked-list traversal
+struct Node {
+    int data;
+    Node* next;
+};
+
+void process_list(Node* head) {
+    for (Node* curr = head; curr != nullptr; curr = curr-&gt;next) {
+        // Prefetch the NEXT node's cache line before processing current
+        if (curr-&gt;next) {
+            PREFETCH(curr-&gt;next);
+        }
+        // Process current node
+        process(curr-&gt;data);
+    }
+}
+</pre>
+
+<h2>Memory Access Patterns</h2>
+
+<table>
+<tr><th>Pattern</th><th>Performance</th><th>Example</th></tr>
+<tr><td>Sequential (stride-1)</td><td>Best — hardware prefetcher works perfectly</td><td><code>for (i=0; i&lt;N; ++i) a[i]</code></td></tr>
+<tr><td>Strided (power-of-2 stride)</td><td>Good — prefetcher can detect pattern</td><td><code>for (i=0; i&lt;N; i+=8) a[i]</code></td></tr>
+<tr><td>Random</td><td>Worst — cache misses on every access</td><td>Hash table lookups, graph traversal</td></tr>
+<tr><td>Reverse sequential</td><td>Good on modern hardware</td><td><code>for (i=N-1; i&gt;=0; --i) a[i]</code></td></tr>
+</table>
+
+<h3>Column-Major vs Row-Major Traversal</h3>
+
+<pre>
+constexpr std::size_t ROWS = 1024;
+constexpr std::size_t COLS = 1024;
+
+int matrix[ROWS][COLS];
+
+// Row-major traversal: sequential memory access — FAST
+void sum_rows() {
+    long sum = 0;
+    for (std::size_t r = 0; r &lt; ROWS; ++r) {
+        for (std::size_t c = 0; c &lt; COLS; ++c) {
+            sum += matrix[r][c];  // sequential: matrix[0][0], [0][1], [0][2], ...
+        }
+    }
+}
+
+// Column-major traversal: stride-ROWS access — SLOW (cache miss per access)
+void sum_cols() {
+    long sum = 0;
+    for (std::size_t c = 0; c &lt; COLS; ++c) {
+        for (std::size_t r = 0; r &lt; ROWS; ++r) {
+            sum += matrix[r][c];  // strided: matrix[0][0], [1][0], [2][0], ...
+        }
+    }
+}
+</pre>
+
+<h2>Telecom Relevance</h2>
+
+<p>Packet processing in a 5G base station involves iterating over millions of packets per second. Each packet header is parsed and forwarded. If packet buffers are cache-line aligned and headers are compact, a single cache line fetch can deliver an entire header. SoA layout for per-UE statistics allows efficient aggregation of metrics across all UEs without loading unnecessary data. Avoiding false sharing between per-core statistics counters is essential for scaling to many cores.</p>
+
+<div class="callout green">
+<p><strong>Optimization checklist:</strong> (1) Profile before optimizing, (2) Use <a href="valgrind.html">Valgrind/cachegrind</a> to measure cache misses, (3) Ensure hot data fits in L1/L2, (4) Eliminate false sharing with padding or thread-local data, (5) Align frequently accessed structures to cache-line boundaries, (6) Use sequential access patterns where possible.</p>
+</div>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="placement-new-memory-pools.html">Placement New &amp; Memory Pools</a> (contiguous allocation), <a href="custom-allocators.html">Custom Allocators</a> (allocation patterns), <a href="lock-free-programming.html">Lock-Free Programming</a> (cache-line effects on atomics), <a href="valgrind.html">Valgrind</a> (cachegrind for profiling), <a href="memory-model-atomics.html">Memory Model &amp; Atomics</a>.</p>
+</div>
+
+<div class="nav"><a href="placement-new-memory-pools.html">&larr; Placement New &amp; Memory Pools</a><a href="constexpr-deep.html">Advanced constexpr &rarr;</a></div>
+</body>
+</html>

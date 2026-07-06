@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Swap Numbers — C++ Practice</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.easy { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  .question { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; }
+  .question h3 { color: #f0f6fc; margin-top: 0; }
+  .solution-toggle { cursor: pointer; user-select: none; }
+  .solution-toggle h3 { color: #3fb950; display: inline; }
+  .solution-content { display: none; margin-top: 1rem; }
+  .solution-content.visible { display: block; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+  .topics-covered { margin-bottom: 1rem; font-size: 0.85rem; color: #8b949e; }
+  .topics-covered a { color: #8b949e; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#5">5 Practice</a> / Easy Questions</div>
+<div class="meta"><span class="tag easy">Easy</span></div>
+<h1>Swap Two Numbers</h1>
+
+<div class="topics-covered">
+  <strong>Topics Covered:</strong>
+  <a href="../pointers.html">Pointers</a>,
+  <a href="../references.html">References</a>,
+  <a href="../functions.html">Functions</a>
+</div>
+
+<div class="question">
+  <h3>Problem Statement</h3>
+  <p>Write functions to swap two numbers using three different approaches:</p>
+  <ol>
+    <li>Using <strong>pointers</strong> (pass by pointer).</li>
+    <li>Using <strong>references</strong> (pass by reference).</li>
+    <li>Using <strong>XOR swap</strong> (no temporary variable).</li>
+  </ol>
+  <p>Explain the differences, advantages, and disadvantages of each approach.</p>
+</div>
+
+<h2>Approach 1: Swap Using Pointers</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution1')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution1">
+    <pre>
+#include &lt;iostream&gt;
+
+void swapByPointer(int* a, int* b) {
+    int temp = *a;
+    *a = *b;
+    *b = temp;
+}
+
+int main() {
+    int x = 10, y = 20;
+    std::cout &lt;&lt; "Before: x = " &lt;&lt; x &lt;&lt; ", y = " &lt;&lt; y &lt;&lt; "\n";
+
+    swapByPointer(&amp;x, &amp;y);
+    std::cout &lt;&lt; "After:  x = " &lt;&lt; x &lt;&lt; ", y = " &lt;&lt; y &lt;&lt; "\n";
+    // Output: After:  x = 20, y = 10
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li>We pass the <strong>addresses</strong> of the variables using the address-of operator <code>&amp;</code>.</li>
+      <li>Inside the function, we dereference the pointers with <code>*</code> to access and modify the original values.</li>
+      <li>This is the C-style approach. It works but requires explicit <code>&amp;</code> and <code>*</code> syntax at the call site and inside the function.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Approach 2: Swap Using References</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution2')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution2">
+    <pre>
+#include &lt;iostream&gt;
+
+void swapByReference(int&amp; a, int&amp; b) {
+    int temp = a;
+    a = b;
+    b = temp;
+}
+
+// Template version that works with any type
+template&lt;typename T&gt;
+void swapGeneric(T&amp; a, T&amp; b) {
+    T temp = std::move(a);  // move instead of copy for efficiency
+    a = std::move(b);
+    b = std::move(temp);
+}
+
+int main() {
+    int x = 10, y = 20;
+    std::cout &lt;&lt; "Before: x = " &lt;&lt; x &lt;&lt; ", y = " &lt;&lt; y &lt;&lt; "\n";
+
+    swapByReference(x, y);
+    std::cout &lt;&lt; "After:  x = " &lt;&lt; x &lt;&lt; ", y = " &lt;&lt; y &lt;&lt; "\n";
+    // Output: After:  x = 20, y = 10
+
+    // With strings
+    std::string s1 = "hello", s2 = "world";
+    swapGeneric(s1, s2);
+    std::cout &lt;&lt; "s1 = " &lt;&lt; s1 &lt;&lt; ", s2 = " &lt;&lt; s2 &lt;&lt; "\n";
+    // Output: s1 = world, s2 = hello
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li>References (<code>int&amp;</code>) are aliases to the original variables. No explicit <code>&amp;</code> or <code>*</code> needed at the call site.</li>
+      <li>The syntax is cleaner and less error-prone than pointers.</li>
+      <li>The template version uses <code>std::move</code> to avoid unnecessary copies for large types (like <code>std::string</code>).</li>
+      <li>This is the idiomatic C++ approach. In practice, use <code>std::swap</code> which already does this.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Approach 3: XOR Swap (No Temporary Variable)</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution3')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution3">
+    <pre>
+#include &lt;iostream&gt;
+
+void swapXOR(int&amp; a, int&amp; b) {
+    // Only works for integer types
+    if (&amp;a == &amp;b) return;  // Guard: same variable would zero it out
+
+    a ^= b;
+    b ^= a;  // b = b ^ (a ^ b) = a
+    a ^= b;  // a = (a ^ b) ^ a = b
+}
+
+int main() {
+    int x = 10, y = 20;
+    std::cout &lt;&lt; "Before: x = " &lt;&lt; x &lt;&lt; ", y = " &lt;&lt; y &lt;&lt; "\n";
+
+    swapXOR(x, y);
+    std::cout &lt;&lt; "After:  x = " &lt;&lt; x &lt;&lt; ", y = " &lt;&lt; y &lt;&lt; "\n";
+    // Output: After:  x = 20, y = 10
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li>XOR swap uses three XOR operations to swap values without a temporary variable.</li>
+      <li><code>a ^= b</code> stores the XOR of both in <code>a</code>.</li>
+      <li><code>b ^= a</code> recovers the original <code>a</code> into <code>b</code> (since <code>a ^ b ^ b = a</code>).</li>
+      <li><code>a ^= b</code> recovers the original <code>b</code> into <code>a</code>.</li>
+      <li><strong>Warning:</strong> If <code>a</code> and <code>b</code> are the same variable, this zeros out the value. The guard <code>if (&amp;a == &amp;b) return;</code> prevents this.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout red">
+  <p><strong>Why XOR Swap is Usually a Bad Idea:</strong></p>
+  <ul>
+    <li>Modern compilers optimize temporary-variable swaps into register moves &mdash; often faster than XOR.</li>
+    <li>XOR swap only works on integer types (not floats, strings, or objects).</li>
+    <li>It prevents the compiler from doing certain optimizations (read-after-write dependency chain).</li>
+    <li>It is a classic interview trick but should <strong>never</strong> be used in real code.</li>
+  </ul>
+</div>
+
+<div class="callout green">
+  <p><strong>Comparison Table:</strong></p>
+  <table>
+    <tr><th>Approach</th><th>Syntax at Call Site</th><th>Works With</th><th>Production Use</th></tr>
+    <tr><td>Pointers</td><td><code>swap(&amp;x, &amp;y)</code></td><td>Any type</td><td>C legacy code</td></tr>
+    <tr><td>References</td><td><code>swap(x, y)</code></td><td>Any type</td><td>Idiomatic C++</td></tr>
+    <tr><td>XOR</td><td><code>swap(x, y)</code></td><td>Integers only</td><td>Never</td></tr>
+    <tr><td><code>std::swap</code></td><td><code>std::swap(x, y)</code></td><td>Any type</td><td>Best choice</td></tr>
+  </table>
+</div>
+
+<h2>Follow-up Questions</h2>
+
+<div class="question">
+  <h3>Variations to Try</h3>
+  <ol>
+    <li><strong>Why can't you swap with pass-by-value?</strong> Write a version that takes <code>int a, int b</code> by value and observe that the original variables are unchanged. Explain why.</li>
+    <li><strong>Swap three variables:</strong> Rotate three variables: <code>a &rarr; b, b &rarr; c, c &rarr; a</code>.</li>
+    <li><strong>Swap bits:</strong> Swap the nth and mth bits of an integer using bit manipulation.</li>
+    <li><strong>Implement your own <code>std::swap</code>:</strong> Create a generic <code>my_swap</code> function template that handles all types efficiently using <code>std::move</code>.</li>
+  </ol>
+</div>
+
+<div class="callout">
+  <p><strong>Key Takeaways:</strong></p>
+  <ul>
+    <li>Pointers vs references: References provide the same ability to modify caller variables but with cleaner syntax. Prefer references in C++.</li>
+    <li>The difference between pass-by-value, pass-by-pointer, and pass-by-reference is one of the most fundamental concepts in C++.</li>
+    <li>In production code, always use <code>std::swap</code> from <code>&lt;utility&gt;</code> &mdash; it is optimized, generic, and handles move semantics correctly.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="find-max.html">&larr; Find Maximum</a>
+  <a href="factorial.html">Factorial &rarr;</a>
+</div>
+<script>
+function toggleSolution(id) {
+  document.getElementById(id).classList.toggle('visible');
+}
+</script>
+</body>
+</html>

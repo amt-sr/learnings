@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Template Metaprogramming — C++ Practice</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.easy { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  .question { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; }
+  .question h3 { color: #f0f6fc; margin-top: 0; }
+  .solution-toggle { cursor: pointer; user-select: none; }
+  .solution-toggle h3 { color: #3fb950; display: inline; }
+  .solution-content { display: none; margin-top: 1rem; }
+  .solution-content.visible { display: block; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+  .topics-covered { margin-bottom: 1rem; font-size: 0.85rem; color: #8b949e; }
+  .topics-covered a { color: #8b949e; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#5">5 Practice</a> / Medium Questions</div>
+<div class="meta"><span class="tag medium">Medium</span></div>
+<h1>Template Metaprogramming</h1>
+
+<div class="topics-covered">
+  <strong>Topics Covered:</strong>
+  <a href="../templates.html">Templates</a>,
+  <a href="../constexpr.html">Constexpr</a>,
+  <a href="../variadic-templates.html">Variadic Templates</a>,
+  <a href="../type-traits.html">Type Traits</a>
+</div>
+
+<div class="question">
+  <h3>Problem Statement</h3>
+  <p>Implement the following at compile time using template metaprogramming and <code>constexpr</code>:</p>
+  <ol>
+    <li><strong>Compile-time factorial</strong> using template specialization and using <code>constexpr</code>.</li>
+    <li><strong>Compile-time Fibonacci</strong> using template specialization and using <code>constexpr</code>.</li>
+    <li><strong>Type list operations:</strong> a type list that supports <code>Append</code>, <code>Contains</code>, <code>Count</code>, and <code>Filter</code>.</li>
+  </ol>
+  <p>All results must be verifiable with <code>static_assert</code> at compile time.</p>
+</div>
+
+<h2>1. Compile-Time Factorial</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution1')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution1">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;cstdint&gt;
+
+// ---- Approach A: Template Metaprogramming (recursive templates) ----
+template&lt;int N&gt;
+struct FactorialTMP {
+    static constexpr uint64_t value = N * FactorialTMP&lt;N - 1&gt;::value;
+};
+
+template&lt;&gt;
+struct FactorialTMP&lt;0&gt; {
+    static constexpr uint64_t value = 1;
+};
+
+// ---- Approach B: constexpr function (C++11+) ----
+constexpr uint64_t factorialConstexpr(int n) {
+    return (n &lt;= 1) ? 1 : static_cast&lt;uint64_t&gt;(n) * factorialConstexpr(n - 1);
+}
+
+// ---- Approach C: constexpr with loop (C++14+) ----
+constexpr uint64_t factorialLoop(int n) {
+    uint64_t result = 1;
+    for (int i = 2; i &lt;= n; ++i) {
+        result *= static_cast&lt;uint64_t&gt;(i);
+    }
+    return result;
+}
+
+// Compile-time verification
+static_assert(FactorialTMP&lt;0&gt;::value == 1);
+static_assert(FactorialTMP&lt;5&gt;::value == 120);
+static_assert(FactorialTMP&lt;10&gt;::value == 3628800);
+
+static_assert(factorialConstexpr(0) == 1);
+static_assert(factorialConstexpr(5) == 120);
+
+static_assert(factorialLoop(0) == 1);
+static_assert(factorialLoop(20) == 2432902008176640000ULL);
+
+int main() {
+    std::cout &lt;&lt; "FactorialTMP&lt;5&gt;::value = " &lt;&lt; FactorialTMP&lt;5&gt;::value &lt;&lt; "\n";
+    std::cout &lt;&lt; "factorialConstexpr(5) = " &lt;&lt; factorialConstexpr(5) &lt;&lt; "\n";
+    std::cout &lt;&lt; "factorialLoop(5) = " &lt;&lt; factorialLoop(5) &lt;&lt; "\n";
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><strong>Template approach:</strong> Recursive template instantiation generates a chain of types. The specialization <code>FactorialTMP&lt;0&gt;</code> provides the base case. This works in C++98 and later.</li>
+      <li><strong>constexpr approach:</strong> A function annotated <code>constexpr</code> can be evaluated at compile time if called with constant arguments. C++11 allows only single return statement + recursion; C++14+ allows loops.</li>
+      <li><strong>constexpr loop:</strong> The most readable and efficient approach (C++14+). No recursion depth limit concerns.</li>
+      <li>Template instantiation depth is limited (typically 1024), so <code>FactorialTMP&lt;1025&gt;</code> would fail. <code>constexpr</code> functions do not have this limit.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>2. Compile-Time Fibonacci</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution2')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution2">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;cstdint&gt;
+
+// ---- Template Metaprogramming ----
+template&lt;int N&gt;
+struct FibTMP {
+    static constexpr uint64_t value = FibTMP&lt;N - 1&gt;::value + FibTMP&lt;N - 2&gt;::value;
+};
+
+template&lt;&gt; struct FibTMP&lt;0&gt; { static constexpr uint64_t value = 0; };
+template&lt;&gt; struct FibTMP&lt;1&gt; { static constexpr uint64_t value = 1; };
+
+// ---- Constexpr ----
+constexpr uint64_t fibConstexpr(int n) {
+    if (n &lt;= 0) return 0;
+    if (n == 1) return 1;
+    uint64_t a = 0, b = 1;
+    for (int i = 2; i &lt;= n; ++i) {
+        uint64_t c = a + b;
+        a = b;
+        b = c;
+    }
+    return b;
+}
+
+// Verification
+static_assert(FibTMP&lt;0&gt;::value == 0);
+static_assert(FibTMP&lt;1&gt;::value == 1);
+static_assert(FibTMP&lt;10&gt;::value == 55);
+static_assert(FibTMP&lt;20&gt;::value == 6765);
+
+static_assert(fibConstexpr(0) == 0);
+static_assert(fibConstexpr(1) == 1);
+static_assert(fibConstexpr(10) == 55);
+static_assert(fibConstexpr(20) == 6765);
+
+int main() {
+    std::cout &lt;&lt; "FibTMP&lt;10&gt; = " &lt;&lt; FibTMP&lt;10&gt;::value &lt;&lt; "\n";  // 55
+    std::cout &lt;&lt; "fibConstexpr(20) = " &lt;&lt; fibConstexpr(20) &lt;&lt; "\n";     // 6765
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li>The template version uses the mathematical definition directly. Note that naive template Fibonacci is <strong>exponential</strong> in instantiation depth, but the compiler typically memoizes template specializations (each <code>FibTMP&lt;N&gt;</code> is instantiated only once).</li>
+      <li>The <code>constexpr</code> version uses an iterative approach for O(n) compile-time computation.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>3. Type List Operations</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution3')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution3">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;type_traits&gt;
+
+// ---- Type List Definition ----
+template&lt;typename... Ts&gt;
+struct TypeList {};
+
+// ---- Length: count the number of types ----
+template&lt;typename TList&gt;
+struct Length;
+
+template&lt;typename... Ts&gt;
+struct Length&lt;TypeList&lt;Ts...&gt;&gt; {
+    static constexpr std::size_t value = sizeof...(Ts);
+};
+
+// ---- Append: add a type to the end of the list ----
+template&lt;typename TList, typename T&gt;
+struct Append;
+
+template&lt;typename... Ts, typename T&gt;
+struct Append&lt;TypeList&lt;Ts...&gt;, T&gt; {
+    using type = TypeList&lt;Ts..., T&gt;;
+};
+
+// ---- Contains: check if a type is in the list ----
+template&lt;typename TList, typename T&gt;
+struct Contains;
+
+template&lt;typename T&gt;
+struct Contains&lt;TypeList&lt;&gt;, T&gt; : std::false_type {};
+
+template&lt;typename T, typename... Rest&gt;
+struct Contains&lt;TypeList&lt;T, Rest...&gt;, T&gt; : std::true_type {};
+
+template&lt;typename Head, typename... Rest, typename T&gt;
+struct Contains&lt;TypeList&lt;Head, Rest...&gt;, T&gt; : Contains&lt;TypeList&lt;Rest...&gt;, T&gt; {};
+
+// ---- Count: how many times a type appears ----
+template&lt;typename TList, typename T&gt;
+struct Count;
+
+template&lt;typename T&gt;
+struct Count&lt;TypeList&lt;&gt;, T&gt; {
+    static constexpr std::size_t value = 0;
+};
+
+template&lt;typename T, typename... Rest&gt;
+struct Count&lt;TypeList&lt;T, Rest...&gt;, T&gt; {
+    static constexpr std::size_t value = 1 + Count&lt;TypeList&lt;Rest...&gt;, T&gt;::value;
+};
+
+template&lt;typename Head, typename... Rest, typename T&gt;
+struct Count&lt;TypeList&lt;Head, Rest...&gt;, T&gt; : Count&lt;TypeList&lt;Rest...&gt;, T&gt; {};
+
+// ---- Filter: keep only types satisfying a predicate ----
+template&lt;typename TList, template&lt;typename&gt; class Predicate&gt;
+struct Filter;
+
+template&lt;template&lt;typename&gt; class Predicate&gt;
+struct Filter&lt;TypeList&lt;&gt;, Predicate&gt; {
+    using type = TypeList&lt;&gt;;
+};
+
+template&lt;typename Head, typename... Rest, template&lt;typename&gt; class Predicate&gt;
+struct Filter&lt;TypeList&lt;Head, Rest...&gt;, Predicate&gt; {
+    using rest = typename Filter&lt;TypeList&lt;Rest...&gt;, Predicate&gt;::type;
+    using type = std::conditional_t&lt;
+        Predicate&lt;Head&gt;::value,
+        typename Append&lt;rest, Head&gt;::type,  // Head passes predicate
+        rest                                  // Skip Head
+    &gt;;
+};
+
+// ---- Predicate: is integral type ----
+template&lt;typename T&gt;
+struct IsIntegralType : std::is_integral&lt;T&gt; {};
+
+// ---- Print TypeList (helper for debugging) ----
+template&lt;typename TList&gt;
+struct PrintTypeList;
+
+template&lt;&gt;
+struct PrintTypeList&lt;TypeList&lt;&gt;&gt; {
+    static std::string value() { return "{}"; }
+};
+
+template&lt;typename Head, typename... Rest&gt;
+struct PrintTypeList&lt;TypeList&lt;Head, Rest...&gt;&gt; {
+    static std::string value() {
+        return "{ " + PrintTypeList&lt;TypeList&lt;Rest...&gt;&gt;::value() + " }";
+    }
+};
+
+// ---- Compile-time verification ----
+using MyTypes = TypeList&lt;int, double, char, int, float&gt;;
+using MyTypes2 = typename Append&lt;MyTypes, std::string&gt;::type;
+
+static_assert(Length&lt;MyTypes&gt;::value == 5);
+static_assert(Contains&lt;MyTypes, int&gt;::value == true);
+static_assert(Contains&lt;MyTypes, std::string&gt;::value == false);
+static_assert(Count&lt;MyTypes, int&gt;::value == 2);
+static_assert(Count&lt;MyTypes, double&gt;::value == 1);
+static_assert(Length&lt;MyTypes2&gt;::value == 6);
+static_assert(Contains&lt;MyTypes2, std::string&gt;::value == true);
+
+// Filter: keep only integral types
+using IntegralTypes = typename Filter&lt;MyTypes, IsIntegralType&gt;::type;
+static_assert(Length&lt;IntegralTypes&gt;::value == 3);  // int, char, int
+static_assert(Contains&lt;IntegralTypes, double&gt;::value == false);
+static_assert(Contains&lt;IntegralTypes, float&gt;::value == false);
+
+int main() {
+    std::cout &lt;&lt; "Length of MyTypes: " &lt;&lt; Length&lt;MyTypes&gt;::value &lt;&lt; "\n";
+    std::cout &lt;&lt; "Contains int: " &lt;&lt; Contains&lt;MyTypes, int&gt;::value &lt;&lt; "\n";
+    std::cout &lt;&lt; "Count of int: " &lt;&lt; Count&lt;MyTypes, int&gt;::value &lt;&lt; "\n";
+    std::cout &lt;&lt; "Filtered (integral) length: " &lt;&lt; Length&lt;IntegralTypes&gt;::value &lt;&lt; "\n";
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><strong>TypeList</strong> is a variadic template that holds a list of types. It has no runtime data &mdash; it exists purely at compile time.</li>
+      <li><strong>Length</strong> uses <code>sizeof...(Ts)</code> to count the pack expansion directly.</li>
+      <li><strong>Append</strong> uses pack expansion to create a new TypeList with the additional type.</li>
+      <li><strong>Contains</strong> uses recursive template matching: check the head, then recurse on the rest.</li>
+      <li><strong>Count</strong> is similar to Contains but adds 1 each time it finds a match.</li>
+      <li><strong>Filter</strong> uses <code>std::conditional_t</code> to either include or skip each type based on a predicate template.</li>
+      <li>All operations are verified with <code>static_assert</code>, meaning errors are caught at compile time.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout green">
+  <p><strong>Template vs Constexpr:</strong></p>
+  <table>
+    <tr><th>Feature</th><th>Template Metaprog.</th><th>constexpr</th></tr>
+    <tr><td>Works on</th><td>Types and values</th><td>Values only</td></tr>
+    <tr><td>Min C++</th><td>C++98</th><td>C++11</td></tr>
+    <tr><td>Readability</th><td>Verbose</th><td>Like regular code</td></tr>
+    <tr><td>Error messages</th><td>Often cryptic</th><td>Clearer</td></tr>
+    <tr><td>Recursion limit</th><td>Template depth (~1024)</th><td>Function recursion (unlimited)</td></tr>
+    <tr><td>Use for</th><td>Type manipulation</th><td>Compile-time computation</td></tr>
+  </table>
+</div>
+
+<h2>Follow-up Questions</h2>
+
+<div class="question">
+  <h3>Variations to Try</h3>
+  <ol>
+    <li><strong>Type map:</strong> Implement a compile-time associative map from types to values. Example: <code>TypeMap&lt;Pair&lt;int, 1&gt;, Pair&lt;double, 2.0&gt;&gt;</code> with a <code>Get&lt;T&gt;</code> operation.</li>
+    <li><strong>Compile-time string:</strong> Implement a fixed-size compile-time string class using <code>const char*</code> template parameters (C++20) and support concatenation.</li>
+    <li><strong>Conditional types (if constexpr):</strong> Use C++17 <code>if constexpr</code> to write compile-time Fibonacci without template recursion.</li>
+    <li><strong>Compile-time CRC32:</strong> Implement a CRC32 calculator using a constexpr lookup table generated at compile time.</li>
+  </ol>
+</div>
+
+<div class="callout">
+  <p><strong>Key Takeaways:</strong></p>
+  <ul>
+    <li>Template metaprogramming operates on <em>types</em>, not just values. This is its unique power &mdash; you cannot do type manipulation with <code>constexpr</code> alone.</li>
+    <li><code>static_assert</code> is your friend: it catches errors at compile time with meaningful messages.</li>
+    <li>C++14/17/20 have progressively made metaprogramming easier: <code>constexpr</code> functions, <code>if constexpr</code>, <code>auto</code> template parameters, and concepts.</li>
+    <li>In real-world telecom code, compile-time computation is used for lookup tables (CRC, bit manipulation), type-safe message handling, and configuration validation.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="custom-allocator.html">&larr; Custom Allocator</a>
+  <a href="packet-parser.html">5G Packet Parser &rarr;</a>
+</div>
+<script>
+function toggleSolution(id) {
+  document.getElementById(id).classList.toggle('visible');
+}
+</script>
+</body>
+</html>

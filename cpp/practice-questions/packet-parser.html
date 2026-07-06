@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5G MAC PDU Parser — C++ Practice</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.easy { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  .question { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; }
+  .question h3 { color: #f0f6fc; margin-top: 0; }
+  .solution-toggle { cursor: pointer; user-select: none; }
+  .solution-toggle h3 { color: #3fb950; display: inline; }
+  .solution-content { display: none; margin-top: 1rem; }
+  .solution-content.visible { display: block; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+  .topics-covered { margin-bottom: 1rem; font-size: 0.85rem; color: #8b949e; }
+  .topics-covered a { color: #8b949e; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#5">5 Practice</a> / Telecom Practice</div>
+<div class="meta"><span class="tag medium">Medium</span></div>
+<h1>Parse a 5G MAC PDU Header</h1>
+
+<div class="topics-covered">
+  <strong>Topics Covered:</strong>
+  <a href="../bit-operations.html">Bit Operations</a>,
+  <a href="../buffers.html">Buffers</a>,
+  <a href="../protocol-handling.html">Protocol Handling</a>
+</div>
+
+<div class="question">
+  <h3>Problem Statement</h3>
+  <p>Implement a parser for a 5G NR MAC PDU (Protocol Data Unit) header. The MAC PDU consists of one or more MAC sub-PDUs, each with a subheader followed by payload. The subheader format varies based on the Logical Channel ID (LCID).</p>
+</div>
+
+<div class="callout">
+  <p><strong>MAC Subheader Format (simplified):</strong></p>
+  <table>
+    <tr><th>Bits</th><th>Field</th><th>Description</th></tr>
+    <tr><td>7-5 (3 bits)</td><td>R / F / LCID (high bits)</td><td>R=reserved, F=format flag</td></tr>
+    <tr><td>4-0 (5 bits)</td><td>LCID (low bits)</td><td>Logical Channel ID</td></tr>
+    <tr><td>15-8 (8 bits)</td><td>L (length)</td><td>Present only for non-fixed-size LCIDs</td></tr>
+  </table>
+  <p><strong>Notes:</strong></p>
+  <ul>
+    <li>LCID 0-32: normal data channels (variable-length, L field present).</li>
+    <li>LCID 33-62: fixed-size logical channels (no L field).</li>
+    <li>LCID 63: padding (end of PDU).</li>
+  </ul>
+</div>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution1')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution1">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+#include &lt;cstdint&gt;
+#include &lt;string&gt;
+#include &lt;sstream&gt;
+#include &lt;iomanip&gt;
+#include &lt;stdexcept&gt;
+#include &lt;bitset&gt;
+
+// ---- Bit-level helper functions ----
+
+// Extract `numBits` bits starting at `bitOffset` from the byte buffer
+uint32_t extractBits(const uint8_t* data, std::size_t bitOffset, int numBits) {
+    uint32_t result = 0;
+    for (int i = 0; i &lt; numBits; ++i) {
+        std::size_t byteIdx = (bitOffset + i) / 8;
+        int bitIdx = 7 - static_cast&lt;int&gt;((bitOffset + i) % 8);
+        bool bitSet = (data[byteIdx] &gt;&gt; bitIdx) &amp; 1;
+        result = (result &lt;&lt; 1) | static_cast&lt;uint32_t&gt;(bitSet);
+    }
+    return result;
+}
+
+// ---- Parsed Sub-PDU structures ----
+
+struct MacSubPdu {
+    uint8_t lcid = 0;        // Logical Channel ID (6 bits)
+    uint8_t formatFlag = 0;   // F bit
+    uint16_t length = 0;     // L field (present only for variable-length)
+    bool hasLength = false;  // Whether L field is present
+    std::size_t payloadOffset = 0;  // Byte offset to payload
+    std::size_t payloadLength = 0;   // Length of payload in bytes
+};
+
+struct MacPduResult {
+    std::vector&lt;MacSubPdu&gt; subPdus;
+    std::size_t totalBytesParsed = 0;
+    bool hasPadding = false;
+};
+
+// ---- Parser ----
+
+class MacPduParser {
+public:
+    // LCID ranges
+    static constexpr uint8_t LCID_PADDING = 63;
+    static constexpr uint8_t LCID_FIXED_START = 33;
+    static constexpr uint8_t LCID_FIXED_END = 62;
+    static constexpr uint16_t MAX_L_VALUE = 32767;
+
+    // Fixed-size payload lengths for specific LCIDs (example values)
+    static constexpr int FIXED_SIZE = 4;
+
+    MacPduResult parse(const uint8_t* data, std::size_t length) {
+        MacPduResult result;
+        std::size_t offset = 0;  // byte offset
+
+        while (offset &lt; length) {
+            MacSubPdu pdu;
+
+            if (offset + 2 &gt; length) {
+                throw std::runtime_error("Incomplete MAC subheader at offset " +
+                    std::to_string(offset));
+            }
+
+            // Parse first byte: bits [7:5] = R,F,LCID_high ; bits [4:0] = LCID_low
+            uint8_t byte0 = data[offset];
+            uint8_t lcidHigh = (byte0 &gt;&gt; 5) &amp; 0x07;  // bits 7-5
+            pdu.formatFlag = (lcidHigh &gt;&gt; 1) &amp; 0x01;   // F is bit 6
+            uint8_t lcidLow = byte0 &amp; 0x1F;             // bits 4-0
+            pdu.lcid = (lcidHigh &amp; 0x01) &lt;&lt; 5 | lcidLow;  // combine
+
+            offset += 1;
+
+            // Check for padding
+            if (pdu.lcid == LCID_PADDING) {
+                result.hasPadding = true;
+                break;
+            }
+
+            // Determine if L field is present
+            bool isFixedSize = (pdu.lcid &gt;= LCID_FIXED_START &amp;&amp;
+                               pdu.lcid &lt;= LCID_FIXED_END);
+
+            if (!isFixedSize) {
+                // Variable-length: read 8-bit L field
+                if (offset + 1 &gt; length) {
+                    throw std::runtime_error("Incomplete L field at offset " +
+                        std::to_string(offset));
+                }
+                pdu.length = data[offset];
+                pdu.hasLength = true;
+                offset += 1;
+                pdu.payloadLength = pdu.length;
+            } else {
+                // Fixed-size: no L field, known payload size
+                pdu.payloadLength = FIXED_SIZE;
+            }
+
+            pdu.payloadOffset = offset;
+
+            // Verify enough data for payload
+            if (offset + pdu.payloadLength &gt; length) {
+                throw std::runtime_error("Incomplete payload for LCID " +
+                    std::to_string(pdu.lcid) + ": need " +
+                    std::to_string(pdu.payloadLength) + " bytes at offset " +
+                    std::to_string(offset) + " but only " +
+                    std::to_string(length - offset) + " available");
+            }
+
+            result.subPdus.push_back(pdu);
+            offset += pdu.payloadLength;
+        }
+
+        result.totalBytesParsed = offset;
+        return result;
+    }
+
+    // Pretty-print the parsed result
+    std::string formatResult(const MacPduResult&amp; result) const {
+        std::ostringstream oss;
+        oss &lt;&lt; "=== MAC PDU Parse Result ===\n";
+        oss &lt;&lt; "Sub-PDUs: " &lt;&lt; result.subPdus.size() &lt;&lt; "\n";
+        oss &lt;&lt; "Total parsed: " &lt;&lt; result.totalBytesParsed &lt;&lt; " bytes\n";
+        if (result.hasPadding) oss &lt;&lt; "Has padding: yes\n";
+        oss &lt;&lt; "\n";
+
+        for (std::size_t i = 0; i &lt; result.subPdus.size(); ++i) {
+            const auto&amp; pdu = result.subPdus[i];
+            oss &lt;&lt; "Sub-PDU #" &lt;&lt; (i + 1) &lt;&lt; ":\n";
+            oss &lt;&lt; "  LCID: " &lt;&lt; static_cast&lt;int&gt;(pdu.lcid) &lt;&lt; "\n";
+            oss &lt;&lt; "  F:    " &lt;&lt; static_cast&lt;int&gt;(pdu.formatFlag) &lt;&lt; "\n";
+            if (pdu.hasLength) {
+                oss &lt;&lt; "  L:    " &lt;&lt; pdu.length &lt;&lt; " bytes\n";
+            }
+            oss &lt;&lt; "  Payload: offset=" &lt;&lt; pdu.payloadOffset
+                &lt;&lt; ", length=" &lt;&lt; pdu.payloadLength &lt;&lt; "\n";
+        }
+        return oss.str();
+    }
+};
+
+// ---- Test ----
+
+int main() {
+    // Construct a test MAC PDU byte buffer
+    // Sub-PDU 1: LCID=5, L=10 (variable-length)
+    //   Byte 0: F=0, LCID=5  => 000 00 00101 = 0x05
+    //   Byte 1: L=10         => 0x0A
+    //   Bytes 2-11: payload (10 bytes)
+    // Sub-PDU 2: LCID=40 (fixed-size)
+    //   Byte 12: F=0, LCID=40 => 000 00 101000 (6-bit LCID=40, padded to byte)
+    //   Bits: byte = 0b000101000... but we only use 1 byte for subheader
+    //   Byte 12: high bits of LCID (bit 7-5 = 000), F=0 (bit 6), LCID low 5 bits = 01000 = 0x08
+    //   Wait: LCID=40 = 0b101000. In 6 bits: bit 5 = 1 (MSB), bits 4-0 = 01000
+    //   Byte: R(0) F(0) LCID5(1) LCID4-0(01000) = 0b00010100 = 0x14
+    //   Bytes 13-16: payload (4 bytes fixed)
+    // Sub-PDU 3: Padding (LCID=63)
+    //   Byte 17: 0b01111111 = 0x7F
+
+    std::vector&lt;uint8_t&gt; pdu;
+
+    // Sub-PDU 1: LCID=5, Length=10
+    // LCID=5, F=0: bits [7:5]=000, bit6=0(F), bits[4:0]=00101
+    pdu.push_back(0x05);  // R=0, F=0, LCID=5
+    pdu.push_back(10);    // L=10
+    for (int i = 0; i &lt; 10; ++i) {
+        pdu.push_back(static_cast&lt;uint8_t&gt;(i));  // dummy payload
+    }
+
+    // Sub-PDU 2: LCID=40 (fixed-size, no L field)
+    // LCID=40 = 0b101000. LCID_high = 1, LCID_low = 01000 = 0x08
+    // Byte: R(0) F(0) LCID_high(1) LCID_low(01000) = 0b000101000... wait
+    // Actually: bits 7=R, 6=F, 5=LCID[5], 4-0=LCID[4:0]
+    // LCID=40 = 101000: LCID[5]=1, LCID[4:0]=01000
+    // Byte = 0b0_0_1_01000 = 0b00101000 = 0x28
+    pdu.push_back(0x28);  // R=0, F=0, LCID=40
+    for (int i = 0; i &lt; 4; ++i) {
+        pdu.push_back(0xFF);  // dummy payload
+    }
+
+    // Padding
+    // LCID=63 = 0b111111
+    // Byte: R=0, F=1, LCID[5]=1, LCID[4:0]=11111 => 0b0_1_1_11111 = 0x7F
+    pdu.push_back(0x7F);  // padding
+
+    // Print raw bytes
+    std::cout &lt;&lt; "Raw PDU (" &lt;&lt; pdu.size() &lt;&lt; " bytes): ";
+    for (auto b : pdu) {
+        std::cout &lt;&lt; std::hex &lt;&lt; std::setw(2) &lt;&lt; std::setfill('0')
+                  &lt;&lt; static_cast&lt;int&gt;(b) &lt;&lt; " ";
+    }
+    std::cout &lt;&lt; "\n\n";
+
+    // Parse
+    MacPduParser parser;
+    try {
+        auto result = parser.parse(pdu.data(), pdu.size());
+        std::cout &lt;&lt; parser.formatResult(result);
+    } catch (const std::exception&amp; e) {
+        std::cerr &lt;&lt; "Parse error: " &lt;&lt; e.what() &lt;&lt; "\n";
+    }
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><strong>extractBits:</strong> Reads individual bits from a byte buffer. Given a bit offset, it extracts <code>numBits</code> bits, constructing the value MSB-first. This is the fundamental building block for protocol parsing.</li>
+      <li><strong>Subheader parsing:</strong> Each subheader starts with 1 byte containing the R, F, and LCID fields. The LCID spans 6 bits: 1 bit in the high nibble and 5 bits in the low nibble.</li>
+      <li><strong>Variable vs Fixed:</strong> LCIDs 0-32 have a length field (L); LCIDs 33-62 have fixed-size payloads; LCID 63 is padding and terminates parsing.</li>
+      <li><strong>Bounds checking:</strong> Every field access is verified against the buffer length to prevent out-of-bounds reads.</li>
+      <li><strong>Exception handling:</strong> Parse errors throw <code>std::runtime_error</code> with a descriptive message including the offset and context.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout green">
+  <p><strong>Complexity Analysis:</strong></p>
+  <ul>
+    <li><strong>Time:</strong> O(n) &mdash; single pass through the PDU buffer.</li>
+    <li><strong>Space:</strong> O(k) where k is the number of sub-PDUs (for the result vector).</li>
+  </ul>
+</div>
+
+<h2>Follow-up Questions</h2>
+
+<div class="question">
+  <h3>Variations to Try</h3>
+  <ol>
+    <li><strong>Extended length (2-byte L):</strong> Add support for L values > 255 using 2-byte encoding when the format flag F=1.</li>
+    <li><strong>MAC CE parsing:</strong> For LCID values corresponding to MAC Control Elements, parse the CE payload (e.g., Timing Advance Command, BSR, PHR).</li>
+    <li><strong>Zero-copy parsing:</strong> Store views (pointers + lengths) into the original buffer instead of copying payload data.</li>
+    <li><strong>Byte-level parsing (no bit extraction):</strong> Rewrite the parser using byte-level access only, with shift and mask operations, for maximum performance.</li>
+    <li><strong>MAC PDU builder:</strong> Implement a serializer that constructs a valid MAC PDU from a list of sub-PDUs (reverse of parsing).</li>
+  </ol>
+</div>
+
+<div class="callout">
+  <p><strong>Real-World Context:</strong></p>
+  <ul>
+    <li>5G MAC PDU parsing is a fundamental operation in every 5G base station (gNB) and user equipment (UE). It runs on every received transport block.</li>
+    <li>In real implementations, parsers must handle multi-slot PDU aggregation, segmented payloads, and various MAC CE types.</li>
+    <li>Performance matters: parsers typically handle millions of PDUs per second and must be cache-friendly and branch-minimal.</li>
+    <li>Zero-copy design is essential in high-throughput telecom systems to avoid memory bandwidth bottlenecks.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="template-metaprogramming.html">&larr; Template Metaprogramming</a>
+  <a href="circular-buffer-impl.html">Circular Buffer &rarr;</a>
+</div>
+<script>
+function toggleSolution(id) {
+  document.getElementById(id).classList.toggle('visible');
+}
+</script>
+</body>
+</html>

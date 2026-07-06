@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reverse a String — C++ Practice</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.easy { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  .question { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; }
+  .question h3 { color: #f0f6fc; margin-top: 0; }
+  .solution-toggle { cursor: pointer; user-select: none; }
+  .solution-toggle h3 { color: #3fb950; display: inline; }
+  .solution-content { display: none; margin-top: 1rem; }
+  .solution-content.visible { display: block; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+  .topics-covered { margin-bottom: 1rem; font-size: 0.85rem; color: #8b949e; }
+  .topics-covered a { color: #8b949e; }
+  .nav-placeholder { visibility: hidden; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#5">5 Practice</a> / Easy Questions</div>
+<div class="meta"><span class="tag easy">Easy</span></div>
+<h1>Reverse a String</h1>
+
+<div class="topics-covered">
+  <strong>Topics Covered:</strong>
+  <a href="../strings.html">Strings</a>,
+  <a href="../pointers.html">Pointers</a>,
+  <a href="../arrays.html">Arrays</a>
+</div>
+
+<div class="question">
+  <h3>Problem Statement</h3>
+  <p>Write a function that reverses a C++ <code>std::string</code> in-place without using the built-in <code>std::reverse</code> algorithm. Then, as a follow-up, show how to achieve the same result using <code>std::reverse</code> from <code>&lt;algorithm&gt;</code>.</p>
+  <p><strong>Examples:</strong></p>
+  <ul>
+    <li><code>"hello"</code> &rarr; <code>"olleh"</code></li>
+    <li><code>"C++"</code> &rarr; <code>"++C"</code></li>
+    <li><code>""</code> &rarr; <code>""</code></li>
+    <li><code>"a"</code> &rarr; <code>"a"</code></li>
+  </ul>
+</div>
+
+<div class="callout warning">
+  <p><strong>Constraints:</strong></p>
+  <ul>
+    <li>Do it in-place (modify the original string, do not create a new one).</li>
+    <li>Handle edge cases: empty string, single character, odd/even length.</li>
+    <li>For the manual approach, use a two-pointer swap technique.</li>
+  </ul>
+</div>
+
+<h2>Manual Two-Pointer Approach</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution1')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution1">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+void reverseString(std::string&amp; s) {
+    int left = 0;
+    int right = static_cast&lt;int&gt;(s.size()) - 1;
+
+    while (left &lt; right) {
+        // Swap characters at left and right positions
+        char temp = s[left];
+        s[left] = s[right];
+        s[right] = temp;
+        ++left;
+        --right;
+    }
+}
+
+// Alternative: using std::swap
+void reverseStringSwap(std::string&amp; s) {
+    int left = 0;
+    int right = static_cast&lt;int&gt;(s.size()) - 1;
+
+    while (left &lt; right) {
+        std::swap(s[left], s[right]);
+        ++left;
+        --right;
+    }
+}
+
+int main() {
+    std::string test1 = "hello";
+    reverseString(test1);
+    std::cout &lt;&lt; "Reversed: " &lt;&lt; test1 &lt;&lt; "\n";  // "olleh"
+
+    std::string test2 = "C++";
+    reverseString(test2);
+    std::cout &lt;&lt; "Reversed: " &lt;&lt; test2 &lt;&lt; "\n";  // "++C"
+
+    std::string test3 = "";
+    reverseString(test3);
+    std::cout &lt;&lt; "Reversed: \"" &lt;&lt; test3 &lt;&lt; "\"\n";  // ""
+
+    std::string test4 = "a";
+    reverseString(test4);
+    std::cout &lt;&lt; "Reversed: " &lt;&lt; test4 &lt;&lt; "\n";  // "a"
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li>We use two pointers: <code>left</code> starting at index 0 and <code>right</code> at the last index.</li>
+      <li>We swap the characters at these positions, then move <code>left</code> forward and <code>right</code> backward.</li>
+      <li>The loop stops when <code>left &gt;= right</code>, meaning all pairs have been swapped.</li>
+      <li>For odd-length strings, the middle character is never swapped (it stays in place).</li>
+      <li>The <code>static_cast&lt;int&gt;</code> is needed because <code>s.size()</code> returns <code>size_t</code> (unsigned); subtracting 1 from 0 would overflow without the cast.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout green">
+  <p><strong>Complexity Analysis:</strong></p>
+  <ul>
+    <li><strong>Time:</strong> O(n/2) = O(n) &mdash; we swap half the characters.</li>
+    <li><strong>Space:</strong> O(1) &mdash; in-place, only a temp variable is used.</li>
+  </ul>
+</div>
+
+<h2>Using std::reverse (Follow-up)</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution2')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution2">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+#include &lt;algorithm&gt;  // for std::reverse
+
+void reverseWithStd(std::string&amp; s) {
+    std::reverse(s.begin(), s.end());
+}
+
+int main() {
+    std::string str = "hello world";
+    reverseWithStd(str);
+    std::cout &lt;&lt; str &lt;&lt; "\n";  // "dlrow olleh"
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><code>std::reverse</code> is a standard library algorithm in <code>&lt;algorithm&gt;</code>.</li>
+      <li>It takes iterators (here <code>s.begin()</code> and <code>s.end()</code>) and reverses the range in-place.</li>
+      <li>Under the hood it uses the same two-pointer swap technique.</li>
+      <li>This is the idiomatic C++ approach &mdash; always prefer standard algorithms when they exist.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Follow-up Questions</h2>
+
+<div class="question">
+  <h3>Variations to Try</h3>
+  <ol>
+    <li><strong>Reverse only the vowels:</strong> Given a string, reverse only the vowel characters while keeping consonants in place. Example: <code>"leetcode"</code> &rarr; <code>"leotcede"</code>.</li>
+    <li><strong>Reverse words in a string:</strong> Given <code>"the sky is blue"</code>, return <code>"blue is sky the"</code>. Handle multiple spaces and leading/trailing spaces.</li>
+    <li><strong>Reverse a C-string (char*):</strong> Implement the same logic for a null-terminated C-style string. This tests raw pointer arithmetic.</li>
+    <li><strong>Reverse a string recursively:</strong> Implement the reversal using recursion instead of iteration. What is the stack depth?</li>
+  </ol>
+</div>
+
+<div class="callout">
+  <p><strong>Key Takeaways:</strong></p>
+  <ul>
+    <li>The two-pointer technique is fundamental: one pointer moves forward, one backward, swapping elements. This pattern appears in palindrome checks, array rotations, and many other problems.</li>
+    <li>Always be careful with <code>size_t</code> vs <code>int</code> when doing arithmetic that involves subtraction (unsigned underflow).</li>
+    <li>In production code, prefer <code>std::reverse</code> over a manual loop &mdash; it is well-tested, expressive, and potentially optimized.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <span class="nav-placeholder">placeholder</span>
+  <a href="fibonacci.html">Fibonacci &rarr;</a>
+</div>
+<script>
+function toggleSolution(id) {
+  document.getElementById(id).classList.toggle('visible');
+}
+</script>
+</body>
+</html>

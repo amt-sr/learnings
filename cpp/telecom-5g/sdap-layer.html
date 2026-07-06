@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SDAP Layer — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#4">4 Telecom &amp; 5G/4G Networking</a> / Protocol Stack / 4.2.6</div>
+<div class="meta"><span class="tag medium">Medium</span></div>
+<h1>SDAP Layer</h1>
+
+<p>SDAP (Service Data Adaptation Protocol) is a new protocol introduced in 5G NR. It sits between the application/transport layer (IP) and PDCP. Its primary purpose is to map QoS flows to Data Radio Bearers (DRBs), enabling fine-grained QoS differentiation within a single PDU session.</p>
+
+<h2>SDAP in the 5G Protocol Stack</h2>
+
+<pre>
+  +------------------+
+  | Application / IP |
+  +--------+---------+
+           |  QoS Flows (QFI)
+  +--------+---------+
+  | SDAP             |  Maps QoS Flow -> DRB
+  +--------+---------+
+           |  SDAP SDU = PDCP SDU
+  +--------+---------+
+  | PDCP             |  Ciphering, integrity, header compression
+  +--------+---------+
+  | RLC              |  Segmentation, ARQ
+  +--------+---------+
+  | MAC / PHY        |
+  +------------------+
+
+  Note: SDAP is 5G-only. LTE does not have SDAP.
+  In LTE, QoS is mapped at the eNodeB to EPS bearers directly.
+</pre>
+
+<h2>QoS Flow to DRB Mapping</h2>
+
+<p>5G introduces QoS Flows identified by a QoS Flow Identifier (QFI). Each QoS flow has a 5QI (5G QoS Identifier) that determines delay, loss rate, and throughput characteristics. SDAP maps these QoS flows to DRBs.</p>
+
+<table>
+  <tr><th>QoS Flow</th><th>5QI</th><th>Characteristics</th><th>DRB Mapping</th></tr>
+  <tr><td>Conversational voice</td><td>1</td><td>100 ms delay, 1e-2 loss</td><td>Default DRB (QFI=5)</td></tr>
+  <tr><td>Video (buffered)</td><td>2</td><td>150 ms delay, 1e-3 loss</td><td>Non-GBR DRB</td></tr>
+  <tr><td>Signaling</td><td>5</td><td>Default QoS</td><td>Default DRB</td></tr>
+  <tr><td>AR/VR</td><td>80</td><td>10 ms delay, 1e-5 loss</td><td>GBR DRB (dedicated)</td></tr>
+  <tr><td>URLLC control</td><td>19</td><td>5 ms delay, 1e-5 loss</td><td>GBR DRB</td></tr>
+</table>
+
+<div class="callout green">
+  <p><strong>Key insight:</strong> Multiple QoS flows can be mapped to a single DRB (reflective mapping), or a single QoS flow can have a dedicated DRB (explicit mapping). Reflective QoS mapping is the default: the UE learns the mapping by observing which DRB carries which QFI.</p>
+</div>
+
+<h2>SDAP Header Format</h2>
+
+<pre>
+  SDAP PDU (Downlink/Uplink):
+  +-----+-----+-----------+
+  | D/C | RDI | QoS Flow  |
+  | 1b  | 1b  | ID (QFI)  |
+  |     |     | 6 bits    |
+  +-----+-----+-----------+
+  (2 bytes total)
+
+  D/C  = Data (0) / Control (1) PDU
+  RDI  = Reflective QoS mapping Delayed Indication
+          0 = QFI is end-marked (no mapping instruction)
+          1 = Reflective mapping applies
+  QFI  = QoS Flow Identifier (6 bits, values 1-63)
+
+  SDAP Control PDU (End Marker):
+  +-----+-----+------+---------+
+  | D/C | RDI | E.Flg| QFI     |
+  |  1  |  0  |  1   | 6 bits  |
+  +-----+-----+------+---------+
+  Used to indicate end of a QoS flow on a DRB.
+</pre>
+
+<h2>C++ SDAP Entity</h2>
+
+<pre>
+#include &lt;vector&gt;
+#include &lt;unordered_map&gt;
+#include &lt;cstdint&gt;
+#include &lt;optional&gt;
+
+// QoS Flow Identifier (6 bits: 1-63)
+using Qfi = uint8_t;
+
+// QoS characteristics per 5QI
+struct QosCharacteristics {
+    uint8_t  fiveqi;          // 5QI value
+    uint32_t pdbr_ul;         // Packet Delay Budget UL (microseconds)
+    uint32_t pdbr_dl;         // Packet Delay Budget DL (microseconds)
+    double   per;             // Packet Error Rate (e.g., 1e-2)
+    bool     is_gbr;          // Guaranteed Bit Rate
+    uint32_t gbr_ul;          // GBR UL (bps)
+    uint32_t gbr_dl;          // GBR DL (bps)
+};
+
+// QoS Flow configuration
+struct QosFlowConfig {
+    Qfi                qfi;
+    QosCharacteristics qos_chars;
+    uint8_t            drb_id;       // Associated DRB
+    bool               reflective_mapping;  // Enable reflective QoS
+};
+
+// SDAP header (2 bytes)
+struct SdapHeader {
+    bool   dc;            // Data/Control
+    bool   rdi;           // Reflective mapping delayed indication
+    uint8_t qfi;          // QoS Flow ID (6 bits)
+} __attribute__((packed));
+
+// SDAP entity (per PDU session)
+class SdapEntity {
+public:
+    explicit SdapEntity(uint8_t pdu_session_id)
+        : pdu_session_id_(pdu_session_id) {}
+
+    // Configure QoS flow -> DRB mapping
+    void addQosFlow(const QosFlowConfig&amp; cfg) {
+        qos_flows_[cfg.qfi] = cfg;
+        // Add reverse mapping: DRB -> list of QFIs
+        drb_to_qfis_[cfg.drb_id].push_back(cfg.qfi);
+    }
+
+    // TX: receive IP packet with QFI, map to DRB
+    void handleDownlinkData(Qfi qfi, const uint8_t* data, size_t len) {
+        auto it = qos_flows_.find(qfi);
+        if (it == qos_flows_.end()) return;
+
+        uint8_t drb_id = it->second.drb_id;
+
+        // Build SDAP header (2 bytes)
+        uint8_t pdu[8192];
+        pdu[0] = (0 &lt;&lt; 7)  // D/C = 0 (Data)
+               | (it->second.reflective_mapping ? 0 : (1 &lt;&lt; 6))  // RDI
+               | ((qfi &amp; 0x3F) &lt;&lt; 0);  // QFI
+        pdu[1] = 0;  // Reserved / padding
+
+        // Copy payload
+        memcpy(pdu + 2, data, len);
+
+        // Send to PDCP
+        sendToPdcp(drb_id, pdu, len + 2);
+    }
+
+    // RX: receive SDAP PDU from PDCP, extract QFI, deliver
+    void handleUplinkPdu(uint8_t drb_id, const uint8_t* pdu, size_t len) {
+        if (len &lt; 1) return;
+
+        // Parse SDAP header
+        bool dc  = (pdu[0] &amp; 0x80) != 0;
+        bool rdi = (pdu[0] &amp; 0x40) != 0;
+        Qfi qfi  = pdu[0] &amp; 0x3F;
+
+        // Reflective QoS mapping: learn QFI -> DRB association
+        if (!rdi &amp;&amp; dc == 0) {
+            updateReflectiveMapping(qfi, drb_id);
+        }
+
+        // Deliver payload (skip SDAP header)
+        deliverToUpper(qfi, pdu + 1, len - 1);
+    }
+
+private:
+    uint8_t pdu_session_id_;
+    std::unordered_map&lt;Qfi, QosFlowConfig&gt; qos_flows_;
+    std::unordered_map&lt;uint8_t, std::vector&lt;Qfi&gt;&gt; drb_to_qfis_;
+
+    void updateReflectiveMapping(Qfi qfi, uint8_t drb_id) {
+        auto it = qos_flows_.find(qfi);
+        if (it != qos_flows_.end()) {
+            it->second.drb_id = drb_id;
+        }
+    }
+
+    void sendToPdcp(uint8_t drb_id, const uint8_t* data, size_t len);
+    void deliverToUpper(Qfi qfi, const uint8_t* data, size_t len);
+};
+</pre>
+
+<h2>Reflective vs Explicit Mapping</h2>
+
+<table>
+  <tr><th>Aspect</th><th>Reflective Mapping</th><th>Explicit Mapping</th></tr>
+  <tr><td>Who decides</td><td>UE (observes DL packets)</td><td>gNB (RRC config)</td></tr>
+  <tr><td>Signaling</td><td>None needed</td><td>RRC reconfiguration</td></tr>
+  <tr><td>Latency</td><td>Fast (automatic)</td><td>Slower (config change)</td></tr>
+  <tr><td>Use case</td><td>Default for best-effort traffic</td><td>GBR and critical QoS flows</td></tr>
+</table>
+
+<div class="callout warning">
+  <p><strong>4G vs 5G:</strong> LTE does not have SDAP. In LTE, the eNodeB maps S1 bearers to EPS bearers (DRBs) directly. The addition of SDAP in 5G provides more flexible QoS handling, especially for network slicing where multiple slices share the same DRB.</p>
+</div>
+
+<h2>Cross-References</h2>
+
+<ul>
+  <li><a href="pdcp-layer.html">PDCP Layer</a> -- SDAP SDUs become PDCP SDUs after SDAP processing.</li>
+  <li><a href="rrc-layer.html">RRC Layer</a> -- QoS flow configurations are signaled via RRC.</li>
+  <li><a href="5g-ran-overview.html">5G RAN Overview</a> -- QoS architecture in the 5G system.</li>
+</ul>
+
+<div class="nav"><a href="pdcp-layer.html">&larr; PDCP Layer</a><a href="nas-layer.html">NAS Layer &rarr;</a></div>
+</body>
+</html>

@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CCDU Concept — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#4">4 Telecom &amp; 5G/4G</a> / CCDU Concept</div>
+<div class="meta"><span class="tag medium">Medium</span></div>
+<h1>CCDU Concept</h1>
+
+<p>The CCDU (Centralized, Cloud, Distributed, Unit) framework describes the deployment topologies for 5G RAN components. It defines where CU, DU, and RU are physically placed -- whether centralized in a data center, distributed at edge sites, or integrated in a single unit. Understanding CCDU is essential for designing C++ software that can be deployed across different topologies.</p>
+
+<h2>Deployment Topologies</h2>
+
+<pre>
+  TOPLOGY A: Integrated (C-RAN, all-in-one)
+  +----------------------------------+
+  |           gNB Site               |
+  |  +------+ +------+ +------+     |
+  |  | CU-CP| | CU-UP| |  DU  |     |
+  |  +------+ +------+ +------+     |
+  |              |  F1   |          |
+  |         +----+------+----+      |
+  |         |      RU       |      |
+  |         +---------------+      |
+  +----------------------------------+
+               |
+            Uu (Air)
+
+  TOPOLOGY B: DU-RU Co-located, CU Centralized
+  +-------------------+          +-------------------+
+  | Central Office    |  E1/F1   | Cell Site         |
+  | (Data Center)     |&lt;--------&gt;| (Edge)            |
+  | +------+ +------+ |          | +------+ +------+  |
+  | | CU-CP| | CU-UP| |          | |  DU  | |  RU  |  |
+  | +------+ +------+ |          | +------+ +------+  |
+  +-------------------+          +-------------------+
+
+  TOPOLOGY C: Fully Centralized (D-RAN style)
+  +-------------------+          +---------+  +---------+
+  | Central Office    | F1       | Cell 1  |  | Cell 2  |
+  | (Data Center)     |&lt;--------&gt;| DU + RU |  | DU + RU |
+  | +------+ +------+ |          +---------+  +---------+
+  | | CU-CP| | CU-UP| |
+  | +------+ +------+ |     +---------+
+  |                   |     | Cell N  |
+  |  (serves many     |&lt;---&gt;| DU + RU |
+  |   cell sites)     |     +---------+
+  +-------------------+
+</pre>
+
+<h2>C++ Placement Abstraction</h2>
+
+<pre>
+#include &lt;string&gt;
+#include &lt;memory&gt;
+#include &lt;optional&gt;
+#include &lt;unordered_map&gt;
+
+// Deployment location types
+enum class Location : uint8_t {
+    DATA_CENTER,     // CU centralized in DC
+    EDGE_CLOUD,      // CU at regional edge
+    CELL_SITE,       // DU/RU at cell site
+    INTEGRATED       // All-in-one at cell site
+};
+
+// Transport network type between components
+enum class TransportType : uint8_t {
+    DIRECT_EMBEDDED,   // Shared memory / PCIe
+    FIBER_FRONTHAUL,   // Optical fiber (CPRI/eCPRI)
+    PACKET_MPLS,       // MPLS network
+    PACKET_IP,         // Standard IP network
+    PACKET_ROE,        // Radio over Ethernet
+};
+
+// Latency budget per link type
+struct LinkBudget {
+    TransportType type;
+    uint32_t      one_way_latency_us;  // Target one-way latency
+    uint32_t      jitter_us;           // Allowed jitter
+    uint64_t      bandwidth_bps;       // Available bandwidth
+};
+
+class DeploymentTopology {
+public:
+    void addCuLocation(Location loc, const std::string&amp; site_id) {
+        cu_location_ = loc;
+        cu_site_ = site_id;
+    }
+
+    void addDuLocation(Location loc, const std::string&amp; site_id) {
+        du_locations_[site_id] = loc;
+    }
+
+    void setTransport(const std::string&amp; site_id,
+                      TransportType type,
+                      const LinkBudget&amp; budget) {
+        transport_[site_id] = {type, budget};
+    }
+
+    // Check if DU is co-located with RU (no fronthaul needed)
+    bool isDuRuColocated(const std::string&amp; site_id) const {
+        // If DU is at cell site, it is co-located with RU
+        auto it = du_locations_.find(site_id);
+        return it != du_locations_.end() &amp;&amp;
+               it-&gt;second == Location::CELL_SITE;
+    }
+
+    // Determine if F1 interface uses IP transport or shared memory
+    bool isF1OverIp(const std::string&amp; site_id) const {
+        auto it = transport_.find(site_id);
+        if (it == transport_.end()) return false;
+        return it-&gt;second.type != TransportType::DIRECT_EMBEDDED;
+    }
+
+    Location getCuLocation() const { return cu_location_; }
+
+private:
+    Location cu_location_;
+    std::string cu_site_;
+    std::unordered_map&lt;std::string, Location&gt; du_locations_;
+    std::unordered_map&lt;std::string,
+                        std::pair&lt;TransportType, LinkBudget&gt;&gt; transport_;
+};
+</pre>
+
+<h2>Latency Budgets by Topology</h2>
+
+<table>
+  <tr><th>Interface</th><th>Integrated</th><th>Edge Cloud</th><th>Centralized DC</th></tr>
+  <tr><td>F1-C (CU-DU)</td><td>&lt;1 us</td><td>~1-5 ms</td><td>~5-10 ms</td></tr>
+  <tr><td>F1-U (CU-DU)</td><td>&lt;1 us</td><td>~1-5 ms</td><td>~5-10 ms</td></tr>
+  <tr><td>E1 (CU-CP/CU-UP)</td><td>&lt;1 us</td><td>&lt;1 ms</td><td>&lt;1 ms</td></tr>
+  <tr><td>Fronthaul (DU-RU)</td><td>&lt;1 us</td><td>&lt;100 us</td><td>N/A</td></tr>
+  <tr><td>NG (gNB-Core)</td><td>~5-30 ms</td><td>~5-30 ms</td><td>~5-30 ms</td></tr>
+</table>
+
+<h2>C++ Adaptive Transport Layer</h2>
+
+<pre>
+// Abstract transport that adapts to deployment topology
+class IF1Transport {
+public:
+    virtual ~IF1Transport() = default;
+
+    // Send F1AP message (control or user plane)
+    virtual int sendF1Message(const uint8_t* data, size_t len) = 0;
+
+    // Receive F1AP message
+    virtual int receiveF1Message(uint8_t* buffer, size_t max_len,
+                                 size_t* received_len) = 0;
+
+    // Get transport statistics
+    virtual uint64_t getTxBytes() const = 0;
+    virtual uint64_t getRxBytes() const = 0;
+    virtual uint32_t getLatencyUs() const = 0;
+};
+
+// Shared memory transport for co-located CU/DU
+class SharedMemF1Transport : public IF1Transport {
+public:
+    explicit SharedMemF1Transport(size_t ring_size = 65536)
+        : ring_buffer_(ring_size) {}
+
+    int sendF1Message(const uint8_t* data, size_t len) override {
+        // Zero-copy write to shared memory ring buffer
+        return ring_buffer_.write(data, len);
+    }
+
+    int receiveF1Message(uint8_t* buffer, size_t max_len,
+                         size_t* received_len) override {
+        return ring_buffer_.read(buffer, max_len, received_len);
+    }
+
+    uint32_t getLatencyUs() const override { return 1; }  // ~1 us
+
+private:
+    // See circular-buffers.html for implementation
+    class SharedMemoryRing { /* ... */ };
+    SharedMemoryRing ring_buffer_;
+};
+
+// UDP/SCTP transport for distributed CU/DU over IP
+class IpF1Transport : public IF1Transport {
+public:
+    IpF1Transport(const std::string&amp; local_addr, uint16_t local_port,
+                  const std::string&amp; remote_addr, uint16_t remote_port)
+        : local_addr_(local_addr), local_port_(local_port),
+          remote_addr_(remote_addr), remote_port_(remote_port) {}
+
+    int sendF1Message(const uint8_t* data, size_t len) override {
+        // Send over SCTP (F1-C) or UDP (F1-U)
+        return sendto(sockfd_, data, len, 0,
+                     (struct sockaddr*)&amp;remote_addr_,
+                     sizeof(remote_addr_));
+    }
+
+    int receiveF1Message(uint8_t* buffer, size_t max_len,
+                         size_t* received_len) override {
+        ssize_t n = recvfrom(sockfd_, buffer, max_len, 0, nullptr, nullptr);
+        if (n &gt; 0) *received_len = n;
+        return n &gt;= 0 ? 0 : -1;
+    }
+
+    uint32_t getLatencyUs() const override { return avg_latency_us_; }
+
+private:
+    std::string local_addr_;
+    uint16_t   local_port_;
+    std::string remote_addr_;
+    uint16_t   remote_port_;
+    int        sockfd_{-1};
+    uint32_t   avg_latency_us_{5000};  // ~5 ms
+};
+
+// Transport factory based on topology
+std::unique_ptr&lt;IF1Transport&gt; createF1Transport(
+    const DeploymentTopology&amp; topo, const std::string&amp; site_id)
+{
+    if (!topo.isF1OverIp(site_id)) {
+        // CU and DU co-located: use shared memory
+        return std::make_unique&lt;SharedMemF1Transport&gt;();
+    } else {
+        // Distributed: use IP transport
+        return std::make_unique&lt;IpF1Transport&gt;(
+            "0.0.0.0", 38000,           // local
+            "10.0.1.100", 38000         // remote DU/CU
+        );
+    }
+}
+</pre>
+
+<h2>Scaling Considerations</h2>
+
+<div class="callout green">
+  <p><strong>Centralized CU Benefits:</strong> A single CU can serve 100+ DUs, enabling coordinated multi-point (CoMP), centralized scheduling, and reduced inter-site handover latency. C++ software must handle concurrent UE contexts from multiple DUs efficiently.</p>
+</div>
+
+<ul>
+  <li><strong>CU Scaling:</strong> A single CU-CP can manage up to 10,000 UEs; CU-UP throughput limited by PDCP processing (typically 10-20 Gbps per instance).</li>
+  <li><strong>DU Scaling:</strong> Each DU handles a single cell site with typically 100-500 UEs.</li>
+  <li><strong>RU Scaling:</strong> One RU per sector; a cell site typically has 3 sectors (3 RUs per DU).</li>
+</ul>
+
+<h2>Cross-References</h2>
+
+<ul>
+  <li><a href="../advanced/factory-pattern.html">Factory Pattern</a> -- <code>createF1Transport()</code> selects transport based on topology.</li>
+  <li><a href="circular-buffers.html">Circular Buffers</a> -- Shared memory ring buffer for co-located CU/DU.</li>
+  <li><a href="gnodeb-components.html">gNB Components</a> -- Detailed CU-CP, CU-UP, DU, RU component design.</li>
+  <li><a href="oran-architecture.html">O-RAN Architecture</a> -- Open RAN deployment topologies and placement options.</li>
+  <li><a href="thread-models-ran.html">Thread Models</a> -- Threading strategies differ by deployment topology.</li>
+</ul>
+
+<div class="nav"><a href="gnodeb-components.html">&larr; gNB Components</a><a href="oran-architecture.html">O-RAN Architecture &rarr;</a></div>
+</body>
+</html>

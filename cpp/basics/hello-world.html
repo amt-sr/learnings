@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hello World &amp; Compilation — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; }
+  .breadcrumb a { color: #8b949e; }
+  .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; }
+  .callout.red { border-left-color: #f85149; }
+  .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; }
+  th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; }
+  .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#1">1 Basics</a> / 1.1.1 Hello World &amp; Compilation</div>
+<div class="meta"><span class="tag basic">BASIC</span></div>
+<h1>1.1.1 Hello World &amp; Compilation</h1>
+
+<p>Every C++ journey begins with the classic Hello World program. Understanding how to write, compile, and run a C++ program is the essential first step before diving into language features.</p>
+
+<h2>Basic Program Structure</h2>
+
+<p>A minimal C++ program consists of preprocessor directives, a <code>main</code> function, and statements. Here is the simplest valid C++ program:</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+int main() {
+    std::cout &lt;&lt; "Hello, World!" &lt;&lt; std::endl;
+    return 0;
+}
+</pre>
+
+<p>Let us break down every line:</p>
+
+<ul>
+  <li><code>#include &lt;iostream&gt;</code> &mdash; A preprocessor directive that includes the Standard I/O library. This gives us access to <code>std::cout</code> for output and <code>std::cin</code> for input.</li>
+  <li><code>int main()</code> &mdash; The entry point of every C++ program. It returns an <code>int</code> to the operating system: <code>0</code> means success, any non-zero value indicates an error.</li>
+  <li><code>std::cout &lt;&lt; "Hello, World!" &lt;&lt; std::endl;</code> &mdash; Sends the string to standard output using the stream insertion operator (<code>&lt;&lt;</code>). <code>std::endl</code> flushes the buffer and inserts a newline.</li>
+  <li><code>return 0;</code> &mdash; Signals successful program termination.</li>
+</ul>
+
+<div class="callout green">
+  <p><strong>Tip:</strong> In C++ you can omit <code>return 0;</code> in <code>main()</code>. The compiler implicitly returns 0 when control reaches the end of <code>main</code>. This is unique to <code>main()</code> &mdash; all other functions that declare a return type must return a value explicitly.</p>
+</div>
+
+<h2>Header Files</h2>
+
+<p>Header files provide declarations for functions, classes, and other entities. Common standard library headers include:</p>
+
+<table>
+  <tr><th>Header</th><th>Purpose</th></tr>
+  <tr><td><code>&lt;iostream&gt;</code></td><td>Input/output streams (<code>cin</code>, <code>cout</code>)</td></tr>
+  <tr><td><code>&lt;string&gt;</code></td><td><code>std::string</code> class</td></tr>
+  <tr><td><code>&lt;vector&gt;</code></td><td><code>std::vector</code> dynamic array</td></tr>
+  <tr><td><code>&lt;cmath&gt;</code></td><td>Math functions (<code>sqrt</code>, <code>pow</code>, <code>sin</code>)</td></tr>
+  <tr><td><code>&lt;cstdio&gt;</code></td><td>C-style I/O (<code>printf</code>, <code>scanf</code>)</td></tr>
+  <tr><td><code>&lt;cstdlib&gt;</code></td><td>General utilities (<code>malloc</code>, <code>exit</code>)</td></tr>
+</table>
+
+<p>Note that C++ standard headers do not use a <code>.h</code> suffix. Headers like <code>&lt;stdio.h&gt;</code> are C compatibility headers and place their contents in the global namespace, whereas <code>&lt;cstdio&gt;</code> places them in the <code>std</code> namespace. See <a href="namespaces.html">Namespaces</a> for more detail.</p>
+
+<h2>Compiling with g++</h2>
+
+<p>The most common compiler on Linux and macOS is GCC's <code>g++</code>. The basic compilation command is:</p>
+
+<pre>
+# Compile a single source file
+g++ -o hello hello.cpp
+
+# Run the compiled program
+./hello
+</pre>
+
+<h3>Essential Compiler Flags</h3>
+
+<table>
+  <tr><th>Flag</th><th>Purpose</th></tr>
+  <tr><td><code>-Wall</code></td><td>Enable all common warnings</td></tr>
+  <tr><td><code>-Wextra</code></td><td>Enable extra warnings beyond <code>-Wall</code></td></tr>
+  <tr><td><code>-Wpedantic</code></td><td>Warn about non-standard C++</td></tr>
+  <tr><td><code>-std=c++17</code></td><td>Use the C++17 standard</td></tr>
+  <tr><td><code>-std=c++20</code></td><td>Use the C++20 standard</td></tr>
+  <tr><td><code>-O2</code></td><td>Optimization level 2 (recommended for builds)</td></tr>
+  <tr><td><code>-g</code></td><td>Include debug symbols</td></tr>
+  <tr><td><code>-o &lt;name&gt;</code></td><td>Specify the output binary name</td></tr>
+</table>
+
+<div class="callout">
+  <p><strong>Recommended compile command:</strong></p>
+</div>
+
+<pre>
+g++ -Wall -Wextra -std=c++17 -o hello hello.cpp
+</pre>
+
+<div class="callout warning">
+  <p><strong>Warning:</strong> Always compile with at least <code>-Wall</code>. Compiler warnings catch bugs early. Ignoring warnings is a common source of undefined behavior and hard-to-find bugs in production code.</p>
+</div>
+
+<h2>Using Namespaces</h2>
+
+<p>You will frequently see <code>using namespace std;</code> in tutorials and older codebases. This brings all names from the <code>std</code> namespace into the global scope:</p>
+
+<pre>
+#include &lt;iostream&gt;
+using namespace std;  // Avoid this in large projects
+
+int main() {
+    cout &lt;&lt; "Hello without std:: prefix" &lt;&lt; endl;
+    return 0;
+}
+</pre>
+
+<div class="callout red">
+  <p><strong>Avoid in header files:</strong> Never put <code>using namespace std;</code> in a header file. It pollutes the namespace of every file that includes it, potentially causing name collisions. In implementation files ( <code>.cpp</code> ), it is acceptable but still discouraged in larger projects. Prefer using the <code>std::</code> prefix explicitly.</p>
+</div>
+
+<h2>Multi-file Programs</h2>
+
+<p>Real projects span multiple source files. A typical project structure:</p>
+
+<pre>
+project/
+  main.cpp
+  math_utils.h    // declarations
+  math_utils.cpp  // definitions
+</pre>
+
+<pre>
+// math_utils.h
+#ifndef MATH_UTILS_H
+#define MATH_UTILS_H
+
+int add(int a, int b);
+
+#endif
+</pre>
+
+<pre>
+// math_utils.cpp
+#include "math_utils.h"
+
+int add(int a, int b) {
+    return a + b;
+}
+</pre>
+
+<pre>
+// main.cpp
+#include &lt;iostream&gt;
+#include "math_utils.h"
+
+int main() {
+    std::cout &lt;&lt; "3 + 4 = " &lt;&lt; add(3, 4) &lt;&lt; std::endl;
+    return 0;
+}
+</pre>
+
+<p>Compile all files together:</p>
+
+<pre>
+g++ -Wall -std=c++17 -o program main.cpp math_utils.cpp
+</pre>
+
+<div class="callout green">
+  <p><strong>Tip:</strong> Use <code>#pragma once</code> as a modern alternative to include guards. It is supported by all major compilers and is more concise. However, <code>#ifndef</code> guards are standard C++ and guaranteed to work everywhere.</p>
+</div>
+
+<h2>The main Function</h2>
+
+<p>The <code>main</code> function is special in C++. It is the only function whose declaration does not need to be visible before it is called (the compiler provides it implicitly). Valid signatures:</p>
+
+<pre>
+// Standard form
+int main();
+
+// With command-line arguments
+int main(int argc, char* argv[]);
+
+// Equivalent using C++ aliases
+int main(int argc, char** argv);
+</pre>
+
+<ul>
+  <li><code>argc</code> &mdash; argument count (at least 1, since the program name is <code>argv[0]</code>)</li>
+  <li><code>argv</code> &mdash; array of C-style strings representing the arguments</li>
+</ul>
+
+<pre>
+#include &lt;iostream&gt;
+
+int main(int argc, char* argv[]) {
+    std::cout &lt;&lt; "Program name: " &lt;&lt; argv[0] &lt;&lt; std::endl;
+    std::cout &lt;&lt; "Argument count: " &lt;&lt; argc &lt;&lt; std::endl;
+
+    for (int i = 1; i &lt; argc; ++i) {
+        std::cout &lt;&lt; "Arg " &lt;&lt; i &lt;&lt; ": " &lt;&lt; argv[i] &lt;&lt; std::endl;
+    }
+
+    return 0;
+}
+</pre>
+
+<div class="callout">
+  <p><strong>Next Steps:</strong> Now that you can write and compile a program, move on to <a href="variables-data-types.html">Variables &amp; Data Types</a> to learn about storing and manipulating data in C++.</p>
+</div>
+
+<div class="nav">
+  <a href="variables-data-types.html">Variables &amp; Data Types &rarr;</a>
+</div>
+</body>
+</html>

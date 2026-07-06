@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>enum class — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / enum class</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>enum class</h1>
+
+<p><code>enum class</code> (scoped enumeration, introduced in C++11) provides type-safe enumerations that avoid the pitfalls of traditional C-style enums. They prevent implicit conversions, namespace pollution, and comparison between unrelated enumerators.</p>
+
+<h2>C-Style enum Problems</h2>
+
+<pre>
+#include &lt;iostream&gt;
+
+// C-style enum — many problems
+enum Color { RED, GREEN, BLUE };
+enum TrafficLight { RED, YELLOW, GREEN };  // ERROR: redefines RED and GREEN
+
+// Even if it compiled:
+void c_enum_problems() {
+    Color c = RED;
+    int x = c;             // implicit conversion to int — not type-safe
+    c = 42;                // assign int to enum — no error!
+    if (c == GREEN) {}     // works, but RED and GREEN are in global scope
+
+    // Both REDs would be ambiguous
+    // Color r = RED;  // Which RED? Color::RED or TrafficLight::RED?
+}
+</pre>
+
+<div class="callout red">
+  <p><strong>Traditional enum issues:</strong> Enumerators leak into the enclosing scope, implicitly convert to and from integers, and cannot specify the underlying type portably. These issues led to many subtle bugs in large codebases.</p>
+</div>
+
+<h2>enum class — Scoped Enumerations</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+// Scoped enumerations — each is its own type
+enum class Color { Red, Green, Blue };
+enum class TrafficLight { Red, Yellow, Green };
+enum class Fruit { Apple, Orange, Banana };
+
+void enum_class_basics() {
+    Color c = Color::Red;
+    // Color c2 = Red;           // ERROR: must qualify with Color::
+    // int x = c;                // ERROR: no implicit conversion
+    // if (c == Fruit::Apple) {} // ERROR: cannot compare different enum classes
+
+    // Explicit conversion to underlying type
+    int val = static_cast&lt;int&gt;(c);  // 0
+    std::cout &lt;&lt; "Color::Red as int: " &lt;&lt; val &lt;&lt; "\n";  // 0
+
+    // No ambiguity between Color::Red and TrafficLight::Red
+    TrafficLight t = TrafficLight::Red;  // OK: different type
+}
+</pre>
+
+<h2>Underlying Type</h2>
+
+<p>You can specify the underlying type of an <code>enum class</code> to control its size and representation.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;cstdint&gt;
+
+// Specify underlying type for memory layout control
+enum class Status : uint8_t { Ok = 0, Error = 1, Pending = 2, Timeout = 3 };
+enum class Priority : int8_t { Low = -1, Normal = 0, High = 1, Critical = 2 };
+enum class Flags : uint32_t { None = 0, Read = 1, Write = 2, Execute = 4 };
+
+void underlying_type_demo() {
+    std::cout &lt;&lt; "sizeof(Status) = " &lt;&lt; sizeof(Status) &lt;&lt; "\n";      // 1
+    std::cout &lt;&lt; "sizeof(Priority) = " &lt;&lt; sizeof(Priority) &lt;&lt; "\n";  // 1
+    std::cout &lt;&lt; "sizeof(Flags) = " &lt;&lt; sizeof(Flags) &lt;&lt; "\n";       // 4
+
+    // Using flags with bitwise operators
+    Flags perms = Flags::Read | Flags::Write;
+    bool can_read = (static_cast&lt;uint32_t&gt;(perms) &amp; static_cast&lt;uint32_t&gt;(Flags::Read)) != 0;
+    std::cout &lt;&lt; "Can read: " &lt;&lt; can_read &lt;&lt; "\n";  // true
+}
+</pre>
+
+<h2>Switch with enum class</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+enum class HttpStatusCode {
+    OK = 200,
+    NotFound = 404,
+    ServerError = 500,
+    ServiceUnavailable = 503
+};
+
+std::string status_message(HttpStatusCode code) {
+    switch (code) {
+        case HttpStatusCode::OK:           return "Everything is fine";
+        case HttpStatusCode::NotFound:     return "Resource not found";
+        case HttpStatusCode::ServerError:  return "Internal server error";
+        case HttpStatusCode::ServiceUnavailable: return "Service unavailable";
+    }
+    return "Unknown status code";  // warning in some compilers if not all cases covered
+}
+
+void switch_demo() {
+    std::cout &lt;&lt; status_message(HttpStatusCode::OK) &lt;&lt; "\n";
+    std::cout &lt;&lt; status_message(HttpStatusCode::NotFound) &lt;&lt; "\n";
+}
+</pre>
+
+<h2>enum class with Bit Flags</h2>
+
+<p>For bitmask operations, define overloaded operators to keep <code>enum class</code> ergonomic.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+enum class Permission : uint32_t {
+    None    = 0,
+    Read    = 1u &lt;&lt; 0,
+    Write   = 1u &lt;&lt; 1,
+    Execute = 1u &lt;&lt; 2,
+    All     = Read | Write | Execute
+};
+
+// Enable bitwise operators for enum class
+constexpr Permission operator|(Permission a, Permission b) {
+    return static_cast&lt;Permission&gt;(static_cast&lt;uint32_t&gt;(a) | static_cast&lt;uint32_t&gt;(b));
+}
+
+constexpr Permission operator&amp;(Permission a, Permission b) {
+    return static_cast&lt;Permission&gt;(static_cast&lt;uint32_t&gt;(a) &amp; static_cast&lt;uint32_t&gt;(b));
+}
+
+constexpr Permission operator~(Permission a) {
+    return static_cast&lt;Permission&gt;(~static_cast&lt;uint32_t&gt;(a));
+}
+
+constexpr bool has_permission(Permission perms, Permission flag) {
+    return (perms &amp; flag) != Permission::None;
+}
+
+void bit_flags_demo() {
+    Permission user_perms = Permission::Read | Permission::Execute;
+
+    std::cout &lt;&lt; std::boolalpha;
+    std::cout &lt;&lt; "Can read: "    &lt;&lt; has_permission(user_perms, Permission::Read) &lt;&lt; "\n";    // true
+    std::cout &lt;&lt; "Can write: "   &lt;&lt; has_permission(user_perms, Permission::Write) &lt;&lt; "\n";   // false
+    std::cout &lt;&lt; "Can execute: " &lt;&lt; has_permission(user_perms, Permission::Execute) &lt;&lt; "\n"; // true
+
+    // Add write permission
+    user_perms = user_perms | Permission::Write;
+    std::cout &lt;&lt; "Can write now: " &lt;&lt; has_permission(user_perms, Permission::Write) &lt;&lt; "\n"; // true
+}
+</pre>
+
+<h2>enum class vs enum — Comparison</h2>
+
+<table>
+  <tr><th>Feature</th><th><code>enum class</code></th><th>Traditional <code>enum</code></th></tr>
+  <tr><td>Scope</td><td>Scoped (must qualify)</td><td>Unscoped (leaks into enclosing scope)</td></tr>
+  <tr><td>Implicit int conversion</td><td>No</td><td>Yes</td></tr>
+  <tr><td>Specify underlying type</td><td>Default <code>int</code>, configurable</td><td>Implementation-defined</td></tr>
+  <tr><td>Forward declaration</td><td>Yes (always)</td><td>Only with specified underlying type</td></tr>
+  <tr><td>Type safety</td><td>High</td><td>Low</td></tr>
+</table>
+
+<div class="callout green">
+  <p><strong>Guideline:</strong> Always prefer <code>enum class</code> over traditional <code>enum</code>. The slight extra verbosity of <code>Color::Red</code> is worth the type safety, namespace isolation, and prevention of implicit conversions.</p>
+</div>
+
+<h2>Practical Example: State Machine</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+enum class ConnectionState { Disconnected, Connecting, Connected, Disconnecting };
+
+class Connection {
+    ConnectionState state_ = ConnectionState::Disconnected;
+public:
+    void connect() {
+        if (state_ == ConnectionState::Disconnected) {
+            state_ = ConnectionState::Connecting;
+            std::cout &lt;&lt; "Connecting...\n";
+            state_ = ConnectionState::Connected;
+            std::cout &lt;&lt; "Connected.\n";
+        }
+    }
+
+    void disconnect() {
+        if (state_ == ConnectionState::Connected) {
+            state_ = ConnectionState::Disconnecting;
+            std::cout &lt;&lt; "Disconnecting...\n";
+            state_ = ConnectionState::Disconnected;
+            std::cout &lt;&lt; "Disconnected.\n";
+        }
+    }
+
+    ConnectionState state() const { return state_; }
+};
+</pre>
+
+<p><code>enum class</code> is commonly used with <a href="range-based-for.html">range-based for</a> to iterate over all enumerators, and <a href="structured-bindings.html">structured bindings</a> (C++17) for mapping enums to values. Next, we explore structured bindings.</p>
+
+<div class="nav"><a href="range-based-for.html">&larr; Range-Based For</a><a href="structured-bindings.html">Structured Bindings &rarr;</a></div>
+</body>
+</html>

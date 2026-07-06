@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Function / Bind — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / <a href="../index.html#2.4">2.4 STL Deep Dive</a> / 2.4.7 Function / Bind</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>Function / Bind</h1>
+
+<p><code>std::function</code> is a general-purpose polymorphic function wrapper that can store, copy, and invoke any <strong>callable</strong> target -- free functions, member functions, lambda expressions, and function objects. <code>std::bind</code> creates partial function applications by binding arguments to a callable. Together they form the foundation of the callback and event patterns in C++.</p>
+
+<h2>std::function</h2>
+
+<pre>
+#include &lt;functional&gt;
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+// Free function
+int add(int a, int b) { return a + b; }
+
+// Functor (function object)
+struct Multiplier {
+    int factor;
+    explicit Multiplier(int f) : factor(f) {}
+    int operator()(int x) const { return x * factor; }
+};
+
+void function_basics() {
+    // Wrap different callable types in std::function
+    std::function&lt;int(int, int)&gt; f1 = add;          // free function
+    std::function&lt;int(int)&gt; f2 = Multiplier{5};       // functor
+    std::function&lt;int(int)&gt; f3 = [](int x) {           // lambda
+        return x * x;
+    };
+
+    std::cout &lt;&lt; f1(3, 4) &lt;&lt; "\n";   // 7
+    std::cout &lt;&lt; f2(10) &lt;&lt; "\n";   // 50
+    std::cout &lt;&lt; f3(7) &lt;&lt; "\n";    // 49
+
+    // Can be empty (default-constructed)
+    std::function&lt;void()&gt; f4;
+    if (!f4) {
+        std::cout &lt;&lt; "f4 is empty\n";
+    }
+    f4 = []() { std::cout &lt;&lt; "Now assigned\n"; };
+    f4();  // "Now assigned"
+}
+</pre>
+
+<h2>Callback Pattern</h2>
+
+<pre>
+#include &lt;functional&gt;
+#include &lt;vector&gt;
+#include &lt;string&gt;
+#include &lt;iostream&gt;
+
+class EventSystem {
+    std::vector&lt;std::function&lt;void(const std::string&amp;)&gt;&gt; listeners_;
+public:
+    using Callback = std::function&lt;void(const std::string&amp;)&gt;;
+
+    void subscribe(Callback cb) {
+        listeners_.push_back(std::move(cb));
+    }
+
+    void notify(const std::string&amp; event) {
+        for (const auto&amp; cb : listeners_) {
+            cb(event);
+        }
+    }
+};
+
+void callback_demo() {
+    EventSystem es;
+
+    // Register lambdas as callbacks
+    es.subscribe([](const std::string&amp; e) {
+        std::cout &lt;&lt; "[Logger] " &lt;&lt; e &lt;&lt; "\n";
+    });
+
+    int count = 0;
+    es.subscribe([&amp;count](const std::string&amp; e) {
+        ++count;
+        std::cout &lt;&lt; "[Counter] event #" &lt;&lt; count &lt;&lt; ": " &lt;&lt; e &lt;&lt; "\n";
+    });
+
+    es.notify("user_login");
+    // [Logger] user_login
+    // [Counter] event #1: user_login
+}
+</pre>
+
+<h2>std::bind and Placeholders</h2>
+
+<p><code>std::bind</code> creates a callable by fixing some arguments of another callable. <code>std::placeholders</code> mark positions where arguments will be passed when the bound function is called.</p>
+
+<pre>
+#include &lt;functional&gt;
+#include &lt;iostream&gt;
+#include &lt;cmath&gt;
+
+using namespace std::placeholders;  // _1, _2, _3...
+
+int pow_int(int base, int exp) {
+    return static_cast&lt;int&gt;(std::pow(base, exp));
+}
+
+void bind_demo() {
+    // Bind second argument to 2: square(int) from pow_int(int, int)
+    auto square = std::bind(pow_int, _1, 2);
+    std::cout &lt;&lt; square(5) &lt;&lt; "\n";   // 25
+
+    // Bind first argument to 3: cube(int)
+    auto cube = std::bind(pow_int, 3, _1);
+    std::cout &lt;&lt; cube(2) &lt;&lt; "\n";    // 9
+
+    // Swap argument order
+    auto subtract = std::bind(std::minus&lt;int&gt;{}, _2, _1);
+    std::cout &lt;&lt; subtract(3, 10) &lt;&lt; "\n";  // 7 (10 - 3)
+
+    // Bind member function
+    struct Printer {
+        void print(const std::string&amp; msg) const {
+            std::cout &lt;&lt; msg &lt;&lt; "\n";
+        }
+    };
+
+    Printer p;
+    auto bound_print = std::bind(&amp;Printer::print, &amp;p, _1);
+    bound_print("Hello via bind");
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>Prefer lambdas over std::bind:</strong> In modern C++, lambdas are usually clearer and more efficient than <code>std::bind</code>. Lambdas avoid the complexity of placeholders and are easier to read. Use <code>std::bind</code> primarily when interfacing with APIs that explicitly require it or when using member function pointers with object instances.</p>
+</div>
+
+<h2>Functors vs Lambdas vs std::function</h2>
+
+<table>
+  <tr><th>Feature</th><th>Functor</th><th>Lambda</th><th>std::function</th></tr>
+  <tr><td>Type</th><td>Named class type</td><td>Unique anonymous type</td><td>Erased type (type-safe)</td></tr>
+  <tr><td>State</th><td>Member variables</th><td>Capture list</th><th>Any callable</th></tr>
+  <tr><td>Overhead</th><td>Zero (inlined)</td><td>Zero (often inlined)</td><td>Possible heap allocation</td></tr>
+  <tr><td>Storage</th><td>Stack</td><td>Stack</td><td>Heap (if large capture)</td></tr>
+  <tr><td>Reassignable</th><td>No (const type)</td><td>No (const type)</td><td>Yes</td></tr>
+  <tr><td>Use case</th><td>Complex stateful objects</th><td>Local short callbacks</td><td>Callback interfaces</td></tr>
+</table>
+
+<h2>std::function with Member Functions</h2>
+
+<pre>
+#include &lt;functional&gt;
+#include &lt;iostream&gt;
+
+class Sensor {
+    double value_ = 0.0;
+public:
+    void update(double delta) { value_ += delta; }
+    double read() const { return value_; }
+};
+
+void member_function_callback() {
+    Sensor s;
+    // Wrap member function with object pointer
+    std::function&lt;void(double)&gt; updater =
+        [&amp;s](double delta) { s.update(delta); };
+
+    // Alternatively using mem_fn (C++11)
+    auto reader = std::mem_fn(&amp;Sensor::read);
+
+    updater(1.5);
+    updater(2.5);
+    std::cout &lt;&lt; "Sensor value: " &lt;&lt; reader(s) &lt;&lt; "\n";  // 4.0
+}
+</pre>
+
+<h2>Performance Considerations</h2>
+
+<pre>
+#include &lt;functional&gt;
+#include &lt;iostream&gt;
+
+// Lambda: no overhead — compiler can inline
+void with_lambda() {
+    auto f = [](int x) { return x * 2; };
+    int result = f(5);
+}
+
+// std::function: may prevent inlining, possible heap allocation
+void with_function() {
+    std::function&lt;int(int)&gt; f = [](int x) { return x * 2; };
+    int result = f(5);
+}
+
+// For maximum performance in critical paths, use templates:
+template&lt;typename F&gt;
+void apply_and_print(F f, int x) {
+    int result = f(x);
+    std::cout &lt;&lt; result &lt;&lt; "\n";
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Best practice:</strong> Use lambdas for local callbacks and templates for generic interfaces. Reserve <code>std::function</code> for cases where type erasure is needed: storing heterogeneous callables in a container, returning a function from another function, or defining callback APIs. The overhead is small but measurable in tight loops.</p>
+</div>
+
+<p><code>std::function</code> complements <a href="lambda-expressions.html">lambda expressions</a> and relates to <a href="operator-overloading.html">operator()</a> overloading (which creates functors). See <a href="../practice-questions/observer-pattern.html">observer pattern</a> for a full callback system design.</p>
+
+<div class="nav"><a href="stl-algorithms.html">&larr; STL Algorithms</a><a href="exception-handling.html">Exception Handling &rarr;</a></div>
+</body>
+</html>

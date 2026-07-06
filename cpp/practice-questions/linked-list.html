@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Singly Linked List — C++ Practice</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.easy { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  .question { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; }
+  .question h3 { color: #f0f6fc; margin-top: 0; }
+  .solution-toggle { cursor: pointer; user-select: none; }
+  .solution-toggle h3 { color: #3fb950; display: inline; }
+  .solution-content { display: none; margin-top: 1rem; }
+  .solution-content.visible { display: block; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+  .topics-covered { margin-bottom: 1rem; font-size: 0.85rem; color: #8b949e; }
+  .topics-covered a { color: #8b949e; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#5">5 Practice</a> / Medium Questions</div>
+<div class="meta"><span class="tag medium">Medium</span></div>
+<h1>Implement a Singly Linked List</h1>
+
+<div class="topics-covered">
+  <strong>Topics Covered:</strong>
+  <a href="../pointers.html">Pointers</a>,
+  <a href="../classes.html">Classes</a>,
+  <a href="../memory-management.html">Memory Management</a>,
+  <a href="../constructors.html">Constructors / Destructors</a>
+</div>
+
+<div class="question">
+  <h3>Problem Statement</h3>
+  <p>Implement a complete singly linked list class in C++ with the following operations:</p>
+  <ul>
+    <li><strong>Insert:</strong> at the head, at the tail, and at a specific position.</li>
+    <li><strong>Delete:</strong> by value, by position, and delete the entire list.</li>
+    <li><strong>Search:</strong> find whether a value exists and return its position.</li>
+    <li><strong>Reverse:</strong> reverse the linked list in-place.</li>
+    <li><strong>Print:</strong> display all elements.</li>
+  </ul>
+  <p>The implementation must properly manage memory with correct Rule of Five semantics.</p>
+</div>
+
+<div class="callout warning">
+  <p><strong>Requirements:</strong></p>
+  <ul>
+    <li>Use proper RAII: the destructor must free all nodes.</li>
+    <li>Implement the Rule of Five (or Rule of Three if C++11 move semantics are not needed).</li>
+    <li>Handle edge cases: empty list, single element, inserting/deleting at boundaries.</li>
+  </ul>
+</div>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution1')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution1">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;stdexcept&gt;
+#include &lt;utility&gt;
+
+template&lt;typename T&gt;
+class LinkedList {
+private:
+    struct Node {
+        T data;
+        Node* next;
+        Node(const T&amp; val) : data(val), next(nullptr) {}
+        Node(T&amp;&amp; val) : data(std::move(val)), next(nullptr) {}
+    };
+
+    Node* head_ = nullptr;
+    std::size_t size_ = 0;
+
+public:
+    // --- Rule of Five ---
+
+    // Constructor
+    LinkedList() = default;
+
+    // Copy constructor
+    LinkedList(const LinkedList&amp; other) : size_(other.size_) {
+        Node* current = other.head_;
+        Node** tail = &amp;head_;
+        while (current) {
+            *tail = new Node(current-&gt;data);
+            tail = &amp;((*tail)-&gt;next);
+            current = current-&gt;next;
+        }
+    }
+
+    // Move constructor
+    LinkedList(LinkedList&amp;&amp; other) noexcept
+        : head_(other.head_), size_(other.size_) {
+        other.head_ = nullptr;
+        other.size_ = 0;
+    }
+
+    // Copy assignment
+    LinkedList&amp; operator=(const LinkedList&amp; other) {
+        if (this != &amp;other) {
+            LinkedList temp(other);
+            std::swap(head_, temp.head_);
+            std::swap(size_, temp.size_);
+        }
+        return *this;
+    }
+
+    // Move assignment
+    LinkedList&amp; operator=(LinkedList&amp;&amp; other) noexcept {
+        if (this != &amp;other) {
+            clear();
+            head_ = other.head_;
+            size_ = other.size_;
+            other.head_ = nullptr;
+            other.size_ = 0;
+        }
+        return *this;
+    }
+
+    // Destructor
+    ~LinkedList() { clear(); }
+
+    // --- Insertion ---
+
+    void pushFront(const T&amp; val) {
+        Node* newNode = new Node(val);
+        newNode-&gt;next = head_;
+        head_ = newNode;
+        ++size_;
+    }
+
+    void pushFront(T&amp;&amp; val) {
+        Node* newNode = new Node(std::move(val));
+        newNode-&gt;next = head_;
+        head_ = newNode;
+        ++size_;
+    }
+
+    void pushBack(const T&amp; val) {
+        if (!head_) {
+            pushFront(val);
+            return;
+        }
+        Node* current = head_;
+        while (current-&gt;next) {
+            current = current-&gt;next;
+        }
+        current-&gt;next = new Node(val);
+        ++size_;
+    }
+
+    void insertAt(std::size_t index, const T&amp; val) {
+        if (index &gt; size_) {
+            throw std::out_of_range("Index out of range");
+        }
+        if (index == 0) {
+            pushFront(val);
+            return;
+        }
+        if (index == size_) {
+            pushBack(val);
+            return;
+        }
+        Node* current = head_;
+        for (std::size_t i = 0; i &lt; index - 1; ++i) {
+            current = current-&gt;next;
+        }
+        Node* newNode = new Node(val);
+        newNode-&gt;next = current-&gt;next;
+        current-&gt;next = newNode;
+        ++size_;
+    }
+
+    // --- Deletion ---
+
+    void popFront() {
+        if (!head_) throw std::out_of_range("List is empty");
+        Node* temp = head_;
+        head_ = head_-&gt;next;
+        delete temp;
+        --size_;
+    }
+
+    void popBack() {
+        if (!head_) throw std::out_of_range("List is empty");
+        if (!head_-&gt;next) {
+            delete head_;
+            head_ = nullptr;
+            --size_;
+            return;
+        }
+        Node* current = head_;
+        while (current-&gt;next-&gt;next) {
+            current = current-&gt;next;
+        }
+        delete current-&gt;next;
+        current-&gt;next = nullptr;
+        --size_;
+    }
+
+    bool removeByValue(const T&amp; val) {
+        if (!head_) return false;
+        if (head_-&gt;data == val) {
+            popFront();
+            return true;
+        }
+        Node* current = head_;
+        while (current-&gt;next) {
+            if (current-&gt;next-&gt;data == val) {
+                Node* temp = current-&gt;next;
+                current-&gt;next = temp-&gt;next;
+                delete temp;
+                --size_;
+                return true;
+            }
+            current = current-&gt;next;
+        }
+        return false;
+    }
+
+    bool removeAt(std::size_t index) {
+        if (index &gt;= size_) return false;
+        if (index == 0) { popFront(); return true; }
+        if (index == size_ - 1) { popBack(); return true; }
+
+        Node* current = head_;
+        for (std::size_t i = 0; i &lt; index - 1; ++i) {
+            current = current-&gt;next;
+        }
+        Node* temp = current-&gt;next;
+        current-&gt;next = temp-&gt;next;
+        delete temp;
+        --size_;
+        return true;
+    }
+
+    void clear() {
+        Node* current = head_;
+        while (current) {
+            Node* next = current-&gt;next;
+            delete current;
+            current = next;
+        }
+        head_ = nullptr;
+        size_ = 0;
+    }
+
+    // --- Search ---
+
+    int find(const T&amp; val) const {
+        Node* current = head_;
+        int index = 0;
+        while (current) {
+            if (current-&gt;data == val) return index;
+            current = current-&gt;next;
+            ++index;
+        }
+        return -1;  // Not found
+    }
+
+    bool contains(const T&amp; val) const {
+        return find(val) != -1;
+    }
+
+    // --- Reverse ---
+
+    void reverse() {
+        Node* prev = nullptr;
+        Node* current = head_;
+        while (current) {
+            Node* next = current-&gt;next;
+            current-&gt;next = prev;
+            prev = current;
+            current = next;
+        }
+        head_ = prev;
+    }
+
+    // --- Utility ---
+
+    std::size_t size() const { return size_; }
+    bool empty() const { return head_ == nullptr; }
+
+    const T&amp; front() const {
+        if (!head_) throw std::out_of_range("List is empty");
+        return head_-&gt;data;
+    }
+
+    const T&amp; back() const {
+        if (!head_) throw std::out_of_range("List is empty");
+        Node* current = head_;
+        while (current-&gt;next) current = current-&gt;next;
+        return current-&gt;data;
+    }
+
+    void print() const {
+        Node* current = head_;
+        std::cout &lt;&lt; "[";
+        while (current) {
+            std::cout &lt;&lt; current-&gt;data;
+            if (current-&gt;next) std::cout &lt;&lt; " -&gt; ";
+            current = current-&gt;next;
+        }
+        std::cout &lt;&lt; "] (size: " &lt;&lt; size_ &lt;&lt; ")\n";
+    }
+};
+
+int main() {
+    LinkedList&lt;int&gt; list;
+
+    // Insert
+    list.pushBack(1);
+    list.pushBack(2);
+    list.pushBack(3);
+    list.pushFront(0);
+    list.insertAt(2, 99);
+    list.print();  // [0 -&gt; 1 -&gt; 99 -&gt; 2 -&gt; 3] (size: 5)
+
+    // Search
+    std::cout &lt;&lt; "Find 99: index " &lt;&lt; list.find(99) &lt;&lt; "\n";  // 2
+    std::cout &lt;&lt; "Find 42: index " &lt;&lt; list.find(42) &lt;&lt; "\n";  // -1
+
+    // Remove
+    list.removeByValue(99);
+    list.popFront();
+    list.popBack();
+    list.print();  // [1 -&gt; 2] (size: 2)
+
+    // Reverse
+    list.pushBack(3);
+    list.pushBack(4);
+    list.print();  // [1 -&gt; 2 -&gt; 3 -&gt; 4] (size: 4)
+    list.reverse();
+    list.print();  // [4 -&gt; 3 -&gt; 2 -&gt; 1] (size: 4)
+
+    // Copy
+    LinkedList&lt;int&gt; copy = list;
+    copy.print();  // [4 -&gt; 3 -&gt; 2 -&gt; 1] (size: 4)
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><strong>Node struct:</strong> Each node holds data and a pointer to the next node. The struct is nested inside the class to keep it encapsulated.</li>
+      <li><strong>Rule of Five:</strong> We implement copy constructor, move constructor, copy assignment, move assignment, and destructor. The copy assignment uses the copy-and-swap idiom.</li>
+      <li><strong>Insert:</strong> <code>pushFront</code> creates a new node and makes it the head. <code>pushBack</code> traverses to the end. <code>insertAt</code> traverses to the position before the target index.</li>
+      <li><strong>Delete:</strong> The key pattern is keeping track of the <em>previous</em> node so you can update its <code>next</code> pointer after deletion. For head deletion, simply update <code>head_</code>.</li>
+      <li><strong>Reverse:</strong> Three-pointer technique: <code>prev</code>, <code>current</code>, and <code>next</code>. On each iteration, we reverse the <code>current-&gt;next</code> pointer to point to <code>prev</code>, then advance all three pointers.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout green">
+  <p><strong>Complexity Analysis:</strong></p>
+  <table>
+    <tr><th>Operation</th><th>Time</th><th>Space</th></tr>
+    <tr><td>pushFront</td><td>O(1)</td><td>O(1)</td></tr>
+    <tr><td>pushBack</td><td>O(n)</td><td>O(1)</td></tr>
+    <tr><td>insertAt(i)</td><td>O(i)</td><td>O(1)</td></tr>
+    <tr><td>removeByValue</td><td>O(n)</td><td>O(1)</td></tr>
+    <tr><td>reverse</td><td>O(n)</td><td>O(1)</td></tr>
+    <tr><td>find</td><td>O(n)</td><td>O(1)</td></tr>
+    <tr><td>copy</td><td>O(n)</td><td>O(n)</td></tr>
+  </table>
+</div>
+
+<h2>Follow-up Questions</h2>
+
+<div class="question">
+  <h3>Variations to Try</h3>
+  <ol>
+    <li><strong>Doubly linked list:</strong> Add a <code>prev</code> pointer to each node. This gives O(1) <code>pushBack</code> if you maintain a tail pointer, and O(n) reverse (or O(1) if bidirectional traversal is allowed).</li>
+    <li><strong>Remove duplicates:</strong> From a sorted linked list, remove all duplicate nodes in a single pass.</li>
+    <li><strong>Find the middle:</strong> Find the middle node using the slow/fast pointer technique (slow moves 1 step, fast moves 2 steps).</li>
+    <li><strong>Detect cycle:</strong> Implement Floyd's cycle detection algorithm (tortoise and hare).</li>
+    <li><strong>Merge two sorted lists:</strong> Given two sorted linked lists, merge them into one sorted list.</li>
+  </ol>
+</div>
+
+<div class="callout red">
+  <p><strong>Memory Safety Tips:</strong></p>
+  <ul>
+    <li>Always delete nodes when removing them. Use <code>valgrind</code> to verify no leaks.</li>
+    <li>In the destructor, walk the entire list and delete every node. This is essential RAII.</li>
+    <li>After a move, set the source's <code>head_</code> to <code>nullptr</code> to prevent double-free in the source's destructor.</li>
+    <li>Never dereference a null pointer. Always check <code>head_</code> before operations.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="check-prime.html">&larr; Check Prime</a>
+  <a href="thread-safe-queue.html">Thread-Safe Queue &rarr;</a>
+</div>
+<script>
+function toggleSolution(id) {
+  document.getElementById(id).classList.toggle('visible');
+}
+</script>
+</body>
+</html>

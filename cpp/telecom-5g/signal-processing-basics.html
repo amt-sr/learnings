@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Signal Processing Basics — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#4">4 Telecom &amp; 5G/4G Networking</a> / Telecom C++ Techniques / 4.4.10</div>
+<div class="meta"><span class="tag medium">Medium</span></div>
+<h1>Signal Processing Basics</h1>
+
+<p>Digital signal processing (DSP) is at the heart of the PHY layer in both LTE and 5G NR. Understanding sampling, FFT, and OFDM is essential for anyone working on telecom PHY or even optimizing upper-layer processing that interacts with the radio.</p>
+
+<h2>Sampling Theorem (Nyquist-Shannon)</h2>
+
+<p>A continuous signal can be perfectly reconstructed from its samples if the sampling rate is at least twice the highest frequency component. For a signal with bandwidth B, the minimum sampling rate is <code>f_s &gt;= 2 * B</code>.</p>
+
+<table>
+  <tr><th>Standard</th><th>Max Bandwidth</th><th>Min Sampling Rate</th><th>Typical FFT Size</th></tr>
+  <tr><td>LTE 20 MHz</td><td>18 MHz (15 kHz SCS)</td><td>30.72 Msps</td><td>2048</td></tr>
+  <tr><td>5G NR 100 MHz</td><td>98.3 MHz (30 kHz SCS)</td><td>122.88 Msps</td><td>4096</td></tr>
+  <tr><td>5G NR 400 MHz (mmWave)</td><td>393 MHz (120 kHz SCS)</td><td>491.52 Msps</td><td>4096</td></tr>
+</table>
+
+<h2>FFT Basics</h2>
+
+<p>The Fast Fourier Transform converts time-domain samples to frequency-domain (and IFFT does the reverse). In OFDM, IFFT creates orthogonal subcarriers from frequency-domain data symbols.</p>
+
+<pre>
+  DFT formula:
+  X[k] = sum(x[n] * e^(-j*2*pi*k*n/N)) for n = 0 to N-1
+
+  FFT complexity: O(N * log2(N))
+  DFT complexity: O(N^2)
+
+  For N = 4096:
+  FFT: ~4096 * 12 = 49,152 operations
+  DFT: ~4096 * 4096 = 16,777,216 operations
+
+  In 5G NR, one OFDM symbol requires one FFT/IFFT per TTI.
+  At 120 kHz SCS: one FFT per ~8.3 us.
+</pre>
+
+<h2>OFDM Basics</h2>
+
+<pre>
+  OFDM (Orthogonal Frequency Division Multiplexing):
+  - Data transmitted on multiple parallel subcarriers
+  - Subcarriers are orthogonal (integers of base frequency)
+  - IFFT at TX creates time-domain OFDM symbol
+  - FFT at RX recovers frequency-domain symbols
+  - Cyclic Prefix (CP) copies tail of symbol to front to
+    handle multi-path delay spread
+
+  5G NR Subcarrier Spacing (SCS):
+  +--------+-------+----------+-----------+
+  | SCS    | Slots | Symbol   | CP length |
+  | (kHz)  | /ms   | duration | (us)      |
+  +--------+-------+----------+-----------+
+  | 15     | 1     | 66.7 us  | 4.7 us    |
+  | 30     | 2     | 33.3 us  | 2.3 us    |
+  | 60     | 4     | 16.7 us  | 1.2 us    |
+  | 120    | 8     | 8.3 us   | 0.59 us   |
+  | 240    | 16    | 4.2 us   | 0.29 us   |
+  +--------+-------+----------+-----------+
+
+  Higher SCS = shorter symbol = lower latency (for URLLC)
+  Lower SCS = longer symbol = better coverage (for mMTC)
+</pre>
+
+<h2>Cyclic Prefix (CP)</h2>
+
+<div class="callout">
+  <p><strong>Purpose of CP:</strong> The cyclic prefix is a copy of the last part of the OFDM symbol prepended to its beginning. It converts a linear convolution (from multi-path channel) into a circular convolution, which the FFT can handle efficiently. The CP length must be longer than the maximum expected delay spread. Normal CP: ~4.7 us (covers ~1.4 km extra path).</p>
+</div>
+
+<h2>C++ FFT Pseudocode</h2>
+
+<pre>
+#include &lt;vector&gt;
+#include &lt;complex&gt;
+#include &lt;cmath&gt;
+
+using Complex = std::complex&lt;double&gt;;
+const double PI = 3.14159265358979323846;
+
+// DFT (naive, O(N^2)) -- for understanding only
+std::vector&lt;Complex&gt; dft(const std::vector&lt;Complex&gt;&amp; x) {
+    size_t N = x.size();
+    std::vector&lt;Complex&gt; X(N);
+    for (size_t k = 0; k &lt; N; ++k) {
+        X[k] = 0;
+        for (size_t n = 0; n &lt; N; ++n) {
+            double angle = -2.0 * PI * k * n / N;
+            Complex W(std::cos(angle), std::sin(angle));
+            X[k] += x[n] * W;
+        }
+    }
+    return X;
+}
+
+// Radix-2 Cooley-Tukey FFT (O(N log N))
+void fftInPlace(std::vector&lt;Complex&gt;&amp; x) {
+    size_t N = x.size();
+    if (N == 0 || (N &amp; (N - 1)) != 0) return; // Must be power of 2
+
+    // Bit-reversal permutation
+    size_t j = 0;
+    for (size_t i = 1; i &lt; N; ++i) {
+        size_t bit = N &gt;&gt; 1;
+        while (j &amp; bit) {
+            j ^= bit;
+            bit &gt;&gt;= 1;
+        }
+        j ^= bit;
+        if (i &lt; j) std::swap(x[i], x[j]);
+    }
+
+    // Butterfly stages
+    for (size_t len = 2; len &lt;= N; len &lt;&lt;= 1) {
+        double angle = -2.0 * PI / len;
+        Complex Wlen(std::cos(angle), std::sin(angle));
+        for (size_t i = 0; i &lt; N; i += len) {
+            Complex w(1.0);
+            for (size_t k = 0; k &lt; len / 2; ++k) {
+                Complex u = x[i + k];
+                Complex v = x[i + k + len/2] * w;
+                x[i + k] = u + v;
+                x[i + k + len/2] = u - v;
+                w *= Wlen;
+            }
+        }
+    }
+}
+
+// IFFT = FFT with conjugated twiddles, then divide by N
+void ifftInPlace(std::vector&lt;Complex&gt;&amp; x) {
+    // Conjugate input
+    for (auto&amp; c : x) c = std::conj(c);
+    // Forward FFT
+    fftInPlace(x);
+    // Conjugate and scale
+    for (auto&amp; c : x) c = std::conj(c) / static_cast&lt;double&gt;(x.size());
+}
+
+// Generate OFDM symbol from subcarrier data
+std::vector&lt;Complex&gt; generateOfdmSymbol(
+        const std::vector&lt;Complex&gt;&amp; subcarriers,
+        size_t fft_size) {
+    // Map subcarriers to FFT bins (centered around DC)
+    std::vector&lt;Complex&gt; freq_domain(fft_size, 0.0);
+    size_t n_sc = subcarriers.size();
+    size_t offset = fft_size / 2 - n_sc / 2;
+    for (size_t i = 0; i &lt; n_sc; ++i) {
+        freq_domain[offset + i] = subcarriers[i];
+    }
+
+    // IFFT to get time-domain OFDM symbol
+    ifftInPlace(freq_domain);
+    return freq_domain;
+}
+
+// Add cyclic prefix
+std::vector&lt;Complex&gt; addCyclicPrefix(
+        const std::vector&lt;Complex&gt;&amp; symbol,
+        size_t cp_length) {
+    size_t N = symbol.size();
+    std::vector&lt;Complex&gt; cp_symbol(N + cp_length);
+    // Copy CP from end of symbol
+    for (size_t i = 0; i &lt; cp_length; ++i) {
+        cp_symbol[i] = symbol[N - cp_length + i];
+    }
+    // Copy full symbol after CP
+    for (size_t i = 0; i &lt; N; ++i) {
+        cp_symbol[cp_length + i] = symbol[i];
+    }
+    return cp_symbol;
+}
+</pre>
+
+<h2>Windowing</h2>
+
+<p>Window functions are applied to OFDM symbols to reduce out-of-band emissions. In 5G NR, time-domain windowing is applied before transmission to smooth symbol transitions at the CP boundary.</p>
+
+<table>
+  <tr><th>Window</th><th>Application</th><th>Sidelobe Suppression</th></tr>
+  <tr><td>Rectangular</td><td>Basic OFDM (no windowing)</td><td>-13 dB</td></tr>
+  <tr><td>Hanning</td><td>General purpose</td><td>-31 dB</td></tr>
+  <tr><td>Blackman</td><td>Strong suppression</td><td>-58 dB</td></tr>
+  <tr><td>Kaiser</td><td>Tunable (beta parameter)</td><td>Variable</td></tr>
+</table>
+
+<div class="callout warning">
+  <p><strong>Production FFT:</strong> Real PHY implementations use FFTW (Fastest Fourier Transform in the West), ARM CMSIS FFT, or custom SIMD-optimized FFT kernels. The C++ code above is for educational purposes. Production FFT achieves sub-microsecond latency using AVX-512 or NEON vectorization.</p>
+</div>
+
+<h2>Cross-References</h2>
+
+<ul>
+  <li><a href="phy-layer.html">PHY Layer</a> -- OFDM resource grid and modulation.</li>
+  <li><a href="fixed-point-arithmetic.html">Fixed-Point Arithmetic</a> -- Fixed-point FFT for embedded PHY.</li>
+  <li><a href="bit-level-operations.html">Bit-Level Operations</a> -- Used in FFT twiddle factor computation.</li>
+</ul>
+
+<div class="nav"><a href="sr-iov-pcie.html">&larr; SR-IOV &amp; PCIe</a><a href="embedded-cpp-constraints.html">Embedded C++ Constraints &rarr;</a></div>
+</body>
+</html>

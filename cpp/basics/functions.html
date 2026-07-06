@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Functions — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; }
+  .breadcrumb a { color: #8b949e; }
+  .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; }
+  .callout.red { border-left-color: #f85149; }
+  .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; }
+  th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; }
+  .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#1">1 Basics</a> / 1.1.5 Functions</div>
+<div class="meta"><span class="tag basic">BASIC</span></div>
+<h1>1.1.5 Functions</h1>
+
+<p>Functions allow you to encapsulate reusable logic into named blocks. A well-designed function has a single responsibility, a clear interface, and is easy to test and debug independently.</p>
+
+<h2>Declaration and Definition</h2>
+
+<p>A function <strong>declaration</strong> (prototype) tells the compiler the function's name, return type, and parameters. A function <strong>definition</strong> provides the actual body. Declarations typically go in header files; definitions go in source files.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+// Declaration (prototype)
+int add(int a, int b);
+double rectangle_area(double width, double height);
+void greet(const std::string&amp; name);
+
+int main() {
+    std::cout &lt;&lt; "3 + 4 = " &lt;&lt; add(3, 4) &lt;&lt; std::endl;
+    std::cout &lt;&lt; "Area: " &lt;&lt; rectangle_area(5.0, 3.0) &lt;&lt; std::endl;
+    greet("Alice");
+    return 0;
+}
+
+// Definitions
+int add(int a, int b) {
+    return a + b;
+}
+
+double rectangle_area(double width, double height) {
+    return width * height;
+}
+
+void greet(const std::string&amp; name) {
+    std::cout &lt;&lt; "Hello, " &lt;&lt; name &lt;&lt; "!" &lt;&lt; std::endl;
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Tip:</strong> In C++, you can place the definition before <code>main()</code> and skip the separate declaration. In larger projects with multiple files, declarations go in <code>.h</code> files and definitions in <code>.cpp</code> files. See <a href="hello-world.html">Hello World &amp; Compilation</a> for multi-file project setup.</p>
+</div>
+
+<h2>Parameters and Return Types</h2>
+
+<p>Functions can take parameters by value or by reference (see <a href="references.html">References</a> for the full discussion). They can also return values or be <code>void</code>.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+// Pass by value: a copy is made (expensive for large objects)
+void by_value(std::string s) {
+    s += " (modified)";
+    std::cout &lt;&lt; "Inside by_value: " &lt;&lt; s &lt;&lt; std::endl;
+}
+
+// Pass by reference: no copy, original can be modified
+void by_reference(std::string&amp; s) {
+    s += " (modified)";
+    std::cout &lt;&lt; "Inside by_reference: " &lt;&lt; s &lt;&lt; std::endl;
+}
+
+// Pass by const reference: no copy, original protected
+void by_const_reference(const std::string&amp; s) {
+    std::cout &lt;&lt; "Inside by_const_reference: " &lt;&lt; s &lt;&lt; std::endl;
+    // s += " (modified)";  // ERROR: cannot modify const ref
+}
+
+int main() {
+    std::string msg = "Hello";
+
+    by_value(msg);
+    std::cout &lt;&lt; "After by_value: " &lt;&lt; msg &lt;&lt; std::endl;
+
+    by_reference(msg);
+    std::cout &lt;&lt; "After by_reference: " &lt;&lt; msg &lt;&lt; std::endl;
+
+    return 0;
+}
+</pre>
+
+<div class="callout">
+  <p><strong>Rule of thumb:</strong> Use <code>const&amp;</code> for read-only parameters of any type beyond basic primitives. Use <code>&amp;</code> only when the function must modify the argument. Use pass-by-value only for small types like <code>int</code>, <code>double</code>, <code>bool</code>.</p>
+</div>
+
+<h2>Default Arguments</h2>
+
+<p>C++ allows parameters to have default values. Callers can omit those arguments and the defaults are used.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+// Default arguments: must be rightmost parameters
+void print_info(const std::string&amp; name, int age = 0, const std::string&amp; role = "user") {
+    std::cout &lt;&lt; "Name: " &lt;&lt; name;
+    std::cout &lt;&lt; ", Age: " &lt;&lt; age;
+    std::cout &lt;&lt; ", Role: " &lt;&lt; role &lt;&lt; std::endl;
+}
+
+int main() {
+    print_info("Alice", 30, "admin");   // All arguments
+    print_info("Bob", 25);              // Uses default role
+    print_info("Charlie");              // Uses default age and role
+
+    return 0;
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>Warning:</strong> Default arguments can only be specified in the declaration (typically in the header file), not in the definition (the .cpp file). If you specify them in both places, the compiler will error.</p>
+</div>
+
+<h2>Function Overloading</h2>
+
+<p>C++ allows multiple functions with the same name but different parameter lists. The compiler selects the correct overload based on the arguments provided.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+int add(int a, int b) {
+    return a + b;
+}
+
+double add(double a, double b) {
+    return a + b;
+}
+
+int add(int a, int b, int c) {
+    return a + b + c;
+}
+
+int main() {
+    std::cout &lt;&lt; add(3, 4) &lt;&lt; std::endl;           // calls int version: 7
+    std::cout &lt;&lt; add(1.5, 2.5) &lt;&lt; std::endl;       // calls double version: 4.0
+    std::cout &lt;&lt; add(1, 2, 3) &lt;&lt; std::endl;         // calls 3-arg version: 6
+
+    return 0;
+}
+</pre>
+
+<div class="callout">
+  <p><strong>Note:</strong> Return type alone is not sufficient to distinguish overloads. Two functions with the same name and same parameter types but different return types will cause a compile error.</p>
+</div>
+
+<h2>Recursion</h2>
+
+<p>A recursive function calls itself. Every recursive function needs a <strong>base case</strong> (stopping condition) to avoid infinite recursion and stack overflow.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+// Factorial: n! = n * (n-1)!
+int factorial(int n) {
+    // Base case
+    if (n &lt;= 1) {
+        return 1;
+    }
+    // Recursive case
+    return n * factorial(n - 1);
+}
+
+// Fibonacci (naive recursive)
+int fibonacci(int n) {
+    if (n &lt;= 0) return 0;
+    if (n == 1) return 1;
+    return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+int main() {
+    std::cout &lt;&lt; "5! = " &lt;&lt; factorial(5) &lt;&lt; std::endl;       // 120
+    std::cout &lt;&lt; "10! = " &lt;&lt; factorial(10) &lt;&lt; std::endl;     // 3628800
+
+    std::cout &lt;&lt; "Fib(10) = " &lt;&lt; fibonacci(10) &lt;&lt; std::endl; // 55
+
+    return 0;
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>Warning:</strong> The naive Fibonacci implementation above has exponential time complexity O(2^n) due to repeated computation. In practice, use iteration or <a href="function-templates.html">memoization</a> techniques. Recursion depth is also limited by stack size (typically around 1 MB, allowing ~10,000 nested calls).</p>
+</div>
+
+<h2>Inline Functions</h2>
+
+<p>The <code>inline</code> keyword suggests to the compiler that the function body should be inserted at each call site, avoiding function call overhead.</p>
+
+<pre>
+inline int square(int x) {
+    return x * x;
+}
+
+int main() {
+    int result = square(5);  // Compiler may replace with: 5 * 5
+    return 0;
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Tip:</strong> Modern compilers are excellent at inlining automatically, even without the <code>inline</code> keyword. Use <code>inline</code> primarily for function definitions in header files to prevent multiple-definition linker errors. Avoid <code>inline</code> for large functions.</p>
+</div>
+
+<h2>constexpr Functions (C++11)</h2>
+
+<p><code>constexpr</code> functions can be evaluated at compile time if their arguments are constant expressions:</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+constexpr int square(int x) {
+    return x * x;
+}
+
+constexpr int factorial(int n) {
+    return (n &lt;= 1) ? 1 : n * factorial(n - 1);
+}
+
+int main() {
+    constexpr int val = square(5);  // Evaluated at compile time
+    constexpr int fact10 = factorial(10);
+
+    static_assert(val == 25, "square(5) should be 25");
+
+    std::cout &lt;&lt; "square(5) = " &lt;&lt; val &lt;&lt; std::endl;
+    std::cout &lt;&lt; "10! = " &lt;&lt; fact10 &lt;&lt; std::endl;
+
+    return 0;
+}
+</pre>
+
+<div class="callout">
+  <p><strong>Next Steps:</strong> Functions often work with collections of data. Learn how to use arrays and strings in <a href="arrays-strings.html">Arrays &amp; Strings</a>.</p>
+</div>
+
+<div class="nav">
+  <a href="control-flow.html">&larr; Control Flow</a>
+  <a href="arrays-strings.html">Arrays &amp; Strings &rarr;</a>
+</div>
+</body>
+</html>

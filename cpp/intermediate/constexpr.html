@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>constexpr — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / constexpr</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>constexpr</h1>
+
+<p><code>constexpr</code> (constant expression) enables compile-time evaluation of variables, functions, and even objects. Introduced in C++11 and significantly enhanced in C++14 and C++17, <code>constexpr</code> bridges the gap between runtime and compile-time programming, enabling zero-cost abstractions.</p>
+
+<h2>constexpr Variables</h2>
+
+<p>A <code>constexpr</code> variable must be initialized by a constant expression and its value is computed at compile time.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+void constexpr_variables() {
+    constexpr int max_size = 1024;          // compile-time constant
+    constexpr double pi = 3.14159265358979;
+
+    // Used where compile-time values are required:
+    int buffer[max_size];                    // array size must be constant
+    static_assert(max_size &gt; 0, "must be positive");  // see <a href="assert-static-assert.html">static_assert</a>
+
+    // ERROR: cannot modify constexpr
+    // max_size = 2048;
+
+    // ERROR: not a constant expression
+    // int x = 10;
+    // constexpr int y = x;
+
+    std::cout &lt;&lt; "max_size = " &lt;&lt; max_size &lt;&lt; "\n";
+    std::cout &lt;&lt; "pi = " &lt;&lt; pi &lt;&lt; "\n";
+}
+</pre>
+
+<h2>constexpr Functions (C++11)</h2>
+
+<p>In C++11, <code>constexpr</code> functions are heavily restricted: a single <code>return</code> statement, no loops, no local variables, no <code>if</code> statements.</p>
+
+<pre>
+// C++11 constexpr — very restricted
+constexpr int factorial_11(int n) {
+    return (n &lt;= 1) ? 1 : n * factorial_11(n - 1);
+}
+
+static_assert(factorial_11(5) == 120, "5! should be 120");
+
+// C++14 constexpr — much more flexible
+constexpr int factorial(int n) {
+    int result = 1;
+    for (int i = 2; i &lt;= n; ++i) {
+        result *= i;
+    }
+    return result;
+}
+
+static_assert(factorial(6) == 720, "6! should be 720");
+
+// Can be called at runtime too
+void runtime_usage() {
+    int n = 7;
+    std::cout &lt;&lt; "7! = " &lt;&lt; factorial(n) &lt;&lt; "\n";  // evaluated at runtime
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Key insight:</strong> A <code>constexpr</code> function <em>can</em> be evaluated at compile time, but it is not <em>required</em> to. If called with non-constant arguments, it executes at runtime like any normal function. The compiler evaluates at compile time only when the result is used in a constant expression context.</p>
+</div>
+
+<h2>constexpr with Loops and Variables (C++14+)</h2>
+
+<pre>
+#include &lt;array&gt;
+#include &lt;algorithm&gt;
+#include &lt;iostream&gt;
+
+// Compile-time string length
+constexpr size_t str_len(const char* s) {
+    size_t len = 0;
+    while (s[len] != '\0') ++len;
+    return len;
+}
+
+// Compile-time Fibonacci
+constexpr int fibonacci(int n) {
+    if (n &lt;= 1) return n;
+    int prev = 0, curr = 1;
+    for (int i = 2; i &lt;= n; ++i) {
+        int next = prev + curr;
+        prev = curr;
+        curr = next;
+    }
+    return curr;
+}
+
+static_assert(fibonacci(10) == 55, "fib(10) should be 55");
+
+// constexpr function returning a complex type
+constexpr int max_of_three(int a, int b, int c) {
+    int m = a;
+    if (b &gt; m) m = b;
+    if (c &gt; m) m = c;
+    return m;
+}
+
+void advanced_constexpr() {
+    constexpr int fib20 = fibonacci(20);
+    std::cout &lt;&lt; "Fibonacci(20) = " &lt;&lt; fib20 &lt;&lt; "\n";  // 6765
+    std::cout &lt;&lt; "max(3, 7, 5) = " &lt;&lt; max_of_three(3, 7, 5) &lt;&lt; "\n";  // 7
+}
+</pre>
+
+<h2>if constexpr (C++17)</h2>
+
+<p><code>if constexpr</code> enables compile-time branching. The discarded branch is not even compiled, which means it does not need to be valid code. This is extremely useful for template programming.</p>
+
+<pre>
+#include &lt;type_traits&gt;
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+// Generic toString that works differently based on type
+template&lt;typename T&gt;
+std::string to_string_impl(const T&amp; value) {
+    if constexpr (std::is_arithmetic_v&lt;T&gt;) {
+        return std::to_string(value);
+    } else if constexpr (std::is_same_v&lt;T, std::string&gt;) {
+        return value;
+    } else {
+        // This branch is only compiled for other types
+        return "[unknown type]";
+    }
+}
+
+void if_constexpr_demo() {
+    std::cout &lt;&lt; to_string_impl(42) &lt;&lt; "\n";           // "42"
+    std::cout &lt;&lt; to_string_impl(3.14) &lt;&lt; "\n";          // "3.14"
+    std::cout &lt;&lt; to_string_impl(std::string("hi")) &lt;&lt; "\n";  // "hi"
+}
+
+// Replace enable_if/SFINAE with if constexpr
+template&lt;typename T&gt;
+auto process_value(T val) {
+    if constexpr (std::is_integral_v&lt;T&gt;) {
+        return val * 2;       // only compiled for integers
+    } else if constexpr (std::is_floating_point_v&lt;T&gt;) {
+        return val + 0.5;     // only compiled for floats
+    } else {
+        return val;            // fallback
+    }
+}
+</pre>
+
+<div class="callout">
+  <p><strong>if constexpr vs regular if:</strong> A regular <code>if</code> evaluates the condition at runtime and both branches must be valid code. With <code>if constexpr</code>, the condition is evaluated at compile time and the discarded branch is not instantiated. See <a href="sfinae.html">SFINAE</a> for the older approach to similar problems.</p>
+</div>
+
+<h2>constexpr Objects</h2>
+
+<pre>
+#include &lt;array&gt;
+#include &lt;iostream&gt;
+
+// constexpr struct — usable at compile time
+struct Point {
+    double x;
+    double y;
+
+    constexpr double distance_to_origin() const {
+        // C++14 allows this in constexpr
+        double sum = x * x + y * y;
+        // sqrt is constexpr in C++26; for now use at runtime
+        return sum;
+    }
+
+    constexpr Point translate(double dx, double dy) const {
+        return Point{x + dx, y + dy};
+    }
+};
+
+// Compile-time point
+constexpr Point origin{0.0, 0.0};
+constexpr Point p{3.0, 4.0};
+
+// Compile-time computation
+constexpr double dist_sq = p.distance_to_origin();  // 25.0
+
+// Compile-time array of constexpr points
+constexpr std::array&lt;Point, 3&gt; triangle = {
+    Point{0, 0}, Point{4, 0}, Point{2, 3}
+};
+
+void constexpr_objects_demo() {
+    std::cout &lt;&lt; "Distance squared: " &lt;&lt; dist_sq &lt;&lt; "\n";  // 25.0
+    constexpr auto moved = p.translate(1.0, 1.0);
+    std::cout &lt;&lt; "Moved point: (" &lt;&lt; moved.x &lt;&lt; ", " &lt;&lt; moved.y &lt;&lt; ")\n";  // (4, 5)
+}
+</pre>
+
+<h2>constexpr and Standard Library</h2>
+
+<pre>
+#include &lt;array&gt;
+#include &lt;algorithm&gt;
+#include &lt;iostream&gt;
+
+// Many std algorithms are constexpr since C++20
+constexpr int find_max_in_array() {
+    std::array&lt;int, 5&gt; arr = {3, 7, 1, 9, 4};
+    return *std::max_element(arr.begin(), arr.end());  // 9
+}
+
+static_assert(find_max_in_array() == 9);
+
+// std::string_view is constexpr friendly
+#include &lt;string_view&gt;
+
+constexpr std::string_view greeting() {
+    return "Hello, constexpr world!";
+}
+</pre>
+
+<p><code>constexpr</code> pairs naturally with <a href="auto-decltype.html">auto/decltype</a> for type-safe compile-time code and with <a href="assert-static-assert.html">static_assert</a> for compile-time validation. Next, we explore <a href="range-based-for.html">range-based for loops</a> for iterating over collections.</p>
+
+<div class="nav"><a href="auto-decltype.html">&larr; auto &amp; decltype</a><a href="range-based-for.html">Range-Based For &rarr;</a></div>
+</body>
+</html>

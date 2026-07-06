@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Variables &amp; Data Types — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; }
+  .breadcrumb a { color: #8b949e; }
+  .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; }
+  .callout.red { border-left-color: #f85149; }
+  .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; }
+  th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; }
+  .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#1">1 Basics</a> / 1.1.2 Variables &amp; Data Types</div>
+<div class="meta"><span class="tag basic">BASIC</span></div>
+<h1>1.1.2 Variables &amp; Data Types</h1>
+
+<p>Variables are named storage locations in memory. C++ is a <strong>statically typed</strong> language, meaning the type of every variable must be known at compile time. This allows the compiler to allocate the correct amount of memory and enforce type safety.</p>
+
+<h2>Fundamental Data Types</h2>
+
+<table>
+  <tr><th>Type</th><th>Size (typical)</th><th>Range</th><th>Description</th></tr>
+  <tr><td><code>bool</code></td><td>1 byte</td><td><code>true</code> / <code>false</code></td><td>Boolean</td></tr>
+  <tr><td><code>char</code></td><td>1 byte</td><td>-128 to 127</td><td>Character (ASCII)</td></tr>
+  <tr><td><code>short</code></td><td>2 bytes</td><td>-32,768 to 32,767</td><td>Short integer</td></tr>
+  <tr><td><code>int</code></td><td>4 bytes</td><td>-2^31 to 2^31 - 1</td><td>Integer</td></tr>
+  <tr><td><code>long long</code></td><td>8 bytes</td><td>-2^63 to 2^63 - 1</td><td>Long integer</td></tr>
+  <tr><td><code>float</code></td><td>4 bytes</td><td>~7 decimal digits</td><td>Single precision floating-point</td></tr>
+  <tr><td><code>double</code></td><td>8 bytes</td><td>~15 decimal digits</td><td>Double precision floating-point</td></tr>
+  <tr><td><code>long double</code></td><td>8/12/16 bytes</td><td>Platform-dependent</td><td>Extended precision</td></tr>
+</table>
+
+<div class="callout warning">
+  <p><strong>Note:</strong> Sizes shown are typical on 64-bit platforms. Use <code>sizeof</code> to check sizes on your specific platform. C++ only guarantees minimum sizes (<code>char</code> &ge; 1 byte, <code>short</code> &ge; <code>int</code> &ge; <code>long</code> &ge; <code>long long</code>).</p>
+</div>
+
+<h2>Declaring and Initializing Variables</h2>
+
+<pre>
+#include &lt;iostream&gt;
+
+int main() {
+    // Declaration + initialization (preferred style)
+    int age = 25;
+    double temperature = 98.6;
+    char grade = 'A';
+    bool is_valid = true;
+
+    // C++11 uniform initialization
+    int count{0};
+    double pi{3.14159265358979};
+    bool found{false};
+
+    // C++17 allows structured bindings and more
+    // C++17 if-init (covered in intermediate topics)
+
+    std::cout &lt;&lt; "Age: " &lt;&lt; age &lt;&lt; std::endl;
+    std::cout &lt;&lt; "Temperature: " &lt;&lt; temperature &lt;&lt; std::endl;
+    std::cout &lt;&lt; "Grade: " &lt;&lt; grade &lt;&lt; std::endl;
+    std::cout &lt;&lt; "Valid: " &lt;&lt; std::boolalpha &lt;&lt; is_valid &lt;&lt; std::endl;
+
+    return 0;
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Tip:</strong> Prefer brace initialization <code>int x{0}</code> over copy initialization <code>int x = 0</code> in modern C++. Brace initialization prevents implicit narrowing conversions. For example, <code>int x{3.14}</code> will not compile (lossy double-to-int conversion), while <code>int x = 3.14</code> silently truncates.</p>
+</div>
+
+<h2>Integer Modifiers</h2>
+
+<p>Integer types support modifiers for signedness and size:</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+int main() {
+    unsigned int population = 331000000;  // No negative values
+    signed int balance = -500;            // Explicitly signed (default)
+    long long big_number = 9223372036854775807LL;
+
+    std::cout &lt;&lt; "Unsigned: " &lt;&lt; population &lt;&lt; std::endl;
+    std::cout &lt;&lt; "Signed:   " &lt;&lt; balance &lt;&lt; std::endl;
+    std::cout &lt;&lt; "Long long: " &lt;&lt; big_number &lt;&lt; std::endl;
+
+    return 0;
+}
+</pre>
+
+<div class="callout red">
+  <p><strong>Warning:</strong> Be careful with <code>unsigned</code> arithmetic. Subtracting from an <code>unsigned</code> value can underflow, wrapping around to a very large number. For example, <code>unsigned int x = 0; x - 1;</code> yields <code>4294967295</code> (on a 32-bit system) rather than <code>-1</code>.</p>
+</div>
+
+<h2>The auto Keyword</h2>
+
+<p>C++11 introduced <code>auto</code> for type deduction. The compiler deduces the type from the initializer:</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+
+int main() {
+    auto x = 42;           // int
+    auto y = 3.14;         // double
+    auto z = "hello";      // const char*
+    auto flag = true;      // bool
+
+    // auto with iterators (very common in STL code)
+    std::vector&lt;int&gt; nums = {10, 20, 30};
+    for (auto it = nums.begin(); it != nums.end(); ++it) {
+        std::cout &lt;&lt; *it &lt;&lt; " ";
+    }
+    std::cout &lt;&lt; std::endl;
+
+    return 0;
+}
+</pre>
+
+<div class="callout">
+  <p><strong>Note:</strong> <code>auto</code> strips <code>const</code> and <code>&amp;</code> by default. Use <code>const auto&amp;</code> to deduce a const reference, and <code>auto&amp;</code> for a mutable reference. See <a href="references.html">References</a> for more detail.</p>
+</div>
+
+<h2>Type Casting</h2>
+
+<p>C++ offers several ways to convert between types. Prefer C++ style casts over C casts:</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+int main() {
+    double pi = 3.14159;
+
+    // C-style cast (avoid in C++)
+    int c_style = (int)pi;                // 3
+
+    // C++ static_cast (preferred)
+    int cpp_style = static_cast&lt;int&gt;(pi);  // 3
+
+    std::cout &lt;&lt; "C-style: " &lt;&lt; c_style &lt;&lt; std::endl;
+    std::cout &lt;&lt; "C++ style: " &lt;&lt; cpp_style &lt;&lt; std::endl;
+
+    // Implicit conversions happen with mixed types
+    int a = 5;
+    double b = 2.5;
+    double result = a + b;  // 'a' is promoted to double
+
+    std::cout &lt;&lt; "5 + 2.5 = " &lt;&lt; result &lt;&lt; std::endl;
+
+    return 0;
+}
+</pre>
+
+<table>
+  <tr><th>Cast</th><th>Use Case</th></tr>
+  <tr><td><code>static_cast&lt;T&gt;(expr)</code></td><td>Well-defined conversions (int to double, enum to int)</td></tr>
+  <tr><td><code>dynamic_cast&lt;T&gt;(expr)</code></td><td>Safe downcasting in inheritance hierarchies</td></tr>
+  <tr><td><code>const_cast&lt;T&gt;(expr)</code></td><td>Adding or removing <code>const</code></td></tr>
+  <tr><td><code>reinterpret_cast&lt;T&gt;(expr)</code></td><td>Low-level reinterpreting of bit patterns (dangerous)</td></tr>
+</table>
+
+<div class="callout warning">
+  <p><strong>Warning:</strong> Avoid <code>reinterpret_cast</code> unless absolutely necessary. It reinterprets the raw bit representation and is inherently unsafe. Prefer <code>static_cast</code> for nearly all everyday conversions.</p>
+</div>
+
+<h2>sizeof Operator</h2>
+
+<p>The <code>sizeof</code> operator returns the size of a type or variable in bytes at compile time:</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+int main() {
+    std::cout &lt;&lt; "bool:       " &lt;&lt; sizeof(bool) &lt;&lt; " bytes" &lt;&lt; std::endl;
+    std::cout &lt;&lt; "char:       " &lt;&lt; sizeof(char) &lt;&lt; " bytes" &lt;&lt; std::endl;
+    std::cout &lt;&lt; "short:      " &lt;&lt; sizeof(short) &lt;&lt; " bytes" &lt;&lt; std::endl;
+    std::cout &lt;&lt; "int:        " &lt;&lt; sizeof(int) &lt;&lt; " bytes" &lt;&lt; std::endl;
+    std::cout &lt;&lt; "long long:  " &lt;&lt; sizeof(long long) &lt;&lt; " bytes" &lt;&lt; std::endl;
+    std::cout &lt;&lt; "float:      " &lt;&lt; sizeof(float) &lt;&lt; " bytes" &lt;&lt; std::endl;
+    std::cout &lt;&lt; "double:     " &lt;&lt; sizeof(double) &lt;&lt; " bytes" &lt;&lt; std::endl;
+
+    // sizeof on an expression
+    int arr[10];
+    std::cout &lt;&lt; "Array size: " &lt;&lt; sizeof(arr) &lt;&lt; " bytes" &lt;&lt; std::endl;
+    std::cout &lt;&lt; "Elements:   " &lt;&lt; sizeof(arr) / sizeof(arr[0]) &lt;&lt; std::endl;
+
+    return 0;
+}
+</pre>
+
+<div class="callout">
+  <p><strong>Next Steps:</strong> With variables and types in hand, learn how to perform computations in <a href="operators.html">Operators</a>.</p>
+</div>
+
+<div class="nav">
+  <a href="hello-world.html">&larr; Hello World &amp; Compilation</a>
+  <a href="operators.html">Operators &rarr;</a>
+</div>
+</body>
+</html>

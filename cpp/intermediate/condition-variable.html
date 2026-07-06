@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Condition Variable — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / <a href="../index.html#2.6">2.6 Multithreading</a> / 2.6.3 Condition Variable</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>Condition Variable</h1>
+
+<p><code>std::condition_variable</code> allows threads to wait for a condition to become true, and other threads to signal that the condition may have changed. It is used with a <code>std::unique_lock&lt;std::mutex&gt;</code> to safely check and modify shared state. Condition variables eliminate the need for busy-waiting (spin loops).</p>
+
+<h2>wait / notify Pattern</h2>
+
+<pre>
+#include &lt;mutex&gt;
+#include &lt;condition_variable&gt;
+#include &lt;iostream&gt;
+
+std::mutex mtx;
+std::condition_variable cv;
+bool ready = false;
+
+void worker() {
+    std::unique_lock&lt;std::mutex&gt; lock(mtx);
+    cv.wait(lock, []{ return ready; });  // wait until ready == true
+    std::cout &lt;&lt; "Worker proceeding\n";
+}
+
+void signaler() {
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    {
+        std::lock_guard&lt;std::mutex&gt; lock(mtx);
+        ready = true;
+    }
+    cv.notify_one();  // wake one waiting thread
+}
+
+void basic_wait_notify() {
+    std::thread t1(worker);
+    std::thread t2(signaler);
+    t1.join();
+    t2.join();
+    // Output: Worker proceeding
+}
+</pre>
+
+<div class="callout red">
+  <p><strong>Always use wait with a predicate:</strong> <code>cv.wait(lock, predicate)</code> is preferred over <code>cv.wait(lock)</code> because it handles <strong>spurious wakeups</strong> -- the OS may wake a thread without any notification. The predicate ensures the thread only proceeds when the condition is actually true.</p>
+</div>
+
+<h2>Producer-Consumer Pattern</h2>
+
+<pre>
+#include &lt;mutex&gt;
+#include &lt;condition_variable&gt;
+#include &lt;queue&gt;
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+template&lt;typename T&gt;
+class ThreadSafeQueue {
+    std::queue&lt;T&gt; queue_;
+    mutable std::mutex mtx_;
+    std::condition_variable not_empty_;
+    std::condition_variable not_full_;
+    size_t max_size_;
+public:
+    explicit ThreadSafeQueue(size_t max_size = 100) : max_size_(max_size) {}
+
+    void push(T value) {
+        std::unique_lock&lt;std::mutex&gt; lock(mtx_);
+        not_full_.wait(lock, [this] { return queue_.size() &lt; max_size_; });
+        queue_.push(std::move(value));
+        not_empty_.notify_one();
+    }
+
+    T pop() {
+        std::unique_lock&lt;std::mutex&gt; lock(mtx_);
+        not_empty_.wait(lock, [this] { return !queue_.empty(); });
+        T value = std::move(queue_.front());
+        queue_.pop();
+        not_full_.notify_one();
+        return value;
+    }
+
+    bool try_pop(T&amp; value, int timeout_ms) {
+        std::unique_lock&lt;std::mutex&gt; lock(mtx_);
+        if (!not_empty_.wait_for(lock,
+            std::chrono::milliseconds(timeout_ms),
+            [this] { return !queue_.empty(); })) {
+            return false;
+        }
+        value = std::move(queue_.front());
+        queue_.pop();
+        not_full_.notify_one();
+        return true;
+    }
+
+    bool empty() const {
+        std::lock_guard&lt;std::mutex&gt; lock(mtx_);
+        return queue_.empty();
+    }
+};
+
+void producer_consumer_demo() {
+    ThreadSafeQueue&lt;int&gt; q(5);
+
+    // Producer thread
+    std::thread producer([&amp;]() {
+        for (int i = 1; i &lt;= 10; ++i) {
+            q.push(i);
+            std::cout &lt;&lt; "Produced: " &lt;&lt; i &lt;&lt; "\n";
+        }
+    });
+
+    // Consumer thread
+    std::thread consumer([&amp;]() {
+        for (int i = 0; i &lt; 10; ++i) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            int value = q.pop();
+            std::cout &lt;&lt; "Consumed: " &lt;&lt; value &lt;&lt; "\n";
+        }
+    });
+
+    producer.join();
+    consumer.join();
+}
+</pre>
+
+<h2>notify_one vs notify_all</h2>
+
+<table>
+  <tr><th>Function</th><th>Behavior</th><th>Use Case</th></tr>
+  <tr><td><code>notify_one()</code></td><td>Wakes one waiting thread</td><td>Single producer, single consumer</td></tr>
+  <tr><td><code>notify_all()</code></td><td>Wakes all waiting threads</td><td>Multiple consumers, one-shot events</td></tr>
+</table>
+
+<pre>
+#include &lt;mutex&gt;
+#include &lt;condition_variable&gt;
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+
+std::mutex barrier_mtx;
+std::condition_variable barrier_cv;
+
+void barrier_demo() {
+    const int num_threads = 4;
+    std::vector&lt;std::thread&gt; threads;
+    int count = 0;
+
+    for (int i = 0; i &lt; num_threads; ++i) {
+        threads.emplace_back([i, &amp;count]() {
+            std::cout &lt;&lt; "Thread " &lt;&lt; i &lt;&lt; " doing work\n";
+
+            std::unique_lock&lt;std::mutex&gt; lock(barrier_mtx);
+            ++count;
+            if (count == num_threads) {
+                // Last thread to arrive: wake everyone
+                barrier_cv.notify_all();
+            } else {
+                // Wait for all threads to arrive
+                barrier_cv.wait(lock, [&amp;count] {
+                    return count == num_threads;
+                });
+            }
+            std::cout &lt;&lt; "Thread " &lt;&lt; i &lt;&lt; " passed barrier\n";
+        });
+    }
+
+    for (auto&amp; t : threads) t.join();
+}
+</pre>
+
+<h2>wait_for and wait_until</h2>
+
+<pre>
+#include &lt;mutex&gt;
+#include &lt;condition_variable&gt;
+#include &lt;iostream&gt;
+
+void timeout_demo() {
+    std::mutex mtx;
+    std::condition_variable cv;
+    bool data_ready = false;
+
+    std::thread consumer([&amp;]() {
+        std::unique_lock&lt;std::mutex&gt; lock(mtx);
+        // Wait for up to 500ms
+        bool result = cv.wait_for(lock, std::chrono::milliseconds(500),
+            [&amp;data_ready] { return data_ready; });
+
+        if (result) {
+            std::cout &lt;&lt; "Data received\n";
+        } else {
+            std::cout &lt;&lt; "Timeout: no data\n";
+        }
+    });
+
+    // No producer -- consumer times out
+    consumer.join();
+    // Output: Timeout: no data
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>Common mistakes:</strong> Forgetting to hold the mutex when modifying the shared state, forgetting to notify after state change, using <code>wait()</code> without a predicate (spurious wakeup vulnerability), and unlocking the mutex before calling notify (this is actually fine -- but the state must be modified while holding the lock).</p>
+</div>
+
+<p>Condition variables require <a href="mutex-locks.html">mutexes</a> and are used by <a href="std-thread.html">threads</a>. See <a href="async-futures.html">async/futures</a> for a higher-level alternative. Practice with <a href="../practice-questions/thread-pool-ran.html">thread pool</a> and <a href="../practice-questions/producer-consumer-pattern.html">producer-consumer pattern</a>.</p>
+
+<div class="nav"><a href="mutex-locks.html">&larr; Mutex / Locks</a><a href="async-futures.html">Async / Futures &rarr;</a></div>
+</body>
+</html>

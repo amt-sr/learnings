@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Virtual Functions &amp; vtable — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / Virtual Functions &amp; vtable</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>Virtual Functions &amp; vtable</h1>
+
+<p>Virtual functions are the mechanism behind runtime polymorphism in C++. When a function is declared <code>virtual</code> in a base class, derived classes can override it. Calls through a base class pointer or reference are dispatched to the correct derived class implementation at runtime using a <strong>vtable</strong> (virtual function table).</p>
+
+<h2>Basic Virtual Functions</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;memory&gt;
+#include &lt;vector&gt;
+#include &lt;string&gt;
+
+class Shape {
+public:
+    virtual double area() const = 0;          // pure virtual (see <a href="abstract-classes.html">abstract classes</a>)
+    virtual std::string name() const {        // virtual with default
+        return "Shape";
+    }
+    virtual ~Shape() = default;               // virtual destructor — critical!
+};
+
+class Circle : public Shape {
+    double radius_;
+public:
+    explicit Circle(double r) : radius_(r) {}
+
+    double area() const override {
+        return 3.14159265358979 * radius_ * radius_;
+    }
+
+    std::string name() const override {
+        return "Circle (r=" + std::to_string(radius_) + ")";
+    }
+};
+
+class Rectangle : public Shape {
+    double width_, height_;
+public:
+    Rectangle(double w, double h) : width_(w), height_(h) {}
+
+    double area() const override {
+        return width_ * height_;
+    }
+
+    std::string name() const override {
+        return "Rectangle (" + std::to_string(width_) + "x" + std::to_string(height_) + ")";
+    }
+};
+
+void virtual_demo() {
+    // Polymorphic collection via base class pointers
+    std::vector&lt;std::unique_ptr&lt;Shape&gt;&gt; shapes;
+    shapes.push_back(std::make_unique&lt;Circle&gt;(5.0));
+    shapes.push_back(std::make_unique&lt;Rectangle&gt;(3.0, 4.0));
+    shapes.push_back(std::make_unique&lt;Circle&gt;(2.0));
+
+    // Calls dispatched through vtable at runtime
+    for (const auto&amp; shape : shapes) {
+        std::cout &lt;&lt; shape-&gt;name() &lt;&lt; ": area = " &lt;&lt; shape-&gt;area() &lt;&lt; "\n";
+    }
+}
+// Output:
+//   Circle (r=5.000000): area = 78.5398
+//   Rectangle (3.000000x4.000000): area = 12
+//   Circle (r=2.000000): area = 12.5664
+</pre>
+
+<h2>How the vtable Works</h2>
+
+<p>Every class with virtual functions has an associated vtable — an array of function pointers. Each object of such a class contains a hidden pointer (<code>vptr</code>) to its class's vtable.</p>
+
+<pre>
+// Conceptual model of the vtable:
+
+// Shape's vtable:
+//   [0] -&gt; Shape::area      (pure virtual — typically __cxa_pure_virtual)
+//   [1] -&gt; Shape::name
+//   [2] -&gt; Shape::~Shape
+
+// Circle's vtable:
+//   [0] -&gt; Circle::area     (overridden)
+//   [1] -&gt; Circle::name     (overridden)
+//   [2] -&gt; Circle::~Circle  (overrides base destructor)
+
+// When you call shape-&gt;area():
+//   1. Compiler looks up vptr inside the Shape object
+//   2. Follows vptr to Circle's vtable (since the object is actually a Circle)
+//   3. Calls the function at slot [0] — Circle::area()
+</pre>
+
+<div class="callout">
+  <p><strong>vtable layout:</strong></p>
+  <ul>
+    <li>One vtable per class (not per object)</li>
+    <li>Each object has one <code>vptr</code> (typically 8 bytes on 64-bit systems)</li>
+    <li>The vptr is set by the constructor during object creation</li>
+    <li>Virtual call dispatch is typically one pointer dereference + one indirect call</li>
+  </ul>
+</div>
+
+<h2>Virtual Destructor</h2>
+
+<div class="callout red">
+  <p><strong>Critical rule:</strong> If a class has any virtual functions, its destructor must also be virtual. Failing to do so causes undefined behavior when deleting a derived class object through a base class pointer.</p>
+</div>
+
+<pre>
+class Base {
+public:
+    virtual void do_work() { std::cout &lt;&lt; "Base work\n"; }
+    virtual ~Base() { std::cout &lt;&lt; "~Base\n"; }
+};
+
+class Derived : public Base {
+    int* data_;
+public:
+    Derived() : data_(new int[100]) {}
+    ~Derived() override {
+        delete[] data_;
+        std::cout &lt;&lt; "~Derived (freed data_)\n";
+    }
+    void do_work() override { std::cout &lt;&lt; "Derived work\n"; }
+};
+
+void virtual_destructor_demo() {
+    Base* ptr = new Derived();
+    ptr-&gt;do_work();   // "Derived work" — correct dispatch
+    delete ptr;        // Correctly calls ~Derived() then ~Base()
+
+    // If ~Base() were NOT virtual:
+    //   delete ptr;  // Would only call ~Base() — memory leak!
+}
+</pre>
+
+<h2>Override Keyword</h2>
+
+<pre>
+class Animal {
+public:
+    virtual void speak() const { std::cout &lt;&lt; "...\n"; }
+    virtual void eat(const std::string&amp; food) { /* ... */ }
+    virtual void move() { /* ... */ }
+};
+
+class Dog : public Animal {
+public:
+    // override — compiler checks that a base class virtual function exists
+    void speak() const override { std::cout &lt;&lt; "Woof!\n"; }
+
+    // Error catching: override catches signature mismatches
+    // void speak() override;        // ERROR: missing const
+    // void eat(std::string food);   // ERROR: should be const ref
+    // void run() override;           // ERROR: no base class function 'run'
+
+    // final — prevents further overriding in derived classes
+    void move() override final {
+        std::cout &lt;&lt; "Dog running\n";
+    }
+};
+</pre>
+
+<div class="callout green">
+  <p><strong>Best practice:</strong> Always use <code>override</code> when overriding a virtual function. It catches bugs at compile time rather than creating a new overloaded function that silently fails to override the base version.</p>
+</div>
+
+<h2>Virtual Call Overhead</h2>
+
+<table>
+  <tr><th>Aspect</th><th>Non-virtual</th><th>Virtual</th></tr>
+  <tr><td>Call mechanism</td><td>Direct call / inlined</td><td>Indirect call through vtable</td></tr>
+  <tr><td>Per-object cost</td><td>None</td><td>8 bytes for vptr</td></tr>
+  <tr><td>Per-class cost</td><td>None</td><td>One vtable</td></tr>
+  <tr><td>Inlining</td><td>Likely</td><td>Unlikely (runtime dispatch)</td></tr>
+  <tr><td>Branch prediction</td><td>Trivially predictable</td><td>Depends on polymorphism pattern</td></tr>
+</table>
+
+<pre>
+// Non-virtual call: typically inlined, zero overhead
+shape.area();              // if area() is non-virtual, compiler knows exact function
+
+// Virtual call: indirect dispatch through vtable
+shape_ptr-&gt;area();         // runtime lookup, cannot inline
+</pre>
+
+<h2>When to Use Virtual Functions</h2>
+
+<div class="callout">
+  <p><strong>Use virtual functions when:</strong></p>
+  <ul>
+    <li>You need runtime polymorphism through base class pointers/references</li>
+    <li>You have a collection of related types with a common interface (<a href="abstract-classes.html">abstract classes</a>)</li>
+    <li>The set of types is open-ended (new derived classes can be added)</li>
+  </ul>
+  <p><strong>Avoid virtual functions when:</strong></p>
+  <ul>
+    <li>Performance is critical and polymorphism can be resolved at compile time</li>
+    <li>The type set is closed and known — consider <code>std::variant</code> with <code>std::visit</code> (<a href="optional-variant.html">optional and variant</a>)</li>
+    <li>You are working in a deeply embedded system where the vptr overhead matters</li>
+  </ul>
+</div>
+
+<p>Virtual functions are fundamental to OOP in C++. They are used heavily with <a href="smart-pointers.html">smart pointers</a> for polymorphic ownership and with <a href="abstract-classes.html">abstract classes</a> for defining interfaces. Next, we explore <a href="abstract-classes.html">abstract classes and pure virtual functions</a>.</p>
+
+<div class="nav"><a href="structured-bindings.html">&larr; Structured Bindings</a><a href="abstract-classes.html">Abstract Classes &rarr;</a></div>
+</body>
+</html>

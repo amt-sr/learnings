@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Modules — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / Modules</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>Modules (C++20)</h1>
+
+<p>Modules are a replacement for the traditional <code>#include</code> / header-file system. They provide better encapsulation, faster compilation (no redundant text inclusion), and eliminate macro pollution across translation units. Modules are one of the most significant build-system changes in C++ history.</p>
+
+<h2>Why Modules Replace Headers</h2>
+
+<table>
+<tr><th>Aspect</th><th>Headers (<code>#include</code>)</th><th>Modules (<code>import</code>)</th></tr>
+<tr><td>Compilation model</td><td>Text substitution per TU</td><td>Compiled once, reused</td></tr>
+<tr><td>Build time</td><td>O(n * includes) — quadratic</td><td>O(n) — linear</td></tr>
+<tr><td>Macro isolation</td><td>None — macros leak everywhere</td><td>Full isolation between modules</td></tr>
+<tr><td>Encapsulation</td><td>Only <code>#pragma once</code> or include guards</td><td>Explicit export declarations</td></tr>
+<tr><td>Preprocessor</td><td>Runs on every TU</td><td>Minimal preprocessor in module units</td></tr>
+<tr><td>Error isolation</td><td>Errors in headers affect all TUs</td><td>Errors are isolated to the module</td></tr>
+</table>
+
+<h2>Module Declaration Types</h2>
+
+<pre>
+// ====== File: math_utils.cppm (Module Interface Unit) ======
+export module math_utils;  // declares the module "math_utils"
+
+export int factorial(int n) {
+    if (n &lt;= 1) return 1;
+    return n * factorial(n - 1);
+}
+
+export double degrees_to_radians(double deg) {
+    return deg * 3.14159265358979323846 / 180.0;
+}
+
+// Not exported — internal to this module
+namespace detail {
+    constexpr double pi = 3.14159265358979323846;
+    double radians_to_degrees(double rad) {
+        return rad * 180.0 / pi;
+    }
+}
+
+export double pi_value() { return detail::pi; }
+</pre>
+
+<pre>
+// ====== File: main.cpp (Consumer) ======
+import math_utils;
+import std.core;  // or import &lt;iostream&gt; (compiler-dependent)
+
+int main() {
+    std::cout &lt;&lt; "5! = " &lt;&lt; factorial(5) &lt;&lt; "\n";
+    std::cout &lt;&lt; "90 deg = " &lt;&lt; degrees_to_radians(90.0) &lt;&lt; " rad\n";
+
+    // detail::radians_to_degrees(1.0);  // ERROR: not exported
+}
+</pre>
+
+<h2>Module Partitions</h2>
+
+<p>Large modules can be split into partitions for organizational purposes. Each partition is a separate translation unit that contributes to the same module.</p>
+
+<pre>
+// ====== File: protocol.cppm (Primary Module Interface) ======
+export module protocol;
+
+// Import partitions
+import :rrc;   // the RRC partition
+import :nas;   // the NAS partition
+import :ngap;  // the NGAP partition
+
+// Re-export everything from partitions
+export import :rrc;
+export import :nas;
+export import :ngap;
+</pre>
+
+<pre>
+// ====== File: protocol_rrc.cppm (Partition Module Interface) ======
+module protocol:rrc;  // partition "rrc" of module "protocol"
+
+export class RrcMessage {
+    int msg_type = 0;
+    std::uint8_t buffer[4096]{};
+public:
+    void set_type(int type) { msg_type = type; }
+    [[nodiscard]] int type() const { return msg_type; }
+    std::size_t serialize(std::uint8_t* dst) const;
+};
+</pre>
+
+<pre>
+// ====== File: protocol_nas.cppm (Partition Module Interface) ======
+module protocol:nas;
+
+export class NasMessage {
+    int procedure_code = 0;
+public:
+    void set_procedure(int code) { procedure_code = code; }
+    [[nodiscard]] int procedure() const { return procedure_code; }
+};
+</pre>
+
+<pre>
+// ====== File: protocol_ngap.cppm (Partition Module Interface) ======
+module protocol:ngap;
+
+export class NgapMessage {
+    int pdu_type = 0;
+public:
+    void set_pdu_type(int type) { pdu_type = type; }
+    [[nodiscard]] int pdu_type() const { return pdu_type; }
+};
+</pre>
+
+<pre>
+// ====== File: protocol_rrc_impl.cpp (Module Implementation Unit) ======
+module protocol:rrc;  // same partition, implementation file
+
+// This file is NOT exported. It provides definitions for
+// declarations in the partition's interface.
+
+std::size_t RrcMessage::serialize(std::uint8_t* dst) const {
+    std::memcpy(dst, buffer, sizeof(buffer));
+    return sizeof(buffer);
+}
+</pre>
+
+<h2>Module Implementation Units</h2>
+
+<p>Implementation units (<code>.cpp</code> files) belong to a module but do not export anything. They provide definitions for declarations made in the module interface:</p>
+
+<pre>
+// ====== File: math_utils_impl.cpp ======
+module math_utils;  // belongs to module, but exports nothing
+
+// This definition is visible inside the module but not to importers.
+// Only the exported declarations in math_utils.cppm are visible externally.
+</pre>
+
+<div class="callout warning">
+<p><strong>Partition naming:</strong> Module partition names start with <code>:</code>. The primary module interface must export-import all partitions. Implementation units use the module name without <code>export</code>.</p>
+</div>
+
+<h2>Importing Standard Library</h2>
+
+<p>How you import the standard library depends on your compiler and its level of C++23 module support:</p>
+
+<pre>
+// GCC 14+ with C++23 modules
+import std;
+
+// Clang with modules
+import std.core;
+import std.io;
+import std.algorithm;
+
+// MSVC (Visual Studio 2022+)
+import std.core;
+import std.filesystem;
+
+// Fallback: mixing headers and modules is allowed
+import math_utils;
+#include &lt;chrono&gt;  // still works
+</pre>
+
+<h2>Global Module Fragment</h2>
+
+<p>When a module needs to use macros or include traditional headers, use the global module fragment:</p>
+
+<pre>
+module;  // global module fragment starts here
+#include &lt;cstring&gt;  // still needed for strcpy, etc.
+#include &lt;cstdint&gt; // std::uint8_t etc.
+
+export module network_utils;  // module declaration ends global fragment
+
+export void copy_buffer(std::uint8_t* dst, const std::uint8_t* src, std::size_t n) {
+    std::memcpy(dst, src, n);  // available from global module fragment
+}
+</pre>
+
+<h2>Modules vs Headers — Decision Guide</h2>
+
+<div class="callout green">
+<p><strong>Use modules when:</strong> Starting a new project, refactoring a large legacy codebase, building library boundaries, or when build times are a critical concern. Modules give you encapsulation by default.</p>
+</div>
+
+<div class="callout red">
+<p><strong>Use headers when:</strong> Interfacing with C libraries, supporting older compilers, or working in a codebase that hasn't migrated. Headers remain fully supported and will not be removed.</p>
+</div>
+
+<div class="callout warning">
+<p><strong>Compiler support (2026):</strong> GCC 14+, Clang 18+, MSVC 19.38+ all support C++20 modules. C++23 adds <code>import std;</code> as a single import for the entire standard library. Check your toolchain before migrating.</p>
+</div>
+
+<h2>Telecom Relevance</h2>
+
+<p>In a 5G protocol stack, modules map naturally to protocol layers. Each layer (PHY, MAC, RLC, PDCP, RRC, NGAP) can be a module with clear export boundaries. Internal implementation details (e.g., buffer management, encoding routines) stay hidden. This prevents accidental coupling between layers — a common source of bugs in monolithic telecom codebases.</p>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="concepts.html">C++20 Concepts</a> (used in module interfaces), <a href="coroutines.html">Coroutines</a> (async patterns within modules), <a href="cmake.html">CMake</a> (building modules), <a href="../telecom-5g/5g-ran-overview.html">5G RAN Overview</a>.</p>
+</div>
+
+<div class="nav"><a href="coroutines.html">&larr; Coroutines</a><a href="memory-model-atomics.html">Memory Model &amp; Atomics &rarr;</a></div>
+</body>
+</html>

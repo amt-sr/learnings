@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stack vs Heap Memory — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; }
+  .breadcrumb a { color: #8b949e; }
+  .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; }
+  .callout.red { border-left-color: #f85149; }
+  .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; }
+  th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#1">1 Basics</a> / 1.3.1 Stack vs Heap Memory</div>
+<div class="meta"><span class="tag basic">BASIC</span></div>
+<h1>1.3.1 Stack vs Heap Memory</h1>
+
+<p>C++ gives you direct control over memory allocation. Understanding the difference between the <strong>stack</strong> and the <strong>heap</strong> is fundamental to writing correct, efficient, and bug-free C++ programs. Every variable, object, and data structure lives in one of these two regions.</p>
+
+<h2>Stack Memory</h2>
+
+<p>The stack is a region of memory that grows and shrinks automatically as functions are called and return. It follows a <strong>Last-In, First-Out (LIFO)</strong> discipline. Local variables, function parameters, and return addresses are all stored on the stack.</p>
+
+<ul>
+  <li><strong>Automatic management:</strong> Memory is allocated when a function is entered and deallocated when it returns. No manual cleanup needed.</li>
+  <li><strong>Fast:</strong> Allocation is just incrementing a stack pointer (a single CPU instruction).</li>
+  <li><strong>Contiguous:</strong> Stack memory is always contiguous, providing excellent cache locality.</li>
+  <li><strong>Limited size:</strong> Typically 1&ndash;8 MB depending on the OS and compiler settings.</li>
+  <li><strong>Deterministic lifetime:</strong> Variables are destroyed in reverse order of construction.</li>
+</ul>
+
+<pre>
+#include &lt;iostream&gt;
+
+void process() {
+    int local_var = 42;        // Allocated on stack when process() is called
+    int arr[1000];             // 4000 bytes on stack (sizeof(int) * 1000)
+    std::cout &lt;&lt; "local_var = " &lt;&lt; local_var &lt;&lt; std::endl;
+    // local_var and arr are deallocated when process() returns
+}
+
+int main() {
+    int a = 10;                // On main's stack frame
+    int b = 20;                // On main's stack frame
+    process();
+    // a and b still valid here
+    std::cout &lt;&lt; "a = " &lt;&lt; a &lt;&lt; ", b = " &lt;&lt; b &lt;&lt; std::endl;
+    return 0;
+}
+</pre>
+
+<h2>Heap Memory</h2>
+
+<p>The heap is a large pool of memory available for dynamic allocation at runtime. Unlike the stack, the heap is not automatically managed &mdash; you control when memory is allocated and freed.</p>
+
+<ul>
+  <li><strong>Dynamic allocation:</strong> Memory is allocated with <code>new</code> and freed with <code>delete</code> (or via <a href="smart-pointers.html">smart pointers</a>).</li>
+  <li><strong>Slower:</strong> The allocator must search for a free block of the right size and update bookkeeping data structures.</li>
+  <li><strong>Large:</strong> Limited only by available virtual memory (gigabytes on modern systems).</li>
+  <li><strong>Fragmentation:</strong> Repeated allocation and deallocation can fragment free memory over time.</li>
+  <li><strong>Manual lifetime:</strong> You must free memory explicitly, or use RAII/smart pointers.</li>
+</ul>
+
+<pre>
+#include &lt;iostream&gt;
+
+int main() {
+    // Allocate a single int on the heap
+    int* ptr = new int{42};
+    std::cout &lt;&lt; "*ptr = " &lt;&lt; *ptr &lt;&lt; std::endl;
+    delete ptr;               // Must free manually
+
+    // Allocate an array on the heap
+    int* arr = new int[1000];
+    for (int i = 0; i &lt; 1000; ++i) {
+        arr[i] = i * i;
+    }
+    delete[] arr;             // Use delete[] for arrays
+
+    return 0;
+}
+</pre>
+
+<div class="callout red">
+  <p><strong>Warning:</strong> Forgetting to <code>delete</code> heap memory causes a <strong>memory leak</strong>. The memory remains allocated but unreachable, gradually consuming all available RAM. In long-running applications (servers, daemons), memory leaks are critical bugs. See <a href="new-delete.html">new/delete</a> for proper techniques and <a href="smart-pointers.html">smart pointers</a> for automatic cleanup.</p>
+</div>
+
+<h2>Comparison Table</h2>
+
+<table>
+  <tr><th>Property</th><th>Stack</th><th>Heap</th></tr>
+  <tr><td><strong>Allocation speed</strong></td><td>Very fast (pointer increment)</td><td>Slower (search + bookkeeping)</td></tr>
+  <tr><td><strong>Deallocation speed</strong></td><td>Instant (function return)</td><td>Manual delete or smart pointer</td></tr>
+  <tr><td><strong>Size</strong></td><td>Limited (~1&ndash;8 MB)</td><td>Large (virtual memory limit)</td></tr>
+  <tr><td><strong>Lifetime</strong></td><td>Automatic (scope-based)</td><td>Manual (programmer-controlled)</td></tr>
+  <tr><td><strong>Fragmentation</strong></td><td>None</td><td>Possible (internal + external)</td></tr>
+  <tr><td><strong>Cache locality</strong></td><td>Excellent (contiguous)</td><td>Variable (depends on allocator)</td></tr>
+  <tr><td><strong>Thread safety</strong></td><td>Each thread has its own stack</td><td>Shared; requires synchronization</td></tr>
+  <tr><td><strong>Management</strong></td><td>Automatic (compiler)</td><td>Manual or RAII</td></tr>
+</table>
+
+<h2>Process Memory Layout</h2>
+
+<p>Both stack and heap occupy specific regions in a process's virtual address space. Understanding this layout clarifies why pointers are dangerous and why stack overflows occur.</p>
+
+<pre>
+Low Addresses (0x0)
++-------------------+
+|       Text        |  Program code (instructions)     -- read-only
+|      Segment      |
++-------------------+
+|    Initialized    |  Global/static variables with
+|      Data         |  explicit initial values          -- read-write
++-------------------+
+|       BSS         |  Uninitialized globals/statics   -- zero-initialized
+|     Segment       |
++-------------------+
+|                   |
+|       Heap        |  Grows upward toward stack       -- new/malloc
+|        |          |     (brk/sbrk or mmap)
+|        v          |
++-------------------+
+|                   |
+|      (free)       |
+|                   |
++-------------------+
+|        ^          |
+|        |          |
+|      Stack        |  Grows downward toward heap       -- local vars
+|                   |
++-------------------+
+High Addresses
+</pre>
+
+<div class="callout">
+  <p><strong>Key insight:</strong> The stack and heap grow toward each other. On most platforms the stack grows downward (from high to low addresses) and the heap grows upward (from low to high). When they meet, the program is out of memory. See <a href="memory-layout.html">Memory Layout</a> for a deeper look at each segment.</p>
+</div>
+
+<h2>Stack Overflow</h2>
+
+<p>A <strong>stack overflow</strong> occurs when the stack exceeds its allocated size. This typically happens due to:</p>
+
+<ul>
+  <li><strong>Infinite or deep recursion:</strong> Each recursive call adds a new stack frame. Too many nested calls exhaust the stack.</li>
+  <li><strong>Very large local variables:</strong> Allocating large arrays on the stack (e.g., <code>int arr[1000000];</code>) can immediately overflow.</li>
+  <li><strong>Excessive call depth:</strong> Deeply nested function calls without proper base cases.</li>
+</ul>
+
+<pre>
+#include &lt;iostream&gt;
+
+// Infinite recursion: causes stack overflow
+void infinite_recursion(int n) {
+    std::cout &lt;&lt; "n = " &lt;&lt; n &lt;&lt; std::endl;
+    infinite_recursion(n + 1);  // No base case!
+    // Run with: ulimit -s unlimited  (Unix) to increase stack
+}
+
+// Large stack allocation: can cause overflow
+void large_stack_array() {
+    // 10 million ints = ~40 MB -- may exceed stack size
+    int huge[10'000'000];
+    huge[0] = 1;  // May crash before reaching this line
+}
+
+int main() {
+    // Uncomment to test (will crash):
+    // infinite_recursion(0);
+    // large_stack_array();
+    std::cout &lt;&lt; "Program completed safely." &lt;&lt; std::endl;
+    return 0;
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>Note:</strong> On Linux, check stack size with <code>ulimit -s</code> (typically 8192 KB). Increase it with <code>ulimit -s unlimited</code>. On Windows, stack size is set in the linker settings. However, increasing stack size is a band-aid &mdash; fix the root cause (deep recursion or large locals).</p>
+</div>
+
+<h2>When to Use Stack vs Heap</h2>
+
+<div class="callout green">
+  <p><strong>Rule of thumb:</strong> Always prefer the stack. Only use the heap when you must. The stack is faster, safer, and automatic.</p>
+</div>
+
+<p><strong>Use the stack when:</strong></p>
+<ul>
+  <li>The object's lifetime is tied to a function scope.</li>
+  <li>The object is small (a few bytes to a few kilobytes).</li>
+  <li>You do not need to share ownership across functions.</li>
+  <li>Performance is critical and allocation overhead matters.</li>
+</ul>
+
+<p><strong>Use the heap when:</strong></p>
+<ul>
+  <li>The object is large (megabytes of data, large arrays, images).</li>
+  <li>The object must outlive the function that creates it.</li>
+  <li>The size is not known at compile time (dynamic arrays).</li>
+  <li>You need polymorphic behavior with <code>virtual</code> functions (objects stored via base pointers).</li>
+  <li>You need shared ownership across multiple parts of the program.</li>
+</ul>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;memory&gt;   // for smart pointers
+#include &lt;vector&gt;
+
+// Stack: appropriate for small, scope-bound objects
+void use_stack() {
+    int counter = 0;
+    double result = 3.14;
+    char buffer[256];
+    // All cleaned up automatically when function returns
+}
+
+// Heap: needed for large, dynamic, or shared data
+void use_heap() {
+    // Large array: heap
+    int* big_data = new int[1'000'000];
+    // ... use big_data ...
+    delete[] big_data;
+
+    // Smart pointer (recommended): heap with automatic cleanup
+    auto ptr = std::make_shared&lt;int&gt;(100);
+
+    // STL container (internally uses heap): stack variable, heap data
+    std::vector&lt;int&gt; nums;
+    nums.reserve(1'000'000);  // Allocates on heap internally
+}
+
+int main() {
+    use_stack();
+    use_heap();
+    std::cout &lt;&lt; "Done." &lt;&lt; std::endl;
+    return 0;
+}
+</pre>
+
+<h2>Common Pitfalls</h2>
+
+<pre>
+#include &lt;iostream&gt;
+
+int* dangling_pointer() {
+    int x = 42;       // x lives on the stack
+    return &amp;x;        // WARNING: returns address of a stack variable!
+    // x is destroyed here -- the pointer is now dangling
+}
+
+int* correct_version() {
+    int* p = new int{42};  // Allocated on heap
+    return p;              // Safe: caller must delete this
+}
+
+int main() {
+    int* bad = dangling_pointer();
+    std::cout &lt;&lt; *bad &lt;&lt; std::endl;  // Undefined behavior!
+
+    int* good = correct_version();
+    std::cout &lt;&lt; *good &lt;&lt; std::endl; // OK: prints 42
+    delete good;                  // Must free heap memory
+
+    return 0;
+}
+</pre>
+
+<div class="callout red">
+  <p><strong>Danger:</strong> Never return a pointer or reference to a local (stack) variable. The variable is destroyed when the function returns, leaving a <strong>dangling pointer</strong>. Accessing it is undefined behavior &mdash; it may appear to work sometimes but can crash unpredictably.</p>
+</div>
+
+<h2>Related Topics</h2>
+
+<ul>
+  <li><a href="pointers.html">Pointers</a> &mdash; Variables that hold memory addresses</li>
+  <li><a href="new-delete.html">new/delete</a> &mdash; C++ dynamic memory operators</li>
+  <li><a href="memory-layout.html">Memory Layout</a> &mdash; Detailed process memory segments</li>
+  <li><a href="../intermediate/smart-pointers.html">Smart Pointers</a> &mdash; Automatic heap memory management</li>
+  <li><a href="../advanced/placement-new-memory-pools.html">Placement New &amp; Memory Pools</a> &mdash; Custom allocation strategies</li>
+  <li><a href="../advanced/custom-allocators.html">Custom Allocators</a> &mdash; Writing your own memory allocators</li>
+</ul>
+
+<div class="nav">
+  <a href="arrays-strings.html">&larr; Arrays &amp; Strings</a>
+  <a href="new-delete.html">new/delete &rarr;</a>
+</div>
+</body>
+</html>

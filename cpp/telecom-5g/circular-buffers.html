@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Circular Buffers — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#4">4 Telecom &amp; 5G/4G Networking</a> / Telecom C++ Techniques / 4.4.7</div>
+<div class="meta"><span class="tag basic">Basic</span></div>
+<h1>Circular Buffers</h1>
+
+<p>Circular buffers (ring buffers) are the backbone of telecom data-path communication. They provide fixed-size, O(1) FIFO queues for passing packets between processing stages, threads, and layers. When combined with power-of-2 sizing, index wrapping becomes a simple bitwise AND, eliminating modulo division.</p>
+
+<h2>Why Power-of-2 Size + Masking?</h2>
+
+<pre>
+  // Modulo (any size):
+  index = (index + 1) % N;       // Division: ~30 cycles on x86
+
+  // Bitwise AND (power-of-2 size):
+  index = (index + 1) &amp; (N - 1); // AND: 1 cycle on x86
+
+  Example with N = 1024 (power of 2):
+  mask = 1023 = 0x3FF
+
+  write_idx = 1023; write_idx + 1 = 1024
+  1024 &amp; 0x3FF = 0       // Wraps to beginning (1 cycle!)
+
+  This is why DPDK rte_ring, all telecom ring buffers,
+  and lock-free queues use power-of-2 sizes.
+</pre>
+
+<div class="callout">
+  <p><strong>Design choice:</strong> Always size circular buffers to a power of 2 (64, 128, 256, 512, 1024, 2048, 4096, 8192). The single-cycle wrap-around is critical in data-path code that runs millions of times per second.</p>
+</div>
+
+<h2>Read/Write Pointer Management</h2>
+
+<pre>
+  SPSC (Single Producer, Single Consumer):
+  +---+---+---+---+---+---+---+---+
+  |   | D | D | D |   |   |   |   |  Capacity = 8
+  +---+---+---+---+---+---+---+---+
+        ^               ^
+        |               |
+     read_ptr       write_ptr
+
+  Empty:     read_ptr == write_ptr
+  Full:      (write_ptr + 1) % N == read_ptr
+  Count:     (write_ptr - read_ptr) % N
+  Available: N - 1 (one slot wasted for empty/full distinction)
+</pre>
+
+<h2>C++ Template Circular Buffer</h2>
+
+<pre>
+#include &lt;array&gt;
+#include &lt;cstddef&gt;
+#include &lt;atomic&gt;
+#include &lt;optional&gt;
+#include &lt;stdexcept&gt;
+
+// Lock-free SPSC circular buffer
+// N must be power of 2
+template&lt;typename T, size_t N&gt;
+class CircularBuffer {
+    static_assert((N &amp; (N - 1)) == 0, "N must be power of 2");
+
+public:
+    CircularBuffer() : buffer_{} {}
+
+    // Push item (producer only, single-threaded)
+    bool push(const T&amp; item) {
+        size_t write = write_idx_.load(std::memory_order_relaxed);
+        size_t next = (write + 1) &amp; MASK_;
+
+        if (next == read_idx_.load(std::memory_order_acquire)) {
+            return false;  // Buffer full
+        }
+
+        buffer_[write] = item;
+        write_idx_.store(next, std::memory_order_release);
+        return true;
+    }
+
+    // Pop item (consumer only, single-threaded)
+    std::optional&lt;T&gt; pop() {
+        size_t read = read_idx_.load(std::memory_order_relaxed);
+
+        if (read == write_idx_.load(std::memory_order_acquire)) {
+            return std::nullopt;  // Buffer empty
+        }
+
+        T item = buffer_[read];
+        read_idx_.store((read + 1) &amp; MASK_,
+                         std::memory_order_release);
+        return item;
+    }
+
+    // Peek without removing
+    std::optional&lt;T&gt; peek() const {
+        size_t read = read_idx_.load(std::memory_order_acquire);
+        if (read == write_idx_.load(std::memory_order_acquire)) {
+            return std::nullopt;
+        }
+        return buffer_[read];
+    }
+
+    [[nodiscard]] size_t size() const {
+        size_t w = write_idx_.load(std::memory_order_acquire);
+        size_t r = read_idx_.load(std::memory_order_acquire);
+        return (w - r) &amp; MASK_;
+    }
+
+    [[nodiscard]] bool empty() const {
+        return size() == 0;
+    }
+
+    [[nodiscard]] bool full() const {
+        return size() == (N - 1);
+    }
+
+    [[nodiscard]] size_t capacity() const { return N - 1; }
+
+    // Batch push (for burst processing)
+    size_t pushBatch(const T* items, size_t count) {
+        size_t written = 0;
+        for (size_t i = 0; i &lt; count; ++i) {
+            if (!push(items[i])) break;
+            written++;
+        }
+        return written;
+    }
+
+    // Batch pop
+    size_t popBatch(T* items, size_t max_count) {
+        size_t read = 0;
+        for (size_t i = 0; i &lt; max_count; ++i) {
+            auto item = pop();
+            if (!item.has_value()) break;
+            items[i] = std::move(*item);
+            read++;
+        }
+        return read;
+    }
+
+private:
+    static constexpr size_t MASK_ = N - 1;
+
+    alignas(64) std::array&lt;T, N&gt; buffer_;
+    alignas(64) std::atomic&lt;size_t&gt; write_idx_{0};
+    alignas(64) std::atomic&lt;size_t&gt; read_idx_{0};
+};
+
+// Usage: inter-layer communication
+// PHY -> MAC ring, MAC -> RLC ring, etc.
+void example() {
+    CircularBuffer&lt;uint8_t*, 4096&gt; mac_to_rlc;
+
+    // MAC thread (producer):
+    uint8_t* pdu = nullptr;  // from MAC processing
+    mac_to_rlc.push(pdu);
+
+    // RLC thread (consumer):
+    auto item = mac_to_rlc.pop();
+    if (item.has_value()) {
+        // Process RLC PDU
+    }
+}
+</pre>
+
+<h2>Overrun and Underrun</h2>
+
+<table>
+  <tr><th>Condition</th><th>Cause</th><th>Handling</th></tr>
+  <tr><td>Overrun (buffer full)</td><td>Producer faster than consumer</td><td>Drop oldest packets, backpressure, or grow buffer</td></tr>
+  <tr><td>Underrun (buffer empty)</td><td>Consumer faster than producer</td><td>Return empty/padding, sleep briefly</td></tr>
+</table>
+
+<div class="callout warning">
+  <p><strong>Telecom consideration:</strong> In a RAN data path, overrun means packet loss and underrun means wasted CPU cycles. Size the buffer to handle burst scenarios. A common approach: 2x the maximum burst size expected between producer and consumer. For 5G, MAC-to-PHY buffer is sized based on the TTI processing budget.</p>
+</div>
+
+<h2>Cross-References</h2>
+
+<ul>
+  <li><a href="../basics/arrays-strings.html">Arrays &amp; Strings</a> -- Underlying array storage.</li>
+  <li><a href="bit-level-operations.html">Bit-Level Operations</a> -- AND masking for power-of-2 wrapping.</li>
+  <li><a href="../intermediate/deque.html">std::deque</a> -- Standard library double-ended queue.</li>
+  <li><a href="packet-processing-dpdk.html">Packet Processing DPDK</a> -- rte_ring: production circular buffer.</li>
+  <li><a href="../practice-questions/circular-buffer-impl.html">Circular Buffer Practice</a> -- Build a multi-producer ring buffer.</li>
+</ul>
+
+<div class="nav"><a href="bit-level-operations.html">&larr; Bit-Level Operations</a><a href="thread-models-ran.html">Thread Models for RAN &rarr;</a></div>
+</body>
+</html>

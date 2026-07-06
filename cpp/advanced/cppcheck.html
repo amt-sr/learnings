@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>cppcheck — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / <a href="../index.html#3.6">3.6 Static Analysis &amp; Code Quality</a> / 3.6.2</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>cppcheck</h1>
+
+<p>cppcheck is a free, open-source static analysis tool for C and C++ code. Unlike compiler-based tools, it does not require compilation -- it performs its own parsing and analysis. This makes it fast and easy to integrate into any build system or CI pipeline.</p>
+
+<h2>Installing cppcheck</h2>
+
+<pre>
+# macOS (Homebrew)
+brew install cppcheck
+
+# Ubuntu/Debian
+sudo apt install cppcheck
+
+# Windows (vcpkg or download from github.com/danmar/cppcheck)
+vcpkg install cppcheck
+
+# Verify installation
+cppcheck --version
+# cppcheck 2.14.0
+</pre>
+
+<h2>Running Analysis</h2>
+
+<pre>
+# Basic scan on source directory
+cppcheck src/
+
+# Enable all checks with detailed output
+cppcheck --enable=all --std=c++17 --suppress=missingInclude src/
+
+# Check specific files
+cppcheck --enable=all src/main.cpp src/network.cpp
+
+# Generate XML report for CI integration
+cppcheck --enable=all --xml 2> report.xml src/
+
+# Parallel analysis (use all cores)
+cppcheck -j 8 --enable=all src/
+</pre>
+
+<h2>Sample Output</h2>
+
+<pre>
+$ cppcheck --enable=all src/parser.cpp
+Checking src/parser.cpp ...
+src/parser.cpp:45:10: error: Memory leak: buffer
+    buffer = new char[1024];
+         ^
+src/parser.cpp:52:18: warning: Null pointer dereference: ptr
+    if (ptr) { process(ptr); }  // OK
+    else { process(ptr->data); } // BUG: ptr is null here
+                 ^
+src/parser.cpp:78:22: style: Unused variable: packet_count
+    int packet_count = 0;  // never read
+                     ^
+src/parser.cpp:102:5: style: Function 'parse_header' is not declared
+    auto result = parse_header(raw_data);
+    ^
+</pre>
+
+<h2>Common Checks</h2>
+
+<table>
+<tr><th>Check Category</th><th>Example Finds</th><th>Severity</th></tr>
+<tr><td>Memory leaks</td><td>Allocated memory never freed, missing delete in destructor</td><td>Error</td></tr>
+<tr><td>Null pointer dereference</td><td>Dereferencing pointer without null check</td><td>Error</td></tr>
+<tr><td>Out-of-bounds access</td><td>Array index beyond bounds, buffer overflow</td><td>Error</td></tr>
+<tr><td>Uninitialized variables</td><td>Variable read before assignment</td><td>Warning</td></tr>
+<tr><td>Unused variables/functions</td><td>Dead code, unused return values</td><td>Style</td></tr>
+<tr><td>Resource management</td><td>File handles not closed, missing RAII</td><td>Warning</td></tr>
+<tr><td>Exception safety</td><td>Throw in destructor, catch by value</td><td>Warning</td></tr>
+</table>
+
+<h2>Suppression Files</h2>
+
+<p>Suppress false positives with inline comments or a suppression file:</p>
+
+<pre>
+// Inline suppression (single line)
+int* p = new int[10]; // cppcheck-suppress memoryLeak
+
+// File suppression (suppress for an entire file)
+// cppcheck-suppress-file unusedFunction
+
+// suppression.txt file format:
+# Suppress by file and line
+memleak:src/legacy.cpp:42
+
+# Suppress by file and check name
+unusedVariable:src/helpers.cpp
+
+# Suppress by check name globally
+missingInclude
+</pre>
+
+<pre>
+# Run with suppression file
+cppcheck --enable=all --suppressions-list=suppressions.txt src/
+</pre>
+
+<h2>CMake Integration</h2>
+
+<pre>
+# CMakeLists.txt -- add cppcheck as a custom target
+find_program(CPPCHECK cppcheck)
+
+if(CPPCHECK)
+    add_custom_target(
+        cppcheck
+        COMMAND ${CPPCHECK}
+            --enable=all
+            --suppress=missingInclude
+            --std=c++17
+            --language=c++
+            -j ${PARALLEL_JOBS}
+            ${PROJECT_SOURCE_DIR}/src
+        WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
+        COMMENT "Running cppcheck static analysis"
+    )
+endif()
+</pre>
+
+<h2>CI Pipeline Integration</h2>
+
+<pre>
+# GitHub Actions step
+- name: Run cppcheck
+  run: |
+    cppcheck --enable=all \
+      --suppress=missingInclude \
+      --std=c++17 \
+      --error-exitcode=1 \
+      --xml 2> cppcheck.xml \
+      src/
+
+- name: Upload cppcheck report
+  if: always()
+  uses: actions/upload-artifact@v4
+  with:
+    name: cppcheck-report
+    path: cppcheck.xml
+</pre>
+
+<div class="callout warning">
+<p><strong>Tip:</strong> Use <code>--error-exitcode=1</code> in CI so the build fails when errors are found. Use <code>--force</code> to check all configurations (all #ifdef branches) if you have platform-specific code.</p>
+</div>
+
+<div class="callout green">
+<p><strong>Best practice:</strong> Combine cppcheck with <a href="clang-tidy.html">clang-tidy</a> and <a href="clang-static-analyzer.html">Clang Static Analyzer</a> for comprehensive coverage. cppcheck excels at catching memory leaks that other tools miss. Add <a href="address-sanitizer-tools.html">sanitizers</a> for runtime verification.</p>
+</div>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="static-analysis-overview.html">Static Analysis Overview</a>, <a href="clang-tidy.html">clang-tidy</a>, <a href="clang-static-analyzer.html">Clang Static Analyzer</a>, <a href="cmake.html">CMake</a>, <a href="address-sanitizer-tools.html">AddressSanitizer &amp; Tools</a>.</p>
+</div>
+
+<div class="nav"><a href="static-analysis-overview.html">&larr; Static Analysis Overview</a><a href="clang-tidy.html">clang-tidy &rarr;</a></div>
+</body>
+</html>

@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>std::string — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; }
+  .breadcrumb a { color: #8b949e; }
+  .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; }
+  .callout.red { border-left-color: #f85149; }
+  .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; }
+  th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#1">1 Basics</a> / 1.5.4 std::string</div>
+<div class="meta"><span class="tag basic">BASIC</span></div>
+<h1>1.5.4 std::string</h1>
+
+<p><code>std::string</code> is the standard C++ class for text manipulation. It manages its own memory, handles resizing automatically, and provides a rich set of member functions for searching, modifying, and comparing strings. Unlike C-style character arrays, <code>std::string</code> is safe, convenient, and integrates seamlessly with the STL.</p>
+
+<h2>Construction and Initialization</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+int main() {
+    // Default: empty string
+    std::string s1;
+
+    // From C-style string literal
+    std::string s2 = "hello";
+
+    // From another string (copy)
+    std::string s3 = s2;
+
+    // Repeated characters
+    std::string s4(5, 'x');  // "xxxxx"
+
+    // From a substring
+    std::string s5 = "hello world";
+    std::string s6(s5, 6);           // "world" (from position 6)
+    std::string s7(s5, 0, 5);        // "hello" (5 chars from position 0)
+
+    // Move constructor (C++11)
+    std::string s8 = std::move(s7);  // s7 is now empty
+
+    std::cout &lt;&lt; "s2: " &lt;&lt; s2 &lt;&lt; std::endl;   // hello
+    std::cout &lt;&lt; "s4: " &lt;&lt; s4 &lt;&lt; std::endl;   // xxxxx
+    std::cout &lt;&lt; "s6: " &lt;&lt; s6 &lt;&lt; std::endl;   // world
+
+    return 0;
+}
+</pre>
+
+<h2>String Operations</h2>
+
+<table>
+  <tr><th>Operation</th><th>Description</th><th>Example</th></tr>
+  <tr><td><code>size() / length()</code></td><td>Number of characters</td><td><code>s.size()</code></td></tr>
+  <tr><td><code>empty()</code></td><td>True if string is empty</td><td><code>s.empty()</code></td></tr>
+  <tr><td><code>clear()</code></td><td>Remove all characters</td><td><code>s.clear()</code></td></tr>
+  <tr><td><code>at(i) / s[i]</code></td><td>Access character at index</td><td><code>s.at(0)</code></td></tr>
+  <tr><td><code>front() / back()</code></td><td>First / last character</td><td><code>s.front()</code></td></tr>
+  <tr><td><code>+=</code></td><td>Append to string</td><td><code>s += " world"</code></td></tr>
+  <tr><td><code>push_back(c)</code></td><td>Append single character</td><td><code>s.push_back('!')</code></td></tr>
+  <tr><td><code>append(str)</code></td><td>Append string</td><td><code>s.append("ing")</code></td></tr>
+</table>
+
+<h2>Concatenation</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+int main() {
+    std::string first = "Hello";
+    std::string second = "World";
+
+    // Using + operator
+    std::string combined = first + ", " + second + "!";
+    std::cout &lt;&lt; combined &lt;&lt; std::endl;  // Hello, World!
+
+    // Using +=
+    first += " C++";
+    std::cout &lt;&lt; first &lt;&lt; std::endl;  // Hello C++
+
+    // Mixing string and C-style literals works with +
+    std::string msg = std::string("Count: ") + std::to_string(42);
+    std::cout &lt;&lt; msg &lt;&lt; std::endl;  // Count: 42
+
+    // Building strings in a loop
+    std::string result;
+    for (int i = 0; i &lt; 5; ++i) {
+        result += std::to_string(i) + " ";
+    }
+    std::cout &lt;&lt; result &lt;&lt; std::endl;  // 0 1 2 3 4
+
+    return 0;
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>Note:</strong> You cannot concatenate two C-string literals with <code>+</code> (e.g., <code>"hello" + "world"</code> is pointer arithmetic, not concatenation). At least one operand must be a <code>std::string</code>. <code>std::string("hello") + " world"</code> works fine.</p>
+</div>
+
+<h2>Substring and Find</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+int main() {
+    std::string text = "Hello, World!";
+
+    // substr(pos, len): extract substring
+    std::string greeting = text.substr(0, 5);    // "Hello"
+    std::string world = text.substr(7);           // "World!" (from pos 7 to end)
+    std::cout &lt;&lt; greeting &lt;&lt; std::endl;           // Hello
+    std::cout &lt;&lt; world &lt;&lt; std::endl;               // World!
+
+    // find(): search for substring (returns position, or std::string::npos)
+    std::string sentence = "the cat sat on the mat";
+
+    size_t pos = sentence.find("cat");
+    if (pos != std::string::npos) {
+        std::cout &lt;&lt; "Found 'cat' at: " &lt;&lt; pos &lt;&lt; std::endl;  // 4
+    }
+
+    // rfind(): search from the end
+    size_t rpos = sentence.rfind("the");
+    std::cout &lt;&lt; "Last 'the' at: " &lt;&lt; rpos &lt;&lt; std::endl;  // 16
+
+    // find_first_of / find_last_of: find any character from a set
+    size_t digit = sentence.find_first_of("0123456789");
+    if (digit == std::string::npos) {
+        std::cout &lt;&lt; "No digits found" &lt;&lt; std::endl;
+    }
+
+    return 0;
+}
+</pre>
+
+<h2>String to Number and Back</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+#include &lt;cmath&gt;
+
+int main() {
+    // String to number
+    int i = std::stoi("42");
+    double d = std::stod("3.14159");
+    long l = std::stol("1234567890");
+
+    std::cout &lt;&lt; "stoi: " &lt;&lt; i &lt;&lt; std::endl;       // 42
+    std::cout &lt;&lt; "stod: " &lt;&lt; d &lt;&lt; std::endl;       // 3.14159
+    std::cout &lt;&lt; "stol: " &lt;&lt; l &lt;&lt; std::endl;       // 1234567890
+
+    // With base specification
+    int hex = std::stoi("0xFF", nullptr, 16);  // 255
+    int bin = std::stoi("1010", nullptr, 2);  // 10
+    std::cout &lt;&lt; "hex: " &lt;&lt; hex &lt;&lt; ", bin: " &lt;&lt; bin &lt;&lt; std::endl;
+
+    // Number to string
+    std::string s1 = std::to_string(42);         // "42"
+    std::string s2 = std::to_string(3.14159);   // "3.141590"
+    std::cout &lt;&lt; "to_string(int):   " &lt;&lt; s1 &lt;&lt; std::endl;
+    std::cout &lt;&lt; "to_string(double): " &lt;&lt; s2 &lt;&lt; std::endl;
+
+    // Handling parse errors
+    try {
+        int bad = std::stoi("not a number");
+    } catch (const std::invalid_argument&amp; e) {
+        std::cout &lt;&lt; "Parse error: " &lt;&lt; e.what() &lt;&lt; std::endl;
+    }
+
+    return 0;
+}
+</pre>
+
+<h2>Comparison with C-Style Strings</h2>
+
+<table>
+  <tr><th>Feature</th><th><code>std::string</code></th><th><code>char[]</code> / <code>char*</code></th></tr>
+  <tr><td><strong>Memory management</strong></td><td>Automatic (heap-managed)</td><td>Manual (fixed buffer size)</td></tr>
+  <tr><td><strong>Size tracking</strong></td><td>Built-in <code>.size()</code></td><td>Must use <code>strlen()</code></td></tr>
+  <tr><td><strong>Assignment</strong></td><td><code>s1 = s2;</code></td><td><code>strcpy(dst, src);</code></td></tr>
+  <tr><td><strong>Comparison</strong></td><td><code>s1 == s2</code></td><td><code>strcmp(a, b) == 0</code></td></tr>
+  <tr><td><strong>Concatenation</strong></td><td><code>s1 + s2</code></td><td><code>strcat(dst, src);</code></td></tr>
+  <tr><td><strong>Safety</strong></td><td>Bounds checking available</td><td>Buffer overflow risk</td></tr>
+  <tr><td><strong>Null terminator</strong></td><td>Internal (hidden)</td><td>Must manage manually</td></tr>
+  <tr><td><strong>STL integration</strong></td><td>Full</td><td>Limited</td></tr>
+</table>
+
+<div class="callout red">
+  <p><strong>Never use:</strong> <code>strcpy</code>, <code>strcat</code>, <code>gets</code>, <code>sprintf</code> &mdash; these C functions are unsafe and have no bounds checking. Buffer overflows in these functions are a major source of security vulnerabilities. Always prefer <code>std::string</code> and its member functions.</p>
+</div>
+
+<h2>String Modification</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+#include &lt;algorithm&gt;
+
+int main() {
+    std::string s = "Hello, World!";
+
+    // Replace
+    s.replace(7, 5, "C++");  // "Hello, C++!"
+    std::cout &lt;&lt; s &lt;&lt; std::endl;
+
+    // Erase
+    s.erase(5, 1);  // Remove comma: "Hello C++!"
+    std::cout &lt;&lt; s &lt;&lt; std::endl;
+
+    // Insert
+    s.insert(5, ",");  // "Hello, C++!"
+    std::cout &lt;&lt; s &lt;&lt; std::endl;
+
+    // Transform to upper/lower case
+    std::string upper = s;
+    std::transform(upper.begin(), upper.end(), upper.begin(), ::toupper);
+    std::cout &lt;&lt; upper &lt;&lt; std::endl;  // HELLO, C++!
+
+    return 0;
+}
+</pre>
+
+<h2>Reading Strings from Input</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+int main() {
+    // cin >> : reads one word (stops at whitespace)
+    std::string word;
+    std::cout &lt;&lt; "Enter a word: ";
+    std::cin &gt;&gt; word;
+    std::cout &lt;&lt; "You entered: " &lt;&lt; word &lt;&lt; std::endl;
+
+    // getline: reads entire line (including spaces)
+    std::cin.ignore();  // Clear leftover newline
+    std::string line;
+    std::cout &lt;&lt; "Enter a line: ";
+    std::getline(std::cin, line);
+    std::cout &lt;&lt; "You entered: " &lt;&lt; line &lt;&lt; std::endl;
+
+    return 0;
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Tip:</strong> After using <code>cin &gt;&gt;</code>, always call <code>cin.ignore()</code> before <code>getline()</code> to consume the leftover newline character. Without this, <code>getline()</code> will read an empty string immediately.</p>
+</div>
+
+<h2>Related Topics</h2>
+
+<ul>
+  <li><a href="arrays-strings.html">Arrays &amp; Strings</a> &mdash; C-style character arrays and string functions</li>
+  <li><a href="stl-overview.html">STL Overview</a> &mdash; Introduction to all STL components</li>
+  <li><a href="../intermediate/string-formatting.html">String Formatting</a> &mdash; Modern formatting with std::format (C++20)</li>
+  <li><a href="../intermediate/regular-expressions.html">Regular Expressions</a> &mdash; Pattern matching with std::regex</li>
+</ul>
+
+<div class="nav">
+  <a href="map-unordered-map.html">&larr; std::map &amp; std::unordered_map</a>
+  <a href="iterators-basics.html">Iterators Basics &rarr;</a>
+</div>
+</body>
+</html>

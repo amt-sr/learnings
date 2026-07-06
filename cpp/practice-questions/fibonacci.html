@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fibonacci Numbers — C++ Practice</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.easy { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  .question { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; }
+  .question h3 { color: #f0f6fc; margin-top: 0; }
+  .solution-toggle { cursor: pointer; user-select: none; }
+  .solution-toggle h3 { color: #3fb950; display: inline; }
+  .solution-content { display: none; margin-top: 1rem; }
+  .solution-content.visible { display: block; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+  .topics-covered { margin-bottom: 1rem; font-size: 0.85rem; color: #8b949e; }
+  .topics-covered a { color: #8b949e; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#5">5 Practice</a> / Easy Questions</div>
+<div class="meta"><span class="tag easy">Easy</span></div>
+<h1>Generate Fibonacci Numbers</h1>
+
+<div class="topics-covered">
+  <strong>Topics Covered:</strong>
+  <a href="../functions.html">Functions</a>,
+  <a href="../recursion.html">Recursion</a>,
+  <a href="../arrays.html">Arrays</a>,
+  <a href="../loops.html">Loops</a>
+</div>
+
+<div class="question">
+  <h3>Problem Statement</h3>
+  <p>Generate the first <code>N</code> Fibonacci numbers. The Fibonacci sequence is defined as:</p>
+  <ul>
+    <li><code>F(0) = 0</code></li>
+    <li><code>F(1) = 1</code></li>
+    <li><code>F(n) = F(n-1) + F(n-2)</code> for <code>n &gt;= 2</code></li>
+  </ul>
+  <p><strong>Examples:</strong></p>
+  <ul>
+    <li>N = 8: <code>0, 1, 1, 2, 3, 5, 8, 13</code></li>
+    <li>N = 1: <code>0</code></li>
+    <li>N = 2: <code>0, 1</code></li>
+  </ul>
+  <p>Provide both an <strong>iterative</strong> and a <strong>recursive</strong> solution. Compare their performance.</p>
+</div>
+
+<h2>Iterative Solution</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution1')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution1">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+
+std::vector&lt;long long&gt; fibonacciIterative(int n) {
+    if (n &lt;= 0) return {};
+    if (n == 1) return {0};
+
+    std::vector&lt;long long&gt; fib(n);
+    fib[0] = 0;
+    fib[1] = 1;
+
+    for (int i = 2; i &lt; n; ++i) {
+        fib[i] = fib[i - 1] + fib[i - 2];
+    }
+
+    return fib;
+}
+
+int main() {
+    int n = 10;
+    auto result = fibonacciIterative(n);
+
+    std::cout &lt;&lt; "First " &lt;&lt; n &lt;&lt; " Fibonacci numbers (iterative):\n";
+    for (auto val : result) {
+        std::cout &lt;&lt; val &lt;&lt; " ";
+    }
+    std::cout &lt;&lt; "\n";
+    // Output: 0 1 1 2 3 5 8 13 21 34
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li>We store the sequence in a <code>std::vector&lt;long long&gt;</code> to handle large values.</li>
+      <li>Edge cases: <code>n &lt;= 0</code> returns empty vector; <code>n == 1</code> returns just <code>{0}</code>.</li>
+      <li>Each new element is simply the sum of the two preceding elements.</li>
+      <li>We use <code>long long</code> because Fibonacci numbers grow exponentially and overflow <code>int</code> quickly (after F(46)).</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Recursive Solution</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution2')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution2">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+#include &lt;unordered_map&gt;
+
+// Naive recursive approach (exponential)
+long long fibNaive(int n) {
+    if (n &lt;= 0) return 0;
+    if (n == 1) return 1;
+    return fibNaive(n - 1) + fibNaive(n - 2);
+}
+
+// Recursive with memoization (top-down DP)
+long long fibMemo(int n, std::unordered_map&lt;int, long long&gt;&amp; cache) {
+    if (n &lt;= 0) return 0;
+    if (n == 1) return 1;
+    if (cache.count(n)) return cache[n];
+
+    cache[n] = fibMemo(n - 1, cache) + fibMemo(n - 2, cache);
+    return cache[n];
+}
+
+std::vector&lt;long long&gt; fibonacciRecursive(int n) {
+    std::unordered_map&lt;int, long long&gt; cache;
+    std::vector&lt;long long&gt; result;
+    for (int i = 0; i &lt; n; ++i) {
+        result.push_back(fibMemo(i, cache));
+    }
+    return result;
+}
+
+int main() {
+    int n = 10;
+
+    // Naive (only use for small n)
+    std::cout &lt;&lt; "fibNaive(10) = " &lt;&lt; fibNaive(10) &lt;&lt; "\n";  // 55
+
+    // Memoized recursive
+    auto result = fibonacciRecursive(n);
+    std::cout &lt;&lt; "First " &lt;&lt; n &lt;&lt; " Fibonacci numbers (recursive + memo):\n";
+    for (auto val : result) {
+        std::cout &lt;&lt; val &lt;&lt; " ";
+    }
+    std::cout &lt;&lt; "\n";
+    // Output: 0 1 1 2 3 5 8 13 21 34
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li>The <strong>naive recursive</strong> version is a direct translation of the mathematical definition. It recalculates the same subproblems many times &mdash; tree of recursive calls grows exponentially.</li>
+      <li>The <strong>memoized</strong> version caches results in an <code>unordered_map</code>, reducing the time complexity from exponential to linear.</li>
+      <li>When generating all first N numbers, the cache is shared across calls, so each <code>fibMemo(i)</code> is computed only once.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout green">
+  <p><strong>Complexity Comparison:</strong></p>
+  <table>
+    <tr><th>Approach</th><th>Time</th><th>Space</th><th>Notes</th></tr>
+    <tr><td>Iterative</td><td>O(n)</td><td>O(n)</td><td>Best for most use cases</td></tr>
+    <tr><td>Naive Recursive</td><td>O(2<sup>n</sup>)</td><td>O(n)</td><td>Stack depth; completely impractical for n &gt; 40</td></tr>
+    <tr><td>Memoized Recursive</td><td>O(n)</td><td>O(n)</td><td>Cache overhead; same complexity as iterative</td></tr>
+  </table>
+</div>
+
+<h2>Follow-up Questions</h2>
+
+<div class="question">
+  <h3>Variations to Try</h3>
+  <ol>
+    <li><strong>Space-optimized iterative:</strong> Use only two variables instead of a full vector. This reduces space to O(1) if you only need the Nth number.</li>
+    <li><strong>Generate up to a limit:</strong> Print all Fibonacci numbers less than a given value (e.g., less than 1,000,000).</li>
+    <li><strong>Matrix exponentiation:</strong> Use the matrix method to compute F(n) in O(log n) time. This is important for competitive programming.</li>
+    <li><strong>Return the Nth Fibonacci only:</strong> Write a function that returns just <code>F(n)</code> without storing the entire sequence.</li>
+  </ol>
+</div>
+
+<div class="callout">
+  <p><strong>Key Takeaways:</strong></p>
+  <ul>
+    <li>The naive recursive Fibonacci is a classic example of overlapping subproblems. It demonstrates why recursion alone is not always the best approach.</li>
+    <li>Memoization or bottom-up iteration (dynamic programming) eliminates redundant computation.</li>
+    <li>Fibonacci numbers grow roughly as <code>phi^n</code> (where phi is the golden ratio, ~1.618), so <code>long long</code> overflows at approximately n = 92.</li>
+    <li>In embedded systems (common in telecom), the iterative approach is preferred to avoid stack overflow and reduce memory usage.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="reverse-string.html">&larr; Reverse a String</a>
+  <a href="palindrome.html">Palindrome Check &rarr;</a>
+</div>
+<script>
+function toggleSolution(id) {
+  document.getElementById(id).classList.toggle('visible');
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Friend Functions — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / Friend Functions</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>Friend Functions</h1>
+
+<p>The <code>friend</code> keyword grants a non-member function or another class access to the private and protected members of the class that declares the friendship. Friend declarations are a controlled exception to encapsulation — they allow specific external functions to access internals without making those members public.</p>
+
+<h2>Basic friend Function</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+class BankAccount {
+    double balance_;
+    std::string owner_;
+public:
+    BankAccount(std::string owner, double initial)
+        : owner_(std::move(owner)), balance_(initial) {}
+
+    void deposit(double amount) { balance_ += amount; }
+    void withdraw(double amount) { if (amount &lt;= balance_) balance_ -= amount; }
+
+    // Grant friend access — audit function can see balance_
+    friend void audit(const BankAccount&amp; account);
+    friend bool transfer(BankAccount&amp; from, BankAccount&amp; to, double amount);
+
+    // Friend class — all methods of TransactionLog can access private members
+    friend class TransactionLog;
+};
+
+// Non-member function with access to private members
+void audit(const BankAccount&amp; account) {
+    std::cout &lt;&lt; "Audit: " &lt;&lt; account.owner_
+              &lt;&lt; " has balance $" &lt;&lt; account.balance_ &lt;&lt; "\n";
+}
+
+// Friend function operating on two objects
+bool transfer(BankAccount&amp; from, BankAccount&amp; to, double amount) {
+    if (amount &gt; from.balance_ || amount &lt;= 0) return false;
+    from.balance_ -= amount;
+    to.balance_ += amount;
+    std::cout &lt;&lt; "Transferred $" &lt;&lt; amount &lt;&lt; " from "
+              &lt;&lt; from.owner_ &lt;&lt; " to " &lt;&lt; to.owner_ &lt;&lt; "\n";
+    return true;
+}
+
+void friend_demo() {
+    BankAccount alice("Alice", 1000.0);
+    BankAccount bob("Bob", 500.0);
+
+    audit(alice);  // "Audit: Alice has balance $1000"
+
+    transfer(alice, bob, 200.0);  // Transferred $200
+
+    audit(alice);  // "Audit: Alice has balance $800"
+    audit(bob);    // "Audit: Bob has balance $700"
+}
+</pre>
+
+<h2>Friend for Operator Overloading</h2>
+
+<p>The most common legitimate use of <code>friend</code> is for overloading <code>&lt;&lt;</code> and <code>&gt;&gt;</code> stream operators.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+class Vector3D {
+    double x_, y_, z_;
+public:
+    Vector3D(double x, double y, double z) : x_(x), y_(y), z_(z) {}
+
+    // Friend declarations for stream operators
+    friend std::ostream&amp; operator&lt;&lt;(std::ostream&amp; os, const Vector3D&amp; v);
+    friend std::istream&amp; operator&gt;&gt;(std::istream&amp; is, Vector3D&amp; v);
+
+    // Friend for symmetric operators
+    friend Vector3D operator*(double scalar, const Vector3D&amp; v);
+
+    double dot(const Vector3D&amp; other) const {
+        return x_ * other.x_ + y_ * other.y_ + z_ * other.z_;
+    }
+};
+
+std::ostream&amp; operator&lt;&lt;(std::ostream&amp; os, const Vector3D&amp; v) {
+    os &lt;&lt; "(" &lt;&lt; v.x_ &lt;&lt; ", " &lt;&lt; v.y_ &lt;&lt; ", " &lt;&lt; v.z_ &lt;&lt; ")";
+    return os;
+}
+
+std::istream&amp; operator&gt;&gt;(std::istream&amp; is, Vector3D&amp; v) {
+    is &gt;&gt; v.x_ &gt;&gt; v.y_ &gt;&gt; v.z_;
+    return is;
+}
+
+// Friend allows scalar * vector (not possible as member because
+// the left operand is double, not Vector3D)
+Vector3D operator*(double scalar, const Vector3D&amp; v) {
+    return Vector3D(v.x_ * scalar, v.y_ * scalar, v.z_ * scalar);
+}
+
+void stream_operator_demo() {
+    Vector3D v(1.0, 2.0, 3.0);
+    std::cout &lt;&lt; "v = " &lt;&lt; v &lt;&lt; "\n";  // (1, 2, 3)
+
+    Vector3D scaled = 2.0 * v;  // (2, 4, 6) — left operand is double
+    std::cout &lt;&lt; "2.0 * v = " &lt;&lt; scaled &lt;&lt; "\n";
+
+    // v * 2.0 would need a member operator* — different from friend
+}
+</pre>
+
+<h2>Friend Class</h2>
+
+<pre>
+class TransactionLog {
+    struct Entry {
+        std::string from;
+        std::string to;
+        double amount;
+        std::string timestamp;
+    };
+    std::vector&lt;Entry&gt; entries_;
+public:
+    void log_transfer(const BankAccount&amp; from, const BankAccount&amp; to, double amount) {
+        // Can access from.balance_, to.owner_ because TransactionLog is a friend of BankAccount
+        entries_.push_back({from.owner_, to.owner_, amount, "now"});
+    }
+
+    void print_log() const {
+        for (const auto&amp; e : entries_) {
+            std::cout &lt;&lt; e.from &lt;&lt; " -&gt; " &lt;&lt; e.to
+                      &lt;&lt; ": $" &lt;&lt; e.amount &lt;&lt; " at " &lt;&lt; e.timestamp &lt;&lt; "\n";
+        }
+    }
+};
+</pre>
+
+<h2>Friend with Templates</h2>
+
+<pre>
+template&lt;typename T&gt;
+class Stack {
+    std::vector&lt;T&gt; data_;
+public:
+    void push(const T&amp; val) { data_.push_back(val); }
+    void pop() { data_.pop_back(); }
+    const T&amp; top() const { return data_.back(); }
+    bool empty() const { return data_.empty(); }
+
+    // Friend a specific template instantiation
+    friend bool operator==&lt;&gt;(const Stack&lt;T&gt;&amp; a, const Stack&lt;T&gt;&amp; b);
+
+    // Friend all template instantiations
+    template&lt;typename U&gt;
+    friend void print_stack(const Stack&lt;U&gt;&amp; s);
+};
+
+template&lt;typename T&gt;
+bool operator==(const Stack&lt;T&gt;&amp; a, const Stack&lt;T&gt;&amp; b) {
+    return a.data_ == b.data_;  // Can access private data_
+}
+
+template&lt;typename U&gt;
+void print_stack(const Stack&lt;U&gt;&amp; s) {
+    for (const auto&amp; item : s.data_)  // Can access private data_
+        std::cout &lt;&lt; item &lt;&lt; " ";
+    std::cout &lt;&lt; "\n";
+}
+</pre>
+
+<h2>Pros and Cons</h2>
+
+<div class="callout green">
+  <p><strong>Legitimate uses:</strong></p>
+  <ul>
+    <li>Overloading <code>&lt;&lt;</code> / <code>&gt;&gt;</code> stream operators</li>
+    <li>Symmetric binary operators where the left operand is not your class</li>
+    <li>Factory functions or utility functions that need deep access</li>
+    <li>Tightly coupled classes (e.g., Iterator and Container)</li>
+  </ul>
+</div>
+
+<div class="callout red">
+  <p><strong>Avoid when:</strong></p>
+  <ul>
+    <li>Public getters/setters would work just as well</li>
+    <li>Too many friends — indicates poor encapsulation design</li>
+    <li>Breaking the class invariant (friend functions bypass invariants)</li>
+  </ul>
+</div>
+
+<div class="callout warning">
+  <p><strong>Friendship is not inherited:</strong> If class <code>B</code> is a friend of <code>A</code>, a class <code>C</code> derived from <code>B</code> is <em>not</em> automatically a friend of <code>A</code>. Friendship is also not transitive: if <code>B</code> is a friend of <code>A</code> and <code>C</code> is a friend of <code>B</code>, <code>C</code> is not a friend of <code>A</code>.</p>
+</div>
+
+<p>Friend functions are commonly used with <a href="operator-overloading.html">operator overloading</a> for stream operators and symmetric operations. They complement the <a href="raii.html">RAII</a> pattern for resource management. Next, we explore <a href="raii.html">RAII</a>.</p>
+
+<div class="nav"><a href="operator-overloading.html">&larr; Operator Overloading</a><a href="raii.html">RAII &rarr;</a></div>
+</body>
+</html>

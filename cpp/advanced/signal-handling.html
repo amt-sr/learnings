@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Signal Handling — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / Networking &amp; IPC / 3.4.3</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>Signal Handling</h1>
+
+<p>Signals are software interrupts delivered to a process by the kernel or other processes. They provide an asynchronous notification mechanism for events like user interrupts (Ctrl+C), segmentation faults, child process termination, and timer expirations. Proper signal handling is critical for building robust server processes that can shut down gracefully.</p>
+
+<div class="callout">
+<p><strong>Prerequisites:</strong> <a href="socket-programming.html">Socket Programming</a>, <a href="shared-memory-ipc.html">Shared Memory IPC</a>, <a href="../intermediate/std-thread.html">std::thread</a>, <a href="../intermediate/exception-handling.html">Exception Handling</a>.</p>
+</div>
+
+<h2>Common Signals</h2>
+
+<table>
+<tr><th>Signal</th><th>Value</th><th>Source</th><th>Default Action</th></tr>
+<tr><td><code>SIGINT</code></td><td>2</td><td>Terminal interrupt (Ctrl+C)</td><td>Terminate</td></tr>
+<tr><td><code>SIGTERM</code></td><td>15</td><td><code>kill</code> command (graceful termination)</td><td>Terminate</td></tr>
+<tr><td><code>SIGKILL</code></td><td>9</td><td>Force kill — cannot be caught or ignored</td><td>Terminate</td></tr>
+<tr><td><code>SIGSEGV</code></td><td>11</td><td>Segmentation fault (invalid memory access)</td><td>Core dump + terminate</td></tr>
+<tr><td><code>SIGPIPE</code></td><td>13</td><td>Write to broken pipe/socket</td><td>Terminate</td></tr>
+<tr><td><code>SIGCHLD</code></td><td>17 (varies)</td><td>Child process status changed</td><td>Ignore</td></tr>
+<tr><td><code>SIGUSR1/SIGUSR2</code></td><td>10/12</td><td>User-defined signals</td><td>Terminate</td></tr>
+<tr><td><code>SIGHUP</code></td><td>1</td><td>Terminal disconnect</td><td>Terminate</td></tr>
+</table>
+
+<h2>sigaction — The Right Way to Handle Signals</h2>
+
+<p>Prefer <code>sigaction()</code> over the legacy <code>signal()</code> function. <code>sigaction</code> provides reliable behavior across platforms and more control over signal handling semantics:</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;csignal&gt;
+#include &lt;cstring&gt;
+#include &lt;atomic&gt;
+#include &lt;unistd.h&gt;
+
+// Global flag for graceful shutdown
+std::atomic&lt;bool&gt; g_running{true};
+
+// Signal handler — must be async-signal-safe
+void signal_handler(int signum) {
+    switch (signum) {
+        case SIGINT:
+            std::cout &lt;&lt; "\nReceived SIGINT, shutting down...\n";
+            g_running.store(false);
+            break;
+        case SIGTERM:
+            std::cout &lt;&lt; "Received SIGTERM, shutting down...\n";
+            g_running.store(false);
+            break;
+    }
+}
+
+// Register signal handlers using sigaction
+void setup_signal_handlers() {
+    struct sigaction sa{};
+    sa.sa_handler = signal_handler;
+    sigemptyset(&amp;sa.sa_mask);
+
+    // SA_RESTART: automatically restart interrupted system calls
+    sa.sa_flags = SA_RESTART;
+
+    if (sigaction(SIGINT, &amp;sa, nullptr) != 0) {
+        std::cerr &lt;&lt; "sigaction(SIGINT) failed: " &lt;&lt; strerror(errno) &lt;&lt; "\n";
+    }
+    if (sigaction(SIGTERM, &amp;sa, nullptr) != 0) {
+        std::cerr &lt;&lt; "sigaction(SIGTERM) failed: " &lt;&lt; strerror(errno) &lt;&lt; "\n";
+    }
+}
+
+int main() {
+    setup_signal_handlers();
+
+    std::cout &lt;&lt; "Server running (PID=" &lt;&lt; getpid() &lt;&lt; ")\n";
+    std::cout &lt;&lt; "Press Ctrl+C to stop\n";
+
+    while (g_running.load()) {
+        // Main event loop
+        // (socket operations, processing, etc.)
+        sleep(1);
+    }
+
+    std::cout &lt;&lt; "Cleaning up resources...\n";
+    // Close sockets, cleanup shared memory, flush buffers
+    std::cout &lt;&lt; "Shutdown complete\n";
+    return 0;
+}
+</pre>
+
+<h2>Ignoring SIGPIPE</h2>
+
+<p><code>SIGPIPE</code> is sent when a process writes to a socket whose remote end has closed the connection. The default action (terminate) is almost never what you want for a server. Instead, ignore it and handle the <code>EPIPE</code> errno from <code>write()</code>/<code>send()</code>:</p>
+
+<pre>
+#include &lt;csignal&gt;
+
+// Ignore SIGPIPE globally — check errno instead
+void ignore_sigpipe() {
+    signal(SIGPIPE, SIG_IGN);
+}
+
+// When writing to a socket:
+ssize_t n = send(sockfd, data, size, 0);
+if (n &lt; 0 &amp;&amp; errno == EPIPE) {
+    // Remote end disconnected — handle gracefully
+    std::cout &lt;&lt; "Connection closed by peer\n";
+}
+</pre>
+
+<h2>Signal-Safe Functions</h2>
+
+<p>Only async-signal-safe functions may be called from a signal handler. Calling non-safe functions (like <code>malloc</code>, <code>std::cout</code>, most libc functions) causes undefined behavior:</p>
+
+<table>
+<tr><th>Safe (async-signal-safe)</th><th>NOT Safe</th></tr>
+<tr><td><code>_exit()</code></td><td><code>exit()</code></td></tr>
+<tr><td><code>write()</code> (to FDs)</td><td><code>printf()</code>, <code>std::cout</code></td></tr>
+<tr><td><code>sigaction()</code>, <code>kill()</code></td><td><code>malloc()</code>, <code>new</code></td></tr>
+<tr><td><code>sigprocmask()</code></td><td><code>pthread_mutex_lock()</code></td></tr>
+<tr><td><code>atomic_flag</code> operations</td><td><code>std::cout</code>, <code>std::cerr</code></td></tr>
+</table>
+
+<div class="callout warning">
+<p><strong>Critical rule:</strong> Signal handlers are async-signal-safe context. Only write to variables of type <code>volatile std::sig_atomic_t</code> or <code>std::atomic</code> with specific guarantees. Use the <code>write()</code> system call for output in handlers, not <code>std::cout</code>. Set a flag in the handler, handle the signal in the main loop.</p>
+</div>
+
+<h2>Signals in Multithreaded Programs</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;csignal&gt;
+#include &lt;pthread.h&gt;
+
+std::atomic&lt;bool&gt; g_shutdown{false};
+
+void handler(int signum) {
+    g_shutdown.store(true);
+}
+
+void setup_signals() {
+    struct sigaction sa{};
+    sa.sa_handler = handler;
+    sigemptyset(&amp;sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+    sigaction(SIGTERM, &amp;sa, nullptr);
+}
+
+// Signal delivery in multi-threaded program:
+// - Kernel picks ANY thread in the process to deliver the signal
+// - You cannot predict which thread receives it
+// - Best practice: block all signals in worker threads,
+//   handle signals only in the main thread
+void block_signals_in_workers() {
+    sigset_t set;
+    sigfillset(&amp;set);
+    // Don't block SIGKILL/SIGSTOP (cannot be blocked)
+    sigdelset(&amp;set, SIGKILL);
+    sigdelset(&amp;set, SIGSTOP);
+    pthread_sigmask(SIG_BLOCK, &amp;set, nullptr);
+}
+
+int main() {
+    setup_signals();
+    block_signals_in_workers();
+
+    // Spawn worker threads...
+    // Worker threads will NOT receive signals
+
+    // Main thread handles signals via the flag
+    while (!g_shutdown.load()) {
+        // Event loop
+    }
+}
+</pre>
+
+<div class="callout green">
+<p><strong>Best practice:</strong> Block signals in all worker threads using <code>pthread_sigmask</code>. Designate a single thread (usually the main thread) to handle signals. Use <code>std::atomic&lt;bool&gt;</code> flags for communication between the signal handler and main loop. Never do complex work inside a signal handler.</p>
+</div>
+
+<div class="callout red">
+<p><strong>Deadlock risk:</strong> Never lock a mutex inside a signal handler. If the main program holds the same mutex when the signal arrives, the process deadlocks. This is one of the most common signal-related bugs in server software.</p>
+</div>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="socket-programming.html">Socket Programming</a> (SIGPIPE on broken connections), <a href="shared-memory-ipc.html">Shared Memory IPC</a> (cleanup on signals), <a href="../intermediate/std-thread.html">std::thread</a> (signal masking in threads), <a href="../intermediate/exception-handling.html">Exception Handling</a> (signals vs exceptions).</p>
+</div>
+
+<div class="nav"><a href="shared-memory-ipc.html">&larr; Shared Memory IPC</a><a href="memory-mapped-files.html">Memory-Mapped Files &rarr;</a></div>
+</body>
+</html>

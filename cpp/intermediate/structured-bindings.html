@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Structured Bindings — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / Structured Bindings</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>Structured Bindings</h1>
+
+<p>Structured bindings (C++17) let you decompose a compound value into its individual components using a single declaration. They provide a cleaner alternative to <code>std::tie</code> and manual member access, dramatically improving readability when working with <a href="tuple-pair.html">pairs and tuples</a>, maps, and custom types.</p>
+
+<h2>Syntax</h2>
+
+<pre>
+auto [name1, name2, ...] = expression;
+auto&amp; [name1, name2, ...] = expression;
+const auto&amp; [name1, name2, ...] = expression;
+</pre>
+
+<h2>With std::pair</h2>
+
+<pre>
+#include &lt;utility&gt;
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+void pair_demo() {
+    // Return multiple values using a pair
+    std::pair&lt;std::string, int&gt; get_user() {
+        return {"Alice", 30};
+    }
+
+    // Without structured bindings
+    auto result = get_user();
+    std::cout &lt;&lt; result.first &lt;&lt; " is " &lt;&lt; result.second &lt;&lt; "\n";
+
+    // With structured bindings — much cleaner
+    auto [name, age] = get_user();
+    std::cout &lt;&lt; name &lt;&lt; " is " &lt;&lt; age &lt;&lt; "\n";
+
+    // Works with references
+    std::pair&lt;int, int&gt; point = {10, 20};
+    auto&amp; [x, y] = point;
+    x = 15;  // modifies point.first
+    y = 25;  // modifies point.second
+    std::cout &lt;&lt; "point: (" &lt;&lt; point.first &lt;&lt; ", " &lt;&lt; point.second &lt;&lt; ")\n";
+}
+</pre>
+
+<h2>With std::tuple</h2>
+
+<pre>
+#include &lt;tuple&gt;
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+std::tuple&lt;std::string, int, double&gt; parse_record(const std::string&amp; line) {
+    // Imagine parsing "Alice,30,3.14"
+    return {"Alice", 30, 3.14};
+}
+
+void tuple_demo() {
+    // Before C++17: std::tie (verbose, requires default-constructible variables)
+    std::string name;
+    int age;
+    double score;
+    std::tie(name, age, score) = parse_record("Alice,30,3.14");
+
+    // C++17 structured bindings — clean and direct
+    auto [n, a, s] = parse_record("Bob,25,2.71");
+    std::cout &lt;&lt; n &lt;&lt; ", age " &lt;&lt; a &lt;&lt; ", score " &lt;&lt; s &lt;&lt; "\n";
+}
+</pre>
+
+<h2>With std::map — Iterating Key-Value Pairs</h2>
+
+<pre>
+#include &lt;map&gt;
+#include &lt;unordered_map&gt;
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+void map_demo() {
+    // This is the most common use case for structured bindings
+    std::map&lt;std::string, int&gt; scores = {
+        {"Alice", 95},
+        {"Bob", 87},
+        {"Carol", 92},
+        {"Dave", 78}
+    };
+
+    // Before C++17
+    for (const auto&amp; pair : scores) {
+        std::cout &lt;&lt; pair.first &lt;&lt; ": " &lt;&lt; pair.second &lt;&lt; "\n";
+    }
+
+    // C++17 structured bindings
+    for (const auto&amp; [name, score] : scores) {
+        std::cout &lt;&lt; name &lt;&lt; ": " &lt;&lt; score &lt;&lt; "\n";
+    }
+
+    // With unordered_map
+    std::unordered_map&lt;std::string, std::string&gt; capitals = {
+        {"France", "Paris"}, {"Germany", "Berlin"}, {"Italy", "Rome"}
+    };
+    for (const auto&amp; [country, capital] : capitals) {
+        std::cout &lt;&lt; "Capital of " &lt;&lt; country &lt;&lt; " is " &lt;&lt; capital &lt;&lt; "\n";
+    }
+}
+</pre>
+
+<h2>With Custom Types</h2>
+
+<p>Structured bindings work with any aggregate type (struct/class with all public members) or any type with <code>std::tuple_size</code>, <code>std::tuple_element</code>, and <code>get&lt;I&gt;()</code> specialized for it.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+// Method 1: Aggregate — public members, no constructors needed
+struct Point3D {
+    double x;
+    double y;
+    double z;
+};
+
+void aggregate_demo() {
+    Point3D p{1.0, 2.0, 3.0};
+
+    auto [x, y, z] = p;  // copies each member
+    std::cout &lt;&lt; "(" &lt;&lt; x &lt;&lt; ", " &lt;&lt; y &lt;&lt; ", " &lt;&lt; z &lt;&lt; ")\n";
+
+    auto&amp;&amp; [rx, ry, rz] = Point3D{4.0, 5.0, 6.0};  // rvalue reference
+    std::cout &lt;&lt; "(" &lt;&lt; rx &lt;&lt; ", " &lt;&lt; ry &lt;&lt; ", " &lt;&lt; rz &lt;&lt; ")\n";
+}
+
+// Method 2: Non-aggregate with tuple-like interface
+struct Employee {
+    std::string name;
+    int id;
+    double salary;
+
+    // Provide tuple-like interface
+    template&lt;size_t I&gt;
+    auto&amp; get() {
+        if constexpr (I == 0) return name;
+        else if constexpr (I == 1) return id;
+        else if constexpr (I == 2) return salary;
+    }
+};
+
+// Specialize std::tuple_size and std::tuple_element for Employee
+namespace std {
+    template&lt;&gt; struct tuple_size&lt;Employee&gt; : integral_constant&lt;size_t, 3&gt; {};
+    template&lt;&gt; struct tuple_element&lt;0, Employee&gt; { using type = std::string; };
+    template&lt;&gt; struct tuple_element&lt;1, Employee&gt; { using type = int; };
+    template&lt;&gt; struct tuple_element&lt;2, Employee&gt; { using type = double; };
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>Important:</strong> Structured bindings create <em>aliases</em>, not new variables. All the names refer to parts of the same underlying object. You cannot move individual components out of a structured binding to a const reference — the binding itself is a copy in that case.</p>
+</div>
+
+<h2>Practical Examples</h2>
+
+<h3>Returning Multiple Values with structured_error</h3>
+
+<pre>
+#include &lt;string&gt;
+#include &lt;optional&gt;
+#include &lt;iostream&gt;
+
+struct Result {
+    bool success;
+    std::string data;
+    std::string error;
+};
+
+Result fetch_data(int id) {
+    if (id &gt; 0)
+        return {true, "Data for " + std::to_string(id), ""};
+    return {false, "", "Invalid ID"};
+}
+
+void result_demo() {
+    // Clean destructuring
+    auto [ok, data, err] = fetch_data(42);
+    if (ok)
+        std::cout &lt;&lt; data &lt;&lt; "\n";
+    else
+        std::cout &lt;&lt; "Error: " &lt;&lt; err &lt;&lt; "\n";
+}
+</pre>
+
+<h3>Insert into map with structured bindings</h3>
+
+<pre>
+#include &lt;map&gt;
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+void map_insert_demo() {
+    std::map&lt;std::string, int&gt; word_count;
+
+    // insert() returns a pair&lt;iterator, bool&gt;
+    auto [it, inserted] = word_count.insert({"hello", 1});
+    if (!inserted) {
+        it-&gt;second++;  // word already existed
+    }
+
+    auto [it2, inserted2] = word_count.insert({"world", 1});
+    std::cout &lt;&lt; "inserted 'hello': " &lt;&lt; inserted &lt;&lt; "\n";  // true
+    std::cout &lt;&lt; "inserted 'world': " &lt;&lt; inserted2 &lt;&lt; "\n";  // true
+}
+</pre>
+
+<h3>Ignore Some Components</h3>
+
+<pre>
+#include &lt;tuple&gt;
+#include &lt;string&gt;
+
+// You can use [[maybe_unused]] or just name unused variables with _
+auto process() {
+    return std::make_tuple(std::string("result"), 42, 3.14);
+}
+
+void ignore_demo() {
+    // Only care about the string, ignore the rest
+    auto [result, /*count*/, /*ratio*/] = process();
+
+    // Common convention: use underscore-like names
+    auto [res, count_unused, ratio_unused] = process();
+}
+</pre>
+
+<p>Structured bindings pair beautifully with <a href="enum-class.html">enum class</a> for dispatching, with <a href="optional-variant.html">std::optional and std::variant</a> for visiting types, and with <a href="auto-decltype.html">auto</a> for deduced types. Next, we dive into <a href="virtual-functions-vtable.html">virtual functions and the vtable</a>.</p>
+
+<div class="nav"><a href="enum-class.html">&larr; enum class</a><a href="virtual-functions-vtable.html">Virtual Functions &amp; vtable &rarr;</a></div>
+</body>
+</html>

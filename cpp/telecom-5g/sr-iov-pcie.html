@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SR-IOV &amp; PCIe — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#4">4 Telecom &amp; 5G/4G Networking</a> / Telecom C++ Techniques / 4.4.9</div>
+<div class="meta"><span class="tag advanced">Advanced</span></div>
+<h1>SR-IOV &amp; PCIe</h1>
+
+<p>SR-IOV (Single Root I/O Virtualization) is a PCIe standard that allows a single physical NIC to present multiple virtual NICs to the host or virtual machines. In vRAN and O-RAN, SR-IOV enables multiple virtual DU functions or containerized RAN components to share physical NIC hardware with near-line-rate performance and isolation.</p>
+
+<h2>Physical Functions vs Virtual Functions</h2>
+
+<pre>
+  SR-IOV Architecture:
+
+  +------------------------------------------+
+  | Physical NIC (PCIe Device)              |
+  |  +------------------------------------+  |
+  |  | Physical Function (PF)               |  |
+  |  | - Full configuration control        |  |
+  |  | - Creates/manages VFs               |  |
+  |  | - Used by hypervisor/host            |  |
+  |  +------------------------------------+  |
+  |  +--------+ +--------+ +--------+      |  |
+  |  | VF 0   | | VF 1   | | VF 2   | ...  |  |
+  |  | (light)| | (light)| | (light)|      |  |
+  |  +--------+ +--------+ +--------+      |  |
+  +------------------------------------------+
+
+  PF = Physical Function (full NIC, manages VFs)
+  VF = Virtual Function (lightweight NIC, data only)
+  - Each VF has its own MAC, queues, MSI-X vectors
+  - VFs appear as independent PCIe devices
+  - Can be assigned to VMs or processes directly
+  - Typical: 1 PF + 64-256 VFs per NIC
+</pre>
+
+<h2>PCIe TLP (Transaction Layer Packet)</h2>
+
+<pre>
+  PCIe Data Path:
+  CPU/VM -> Memory Write TLP -> NIC -> DMA Read/Write TLP -> Memory
+
+  TLP types relevant to networking:
+  - Memory Write (MWr): CPU sends packet data to NIC
+  - Memory Read (MRead): NIC reads descriptor from host
+  - Completion (Cpl): NIC returns completed status
+
+  DMA (Direct Memory Access):
+  - NIC reads packet descriptors from host memory (doorbell)
+  - NIC writes received packets directly to host memory (rx buffers)
+  - Zero-copy: data stays in user-space buffers (with DPDK + hugepages)
+</pre>
+
+<h2>SR-IOV in Telecom (vRAN/O-RAN)</h2>
+
+<table>
+  <tr><th>Use Case</th><th>How SR-IOV Helps</th></tr>
+  <tr><td>vRAN DU virtualization</td><td>Multiple VFs assigned to different DU VMs/containers</td></tr>
+  <tr><td>O-RAN RU-DU split</td><td>VF for eCPRI fronthaul, PF for management</td></tr>
+  <tr><td>5G UPF</td><td>Multiple VF groups for different slices/networks</td></tr>
+  <tr><td>Multi-tenant RAN</td><td>Each tenant gets dedicated VFs with bandwidth limits</td></tr>
+</table>
+
+<div class="callout">
+  <p><strong>Key advantage:</strong> SR-IOV bypasses the hypervisor for data traffic. VMs/containers access VFs directly via DMA, eliminating the software switching overhead. This provides near bare-metal throughput while maintaining isolation between tenants.</p>
+</div>
+
+<h2>C++ SR-IOV Configuration</h2>
+
+<pre>
+#include &lt;fstream&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+#include &lt;iostream&gt;
+
+class SrIovConfigurator {
+public:
+    struct VfInfo {
+        int vf_id;
+        int pci_bus;
+        int pci_slot;
+        int pci_func;
+        std::string mac;
+        int vlan_id;
+        uint32_t max_tx_rate;  // Mbps (0 = unlimited)
+    };
+
+    // Enable SR-IOV and create VFs
+    bool enableVfs(const std::string&amp; pf_pci_addr, int num_vfs) {
+        // Enable SR-IOV via sysfs
+        std::ofstream sriov_numvfs(
+            "/sys/bus/pci/devices/" + pf_pci_addr
+            + "/sriov_numvfs");
+        if (!sriov_numvfs.is_open()) return false;
+
+        // Set number of VFs (must be 0 before changing)
+        sriov_numvfs &lt;&lt; "0";
+        sriov_numvfs.flush();
+        sriov_numvfs &lt;&lt; std::to_string(num_vfs);
+
+        return sriov_numvfs.good();
+    }
+
+    // Set VF MAC address
+    bool setVfMac(const std::string&amp; pf_pci_addr,
+                  int vf_id, const std::string&amp; mac) {
+        std::ofstream vf_mac(
+            "/sys/bus/pci/devices/" + pf_pci_addr
+            + "/virtfn" + std::to_string(vf_id) + "/mac");
+        if (!vf_mac.is_open()) return false;
+        vf_mac &lt;&lt; mac;
+        return vf_mac.good();
+    }
+
+    // Set VF max TX rate (in Mbps)
+    bool setVfRate(const std::string&amp; pf_pci_addr,
+                   int vf_id, uint32_t rate_mbps) {
+        std::ofstream vf_rate(
+            "/sys/bus/pci/devices/" + pf_pci_addr
+            + "/virtfn" + std::to_string(vf_id) + "/max_tx_rate");
+        if (!vf_rate.is_open()) return false;
+        vf_rate &lt;&lt; std::to_string(rate_mbps * 1000); // in Kbps
+        return vf_rate.good();
+    }
+
+    // Get VF PCI addresses
+    std::vector&lt;std::string&gt; getVfPciAddrs(
+            const std::string&amp; pf_pci_addr) {
+        std::vector&lt;std::string&gt; vfs;
+        std::ifstream virtfn_list(
+            "/sys/bus/pci/devices/" + pf_pci_addr
+            + "/virtfn?/pci_address");
+        std::string line;
+        while (std::getline(virtfn_list, line)) {
+            vfs.push_back(line);
+        }
+        return vfs;
+    }
+};
+
+// Example: Setup vRAN NIC with 4 VFs
+void setupVranNic() {
+    SrIovConfigurator cfg;
+    std::string pf_addr = "0000:81:00.0";
+
+    // Enable 4 VFs
+    cfg.enableVfs(pf_addr, 4);
+
+    // Configure each VF
+    for (int i = 0; i &lt; 4; ++i) {
+        cfg.setVfMac(pf_addr, i,
+            "02:00:00:00:00:" + std::to_string(i + 1));
+        cfg.setVfRate(pf_addr, i, 10000);  // 10 Gbps each
+    }
+
+    // Get VF PCI addresses for DPDK binding
+    auto vfs = cfg.getVfPciAddrs(pf_addr);
+    for (const auto&amp; vf : vfs) {
+        // Bind VFs to DPDK vfio-pci driver:
+        // dpdk-devbind.py --bind=vfio-pci &lt;vf_addr&gt;
+    }
+}
+</pre>
+
+<h2>DPDK with SR-IOV</h2>
+
+<div class="callout green">
+  <p><strong>DPDK + SR-IOV:</strong> Bind VFs to the <code>vfio-pci</code> driver (not <code>igb_uio</code> for security). DPDK uses each VF as an independent port with its own RX/TX queues. The PF manages overall NIC settings (link state, global statistics) while each VF processes packets independently.</p>
+</div>
+
+<pre>
+  DPDK SR-IOV setup:
+  # 1. Load vfio-pci driver
+  modprobe vfio-pci
+
+  # 2. Enable IOMMU (required for VFIO)
+  intel_iommu=on in kernel boot params
+
+  # 3. Bind VFs to vfio-pci
+  dpdk-devbind.py --bind=vfio-pci 0000:81:00.1  # VF 0
+  dpdk-devbind.py --bind=vfio-pci 0000:81:00.2  # VF 1
+
+  # 4. In DPDK app, VFs appear as regular ports:
+  # rte_eth_dev_configure(port=0, ...)  -> uses VF 0
+  # rte_eth_dev_configure(port=1, ...)  -> uses VF 1
+</pre>
+
+<h2>Cross-References</h2>
+
+<ul>
+  <li><a href="packet-processing-dpdk.html">Packet Processing DPDK</a> -- DPDK with SR-IOV VFs.</li>
+  <li><a href="../intermediate/socket-programming.html">Socket Programming</a> -- Kernel networking (non-SR-IOV path).</li>
+  <li><a href="oran-architecture.html">O-RAN Architecture</a> -- RU-DU split using eCPRI over Ethernet.</li>
+  <li><a href="../advanced/memory-mapped-files.html">Memory-Mapped Files</a> -- PCIe BAR mapping concepts.</li>
+</ul>
+
+<div class="nav"><a href="thread-models-ran.html">&larr; Thread Models for RAN</a><a href="signal-processing-basics.html">Signal Processing Basics &rarr;</a></div>
+</body>
+</html>

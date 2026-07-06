@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arrays &amp; Strings — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117;
+    color: #c9d1d9;
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; }
+  .breadcrumb a { color: #8b949e; }
+  .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; }
+  ul, ol { margin: 0.5rem 0 1rem 1.5rem; }
+  li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; }
+  .callout.red { border-left-color: #f85149; }
+  .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; }
+  th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; }
+  .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#1">1 Basics</a> / 1.1.6 Arrays &amp; Strings</div>
+<div class="meta"><span class="tag basic">BASIC</span></div>
+<h1>1.1.6 Arrays &amp; Strings</h1>
+
+<p>Arrays store collections of elements of the same type in contiguous memory. Strings are sequences of characters, and C++ provides both C-style strings and the modern <code>std::string</code> class.</p>
+
+<h2>C-Style Arrays</h2>
+
+<p>C-style arrays have a fixed size determined at compile time. They are simple but lack bounds checking and do not know their own length.</p>
+
+<pre>
+#include &lt;iostream&gt;
+
+int main() {
+    // Declaration and initialization
+    int nums[5] = {10, 20, 30, 40, 50};
+
+    // Partial initialization (remaining elements are zero-initialized)
+    int partial[5] = {1, 2};  // {1, 2, 0, 0, 0}
+
+    // Size deduction from initializer
+    int deduced[] = {100, 200, 300};  // int[3]
+
+    // Access elements (zero-indexed)
+    std::cout &lt;&lt; "First: " &lt;&lt; nums[0] &lt;&lt; std::endl;
+    std::cout &lt;&lt; "Last: " &lt;&lt; nums[4] &lt;&lt; std::endl;
+
+    // Determine number of elements
+    int count = sizeof(nums) / sizeof(nums[0]);
+    std::cout &lt;&lt; "Element count: " &lt;&lt; count &lt;&lt; std::endl;
+
+    // Iterate
+    for (int i = 0; i &lt; count; ++i) {
+        std::cout &lt;&lt; nums[i] &lt;&lt; " ";
+    }
+    std::cout &lt;&lt; std::endl;
+
+    return 0;
+}
+</pre>
+
+<div class="callout red">
+  <p><strong>Warning:</strong> C-style arrays do not perform bounds checking. Accessing <code>nums[100]</code> when the array has 5 elements is <strong>undefined behavior</strong> &mdash; it will read whatever happens to be in that memory location. This is a common source of crashes and security vulnerabilities. Prefer <code>std::array</code> or <code>std::vector</code> for safer alternatives.</p>
+</div>
+
+<h2>std::array (C++11)</h2>
+
+<p><code>std::array</code> is a fixed-size container from the standard library. It wraps a C-style array with safety features and utility methods.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;array&gt;
+
+int main() {
+    std::array&lt;int, 5&gt; arr = {10, 20, 30, 40, 50};
+
+    // Bounds-checked access (throws std::out_of_range)
+    std::cout &lt;&lt; arr.at(0) &lt;&lt; std::endl;
+
+    // Size is always available
+    std::cout &lt;&lt; "Size: " &lt;&lt; arr.size() &lt;&lt; std::endl;
+
+    // Range-based for loop
+    for (const auto&amp; elem : arr) {
+        std::cout &lt;&lt; elem &lt;&lt; " ";
+    }
+    std::cout &lt;&lt; std::endl;
+
+    // Fill with a value
+    std::array&lt;int, 5&gt; zeros{};
+    zeros.fill(42);
+    for (const auto&amp; elem : zeros) {
+        std::cout &lt;&lt; elem &lt;&lt; " ";
+    }
+    std::cout &lt;&lt; std::endl;
+
+    return 0;
+}
+</pre>
+
+<div class="callout green">
+  <p><strong>Tip:</strong> Prefer <code>std::array</code> over C-style arrays. It knows its own size, supports <code>.at()</code> for bounds checking, works with range-based for loops, and has the same performance as raw arrays (zero overhead).</p>
+</div>
+
+<h2>Multi-dimensional Arrays</h2>
+
+<pre>
+#include &lt;iostream&gt;
+
+int main() {
+    // 3x3 matrix (C-style)
+    int matrix[3][3] = {
+        {1, 2, 3},
+        {4, 5, 6},
+        {7, 8, 9}
+    };
+
+    // Access element at row 1, column 2
+    std::cout &lt;&lt; "matrix[1][2] = " &lt;&lt; matrix[1][2] &lt;&lt; std::endl;
+
+    // Iterate over all elements
+    for (int i = 0; i &lt; 3; ++i) {
+        for (int j = 0; j &lt; 3; ++j) {
+            std::cout &lt;&lt; matrix[i][j] &lt;&lt; "\t";
+        }
+        std::cout &lt;&lt; std::endl;
+    }
+
+    return 0;
+}
+</pre>
+
+<h2>C-Strings</h2>
+
+<p>C-style strings are null-terminated character arrays. They are inherited from C and still appear frequently in C++ code, especially in system programming and when interfacing with C libraries.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;cstring&gt;  // for strlen, strcpy, strcmp
+
+int main() {
+    // C-string: character array terminated by '\0'
+    char greeting[] = "Hello";  // Automatically null-terminated
+
+    // Manual C-string
+    char name[20];
+    std::strcpy(name, "Alice");
+
+    std::cout &lt;&lt; greeting &lt;&lt; std::endl;
+    std::cout &lt;&lt; "Length: " &lt;&lt; std::strlen(greeting) &lt;&lt; std::endl;
+
+    // Comparison (returns 0 if equal)
+    if (std::strcmp(greeting, "Hello") == 0) {
+        std::cout &lt;&lt; "Strings match" &lt;&lt; std::endl;
+    }
+
+    return 0;
+}
+</pre>
+
+<div class="callout warning">
+  <p><strong>Warning:</strong> <code>strcpy</code> and <code>strcat</code> do not check buffer sizes and can cause buffer overflows. Use <code>strncpy</code> and <code>strncat</code> with explicit size limits, or better yet, use <code>std::string</code> which handles memory management automatically.</p>
+</div>
+
+<h2>std::string</h2>
+
+<p><code>std::string</code> is the modern C++ string class. It manages memory automatically, provides safe operations, and integrates with the STL. See <a href="std-string.html">std::string Deep Dive</a> for comprehensive coverage.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+int main() {
+    // Construction
+    std::string s1 = "Hello";
+    std::string s2("World");
+    std::string s3(5, 'x');  // "xxxxx"
+
+    // Concatenation
+    std::string greeting = s1 + ", " + s2 + "!";
+    std::cout &lt;&lt; greeting &lt;&lt; std::endl;
+
+    // Length and capacity
+    std::cout &lt;&lt; "Length: " &lt;&lt; greeting.length() &lt;&lt; std::endl;
+    std::cout &lt;&lt; "Size: " &lt;&lt; greeting.size() &lt;&lt; std::endl;
+
+    // Substring
+    std::string sub = greeting.substr(0, 5);  // "Hello"
+    std::cout &lt;&lt; "Substring: " &lt;&lt; sub &lt;&lt; std::endl;
+
+    // Find
+    size_t pos = greeting.find("World");
+    if (pos != std::string::npos) {
+        std::cout &lt;&lt; "Found 'World' at position " &lt;&lt; pos &lt;&lt; std::endl;
+    }
+
+    // Comparison
+    std::cout &lt;&lt; (s1 == "Hello" ? "equal" : "not equal") &lt;&lt; std::endl;
+
+    // Iteration
+    for (char c : greeting) {
+        std::cout &lt;&lt; c;
+    }
+    std::cout &lt;&lt; std::endl;
+
+    return 0;
+}
+</pre>
+
+<h2>String Stream (Parsing)</h2>
+
+<p><code>std::stringstream</code> is useful for converting between strings and numeric types, and for parsing delimited data.</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;sstream&gt;
+#include &lt;string&gt;
+
+int main() {
+    // String to int
+    std::stringstream ss("42 3.14 hello");
+
+    int num;
+    double pi;
+    std::string word;
+
+    ss &gt;&gt; num &gt;&gt; pi &gt;&gt; word;
+
+    std::cout &lt;&lt; "num = " &lt;&lt; num &lt;&lt; std::endl;
+    std::cout &lt;&lt; "pi = " &lt;&lt; pi &lt;&lt; std::endl;
+    std::cout &lt;&lt; "word = " &lt;&lt; word &lt;&lt; std::endl;
+
+    // Number to string
+    std::ostringstream oss;
+    oss &lt;&lt; "Score: " &lt;&lt; 95 &lt;&lt; " / 100";
+    std::string result = oss.str();
+    std::cout &lt;&lt; result &lt;&lt; std::endl;
+
+    return 0;
+}
+</pre>
+
+<div class="callout">
+  <p><strong>Next Steps:</strong> Arrays and strings often interact closely with <a href="pointers.html">Pointers</a>, since array names decay to pointers and C-strings are pointer-based. Understanding pointer mechanics is essential for mastering C++ memory management.</p>
+</div>
+
+<div class="nav">
+  <a href="functions.html">&larr; Functions</a>
+  <a href="pointers.html">Pointers &rarr;</a>
+</div>
+</body>
+</html>

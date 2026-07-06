@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Optional / Variant — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / <a href="../index.html#2.4">2.4 STL Deep Dive</a> / 2.4.5 Optional / Variant</div>
+<div class="meta"><span class="tag medium">MEDIUM</span></div>
+<h1>Optional / Variant</h1>
+
+<p>C++17 introduced <code>std::optional</code> and <code>std::variant</code> as type-safe alternatives to "magic values" (like -1 or nullptr) and raw unions. Together with <code>std::any</code>, they form the modern C++ vocabulary for representing values that may or may not exist, or values that hold one of several types.</p>
+
+<h2>std::optional (C++17)</h2>
+
+<p><code>std::optional&lt;T&gt;</code> wraps a value that may or may not be present. It is the type-safe replacement for returning sentinel values or using output parameters.</p>
+
+<pre>
+#include &lt;optional&gt;
+#include &lt;string&gt;
+#include &lt;iostream&gt;
+#include &lt;fstream&gt;
+
+// Instead of returning -1 or throwing on "not found"
+std::optional&lt;std::string&gt; find_user(int id) {
+    if (id == 1) return "Alice";
+    if (id == 2) return "Bob";
+    return std::nullopt;  // "no value"
+}
+
+void optional_demo() {
+    auto user = find_user(1);
+    if (user.has_value()) {
+        std::cout &lt;&lt; "Found: " &lt;&lt; *user &lt;&lt; "\n";
+    }
+
+    // value_or: provide default if empty
+    auto name = find_user(99).value_or("Unknown");
+    std::cout &lt;&lt; name &lt;&lt; "\n";  // Unknown
+
+    // Using the arrow operator
+    std::optional&lt;std::string&gt; config = read_config("path");
+    if (config) {  // implicit bool conversion
+        std::cout &lt;&lt; config-&gt;length() &lt;&lt; "\n";
+    }
+}
+</pre>
+
+<div class="callout red">
+  <p><strong>Never dereference empty optional:</strong> Calling <code>*opt</code> or <code>opt.value()</code> on a disengaged optional is undefined behavior (for <code>*</code>) or throws <code>std::bad_optional_access</code> (for <code>.value()</code>). Always check with <code>has_value()</code>, <code>operator bool()</code>, or use <code>value_or()</code>.</p>
+</div>
+
+<h3>Common optional Patterns</h3>
+
+<pre>
+#include &lt;optional&gt;
+#include &lt;string_view&gt;
+#include &lt;charconv&gt;
+
+// Parse with error handling (no exceptions)
+std::optional&lt;int&gt; parse_int(std::string_view str) {
+    int value = 0;
+    auto [ptr, ec] = std::from_chars(str.begin(), str.end(), value);
+    if (ec == std::errc{} &amp;&amp; ptr == str.end())
+        return value;
+    return std::nullopt;
+}
+
+// Chaining optionals
+std::optional&lt;double&gt; safe_divide(int a, int b) {
+    if (b == 0) return std::nullopt;
+    return static_cast&lt;double&gt;(a) / b;
+}
+
+void optional_patterns() {
+    if (auto val = parse_int("42")) {
+        std::cout &lt;&lt; "Parsed: " &lt;&lt; *val &lt;&lt; "\n";
+    }
+
+    // Monadic-style chaining with and_then (C++23)
+    // auto result = parse_int("10")
+    //     .and_then([](int x) { return safe_divide(x, 3); });
+}
+</pre>
+
+<h2>std::variant (C++17)</h2>
+
+<p><code>std::variant&lt;Types...&gt;</code> holds exactly one value from a set of alternative types at any time. It is a type-safe replacement for C-style unions.</p>
+
+<pre>
+#include &lt;variant&gt;
+#include &lt;string&gt;
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+
+// A value that can be int, double, or string
+using Value = std::variant&lt;int, double, std::string&gt;;
+
+void variant_basics() {
+    Value v1 = 42;               // holds int
+    Value v2 = 3.14;             // holds double
+    Value v3 = std::string("hi"); // holds string (need explicit type)
+
+    // Check which type is held
+    std::cout &lt;&lt; "v1 index: " &lt;&lt; v1.index() &lt;&lt; "\n";  // 0 (int)
+    std::cout &lt;&lt; std::holds_alternative&lt;int&gt;(v1) &lt;&lt; "\n";  // true
+
+    // Access with std::get (throws if wrong type)
+    std::cout &lt;&lt; std::get&lt;int&gt;(v1) &lt;&lt; "\n";    // 42
+    // std::get&lt;double&gt;(v1);  // THROWS std::bad_variant_access
+
+    // Safe access with std::get_if (returns pointer or nullptr)
+    if (auto* p = std::get_if&lt;std::string&gt;(&amp;v3)) {
+        std::cout &lt;&lt; "String value: " &lt;&lt; *p &lt;&lt; "\n";
+    }
+}
+</pre>
+
+<h2>The Visit Pattern</h2>
+
+<p><code>std::visit</code> applies a callable to the active alternative. This is the primary way to process variant values.</p>
+
+<pre>
+#include &lt;variant&gt;
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+using Value = std::variant&lt;int, double, std::string&gt;
+
+// Visitor as overloaded function object
+struct PrintVisitor {
+    void operator()(int v) const { std::cout &lt;&lt; "int: " &lt;&lt; v &lt;&lt; "\n"; }
+    void operator()(double v) const { std::cout &lt;&lt; "double: " &lt;&lt; v &lt;&lt; "\n"; }
+    void operator()(const std::string&amp; v) const { std::cout &lt;&lt; "string: " &lt;&lt; v &lt;&lt; "\n"; }
+};
+
+// C++17: lambda-based overloaded (helper)
+template&lt;class... Fs&gt;
+struct overloaded : Fs... { using Fs::operator()...; };
+template&lt;class... Fs&gt;
+overloaded(Fs...) -&gt; overloaded&lt;Fs...&gt;;
+
+void visit_demo() {
+    Value v = 42;
+
+    // Using a visitor struct
+    std::visit(PrintVisitor{}, v);
+
+    // Using lambdas with overloaded (C++17)
+    std::visit(overloaded{
+        [](int v) { std::cout &lt;&lt; "INT: " &lt;&lt; v &lt;&lt; "\n"; },
+        [](double v) { std::cout &lt;&lt; "DBL: " &lt;&lt; v &lt;&lt; "\n"; },
+        [](const std::string&amp; v) { std::cout &lt;&lt; "STR: " &lt;&lt; v &lt;&lt; "\n"; }
+    }, v);
+}
+</pre>
+
+<h2>std::any</h2>
+
+<p><code>std::any</code> can hold any copyable type. It is less type-safe than variant but more flexible when the set of possible types is unknown at compile time.</p>
+
+<pre>
+#include &lt;any&gt;
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+void any_demo() {
+    std::any data = 42;
+    data = std::string("hello");
+
+    // Check type
+    if (data.type() == typeid(std::string)) {
+        std::cout &lt;&lt; "Holds string\n";
+    }
+
+    // Retrieve with any_cast (throws if wrong type)
+    try {
+        auto&amp; s = std::any_cast&lt;std::string&amp;&gt;(data);
+        std::cout &lt;&lt; s &lt;&lt; "\n";
+    } catch (const std::bad_any_cast&amp; e) {
+        std::cout &lt;&lt; "Wrong type: " &lt;&lt; e.what() &lt;&lt; "\n";
+    }
+
+    // Pointer version (returns nullptr on mismatch)
+    if (auto* p = std::any_cast&lt;int&gt;(&amp;data)) {
+        std::cout &lt;&lt; *p &lt;&lt; "\n";  // not reached
+    }
+}
+</pre>
+
+<h2>Comparison Table</h2>
+
+<table>
+  <tr><th>Feature</th><th>std::optional</th><th>std::variant</th><th>std::any</th></tr>
+  <tr><td>Purpose</th><td>May or may not have a value</td><td>One of several types</td><td>Any copyable type</td></tr>
+  <tr><td>Type safety</th><td>Full</td><td>Full</td><td>Runtime checked</td></tr>
+  <tr><td>Overhead</td><td>1 bool + padding</td><td>Size of largest + discriminant</td><td>Heap allocation possible</td></tr>
+  <tr><td>Access</th><td>*opt, value_or()</td><td>std::get, std::visit</td><td>std::any_cast</td></tr>
+  <tr><td>Header</th><td>&lt;optional&gt;</td><td>&lt;variant&gt;</td><td>&lt;any&gt;</td></tr>
+</table>
+
+<div class="callout green">
+  <p><strong>Best practice:</strong> Prefer <code>optional</code> for nullable values (instead of pointers or sentinel values). Prefer <code>variant</code> when a value can be one of several known types (instead of unions or inheritance hierarchies). Avoid <code>any</code> unless you truly need to store arbitrary types.</p>
+</div>
+
+<p>Optional and variant work well with <a href="tuple-pair.html">tuples</a> and <a href="structured-bindings.html">structured bindings</a>. For error handling via exceptions, see <a href="exception-handling.html">exception handling</a>.</p>
+
+<div class="nav"><a href="tuple-pair.html">&larr; Tuple / Pair</a><a href="stl-algorithms.html">STL Algorithms &rarr;</a></div>
+</body>
+</html>

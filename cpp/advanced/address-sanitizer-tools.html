@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AddressSanitizer &amp; Tools — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .source { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; }
+  .source-label { font-size: 0.8rem; font-weight: 600; color: #58a6ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / <a href="../index.html#3.6">3.6 Static Analysis &amp; Code Quality</a> / 3.6.5</div>
+<div class="meta"><span class="tag advanced">ADVANCED</span></div>
+<h1>AddressSanitizer &amp; Tools</h1>
+
+<p>Sanitizers are compiler instrumentation tools that detect runtime errors in C and C++ code. Unlike static analysis tools, sanitizers run as part of the compiled program and catch errors during actual execution. They add a 2x memory overhead and 2-5x CPU overhead but provide extremely precise error detection with near-zero false positive rates.</p>
+
+<h2>Compiler Flags Overview</h2>
+
+<table>
+<tr><th>Sanitizer</th><th>Flag (GCC/Clang)</th><th>Detects</th></tr>
+<tr><td>AddressSanitizer (ASan)</td><td><code>-fsanitize=address</code></td><td>Buffer overflows, use-after-free, memory leaks</td></tr>
+<tr><td>MemorySanitizer (MSan)</td><td><code>-fsanitize=memory</code></td><td>Use of uninitialized memory (Clang only)</td></tr>
+<tr><td>ThreadSanitizer (TSan)</td><td><code>-fsanitize=thread</code></td><td>Data races, lock order inversions</td></tr>
+<tr><td>UndefinedBehaviorSanitizer (UBSan)</td><td><code>-fsanitize=undefined</code></td><td>Undefined behavior (signed overflow, null deref)</td></tr>
+<tr><td>LeakSanitizer (LSan)</td><td><code>-fsanitize=leak</code></td><td>Memory leaks (included with ASan)</td></tr>
+</table>
+
+<div class="callout red">
+<p><strong>Important:</strong> Use only one memory-related sanitizer at a time (ASan, MSan, or TSan). They each instrument memory differently and conflict with each other. However, UBSan can be combined with any of them.</p>
+</div>
+
+<h2>Compiling with Sanitizers</h2>
+
+<pre>
+# GCC / Clang
+g++ -fsanitize=address -fno-omit-frame-pointer -g -O1 src/main.cpp -o main
+g++ -fsanitize=thread -g -O1 src/main.cpp -o main
+g++ -fsanitize=undefined -g -O1 src/main.cpp -o main
+
+# Combine UBSan with ASan
+g++ -fsanitize=address,undefined -g -O1 src/main.cpp -o main
+
+# CMake
+cmake -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g" \
+      -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address" -B build
+</pre>
+
+<h2>AddressSanitizer (ASan) -- Sample Output</h2>
+
+<pre>
+$ ./main
+=================================================================
+==12345==ERROR: AddressSanitizer: heap-use-after-free on address 0x602000000028
+    #0 0x55a1b2c3d4e5 in process(Packet* p) src/packet.cpp:42
+    #1 0x55a1b2c3d567 in handle_connection src/server.cpp:78
+    #2 0x55a1b2c3d678 in main src/main.cpp:15
+    #3 0x7f8a9b0c1d23 in __libc_start_main
+    #4 0x55a1b2c3d100 in _start
+
+READ of size 4 at 0x602000000028 thread T0
+    #0 0x55a1b2c3d4e5 in process(Packet* p) src/packet.cpp:42
+  Address 0x602000000028 is a dangling pointer
+  and is located 8 bytes inside a 64-byte region freed at:
+    #0 0x55a1b2c3d200 in operator delete(void*) (asan)
+    #1 0x55a1b2c3d400 in free_packet src/packet.cpp:35
+
+previously allocated at:
+    #0 0x55a1b2c3d100 in operator new(unsigned long) (asan)
+    #1 0x55a1b2c3d300 in create_packet src/packet.cpp:28
+SUMMARY: AddressSanitizer heap-use-after-free src/packet.cpp:42
+</pre>
+
+<h3>What ASan Detects</h3>
+
+<ul>
+<li>Heap buffer overflow (reading/writing past allocated size)</li>
+<li>Stack buffer overflow (writing past local array bounds)</li>
+<li>Use-after-free (accessing memory after it was freed)</li>
+<li>Use-after-return (accessing stack variables after function returns)</li>
+<li>Double-free (calling delete twice on the same pointer)</li>
+<li>Memory leaks (via integrated LeakSanitizer)</li>
+</ul>
+
+<h2>ThreadSanitizer (TSan)</h2>
+
+<p>TSan detects data races in multi-threaded programs. It instruments every memory access and uses a happens-before analysis to find unsynchronized concurrent access:</p>
+
+<pre>
+$ ./server
+==================
+WARNING: ThreadSanitizer: data race (pid=12345)
+  Write of size 8 at 0x7b4a00000000 by thread T1:
+    #0 increment_counter() src/stats.cpp:15
+    #1 void std::thread::_State_impl&lt;...&gt;::_M_run() (libstdc++)
+
+  Previous write of size 8 at 0x7b4a00000000 by main thread:
+    #0 reset_counters() src/stats.cpp:22
+    #1 main src/main.cpp:10
+
+  Location is global variable 'packet_count' declared at src/stats.cpp:5
+SUMMARY: ThreadSanitizer: data race src/stats.cpp:15
+</pre>
+
+<h2>UndefinedBehaviorSanitizer (UBSan)</h2>
+
+<p>UBSan catches undefined behavior at runtime, complementing <a href="undefined-behavior.html">static UB detection</a>:</p>
+
+<pre>
+$ ./main
+src/math.cpp:42:18: runtime error: signed integer overflow: 2147483647 + 1
+src/parser.cpp:78:5: runtime error: null pointer dereference
+src/convert.cpp:33:22: runtime error: shift exponent 64 is too large
+src/float.cpp:15:10: runtime error: division by zero
+src/cast.cpp:22:7: runtime error: member access within null pointer
+</pre>
+
+<h2>Interpreting Reports</h2>
+
+<table>
+<tr><th>Report Element</th><th>Meaning</th></tr>
+<tr><td><code>heap-use-after-free</code></td><td>Reading or writing memory that was already freed</td></tr>
+<tr><td><code>heap-buffer-overflow</code></td><td>Access beyond the bounds of a heap allocation</td></tr>
+<tr><td><code>stack-buffer-overflow</code></td><td>Access beyond the bounds of a stack variable</td></tr>
+<tr><td><code>data race</code></td><td>Two threads accessing same memory without synchronization</td></tr>
+<tr><td><code>signed integer overflow</code></td><td>Arithmetic operation overflows a signed integer</td></tr>
+<tr><td><code>null pointer dereference</code></td><td>Dereferencing a pointer that is null</td></tr>
+</table>
+
+<div class="callout green">
+<p><strong>Best practice:</strong> Run sanitizers in CI with <code>-fno-omit-frame-pointer -g -O1</code> for readable stack traces. Use <code>ASAN_OPTIONS=detect_leaks=1:halt_on_error=0</code> to control behavior. For debugging, use <a href="gdb-debugging.html">GDB</a> with sanitizers -- set breakpoints on <code>__asan_report_error</code> to catch issues live.</p>
+</div>
+
+<div class="callout">
+<p><strong>Related topics:</strong> <a href="static-analysis-overview.html">Static Analysis Overview</a>, <a href="cppcheck.html">cppcheck</a>, <a href="clang-tidy.html">clang-tidy</a>, <a href="undefined-behavior.html">Undefined Behavior</a>, <a href="valgrind.html">Valgrind</a>, <a href="gdb-debugging.html">GDB Debugging</a>.</p>
+</div>
+
+<div class="nav"><a href="clang-static-analyzer.html">&larr; Clang Static Analyzer</a><a href="undefined-behavior.html">Undefined Behavior &rarr;</a></div>
+</body>
+</html>
