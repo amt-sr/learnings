@@ -168,6 +168,80 @@ int main() {
 <p><strong>When to use Singleton:</strong> True singletons in a system are rare. Good candidates: a logging subsystem, a hardware device wrapper, or a configuration manager. Bad candidates: objects that happen to have one instance "for now" but may need multiple instances later. See <a href="../practice-questions/singleton-pattern.html">Singleton Pattern Practice</a> for exercises.</p>
 </div>
 
+<h2>Dependency Injection Alternative</h2>
+
+<p>The main problem with Singletons is hidden dependencies and testability. Dependency injection (DI) solves both by passing dependencies explicitly through constructors:</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;memory&gt;
+#include &lt;string&gt;
+
+// Interface for logging (allows test doubles)
+class ILogger {
+public:
+    virtual ~ILogger() = default;
+    virtual void log(const std::string&amp; msg) = 0;
+    virtual int count() const = 0;
+};
+
+// Production implementation
+class ConsoleLogger : public ILogger {
+    int log_count_ = 0;
+public:
+    void log(const std::string&amp; msg) override {
+        ++log_count_;
+        std::cout &lt;&lt; "[" &lt;&lt; log_count_ &lt;&lt; "] " &lt;&lt; msg &lt;&lt; "\n";
+    }
+    int count() const override { return log_count_; }
+};
+
+// Test double (mock)
+class MockLogger : public ILogger {
+    int log_count_ = 0;
+public:
+    void log(const std::string&amp;) override { ++log_count_; }
+    int count() const override { return log_count_; }
+    std::string last_message;
+};
+
+// Services receive logger via constructor injection
+class DatabaseService {
+    std::shared_ptr&lt;ILogger&gt; logger_;
+public:
+    explicit DatabaseService(std::shared_ptr&lt;ILogger&gt; logger)
+        : logger_(std::move(logger)) {}
+
+    void connect() {
+        logger_-&gt;log("Database connected");
+    }
+
+    void query(const std::string&amp; sql) {
+        logger_-&gt;log("Executing: " + sql);
+    }
+};
+
+int main() {
+    // Production: real logger
+    auto real_logger = std::make_shared&lt;ConsoleLogger&gt;();
+    DatabaseService db_prod(real_logger);
+    db_prod.connect();
+
+    // Testing: inject mock to verify behavior
+    auto mock_logger = std::make_shared&lt;MockLogger&gt;();
+    DatabaseService db_test(mock_logger);
+    db_test.connect();
+    db_test.query("SELECT * FROM users");
+
+    std::cout &lt;&lt; "Log count in test: " &lt;&lt; mock_logger-&gt;count() &lt;&lt; "\n";
+    // Output: Log count in test: 2
+}
+</pre>
+
+<div class="callout green">
+<p><strong>Key advantage:</strong> With DI, tests inject a <code>MockLogger</code> that records calls without side effects. With a Singleton, tests would share the same global logger instance and could not verify specific interactions.</p>
+</div>
+
 <div class="callout">
 <p><strong>Related topics:</strong> <a href="observer-pattern.html">Observer Pattern</a> (event systems often use singletons), <a href="factory-pattern.html">Factory Pattern</a> (alternative to singleton for creating objects), <a href="../intermediate/raii.html">RAII</a> (resource management for singletons), <a href="../intermediate/mutex-locks.html">Mutex &amp; Locks</a> (thread-safe initialization), <a href="../practice-questions/singleton-pattern.html">Singleton Practice</a>.</p>
 </div>

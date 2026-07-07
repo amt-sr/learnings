@@ -1,0 +1,1221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Advanced Practice: Build a Compile-Time Plugin System — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.easy { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  .question { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; }
+  .question h3 { color: #f0f6fc; margin-top: 0; }
+  .solution-toggle { cursor: pointer; user-select: none; }
+  .solution-toggle h3 { color: #3fb950; display: inline; }
+  .solution-content { display: none; margin-top: 1rem; }
+  .solution-content.visible { display: block; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+  .topics-covered { margin-bottom: 1rem; font-size: 0.85rem; color: #8b949e; }
+  .topics-covered a { color: #8b949e; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#3">3 Advanced</a> / Practice</div>
+<div class="meta"><span class="tag advanced">Advanced</span></div>
+<h1>Advanced Practice: Build a Compile-Time Plugin System</h1>
+
+<div class="topics-covered">
+  <strong>Topics Covered:</strong>
+  <a href="concepts.html">Concepts</a>,
+  <a href="ranges.html">Ranges</a>,
+  <a href="coroutines.html">Coroutines</a>,
+  <a href="memory-model-atomics.html">Memory Model &amp; Atomics</a>,
+  <a href="lock-free-programming.html">Lock-Free Programming</a>,
+  <a href="custom-allocators.html">Custom Allocators</a>,
+  <a href="crtp.html">CRTP</a>,
+  <a href="type-erasure.html">Type Erasure</a>,
+  <a href="singleton-pattern.html">Singleton Pattern</a>,
+  <a href="observer-pattern.html">Observer Pattern</a>,
+  <a href="factory-pattern.html">Factory Pattern</a>,
+  <a href="socket-programming.html">Socket Programming</a>
+</div>
+
+<div class="question">
+  <h3>Problem Statement</h3>
+  <p>Build a production-quality plugin system that demonstrates mastery of advanced C++ techniques. The system must support:</p>
+  <ul>
+    <li><strong>Concept-constrained plugins</strong> &mdash; enforce a plugin interface at compile time using C++20 concepts.</li>
+    <li><strong>Type-erased plugin storage</strong> &mdash; store heterogeneous plugin types in a single container without virtual inheritance overhead.</li>
+    <li><strong>Lock-free task dispatch</strong> &mdash; a Michael-Scott style lock-free queue for submitting tasks to plugins concurrently.</li>
+    <li><strong>CRTP-based lifecycle mixin</strong> &mdash; add logging, timing, and reference counting to every plugin at compile time with zero virtual overhead.</li>
+    <li><strong>Factory-based plugin loading</strong> &mdash; abstract factory for dynamic loading from shared libraries or static registration.</li>
+    <li><strong>Network notification</strong> &mdash; send UDP notifications to a monitoring endpoint when a plugin completes a task.</li>
+    <li><strong>Signal-safe shutdown</strong> &mdash; graceful teardown via POSIX signal handling.</li>
+  </ul>
+  <p>This exercise ties together concepts, type erasure, atomics, CRTP, design patterns, and socket programming into one cohesive system.</p>
+</div>
+
+<div class="callout warning">
+  <p><strong>Prerequisites:</strong> This is a capstone exercise. You should be comfortable with C++20 concepts, <code>std::atomic</code> with memory ordering, CRTP, <code>std::any</code> / type erasure, the Factory and Observer patterns, and basic BSD socket programming before attempting.</p>
+</div>
+
+<h2>1. Define the Plugin Concept</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution1')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution1">
+    <pre>
+#include &lt;concepts&gt;
+#include &lt;string_view&gt;
+
+// C++20 concept that constrains what qualifies as a Plugin.
+// Any type satisfying this concept can be registered with the PluginManager.
+template&lt;typename T&gt;
+concept Plugin = requires(T t, const T ct) {
+    // Must have a name() returning a string-like value
+    { t.name() } -&gt; std::convertible_to&lt;std::string_view&gt;;
+    // Must have a version() returning a string-like value
+    { t.version() } -&gt; std::convertible_to&lt;std::string_view&gt;;
+    // Must have an execute() method accepting a string argument
+    { t.execute(std::string{}) } -&gt; std::convertible_to&lt;std::string&gt;;
+    // Must have lifecycle hooks: on_load() and on_unload()
+    { t.on_load() } -&gt; std::same_as&lt;void&gt;;
+    { t.on_unload() } -&gt; std::same_as&lt;void&gt;;
+};
+
+// Example plugin satisfying the concept
+struct GreeterPlugin {
+    std::string name() { return "Greeter"; }
+    std::string version() { return "1.0.0"; }
+
+    std::string execute(const std::string&amp; task) {
+        return "Hello, " + task + "!";
+    }
+
+    void on_load() {
+        std::cout &lt;&lt; "[GreeterPlugin] loaded\n";
+    }
+
+    void on_unload() {
+        std::cout &lt;&lt; "[GreeterPlugin] unloaded\n";
+    }
+};
+
+// Compile-time check
+static_assert(Plugin&lt;GreeterPlugin&gt;, "GreeterPlugin must satisfy Plugin concept");
+
+// This will NOT compile (demonstrates concept rejection):
+// struct BadPlugin {};
+// static_assert(Plugin&lt;BadPlugin&gt;, "");
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li>The <code>Plugin</code> concept uses <code>requires</code> expressions to specify five required methods: <code>name()</code>, <code>version()</code>, <code>execute()</code>, <code>on_load()</code>, and <code>on_unload()</code>.</li>
+      <li>Return type constraints use <code>std::convertible_to</code> for flexibility (accepts <code>std::string</code>, <code>std::string_view</code>, <code>const char*</code>) and <code>std::same_as</code> for exact matches (<code>void</code> for lifecycle hooks).</li>
+      <li>The <code>static_assert</code> verifies the plugin at compile time. If a type does not satisfy the concept, the compiler produces a clear error listing which requirements are missing.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>2. Implement the PluginManager with Type Erasure</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution2')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution2">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+#include &lt;unordered_map&gt;
+#include &lt;memory&gt;
+#include &lt;functional&gt;
+#include &lt;mutex&gt;
+#include &lt;stdexcept&gt;
+#include "concepts_check.h"   // assumes Plugin concept is defined here
+
+// Type-erased wrapper: stores any Plugin-constrained type behind
+// a uniform interface without virtual inheritance on the plugin itself.
+class TypeErasedPlugin {
+public:
+    template&lt;Plugin T&gt;
+    explicit TypeErasedPlugin(T plugin)
+        : name_fn_([p = std::move(plugin)]() mutable { return p.name(); })
+        , version_fn_([p = std::move(plugin)]() mutable { return p.version(); })
+        , execute_fn_([p = std::move(plugin)](std::string task) mutable {
+              return p.execute(std::move(task));
+          })
+        , on_load_fn_([p = std::move(plugin)]() mutable { p.on_load(); })
+        , on_unload_fn_([p = std::move(plugin)]() mutable { p.on_unload(); })
+    {
+        // Note: in production, use a single captured object (e.g. shared_ptr)
+        // to avoid issues with multiple moves above. Simplified here for clarity.
+    }
+
+    std::string name()              { return name_fn_(); }
+    std::string version()           { return version_fn_(); }
+    std::string execute(std::string t) { return execute_fn_(std::move(t)); }
+    void on_load()                  { on_load_fn_(); }
+    void on_unload()                { on_unload_fn_(); }
+
+private:
+    std::function&lt;std::string()&gt;               name_fn_;
+    std::function&lt;std::string()&gt;               version_fn_;
+    std::function&lt;std::string(std::string)&gt;      execute_fn_;
+    std::function&lt;void()&gt;                     on_load_fn_;
+    std::function&lt;void()&gt;                     on_unload_fn_;
+};
+
+// PluginManager: thread-safe registry of type-erased plugins
+class PluginManager {
+public:
+    template&lt;Plugin T&gt;
+    bool register_plugin(T plugin) {
+        std::string plugin_name = plugin.name();
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        if (plugins_.contains(plugin_name)) {
+            return false;  // already registered
+        }
+        plugins_.emplace(plugin_name, std::make_unique&lt;TypeErasedPlugin&gt;(std::move(plugin)));
+        plugins_[plugin_name]-&gt;on_load();
+        return true;
+    }
+
+    bool unregister_plugin(const std::string&amp; name) {
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        auto it = plugins_.find(name);
+        if (it == plugins_.end()) return false;
+        it-&gt;second-&gt;on_unload();
+        plugins_.erase(it);
+        return true;
+    }
+
+    TypeErasedPlugin* lookup(const std::string&amp; name) {
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        auto it = plugins_.find(name);
+        return (it != plugins_.end()) ? it-&gt;second.get() : nullptr;
+    }
+
+    // Execute a task on a named plugin
+    std::string dispatch(const std::string&amp; plugin_name, const std::string&amp; task) {
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        auto it = plugins_.find(plugin_name);
+        if (it == plugins_.end()) {
+            throw std::runtime_error("Plugin not found: " + plugin_name);
+        }
+        return it-&gt;second-&gt;execute(task);
+    }
+
+    // List all registered plugin names
+    std::vector&lt;std::string&gt; list_plugins() const {
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        std::vector&lt;std::string&gt; names;
+        names.reserve(plugins_.size());
+        for (const auto&amp; [name, _] : plugins_) {
+            names.push_back(name);
+        }
+        return names;
+    }
+
+private:
+    mutable std::mutex mutex_;
+    std::unordered_map&lt;std::string, std::unique_ptr&lt;TypeErasedPlugin&gt;&gt; plugins_;
+};
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><strong>TypeErasedPlugin</strong> uses <code>std::function</code> to wrap each plugin method. This is one form of type erasure: the caller interacts with a uniform interface while the concrete type is captured inside lambdas.</li>
+      <li>The constructor is constrained with <code>template&lt;Plugin T&gt;</code>, so only types satisfying the <code>Plugin</code> concept can be stored.</li>
+      <li><strong>PluginManager</strong> provides thread-safe registration, lookup, and dispatch via a <code>std::mutex</code> and <code>std::unordered_map</code>.</li>
+      <li>In a production system you would capture a single <code>std::shared_ptr</code> to the plugin object rather than moving it into each lambda separately.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>3. Build a Lock-Free Task Queue</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution3')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution3">
+    <pre>
+#include &lt;atomic&gt;
+#include &lt;memory&gt;
+#include &lt;optional&gt;
+#include &lt;string&gt;
+#include &lt;functional&gt;
+#include &lt;iostream&gt;
+
+// A task represents work to be dispatched to a plugin.
+struct Task {
+    std::string plugin_name;
+    std::string payload;
+    std::function&lt;void(const std::string&amp;)&gt; callback;  // called with result
+
+    Task() = default;
+    Task(std::string pn, std::string pl,
+         std::function&lt;void(const std::string&amp;)&gt; cb)
+        : plugin_name(std::move(pn))
+        , payload(std::move(pl))
+        , callback(std::move(cb)) {}
+};
+
+// Node for the Michael-Scott lock-free queue
+template&lt;typename T&gt;
+struct LockFreeNode {
+    T data;
+    std::atomic&lt;LockFreeNode*&gt; next{nullptr};
+
+    template&lt;typename... Args&gt;
+    explicit LockFreeNode(Args&amp;&amp;... args)
+        : data(std::forward&lt;Args&gt;(args)...)
+        , next{nullptr} {}
+};
+
+// Michael-Scott style lock-free queue (SPSC-safe, MPMC best-effort)
+template&lt;typename T&gt;
+class LockFreeQueue {
+public:
+    LockFreeQueue() {
+        LockFreeNode&lt;T&gt;* sentinel = new LockFreeNode&lt;T&gt;();
+        head_.store(sentinel, std::memory_order_relaxed);
+        tail_.store(sentinel, std::memory_order_relaxed);
+    }
+
+    ~LockFreeQueue() {
+        while (try_dequeue().has_value()) {}  // drain remaining
+        delete head_.load(std::memory_order_relaxed);  // delete sentinel
+    }
+
+    // Enqueue an item (lock-free)
+    void enqueue(T item) {
+        LockFreeNode&lt;T&gt;* node = new LockFreeNode&lt;T&gt;(std::move(item));
+        while (true) {
+            LockFreeNode&lt;T&gt;* tail = tail_.load(std::memory_order_acquire);
+            LockFreeNode&lt;T&gt;* next = tail-&gt;next.load(std::memory_order_acquire);
+            if (tail == tail_.load(std::memory_order_acquire)) {
+                if (next == nullptr) {
+                    // tail-&gt;next is null, try to link our node
+                    if (tail-&gt;next.compare_exchange_weak(
+                            next, node,
+                            std::memory_order_release,
+                            std::memory_order_relaxed)) {
+                        // Successfully linked; try to swing tail to our node
+                        tail_.compare_exchange_weak(
+                            tail, node,
+                            std::memory_order_release,
+                            std::memory_order_relaxed);
+                        return;
+                    }
+                } else {
+                    // Tail is falling behind; help advance it
+                    tail_.compare_exchange_weak(
+                        tail, next,
+                        std::memory_order_release,
+                        std::memory_order_relaxed);
+                }
+            }
+        }
+    }
+
+    // Dequeue an item (lock-free). Returns nullopt if empty.
+    std::optional&lt;T&gt; try_dequeue() {
+        while (true) {
+            LockFreeNode&lt;T&gt;* head = head_.load(std::memory_order_acquire);
+            LockFreeNode&lt;T&gt;* tail = tail_.load(std::memory_order_acquire);
+            LockFreeNode&lt;T&gt;* next = head-&gt;next.load(std::memory_order_acquire);
+
+            if (head == head_.load(std::memory_order_acquire)) {
+                if (head == tail) {
+                    if (next == nullptr) {
+                        return std::nullopt;  // Queue is empty
+                    }
+                    // Tail is behind; help advance it
+                    tail_.compare_exchange_weak(
+                        tail, next,
+                        std::memory_order_release,
+                        std::memory_order_relaxed);
+                } else {
+                    // Read value before CAS, otherwise another dequeue
+                    // might free the node before we get the value
+                    T value = std::move(next-&gt;data);
+                    if (head_.compare_exchange_weak(
+                            head, next,
+                            std::memory_order_release,
+                            std::memory_order_relaxed)) {
+                        // Successfully dequeued; reclaim old sentinel
+                        delete head;
+                        return value;
+                    }
+                }
+            }
+        }
+    }
+
+    bool empty() const {
+        LockFreeNode&lt;T&gt;* head = head_.load(std::memory_order_acquire);
+        LockFreeNode&lt;T&gt;* next = head-&gt;next.load(std::memory_order_acquire);
+        return next == nullptr;
+    }
+
+    // Non-copyable, non-movable
+    LockFreeQueue(const LockFreeQueue&amp;) = delete;
+    LockFreeQueue&amp; operator=(const LockFreeQueue&amp;) = delete;
+
+private:
+    std::atomic&lt;LockFreeNode&lt;T&gt;*&gt; head_;
+    std::atomic&lt;LockFreeNode&lt;T&gt;*&gt; tail_;
+};
+
+// --- Demo ---
+int main() {
+    LockFreeQueue&lt;Task&gt; taskQueue;
+
+    // Enqueue tasks
+    taskQueue.enqueue(Task("Greeter", "World", [](const std::string&amp; result) {
+        std::cout &lt;&lt; "Callback: " &lt;&lt; result &lt;&lt; "\n";
+    }));
+    taskQueue.enqueue(Task("Greeter", "C++", [](const std::string&amp; result) {
+        std::cout &lt;&lt; "Callback: " &lt;&lt; result &lt;&lt; "\n";
+    }));
+
+    // Dequeue tasks
+    int count = 0;
+    while (auto task = taskQueue.try_dequeue()) {
+        std::cout &lt;&lt; "Dequeued task for plugin: "
+                  &lt;&lt; task-&gt;plugin_name
+                  &lt;&lt; ", payload: " &lt;&lt; task-&gt;payload &lt;&lt; "\n";
+        if (task-&gt;callback) {
+            task-&gt;callback("Result of " + task-&gt;payload);
+        }
+        ++count;
+    }
+    std::cout &lt;&lt; "Processed " &lt;&lt; count &lt;&lt; " tasks\n";
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li>This is a <strong>Michael-Scott queue</strong>: a sentinel node at the head allows the head and tail pointers to be updated independently without ABA problems.</li>
+      <li><strong>enqueue</strong>: appends to the tail. Uses <code>compare_exchange_weak</code> on <code>tail-&gt;next</code> to link the new node. If successful, tries to advance the tail (non-critical if it fails, another thread will help).</li>
+      <li><strong>try_dequeue</strong>: reads <code>head-&gt;next</code> and moves the value <em>before</em> the CAS. This prevents another thread from freeing the node while we are reading it.</li>
+      <li>Memory ordering: <code>acquire</code> on loads and <code>release</code> on stores ensure that all writes to a node are visible before the node is published or consumed.</li>
+      <li>Each <code>try_dequeue</code> reclaims the old sentinel node (the previous head). This is safe for single-consumer; for multi-consumer you would need hazard pointers or epoch-based reclamation.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout red">
+  <p><strong>Important:</strong> The Michael-Scott queue as implemented above is safe for single-producer-single-consumer (SPSC) and work-conserving for MPMC. However, without a memory reclamation scheme (hazard pointers, epoch-based reclamation, or RCU), the multi-consumer case risks use-after-free. For production MPMC, add hazard pointers or use a reference-counted node approach.</p>
+</div>
+
+<h2>4. Add CRTP-Based Plugin Lifecycle</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution4')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution4">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+#include &lt;chrono&gt;
+#include &lt;sstream&gt;
+#include &lt;iomanip&gt;
+#include &lt;atomic&gt;
+
+// CRTP base: provides logging, timing, and reference counting.
+// Zero virtual overhead -- all calls are resolved at compile time.
+template&lt;typename Derived&gt;
+class PluginLifecycle {
+public:
+    void on_load() {
+        auto start = std::chrono::steady_clock::now();
+        derived().on_load_impl();
+        auto end = std::chrono::steady_clock::now();
+        auto ms = std::chrono::duration_cast&lt;std::chrono::milliseconds&gt;(end - start);
+        log("Loaded in " + std::to_string(ms.count()) + "ms");
+    }
+
+    void on_unload() {
+        auto start = std::chrono::steady_clock::now();
+        derived().on_unload_impl();
+        auto end = std::chrono::steady_clock::now();
+        auto ms = std::chrono::duration_cast&lt;std::chrono::milliseconds&gt;(end - start);
+        log("Unloaded in " + std::to_string(ms.count()) + "ms");
+    }
+
+    std::string execute(const std::string&amp; task) {
+        auto start = std::chrono::steady_clock::now();
+        std::string result = derived().execute_impl(task);
+        auto end = std::chrono::steady_clock::now();
+        auto us = std::chrono::duration_cast&lt;std::chrono::microseconds&gt;(end - start);
+        log("Executed '" + task + "' in " + std::to_string(us.count()) + "us");
+        return result;
+    }
+
+    // Reference counting (thread-safe)
+    void add_ref() { ref_count_.fetch_add(1, std::memory_order_relaxed); }
+    void release() {
+        if (ref_count_.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+            log("Reference count reached zero");
+        }
+    }
+    long ref_count() const {
+        return ref_count_.load(std::memory_order_relaxed);
+    }
+
+protected:
+    // CRTP accessor
+    Derived&amp; derived() { return static_cast&lt;Derived&amp;&gt;(*this); }
+    const Derived&amp; derived() const {
+        return static_cast&lt;const Derived&amp;&gt;(*this);
+    }
+
+    void log(const std::string&amp; message) {
+        auto now = std::chrono::system_clock::now();
+        auto time_t = std::chrono::system_clock::to_time_t(now);
+        std::tm tm_buf{};
+        localtime_r(&amp;time_t, &amp;tm_buf);
+        std::ostringstream oss;
+        oss &lt;&lt; std::put_time(&amp;tm_buf, "%H:%M:%S")
+            &lt;&lt; " [" &lt;&lt; derived().name() &lt;&lt; "] " &lt;&lt; message;
+        std::cout &lt;&lt; oss.str() &lt;&lt; "\n";
+    }
+
+    std::atomic&lt;long&gt; ref_count_{0};
+};
+
+// Concrete plugin using CRTP mixin
+class LoggingGreeter : public PluginLifecycle&lt;LoggingGreeter&gt; {
+public:
+    std::string name() const { return "LoggingGreeter"; }
+    std::string version() const { return "2.0.0"; }
+
+    // These are called by the CRTP base; the base wraps them with logging/timing
+    void on_load_impl() {
+        // Expensive initialization simulated
+    }
+    void on_unload_impl() {
+        // Cleanup simulated
+    }
+    std::string execute_impl(const std::string&amp; task) {
+        return "Hello, " + task + "!";
+    }
+};
+
+// CRTP-based plugin for data processing
+class DataProcessor : public PluginLifecycle&lt;DataProcessor&gt; {
+public:
+    std::string name() const { return "DataProcessor"; }
+    std::string version() const { return "1.3.0"; }
+
+    void on_load_impl() {}
+    void on_unload_impl() {}
+    std::string execute_impl(const std::string&amp; task) {
+        // Reverse the input string as a "processing" example
+        return std::string(task.rbegin(), task.rend());
+    }
+};
+
+int main() {
+    LoggingGreeter greeter;
+    greeter.add_ref();
+    greeter.add_ref();
+
+    greeter.on_load();
+    std::cout &lt;&lt; "Result: " &lt;&lt; greeter.execute("World") &lt;&lt; "\n";
+    std::cout &lt;&lt; "Result: " &lt;&lt; greeter.execute("Plugin System") &lt;&lt; "\n";
+    greeter.release();
+    greeter.on_unload();
+    greeter.release();
+
+    std::cout &lt;&lt; "\n--- DataProcessor ---\n";
+    DataProcessor processor;
+    processor.on_load();
+    std::cout &lt;&lt; "Result: " &lt;&lt; processor.execute("abcdef") &lt;&lt; "\n";
+    processor.on_unload();
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><strong>PluginLifecycle&lt;Derived&gt;</strong> uses the Curiously Recurring Template Pattern (CRTP) to inject logging, timing, and reference counting into any derived plugin class.</li>
+      <li>The base class calls <code>derived().on_load_impl()</code>, <code>derived().execute_impl()</code>, etc. Because the derived type is known at compile time, these calls are statically dispatched -- no vtable, no virtual overhead.</li>
+      <li>Each concrete plugin only implements the <code>*_impl</code> methods. The CRTP base wraps every call with timestamped logging.</li>
+      <li><strong>Reference counting</strong> uses <code>std::atomic&lt;long&gt;</code> with relaxed ordering for the counter and acquire-release for the final check, ensuring the cleanup side-effect is visible to the thread that sees the count drop to zero.</li>
+      <li>Because there are no virtual functions, the compiler can inline the entire call chain in optimized builds.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>5. Implement the PluginLoader with Factory Pattern</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution5')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution5">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+#include &lt;unordered_map&gt;
+#include &lt;memory&gt;
+#include &lt;functional&gt;
+#include &lt;dlfcn.h&gt;
+
+// Abstract factory interface for creating plugins
+class IPluginFactory {
+public:
+    virtual ~IPluginFactory() = default;
+
+    // The returned pointer must be a type satisfying the Plugin concept.
+    // We return void* here to avoid forcing a common base class on plugins.
+    virtual void* create() = 0;
+    virtual std::string plugin_name() const = 0;
+};
+
+// Concrete factory for a statically known plugin type
+template&lt;typename T&gt;
+class PluginFactory : public IPluginFactory {
+public:
+    void* create() override {
+        return static_cast&lt;void*&gt;(new T());
+    }
+    std::string plugin_name() const override {
+        T instance;
+        return instance.name();
+    }
+};
+
+// Macro for static plugin registration (used in each plugin .cpp file)
+#define REGISTER_PLUGIN(PluginClass) \
+    static bool _registered_##PluginClass = []() { \
+        PluginLoader::instance().register_factory( \
+            std::string(PluginClass{}.name()), \
+            std::make_unique&lt;PluginFactory&lt;PluginClass&gt;&gt;()); \
+        return true; \
+    }()
+
+// PluginLoader: singleton that owns factories and can load plugins
+// either statically (via REGISTER_PLUGIN) or dynamically (via dlopen)
+class PluginLoader {
+public:
+    static PluginLoader&amp; instance() {
+        static PluginLoader loader;
+        return loader;
+    }
+
+    void register_factory(const std::string&amp; name,
+                           std::unique_ptr&lt;IPluginFactory&gt; factory) {
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        factories_[name] = std::move(factory);
+        std::cout &lt;&lt; "[PluginLoader] Registered factory: " &lt;&lt; name &lt;&lt; "\n";
+    }
+
+    // Load a plugin by name (must have a registered factory)
+    void* load(const std::string&amp; name) {
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        auto it = factories_.find(name);
+        if (it == factories_.end()) {
+            // Try dynamic loading as a fallback
+            return load_dynamic(name);
+        }
+        return it-&gt;second-&gt;create();
+    }
+
+    // Dynamic loading: open a shared library (.so / .dylib)
+    void* load_dynamic(const std::string&amp; lib_path) {
+        // POSIX: dlopen opens the shared library
+        void* handle = dlopen(lib_path.c_str(), RTLD_NOW);
+        if (!handle) {
+            std::cerr &lt;&lt; "[PluginLoader] dlopen failed: " &lt;&lt; dlerror() &lt;&lt; "\n";
+            return nullptr;
+        }
+
+        // Convention: each plugin .so exports a create_plugin() function
+        using CreateFn = void* (*)();
+        CreateFn create_fn = reinterpret_cast&lt;CreateFn&gt;(dlsym(handle, "create_plugin"));
+        if (!create_fn) {
+            std::cerr &lt;&lt; "[PluginLoader] dlsym failed: " &lt;&lt; dlerror() &lt;&lt; "\n";
+            dlclose(handle);
+            return nullptr;
+        }
+
+        void* plugin = create_fn();
+
+        // Store handle for cleanup
+        handles_[lib_path] = handle;
+        std::cout &lt;&lt; "[PluginLoader] Dynamically loaded: " &lt;&lt; lib_path &lt;&lt; "\n";
+        return plugin;
+    }
+
+    // Unload a dynamic library
+    void unload_dynamic(const std::string&amp; lib_path) {
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        auto it = handles_.find(lib_path);
+        if (it != handles_.end()) {
+            dlclose(it-&gt;second);
+            handles_.erase(it);
+            std::cout &lt;&lt; "[PluginLoader] Unloaded: " &lt;&lt; lib_path &lt;&lt; "\n";
+        }
+    }
+
+    // List all statically registered factory names
+    std::vector&lt;std::string&gt; available_factories() const {
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        std::vector&lt;std::string&gt; names;
+        names.reserve(factories_.size());
+        for (const auto&amp; [name, _] : factories_) {
+            names.push_back(name);
+        }
+        return names;
+    }
+
+private:
+    PluginLoader() = default;
+
+    std::mutex mutex_;
+    std::unordered_map&lt;std::string, std::unique_ptr&lt;IPluginFactory&gt;&gt; factories_;
+    std::unordered_map&lt;std::string, void*&gt; handles_;  // dlopen handles
+};
+
+// --- Demo: static registration ---
+struct EchoPlugin {
+    std::string name() { return "Echo"; }
+    std::string version() { return "1.0.0"; }
+    std::string execute(const std::string&amp; task) { return "Echo: " + task; }
+    void on_load() { std::cout &lt;&lt; "[Echo] on_load\n"; }
+    void on_unload() { std::cout &lt;&lt; "[Echo] on_unload\n"; }
+};
+
+REGISTER_PLUGIN(EchoPlugin);
+
+int main() {
+    // The REGISTER_PLUGIN macro has already registered EchoPlugin
+    auto&amp; loader = PluginLoader::instance();
+
+    std::cout &lt;&lt; "Available factories: ";
+    for (const auto&amp; name : loader.available_factories()) {
+        std::cout &lt;&lt; name &lt;&lt; " ";
+    }
+    std::cout &lt;&lt; "\n";
+
+    // Load plugin via factory
+    void* raw = loader.load("Echo");
+    if (raw) {
+        auto* echo = static_cast&lt;EchoPlugin*&gt;(raw);
+        echo-&gt;on_load();
+        std::cout &lt;&lt; echo-&gt;execute("Hello Factory") &lt;&lt; "\n";
+        echo-&gt;on_unload();
+        delete echo;
+    }
+
+    // Dynamic loading example (would work with a real .so file):
+    // void* dyn = loader.load_dynamic("./plugins/libmath_plugin.so");
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><strong>Abstract Factory</strong>: <code>IPluginFactory</code> defines a uniform interface for creating plugins. <code>PluginFactory&lt;T&gt;</code> is the concrete factory templated on the plugin type.</li>
+      <li><strong>Static registration</strong>: The <code>REGISTER_PLUGIN</code> macro leverages a static variable initializer to self-register at program startup, before <code>main()</code> runs.</li>
+      <li><strong>Dynamic loading</strong>: Uses POSIX <code>dlopen</code>/<code>dlsym</code> to load shared libraries at runtime. The convention is that each plugin <code>.so</code> exports a <code>create_plugin()</code> C function.</li>
+      <li>The <code>PluginLoader</code> is a Meyer's Singleton (thread-safe by C++11 guarantee).</li>
+      <li>Handles from <code>dlopen</code> are stored for proper cleanup via <code>dlclose</code>.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout">
+  <p><strong>Tip:</strong> For cross-platform dynamic loading, wrap <code>dlopen</code>/<code>dlsym</code>/<code>dlclose</code> behind an interface. On Windows, use <code>LoadLibrary</code>/<code>GetProcAddress</code>/<code>FreeLibrary</code> instead. Consider using <code>std::unique_ptr</code> with a custom deleter for automatic handle cleanup.</p>
+</div>
+
+<h2>6. Add Network Notification via Sockets</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution6')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution6">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+#include &lt;cstring&gt;
+#include &lt;stdexcept&gt;
+#include &lt;sstream&gt;
+#include &lt;iomanip&gt;
+#include &lt;chrono&gt;
+#include &lt;sys/socket.h&gt;
+#include &lt;netinet/in.h&gt;
+#include &lt;arpa/inet.h&gt;
+#include &lt;unistd.h&gt;
+
+// RAII wrapper for a UDP socket
+class UdpNotifier {
+public:
+    UdpNotifier(const std::string&amp; host, uint16_t port)
+        : host_(host), port_(port)
+    {
+        sock_fd_ = socket(AF_INET, SOCK_DGRAM, 0);
+        if (sock_fd_ &lt; 0) {
+            throw std::runtime_error("Failed to create socket: " +
+                                     std::string(strerror(errno)));
+        }
+
+        // Resolve destination address
+        std::memset(&amp;dest_addr_, 0, sizeof(dest_addr_));
+        dest_addr_.sin_family = AF_INET;
+        dest_addr_.sin_port = htons(port_);
+        if (inet_pton(AF_INET, host_.c_str(), &amp;dest_addr_.sin_addr) &lt;= 0) {
+            close(sock_fd_);
+            throw std::runtime_error("Invalid address: " + host_);
+        }
+
+        std::cout &lt;&lt; "[UdpNotifier] Configured: " &lt;&lt; host_
+                  &lt;&lt; ":" &lt;&lt; port &lt;&lt; "\n";
+    }
+
+    ~UdpNotifier() {
+        if (sock_fd_ &gt;= 0) {
+            close(sock_fd_);
+            std::cout &lt;&lt; "[UdpNotifier] Socket closed\n";
+        }
+    }
+
+    // Send a notification message to the monitoring endpoint
+    void notify(const std::string&amp; plugin_name,
+                const std::string&amp; task,
+                const std::string&amp; result) {
+        std::ostringstream oss;
+        auto now = std::chrono::system_clock::now();
+        auto time_t = std::chrono::system_clock::to_time_t(now);
+        std::tm tm_buf{};
+        localtime_r(&amp;time_t, &amp;tm_buf);
+
+        oss &lt;&lt; std::put_time(&amp;tm_buf, "%Y-%m-%dT%H:%M:%S")
+            &lt;&lt; " plugin=\"" &lt;&lt; plugin_name &lt;&lt; "\""
+            &lt;&lt; " task=\"" &lt;&lt; task &lt;&lt; "\""
+            &lt;&lt; " result=\"" &lt;&lt; result &lt;&lt; "\""
+            &lt;&lt; " status=\"complete\"";
+
+        std::string message = oss.str();
+
+        ssize_t sent = sendto(sock_fd_,
+                              message.c_str(),
+                              message.size(),
+                              0,
+                              reinterpret_cast&lt;const sockaddr*&gt;(&amp;dest_addr_),
+                              sizeof(dest_addr_));
+
+        if (sent &lt; 0) {
+            std::cerr &lt;&lt; "[UdpNotifier] sendto failed: "
+                      &lt;&lt; strerror(errno) &lt;&lt; "\n";
+        } else {
+            std::cout &lt;&lt; "[UdpNotifier] Sent " &lt;&lt; sent
+                      &lt;&lt; " bytes to " &lt;&lt; host_
+                      &lt;&lt; ":" &lt;&lt; port_ &lt;&lt; "\n";
+        }
+    }
+
+    // Non-copyable, non-movable
+    UdpNotifier(const UdpNotifier&amp;) = delete;
+    UdpNotifier&amp; operator=(const UdpNotifier&amp;) = delete;
+    UdpNotifier(UdpNotifier&amp;&amp;) = delete;
+    UdpNotifier&amp; operator=(UdpNotifier&amp;&amp;) = delete;
+
+private:
+    std::string host_;
+    uint16_t port_;
+    int sock_fd_ = -1;
+    struct sockaddr_in dest_addr_{};
+};
+
+// --- Demo ---
+int main() {
+    try {
+        // Send notifications to localhost:9999 (run a UDP listener there)
+        UdpNotifier notifier("127.0.0.1", 9999);
+
+        // Simulate plugin completions
+        notifier.notify("Greeter", "World", "Hello, World!");
+        notifier.notify("DataProcessor", "abc123", "321cba");
+        notifier.notify("Echo", "test", "Echo: test");
+
+        std::cout &lt;&lt; "\nTip: run `nc -u -l 9999` to receive the UDP "
+                  &lt;&lt; "messages in another terminal.\n";
+    } catch (const std::exception&amp; e) {
+        std::cerr &lt;&lt; "Error: " &lt;&lt; e.what() &lt;&lt; "\n";
+        return 1;
+    }
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><strong>UdpNotifier</strong> is an RAII wrapper around a POSIX UDP socket. The socket is created in the constructor and closed in the destructor, ensuring no resource leaks even on exceptions.</li>
+      <li><code>socket(AF_INET, SOCK_DGRAM, 0)</code> creates a UDP (datagram) socket. Unlike TCP, UDP does not require a connection -- each <code>sendto</code> is independent.</li>
+      <li><code>inet_pton</code> converts the IP address string to binary form. <code>htons</code> converts the port to network byte order.</li>
+      <li>The <code>notify</code> method formats a structured message with timestamp, plugin name, task, and result -- suitable for parsing by a monitoring service.</li>
+      <li>UDP is chosen over TCP because notifications are fire-and-forget: the plugin system should not block waiting for a monitor acknowledgement.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout warning">
+  <p><strong>Production Notes:</strong></p>
+  <ul>
+    <li>Add retry logic with exponential backoff if the monitoring endpoint is temporarily unreachable.</li>
+    <li>Consider using a local buffer or a lock-free queue for notifications to decouple the plugin execution from network I/O.</li>
+    <li>Set <code>SO_SNDBUF</code> socket option if sending high-volume notifications to avoid kernel buffer drops.</li>
+  </ul>
+</div>
+
+<h2>7. Tie It All Together: main() Integration</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution7')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution7">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+#include &lt;csignal&gt;
+#include &lt;atomic&gt;
+#include &lt;thread&gt;
+#include &lt;vector&gt;
+#include &lt;chrono&gt;
+#include &lt;sstream&gt;
+#include &lt;cstring&gt;
+#include &lt;functional&gt;
+#include &lt;memory&gt;
+#include &lt;sys/socket.h&gt;
+#include &lt;netinet/in.h&gt;
+#include &lt;arpa/inet.h&gt;
+#include &lt;unistd.h&gt;
+
+// ---- Forward declarations (components from previous steps) ----
+
+// Step 1: Plugin concept
+template&lt;typename T&gt;
+concept Plugin = requires(T t, const T ct) {
+    { t.name() } -&gt; std::convertible_to&lt;std::string_view&gt;;
+    { t.version() } -&gt; std::convertible_to&lt;std::string_view&gt;;
+    { t.execute(std::string{}) } -&gt; std::convertible_to&lt;std::string&gt;;
+    { t.on_load() } -&gt; std::same_as&lt;void&gt;;
+    { t.on_unload() } -&gt; std::same_as&lt;void&gt;;
+};
+
+// Step 2: Type-erased wrapper (simplified)
+class TypeErasedPlugin {
+public:
+    template&lt;Plugin T&gt;
+    explicit TypeErasedPlugin(T plugin)
+        : name_fn_([p = std::move(plugin)]() mutable { return p.name(); })
+        , execute_fn_([p = std::move(plugin)](std::string t) mutable {
+              return p.execute(std::move(t));
+          })
+        , on_load_fn_([p = std::move(plugin)]() mutable { p.on_load(); })
+        , on_unload_fn_([p = std::move(plugin)]() mutable { p.on_unload(); })
+    {}
+
+    std::string name()              { return name_fn_(); }
+    std::string execute(std::string t) { return execute_fn_(std::move(t)); }
+    void on_load()                  { on_load_fn_(); }
+    void on_unload()                { on_unload_fn_(); }
+
+private:
+    std::function&lt;std::string()&gt;               name_fn_;
+    std::function&lt;std::string(std::string)&gt;      execute_fn_;
+    std::function&lt;void()&gt;                     on_load_fn_;
+    std::function&lt;void()&gt;                     on_unload_fn_;
+};
+
+// Step 3: Lock-free queue (simplified -- uses mutex for this demo)
+struct Task {
+    std::string plugin_name;
+    std::string payload;
+    std::function&lt;void(const std::string&amp;)&gt; callback;
+};
+LockFreeQueue&lt;Task&gt; taskQueue;  // from Step 3 implementation
+
+// Step 6: UdpNotifier (simplified inline)
+class UdpNotifier {
+public:
+    UdpNotifier(const std::string&amp; host, uint16_t port) {
+        sock_fd_ = socket(AF_INET, SOCK_DGRAM, 0);
+        if (sock_fd_ &lt; 0) throw std::runtime_error("socket() failed");
+        std::memset(&amp;dest_addr_, 0, sizeof(dest_addr_));
+        dest_addr_.sin_family = AF_INET;
+        dest_addr_.sin_port = htons(port);
+        inet_pton(AF_INET, host.c_str(), &amp;dest_addr_.sin_addr);
+    }
+    ~UdpNotifier() { if (sock_fd_ &gt;= 0) close(sock_fd_); }
+
+    void notify(const std::string&amp; plugin_name,
+                const std::string&amp; task,
+                const std::string&amp; result) {
+        std::string msg = "plugin=" + plugin_name +
+                          " task=" + task +
+                          " result=" + result;
+        sendto(sock_fd_, msg.c_str(), msg.size(), 0,
+               reinterpret_cast&lt;const sockaddr*&gt;(&amp;dest_addr_),
+               sizeof(dest_addr_));
+    }
+private:
+    int sock_fd_ = -1;
+    struct sockaddr_in dest_addr_{};
+};
+
+// ---- Global state for signal handling ----
+std::atomic&lt;bool&gt; g_running{true};
+
+void signal_handler(int signum) {
+    std::cout &lt;&lt; "\n[Signal] Received signal " &lt;&lt; signum
+              &lt;&lt; ", shutting down...\n";
+    g_running.store(false, std::memory_order_release);
+}
+
+// ---- Concrete plugins ----
+class GreeterPlugin {
+public:
+    std::string name() { return "Greeter"; }
+    std::string version() { return "1.0.0"; }
+    std::string execute(const std::string&amp; task) { return "Hello, " + task + "!"; }
+    void on_load()  { std::cout &lt;&lt; "[Greeter] loaded\n"; }
+    void on_unload() { std::cout &lt;&lt; "[Greeter] unloaded\n"; }
+};
+
+class UpperPlugin {
+public:
+    std::string name() { return "UpperCase"; }
+    std::string version() { return "1.2.0"; }
+    std::string execute(const std::string&amp; task) {
+        std::string result = task;
+        for (auto&amp; c : result) c = std::toupper(c);
+        return result;
+    }
+    void on_load()  { std::cout &lt;&lt; "[UpperCase] loaded\n"; }
+    void on_unload() { std::cout &lt;&lt; "[UpperCase] unloaded\n"; }
+};
+
+class ReversePlugin {
+public:
+    std::string name() { return "Reverse"; }
+    std::string version() { return "1.1.0"; }
+    std::string execute(const std::string&amp; task) {
+        return std::string(task.rbegin(), task.rend());
+    }
+    void on_load()  { std::cout &lt;&lt; "[Reverse] loaded\n"; }
+    void on_unload() { std::cout &lt;&lt; "[Reverse] unloaded\n"; }
+};
+
+// ---- PluginManager ----
+class PluginManager {
+public:
+    template&lt;Plugin T&gt;
+    void register_plugin(T plugin) {
+        std::string n = plugin.name();
+        plugins_[n] = std::make_unique&lt;TypeErasedPlugin&gt;(std::move(plugin));
+        plugins_[n]-&gt;on_load();
+    }
+
+    void unregister_all() {
+        for (auto&amp; [name, p] : plugins_) p-&gt;on_unload();
+        plugins_.clear();
+    }
+
+    std::string dispatch(const std::string&amp; name, const std::string&amp; task) {
+        auto it = plugins_.find(name);
+        if (it == plugins_.end()) return "ERROR: plugin '" + name + "' not found";
+        return it-&gt;second-&gt;execute(task);
+    }
+
+private:
+    std::unordered_map&lt;std::string, std::unique_ptr&lt;TypeErasedPlugin&gt;&gt; plugins_;
+};
+
+// ---- Worker thread: drains the lock-free queue and dispatches tasks ----
+void worker_thread(PluginManager&amp; manager, UdpNotifier&amp; notifier) {
+    while (g_running.load(std::memory_order_acquire)) {
+        auto task = taskQueue.try_dequeue();
+        if (!task) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            continue;
+        }
+
+        std::cout &lt;&lt; "[Worker] Dispatching to " &lt;&lt; task-&gt;plugin_name
+                  &lt;&lt; ": " &lt;&lt; task-&gt;payload &lt;&lt; "\n";
+
+        std::string result = manager.dispatch(task-&gt;plugin_name, task-&gt;payload);
+        std::cout &lt;&lt; "[Worker] Result: " &lt;&lt; result &lt;&lt; "\n";
+
+        // Send UDP notification
+        notifier.notify(task-&gt;plugin_name, task-&gt;payload, result);
+
+        // Invoke callback
+        if (task-&gt;callback) {
+            task-&gt;callback(result);
+        }
+    }
+    std::cout &lt;&lt; "[Worker] Exiting\n";
+}
+
+// ---- main() ----
+int main() {
+    // Register signal handlers for graceful shutdown
+    std::signal(SIGINT, signal_handler);
+    std::signal(SIGTERM, signal_handler);
+
+    std::cout &lt;&lt; "=== Compile-Time Plugin System ===\n\n";
+
+    // 1. Set up UDP notification (to localhost:9999)
+    std::unique_ptr&lt;UdpNotifier&gt; notifier;
+    try {
+        notifier = std::make_unique&lt;UdpNotifier&gt;("127.0.0.1", 9999);
+    } catch (const std::exception&amp; e) {
+        std::cout &lt;&lt; "[Warning] UDP notifier unavailable: "
+                  &lt;&lt; e.what() &lt;&lt; "\n";
+        std::cout &lt;&lt; "Continuing without notifications...\n\n";
+    }
+
+    // 2. Register plugins (concept-constrained)
+    PluginManager manager;
+    manager.register_plugin(GreeterPlugin{});
+    manager.register_plugin(UpperPlugin{});
+    manager.register_plugin(ReversePlugin{});
+    std::cout &lt;&lt; "\n";
+
+    // 3. Start worker threads
+    const int num_workers = 2;
+    std::vector&lt;std::thread&gt; workers;
+    for (int i = 0; i &lt; num_workers; ++i) {
+        workers.emplace_back([&amp;manager, &amp;notifier]() {
+            if (notifier) {
+                worker_thread(manager, *notifier);
+            } else {
+                // Dummy notifier fallback
+                UdpNotifier dummy("127.0.0.1", 1);
+                worker_thread(manager, dummy);
+            }
+        });
+    }
+
+    // 4. Submit tasks
+    auto submit = [](std::string plugin, std::string payload,
+                      std::function&lt;void(const std::string&amp;)&gt; cb = {}) {
+        taskQueue.enqueue(Task{
+            std::move(plugin),
+            std::move(payload),
+            std::move(cb)
+        });
+    };
+
+    submit("Greeter", "World", [](const std::string&amp; r) {
+        std::cout &lt;&lt; "[Callback] " &lt;&lt; r &lt;&lt; "\n";
+    });
+    submit("UpperCase", "hello plugin system");
+    submit("Reverse", "abcdef");
+    submit("Greeter", "C++ Advanced");
+    submit("UpperCase", "lock-free queue");
+    submit("Reverse", "Compile-Time Plugin System");
+
+    std::cout &lt;&lt; "[Main] Submitted 6 tasks\n\n";
+
+    // 5. Wait for tasks to drain or shutdown signal
+    int drain_count = 0;
+    while (g_running.load(std::memory_order_acquire) &amp;&amp; drain_count &lt; 100) {
+        if (taskQueue.empty()) {
+            // Give workers time to process the last items
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            if (taskQueue.empty()) break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        ++drain_count;
+    }
+
+    // 6. Graceful shutdown
+    std::cout &lt;&lt; "\n=== Shutting down ===\n";
+    g_running.store(false, std::memory_order_release);
+    for (auto&amp; w : workers) w.join();
+
+    manager.unregister_all();
+    std::cout &lt;&lt; "\n=== Shutdown complete ===\n";
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><strong>Signal handling</strong>: <code>std::signal</code> registers handlers for <code>SIGINT</code> (Ctrl+C) and <code>SIGTERM</code>. The handler sets a global <code>std::atomic&lt;bool&gt;</code> flag. All threads check this flag and exit cooperatively.</li>
+      <li><strong>Plugin registration</strong>: <code>register_plugin</code> is constrained by the <code>Plugin</code> concept, so only valid plugins compile through.</li>
+      <li><strong>Worker threads</strong>: Two worker threads drain the lock-free queue, dispatch tasks to the PluginManager, send UDP notifications, and invoke callbacks.</li>
+      <li><strong>Graceful shutdown</strong>: After submitting tasks, main waits for the queue to drain (with a timeout). Then it sets <code>g_running = false</code> and joins all worker threads. Finally, <code>unregister_all()</code> calls <code>on_unload()</code> on each plugin.</li>
+      <li>The <code>UdpNotifier</code> is created with a try/catch so the system continues to function even if the notification endpoint is unavailable.</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Follow-up Questions</h2>
+
+<div class="question">
+  <h3>Variations to Try</h3>
+  <ol>
+    <li><strong>Hot-reloadable plugins:</strong> Extend the <code>PluginLoader</code> to support reloading a plugin from an updated <code>.so</code> without restarting the process. How do you handle in-flight tasks that reference the old plugin instance?</li>
+    <li><strong>Coroutine-based task dispatch:</strong> Replace the lock-free queue with a C++20 coroutine task system where each <code>execute()</code> call is a <code>co_await</code>-able coroutine, allowing plugins to suspend and resume mid-execution.</li>
+    <li><strong>Custom allocator for plugin nodes:</strong> Use a pool allocator for the lock-free queue nodes to reduce allocation contention. Benchmark against the default <code>new</code> allocator under high-throughput conditions.</li>
+    <li><strong>Observer pattern for plugin events:</strong> Add an observer/event system so that other components can subscribe to plugin load, unload, and task-completion events without the PluginManager needing to know about them.</li>
+  </ol>
+</div>
+
+<div class="callout green">
+  <p><strong>Key Takeaways:</strong></p>
+  <ul>
+    <li><strong>C++20 concepts</strong> provide compile-time interface enforcement that is more expressive and readable than SFINAE or <code>static_assert</code> alone.</li>
+    <li><strong>Type erasure</strong> (via <code>std::function</code>, <code>std::any</code>, or custom wrappers) enables heterogeneous storage without forcing a common base class, preserving the ability to use CRTP and value semantics in concrete plugins.</li>
+    <li><strong>Lock-free data structures</strong> eliminate mutex contention on hot paths but require careful attention to memory ordering and memory reclamation. The Michael-Scott queue is a foundational pattern.</li>
+    <li><strong>CRTP</strong> lets you inject cross-cutting concerns (logging, timing, reference counting) at compile time with zero virtual overhead, making it ideal for performance-critical plugin systems.</li>
+    <li><strong>Abstract factory</strong> decouples plugin creation from usage, enabling both static registration (for known plugins) and dynamic loading (for third-party or hot-swappable plugins).</li>
+    <li><strong>Socket programming</strong> adds observability to the plugin system. UDP is the right choice for fire-and-forget notifications where reliability is not critical.</li>
+    <li><strong>Signal-safe shutdown</strong> with <code>std::atomic</code> flags ensures that the system can be stopped gracefully without leaving resources leaked or threads orphaned.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="../index.html">C++ Index &larr;</a>
+  <span></span>
+</div>
+<script>
+function toggleSolution(id) {
+  document.getElementById(id).classList.toggle('visible');
+}
+</script>
+</body>
+</html>

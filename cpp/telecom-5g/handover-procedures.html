@@ -225,6 +225,100 @@ private:
 };
 </pre>
 
+<h2>5G Conditional Handover (CHO) Implementation</h2>
+
+<p>In 5G NR, Conditional Handover (CHO) allows the source gNB to pre-configure multiple candidate target cells. The UE executes the handover autonomously when a trigger condition is met.</p>
+
+<pre>
+#include &lt;vector&gt;
+#include &lt;string&gt;
+#include &lt;unordered_map&gt;
+#include &lt;cstdint&gt;
+#include &lt;optional&gt;
+
+// CHO candidate configuration
+struct ChoCandidate {
+    uint32_t       cell_id;
+    uint32_t       cho_id;            // Unique CHO execution ID
+    uint16_t       pci;              // Physical Cell ID
+    uint32_t       arfcn;            // Carrier frequency
+    uint32_t       rach_preamble;    // Dedicated RACH preamble
+    uint8_t        rach_occasion;    // RACH occasion index
+    bool           triggered;        // UE has triggered this candidate
+    bool           executed;         // UE has completed handover to this cell
+};
+
+// CHO execution condition (A3-like event)
+struct ChoCondition {
+    uint32_t source_pci;
+    uint32_t target_pci;
+    float    a3_offset_db;           // Offset in dB
+    float    hysteresis_db;
+    uint32_t time_to_trigger_ms;    // TTT
+};
+
+// UE-side CHO manager
+class ChoManager {
+public:
+    // gNB configures CHO candidates
+    void addCandidate(const ChoCandidate&amp; candidate,
+                      const ChoCondition&amp; condition) {
+        candidates_[candidate.cho_id] = candidate;
+        conditions_[candidate.cho_id] = condition;
+    }
+
+    // UE evaluates trigger conditions on measurement reports
+    std::optional&lt;uint32_t&gt; evaluateConditions(
+            uint32_t serving_pci, float serving_rsrp_dbm,
+            const std::vector&lt;std::pair&lt;uint32_t, float&gt;&gt;&amp; neighbor_measurements) {
+        for (auto&amp; [cho_id, cond] : conditions_) {
+            if (candidates_[cho_id].executed) continue;
+
+            for (auto&amp; [pci, rsrp] : neighbor_measurements) {
+                if (pci != cond.target_pci) continue;
+
+                // A3 event: neighbor + offset > serving
+                if (rsrp + cond.a3_offset_db - cond.hysteresis_db
+                    &gt; serving_rsrp_dbm) {
+                    // Check time-to-trigger
+                    if (checkTimeToTrigger(cho_id, cond.time_to_trigger_ms)) {
+                        candidates_[cho_id].triggered = true;
+                        return cho_id;
+                    }
+                }
+            }
+        }
+        return std::nullopt;
+    }
+
+    // Execute handover to triggered candidate
+    void executeHandover(uint32_t cho_id) {
+        auto it = candidates_.find(cho_id);
+        if (it == candidates_.end() || !it-&gt;second.triggered) return;
+
+        auto&amp; candidate = it-&gt;second;
+        // Perform RACH to target cell using dedicated preamble
+        performRach(candidate.rach_preamble, candidate.rach_occasion);
+        candidate.executed = true;
+
+        // Cancel all other candidates
+        for (auto&amp; [id, cand] : candidates_) {
+            if (id != cho_id) {
+                cand.triggered = false;
+            }
+        }
+    }
+
+private:
+    std::unordered_map&lt;uint32_t, ChoCandidate&gt; candidates_;
+    std::unordered_map&lt;uint32_t, ChoCondition&gt; conditions_;
+    std::unordered_map&lt;uint32_t, uint32_t&gt;   ttt_start_;
+
+    bool checkTimeToTrigger(uint32_t cho_id, uint32_t ttt_ms);
+    void performRach(uint32_t preamble, uint8_t occasion) {}
+};
+</pre>
+
 <h2>Cross-References</h2>
 
 <ul>

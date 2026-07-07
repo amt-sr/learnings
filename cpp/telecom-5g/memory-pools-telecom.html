@@ -169,6 +169,139 @@ private:
 };
 </pre>
 
+<h2>Multi-Size Slab Allocator</h2>
+
+<p>Telecom systems need buffers of different sizes for different layers. A slab allocator manages multiple fixed-size pools:</p>
+
+<pre>
+#include &lt;cstdint&gt;
+#include &lt;array&gt;
+#include &lt;atomic&gt;
+#include &lt;new&gt;
+#include &lt;iostream&gt;
+
+// Slab allocator: multiple pools for different buffer sizes
+class SlabAllocator {
+public:
+    static constexpr int NUM_SIZES = 4;
+
+    struct SizeClass {
+        uint32_t block_size;
+        uint32_t pool_count;     // Number of blocks in this pool
+    };
+
+    // Telecom buffer sizes
+    static constexpr std::array&lt;SizeClass, NUM_SIZES&gt; SIZE_CLASSES = {{
+        {  256, 4096 },  // Small: MAC headers, control PDU
+        { 2048, 2048 },  // Medium: RLC/PDCP SDUs
+        { 8192, 1024 },  // Large: Transport blocks
+        { 65536, 128 },  // Jumbo: Full MAC PDUs, reassembly
+    }};
+
+    SlabAllocator() {
+        for (int s = 0; s &lt; NUM_SIZES; ++s) {
+            pools_[s] = std::make_unique&lt;uint8_t[]&gt;(
+                SIZE_CLASSES[s].block_size * SIZE_CLASSES[s].pool_count);
+            // Initialize free list (stack-based, per size class)
+            free_stacks_[s] = std::make_unique&lt;uintptr_t[]&gt;(
+                SIZE_CLASSES[s].pool_count);
+            for (uint32_t i = 0; i &lt; SIZE_CLASSES[s].pool_count; ++i) {
+                free_stacks_[s][i] = i;  // Index into pool
+            }
+            free_counts_[s].store(SIZE_CLASSES[s].pool_count,
+                                  std::memory_order_relaxed);
+        }
+    }
+
+    // Allocate buffer of at least 'size' bytes
+    void* allocate(uint32_t size) {
+        int size_class = findSizeClass(size);
+        if (size_class &lt; 0) return nullptr;
+
+        uint32_t idx = free_counts_[size_class].fetch_sub(
+            1, std::memory_order_acq_rel) - 1;
+        if (idx &gt;= SIZE_CLASSES[size_class].pool_count) {
+            free_counts_[size_class].fetch_add(
+                1, std::memory_order_relaxed);
+            return nullptr;  // Pool exhausted
+        }
+
+        uint32_t block_idx = free_stacks_[size_class][idx];
+        return &amp;pools_[size_class][block_idx *
+               SIZE_CLASSES[size_class].block_size];
+    }
+
+    void deallocate(void* ptr, uint32_t size) {
+        if (!ptr) return;
+        int size_class = findSizeClass(size);
+        if (size_class &lt; 0) return;
+
+        // Calculate block index from pointer
+        uintptr_t base = reinterpret_cast&lt;uintptr_t&gt;(pools_[size_class].get());
+        uintptr_t p = reinterpret_cast&lt;uintptr_t&gt;(ptr);
+        uint32_t block_idx = static_cast&lt;uint32_t&gt;(
+            (p - base) / SIZE_CLASSES[size_class].block_size);
+
+        uint32_t slot = free_counts_[size_class].fetch_add(
+            1, std::memory_order_acq_rel);
+        if (slot &lt; SIZE_CLASSES[size_class].pool_count) {
+            free_stacks_[size_class][slot] = block_idx;
+        }
+    }
+
+    // Stats per size class
+    void printStats() {
+        const char* names[] = {"Small(256)", "Medium(2048)",
+                               "Large(8192)", "Jumbo(65536)"};
+        for (int s = 0; s &lt; NUM_SIZES; ++s) {
+            uint32_t used = SIZE_CLASSES[s].pool_count -
+                free_counts_[s].load(std::memory_order_relaxed);
+            std::cout &lt;&lt; names[s] &lt;&lt; ": "
+                      &lt;&lt; used &lt;&lt; "/" &lt;&lt; SIZE_CLASSES[s].pool_count
+                      &lt;&lt; " used\n";
+        }
+    }
+
+private:
+    int findSizeClass(uint32_t size) {
+        for (int s = 0; s &lt; NUM_SIZES; ++s) {
+            if (size &lt;= SIZE_CLASSES[s].block_size) return s;
+        }
+        return -1;
+    }
+
+    std::array&lt;std::unique_ptr&lt;uint8_t[]&gt;, NUM_SIZES&gt; pools_;
+    std::array&lt;std::unique_ptr&lt;uintptr_t[]&gt;, NUM_SIZES&gt; free_stacks_;
+    std::array&lt;std::atomic&lt;uint32_t&gt;, NUM_SIZES&gt; free_counts_{};
+};
+
+int main() {
+    SlabAllocator alloc;
+
+    // Allocate buffers for different protocol layers
+    void* mac_buf    = alloc.allocate(128);   // -> Small pool
+    void* rlc_buf    = alloc.allocate(1500);   // -> Medium pool
+    void* tb_buf     = alloc.allocate(5000);   // -> Large pool
+    void* reasm_buf  = alloc.allocate(50000);  // -> Jumbo pool
+
+    alloc.printStats();
+    // Small(256): 1/4096 used
+    // Medium(2048): 1/2048 used
+    // Large(8192): 1/1024 used
+    // Jumbo(65536): 1/128 used
+
+    // Return buffers (size must match allocation size class)
+    alloc.deallocate(mac_buf, 256);
+    alloc.deallocate(rlc_buf, 2048);
+    alloc.deallocate(tb_buf, 8192);
+    alloc.deallocate(reasm_buf, 65536);
+
+    std::cout &lt;&lt; "\nAfter deallocation:\n";
+    alloc.printStats();
+    return 0;
+}
+</pre>
+
 <h2>Pre-Allocation Strategies</h2>
 
 <pre>

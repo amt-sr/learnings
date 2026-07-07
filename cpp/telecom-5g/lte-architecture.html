@@ -176,7 +176,7 @@ private:
   <tr><td>RAN node</td><td>eNodeB (integrated CU+DU)</td><td>gNB (CU-DU split)</td></tr>
   <tr><td>Control plane</td><td>MME</td><td>AMF (access) + SMF (session)</td></tr>
   <tr><td>User plane</td><td>S-GW + P-GW</td><td>UPF</td></tr>
-  <tr><td>Paging</td><td>MME -> eNodeB</td><td>AMF -> gNB</td></tr>
+  <tr><td>Paging</td><td>MME -&gt; eNodeB</td><td>AMF -&gt; gNB</td></tr>
   <tr><td>QoS granularity</td><td>EPS bearer (QCI)</td><td>QoS flow (5QI) via SDAP</td></tr>
   <tr><td>Network slicing</td><td>Not supported</td><td>NSSAI-based slicing</td></tr>
   <tr><td>State model</td><td>IDLE, CONNECTED</td><td>IDLE, INACTIVE, CONNECTED</td></tr>
@@ -186,11 +186,90 @@ private:
   <p><strong>5G evolution:</strong> The biggest architectural change is the separation of control and user plane. In 5G, AMF handles mobility while SMF manages sessions. UPF is a pure user-plane function. This CUPS (Control and User Plane Separation) enables flexible network deployment and edge computing.</p>
 </div>
 
+<h2>S1-AP Message Flow</h2>
+
+<p>Here's a C++ simulation of the S1-AP attach procedure showing how messages flow between UE, eNodeB, and EPC nodes:</p>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+#include &lt;functional&gt;
+
+// Simplified S1-AP message types
+enum class S1apMsgType : uint8_t {
+    INITIAL_UE_MESSAGE,        // eNodeB -&gt; MME (NAS attach request)
+    INITIAL_CONTEXT_SETUP_REQ, // MME -&gt; eNodeB (security + bearers)
+    INITIAL_CONTEXT_SETUP_RSP, // eNodeB -&gt; MME (setup complete)
+    ATTACH_ACCEPT,              // MME -&gt; eNodeB -&gt; UE (with EPS bearer)
+};
+
+struct S1apMessage {
+    S1apMsgType type;
+    uint32_t    mme_ue_id;
+    uint32_t    enb_ue_id;
+    uint32_t    cell_id;
+    std::string nas_payload;
+};
+
+// S1 interface simulation
+class S1Interface {
+public:
+    void sendToMme(const S1apMessage&amp; msg) {
+        std::cout &lt;&lt; "[S1] eNodeB -&gt; MME: "
+                  &lt;&lt; msgName(msg.type) &lt;&lt; "\n";
+    }
+
+    void sendToEnb(const S1apMessage&amp; msg) {
+        std::cout &lt;&lt; "[S1] MME -&gt; eNodeB: "
+                  &lt;&lt; msgName(msg.type) &lt;&lt; "\n";
+    }
+
+private:
+    const char* msgName(S1apMsgType t) {
+        static const char* names[] = {
+            "InitialUEMessage", "InitCtxSetupReq",
+            "InitCtxSetupRsp", "AttachAccept"
+        };
+        return names[static_cast&lt;int&gt;(t)];
+    }
+};
+
+void simulateAttach(S1Interface&amp; s1) {
+    uint32_t enb_ue_id = 1, mme_ue_id = 100;
+
+    // Step 1: eNodeB forwards NAS Attach Request to MME
+    S1apMessage msg1{S1apMsgType::INITIAL_UE_MESSAGE, mme_ue_id,
+                     enb_ue_id, 0x01A0, "NAS_ATTACH_REQUEST"};
+    s1.sendToMme(msg1);
+
+    // Step 2: MME sends Initial Context Setup (after auth + HSS query)
+    S1apMessage msg2{S1apMsgType::INITIAL_CONTEXT_SETUP_REQ, mme_ue_id,
+                     enb_ue_id, 0x01A0, "SECURITY+BEARER_CTX"};
+    s1.sendToEnb(msg2);
+
+    // Step 3: eNodeB acknowledges context setup
+    S1apMessage msg3{S1apMsgType::INITIAL_CONTEXT_SETUP_RSP, mme_ue_id,
+                     enb_ue_id, 0x01A0, "CONTEXT_ACTIVE"};
+    s1.sendToMme(msg3);
+
+    // Step 4: MME sends Attach Accept (via eNodeB to UE)
+    S1apMessage msg4{S1apMsgType::ATTACH_ACCEPT, mme_ue_id,
+                     enb_ue_id, 0x01A0, "NAS_ATTACH_ACCEPT"};
+    s1.sendToEnb(msg4);
+}
+
+int main() {
+    S1Interface s1;
+    simulateAttach(s1);
+    return 0;
+}
+</pre>
+
 <h2>Cross-References</h2>
 
 <ul>
   <li><a href="5g-ran-overview.html">5G RAN Overview</a> -- 5G architecture comparison.</li>
-  <li><a href="cu-du-split.html">CU-DU Split</a> -- 5G gNB separation vs integrated LTE eNodeB.</li>
+  <li><a href="cu-du-split.html">CU/DU Split</a> -- 5G gNB separation vs integrated LTE eNodeB.</li>
   <li><a href="gnodeb-components.html">gNB Components</a> -- Detailed gNB internal architecture.</li>
 </ul>
 

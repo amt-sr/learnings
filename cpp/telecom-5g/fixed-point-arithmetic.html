@@ -188,6 +188,68 @@ private:
 };
 </pre>
 
+<h2>Q15 Class in Action: DSP Example</h2>
+
+<pre>
+#include &lt;iostream&gt;
+#include &lt;cmath&gt;
+
+// Using the Q15 class from above
+
+int main() {
+    // Convert real-world coefficients to Q15
+    auto gain       = Q15::fromFloat(0.5f);
+    auto offset     = Q15::fromFloat(0.1f);
+    auto input      = Q15::fromFloat(0.75f);
+
+    std::cout &lt;&lt; "Input:   " &lt;&lt; input.toFloat() &lt;&lt; "\n";
+    std::cout &lt;&lt; "Gain:    " &lt;&lt; gain.toFloat() &lt;&lt; "\n";
+
+    // Apply gain: output = input * gain
+    auto amplified = input * gain;
+    std::cout &lt;&lt; "Amplified: " &lt;&lt; amplified.toFloat() &lt;&lt; "\n";
+
+    // Add offset: output = amplified + offset
+    auto result = amplified + offset;
+    std::cout &lt;&lt; "With offset: " &lt;&lt; result.toFloat() &lt;&lt; "\n";
+
+    // FIR filter: low-pass 4-tap filter
+    Q15 coeffs[4] = {
+        Q15::fromFloat(0.1f),
+        Q15::fromFloat(0.2f),
+        Q15::fromFloat(0.4f),
+        Q15::fromFloat(0.2f),
+    };
+    FirFilterQ15&lt;4&gt; lpf(coeffs);
+
+    // Process a sample signal
+    float samples[] = {1.0f, 0.8f, 0.3f, -0.2f, -0.5f, -0.3f, 0.1f, 0.6f};
+    std::cout &lt;&lt; "\nLow-pass filtered output:\n";
+    for (float s : samples) {
+        auto out = lpf.process(Q15::fromFloat(s));
+        std::cout &lt;&lt; "  " &lt;&lt; out.toFloat() &lt;&lt; "\n";
+    }
+
+    // MAC operation (core DSP primitive)
+    auto acc = Q15(0);
+    Q15 taps[] = { Q15::fromFloat(0.5f), Q15::fromFloat(0.3f),
+                  Q15::fromFloat(0.2f) };
+    Q15 samples_q15[] = { Q15::fromFloat(0.8f), Q15::fromFloat(0.6f),
+                          Q15::fromFloat(0.4f) };
+    for (int i = 0; i &lt; 3; ++i) {
+        acc = Q15::mac(acc, taps[i], samples_q15[i]);
+    }
+    std::cout &lt;&lt; "\nDot product (MAC): " &lt;&lt; acc.toFloat() &lt;&lt; "\n";
+    // Expected: 0.5*0.8 + 0.3*0.6 + 0.2*0.4 = 0.4 + 0.18 + 0.08 = 0.66
+
+    return 0;
+}
+</pre>
+
+<div class="callout">
+<p><strong>DSP note:</strong> The MAC (multiply-accumulate) operation is the fundamental building block of FIR filters, FFTs, and correlation. Modern DSP cores have dedicated MAC instructions that execute in a single cycle. The <code>Q15::mac()</code> function uses 64-bit intermediate results to prevent overflow during accumulation.</p>
+</div>
+
 <h2>Overflow and Saturation</h2>
 
 <div class="callout red">

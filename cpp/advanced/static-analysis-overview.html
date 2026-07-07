@@ -115,6 +115,52 @@ jobs:
 <p><strong>Best practice:</strong> Use multiple complementary tools. <a href="cppcheck.html">cppcheck</a> catches what <a href="clang-tidy.html">clang-tidy</a> misses and vice versa. Add <a href="address-sanitizer-tools.html">sanitizers</a> for runtime coverage. See <a href="code-scanning-best-practices.html">Code Scanning Best Practices</a> for a complete pipeline setup.</p>
 </div>
 
+<h2>Bugs That Static Analysis Catches</h2>
+
+<p>Static analyzers can detect entire categories of bugs that compilers miss. Here are common C++ bugs and what the tools report:</p>
+
+<pre>
+// Bug 1: Null pointer dereference (caught by clang-tidy, Clang SA)
+void processUser(User* user) {
+    int age = user->getAge();  // Warning: potential null dereference
+    // Fix: check for nullptr first
+    if (!user) { return; }
+    int name_len = user->getName().length();
+}
+
+// Bug 2: Memory leak (caught by cppcheck, LeakSanitizer)
+void processData() {
+    auto* data = new int[1024];  // cppcheck: "Memory leak: data"
+    if (someCondition()) {
+        throw std::runtime_error("failed");  // leaks data
+    }
+    delete[] data;  // never reached on exception path
+    // Fix: use std::vector&lt;int&gt; or std::unique_ptr&lt;int[]&gt;
+}
+
+// Bug 3: Uninitialized variable (caught by cppcheck, Clang SA)
+void computeAverage() {
+    int sum;                    // Warning: variable is uninitialized
+    int count = 5;
+    for (int i = 0; i &lt; count; ++i) {
+        sum += i;               // UB: using uninitialized sum
+    }
+    double avg = sum / count;   // result is undefined
+    // Fix: int sum = 0;
+}
+
+// Bug 4: Use-after-free (caught by ASan at runtime, Clang SA statically)
+void useAfterFree(std::vector&lt;int&gt;&amp; v) {
+    int* ptr = &amp;v[0];
+    v.push_back(42);           // may reallocate, invalidating ptr
+    std::cout &lt;&lt; *ptr &lt;&lt; "\n";  // Warning: potential use-after-free
+}
+</pre>
+
+<div class="callout red">
+<p><strong>Compilers vs static analyzers:</strong> GCC and Clang catch syntax errors and basic type mismatches, but they do not check data flow for null pointers, uninitialized variables, or memory leaks. Static analysis tools like <a href="cppcheck.html">cppcheck</a> and <a href="clang-tidy.html">clang-tidy</a> bridge this gap by performing deeper analysis.</p>
+</div>
+
 <h2>Static vs Dynamic Analysis</h2>
 
 <table>

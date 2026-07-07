@@ -241,6 +241,147 @@ private:
 };
 </pre>
 
+<h2>RLC UM and TM Entities</h2>
+
+<pre>
+#include &lt;queue&gt;
+#include &lt;vector&gt;
+#include &lt;cstdint&gt;
+
+// RLC UM Entity (no retransmission, used for VoIP/video)
+class RlcUmEntity : public RlcEntity {
+public:
+    explicit RlcUmEntity(uint32_t channel_id,
+                         uint16_t sn_modulus = 4096)
+        : channel_id_(channel_id), sn_modulus_(sn_modulus) {}
+
+    void handleSduFromUpper(const RlcSdu&amp; sdu) override {
+        tx_buffer_.push(sdu);
+    }
+
+    void handlePduFromLower(const uint8_t* pdu, size_t len) override {
+        // Parse UM PDU header
+        uint16_t sn = (pdu[0] &amp; 0x03) &lt;&lt; 8 | pdu[1]; // 10-bit SN
+        uint8_t  fi = (pdu[0] &gt;&gt; 2) &amp; 0x03;
+
+        size_t header_size = 2;
+        const uint8_t* payload = pdu + header_size;
+        size_t payload_len = len - header_size;
+
+        // Store in reassembly buffer (keyed by SN)
+        auto&amp; entry = rx_reassembly_[sn];
+        // FI indicates if first/last bytes of SDU are present
+        if (fi == 0x00 || fi == 0x02) {
+            // First segment of SDU
+            entry.segments.clear();
+            entry.expected_size = 0;
+        }
+        entry.segments.push_back({payload, payload_len});
+        entry.expected_size += payload_len;
+
+        // Deliver if FI indicates last segment
+        if (fi == 0x00 || fi == 0x01) {
+            deliverToPdcp(sn);
+        }
+    }
+
+    size_t getPduSize(uint32_t grant_bytes) override {
+        if (tx_buffer_.empty()) return 0;
+        uint32_t header = 2;  // UM header (2 bytes)
+        return std::min(grant_bytes, header +
+            tx_buffer_.front().data.size());
+    }
+
+    bool buildPdu(uint8_t* buffer, uint32_t max_len,
+                  uint32_t&amp; pdu_len) override {
+        if (tx_buffer_.empty()) return false;
+
+        auto&amp; sdu = tx_buffer_.front();
+        uint32_t header = 2;
+        uint32_t payload = std::min(max_len - header,
+                                   static_cast&lt;uint32_t&gt;(sdu.data.size()));
+
+        // Write UM header: D/C=1, FI=00, SN
+        buffer[0] = 0x80 | (tx_sn_ &gt;&gt; 8) &amp; 0x03;
+        buffer[1] = tx_sn_ &amp; 0xFF;
+        std::memcpy(buffer + header, sdu.data.data(), payload);
+        pdu_len = header + payload;
+
+        // Advance state
+        sdu.data.erase(sdu.data.begin(),
+                       sdu.data.begin() + payload);
+        if (sdu.data.empty()) {
+            tx_buffer_.pop();
+        }
+        tx_sn_ = (tx_sn_ + 1) % sn_modulus_;
+        return true;
+    }
+
+    uint32_t nextTxSn() const { return tx_sn_; }
+
+private:
+    uint32_t channel_id_;
+    uint16_t sn_modulus_;
+    uint32_t tx_sn_{0};
+    uint32_t rx_sn_{0};
+
+    std::queue&lt;RlcSdu&gt; tx_buffer_;
+
+    struct RxEntry {
+        std::vector&lt;std::pair&lt;const uint8_t*, size_t&gt;&gt; segments;
+        size_t expected_size;
+    };
+    std::unordered_map&lt;uint32_t, RxEntry&gt; rx_reassembly_;
+
+    void deliverToPdcp(uint32_t sn) {
+        // Reassemble and pass up to PDCP layer
+        rx_reassembly_.erase(sn);
+    }
+};
+
+// RLC TM Entity (simplest, no header, no segmentation)
+class RlcTmEntity : public RlcEntity {
+public:
+    explicit RlcTmEntity(uint32_t channel_id)
+        : channel_id_(channel_id) {}
+
+    void handleSduFromUpper(const RlcSdu&amp; sdu) override {
+        // No segmentation — pass through as-is
+        pending_pdus_.push_back(sdu);
+    }
+
+    void handlePduFromLower(const uint8_t* pdu, size_t len) override {
+        // No header to parse — deliver directly
+        RlcSdu sdu;
+        sdu.channel_id = channel_id_;
+        sdu.data.assign(pdu, pdu + len);
+        // Deliver to PDCP (upper layer callback)
+    }
+
+    size_t getPduSize(uint32_t grant_bytes) override {
+        if (pending_pdus_.empty()) return 0;
+        return std::min(grant_bytes,
+            static_cast&lt;uint32_t&gt;(pending_pdus_.front().data.size()));
+    }
+
+    bool buildPdu(uint8_t* buffer, uint32_t max_len,
+                  uint32_t&amp; pdu_len) override {
+        if (pending_pdus_.empty()) return false;
+        auto&amp; sdu = pending_pdus_.front();
+        uint32_t len = std::min(max_len,
+            static_cast&lt;uint32_t&gt;(sdu.data.size()));
+        std::memcpy(buffer, sdu.data.data(), len);
+        pdu_len = len;
+        pending_pdus_.erase(pending_pdus_.begin());
+        return true;
+    }
+
+private:
+    uint32_t channel_id_;
+    std::vector&lt;RlcSdu&gt; pending_pdus_;
+};
+</pre>
+
 <h2>RLC Buffer Management</h2>
 
 <div class="callout green">

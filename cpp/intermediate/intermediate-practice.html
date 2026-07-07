@@ -1,0 +1,1434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Intermediate Practice: Build a Task Scheduler — C++ Learning Path</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.easy { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  .question { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; }
+  .question h3 { color: #f0f6fc; margin-top: 0; }
+  .solution-toggle { cursor: pointer; user-select: none; }
+  .solution-toggle h3 { color: #3fb950; display: inline; }
+  .solution-content { display: none; margin-top: 1rem; }
+  .solution-content.visible { display: block; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+  .topics-covered { margin-bottom: 1rem; font-size: 0.85rem; color: #8b949e; }
+  .topics-covered a { color: #8b949e; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#2">2 Intermediate</a> / Practice</div>
+<div class="meta"><span class="tag medium">Medium</span></div>
+<h1>Intermediate Practice: Build a Task Scheduler</h1>
+
+<div class="topics-covered">
+  <strong>Topics Covered:</strong>
+  <a href="smart-pointers.html">Smart Pointers</a>,
+  <a href="move-semantics.html">Move Semantics</a>,
+  <a href="lambda-expressions.html">Lambda Expressions</a>,
+  <a href="auto-decltype.html">auto &amp; decltype</a>,
+  <a href="constexpr.html">constexpr</a>,
+  <a href="enum-class.html">Enum Class</a>,
+  <a href="structured-bindings.html">Structured Bindings</a>,
+  <a href="virtual-functions-vtable.html">Virtual Functions / vtable</a>,
+  <a href="abstract-classes.html">Abstract Classes</a>,
+  <a href="raii.html">RAII</a>,
+  <a href="stl-algorithms.html">STL Algorithms</a>,
+  <a href="exception-handling.html">Exception Handling</a>,
+  <a href="std-thread.html">std::thread</a>,
+  <a href="mutex-locks.html">Mutex &amp; Locks</a>,
+  <a href="condition-variable.html">Condition Variable</a>,
+  <a href="async-futures.html">async &amp; Futures</a>,
+  <a href="thread-safe-data-structures.html">Thread-Safe Data Structures</a>,
+  <a href="function-bind.html">std::function &amp; std::bind</a>
+</div>
+
+<div class="question">
+  <h3>Problem Statement</h3>
+  <p>Build a thread-safe task scheduler with the following capabilities:</p>
+  <ul>
+    <li><strong>Priority queue:</strong> Tasks have priority levels (CRITICAL, HIGH, NORMAL, LOW). Higher-priority tasks are executed first.</li>
+    <li><strong>Thread pool:</strong> A fixed-size pool of worker threads that process tasks concurrently.</li>
+    <li><strong>Futures:</strong> Scheduling a task returns a <code>std::future</code> so the caller can retrieve the result or detect exceptions.</li>
+    <li><strong>Timers:</strong> Support delayed/timed tasks that execute at a specified future time.</li>
+    <li><strong>Cancellation:</strong> Tasks can be cancelled before they begin execution.</li>
+    <li><strong>Result aggregation:</strong> A <code>when_all</code>-style mechanism to wait for multiple tasks and collect their results.</li>
+  </ul>
+  <p>This exercise combines many intermediate C++ features: smart pointers, move semantics, lambda expressions, <code>enum class</code>, RAII, STL algorithms, exception handling, multithreading primitives, and <code>std::function</code>.</p>
+</div>
+
+<div class="callout warning">
+  <p><strong>Design Considerations:</strong></p>
+  <ul>
+    <li>Use <code>enum class</code> for priority levels to avoid implicit conversions and namespace pollution.</li>
+    <li>Use <code>std::function</code> for type-erased task payloads so callers can use lambdas, function pointers, or bind expressions.</li>
+    <li>Use <code>std::packaged_task</code> / <code>std::promise</code> to bridge tasks with <code>std::future</code> for result retrieval.</li>
+    <li>The priority queue comparator must order by priority first, then by submission time (FIFO within the same priority).</li>
+    <li>The scheduler should own the thread pool (RAII) and shut down gracefully in its destructor.</li>
+    <li>Timed tasks require a separate timer thread that uses <code>condition_variable::wait_until</code> and promotes tasks to the ready queue when their deadline arrives.</li>
+  </ul>
+</div>
+
+<!-- ====== Step 1 ====== -->
+
+<h2>Step 1: Define the Task and TaskResult Types</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution1')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution1">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;functional&gt;
+#include &lt;future&gt;
+#include &lt;string&gt;
+#include &lt;chrono&gt;
+#include &lt;atomic&gt;
+#include &lt;memory&gt;
+
+// ---- Type aliases and enum ----
+
+using TaskId = std::uint64_t;
+using Clock = std::chrono::steady_clock;
+using TimePoint = Clock::time_point;
+
+enum class Priority {
+    CRITICAL = 0,   // Highest
+    HIGH     = 1,
+    NORMAL   = 2,
+    LOW      = 3    // Lowest
+};
+
+// Enumerate priority names for logging
+inline const char* priorityName(Priority p) {
+    switch (p) {
+        case Priority::CRITICAL: return "CRITICAL";
+        case Priority::HIGH:     return "HIGH";
+        case Priority::NORMAL:   return "NORMAL";
+        case Priority::LOW:      return "LOW";
+    }
+    return "UNKNOWN";
+}
+
+// ---- TaskResult: wraps a future and metadata ----
+
+template&lt;typename T&gt;
+class TaskResult {
+public:
+    TaskResult() = default;
+    explicit TaskResult(std::future&lt;T&gt;&amp;&amp; fut, TaskId id, Priority prio)
+        : future_(std::move(fut)), id_(id), priority_(prio) {}
+
+    // Non-copyable, movable
+    TaskResult(const TaskResult&amp;) = delete;
+    TaskResult&amp; operator=(const TaskResult&amp;) = delete;
+    TaskResult(TaskResult&amp;&amp;) = default;
+    TaskResult&amp; operator=(TaskResult&amp;&amp;) = default;
+
+    T get() { return future_.get(); }
+
+    std::future_status wait_for(const std::chrono::milliseconds&amp; dur) const {
+        return future_.wait_for(dur);
+    }
+
+    bool valid() const { return future_.valid(); }
+    TaskId id() const { return id_; }
+    Priority priority() const { return priority_; }
+
+private:
+    std::future&lt;T&gt; future_;
+    TaskId id_{0};
+    Priority priority_{Priority::NORMAL};
+};
+
+// ---- Internal task wrapper ----
+
+struct Task {
+    std::function&lt;void()&gt; execute;   // Type-erased callable
+    Priority priority;
+    TaskId id;
+    TimePoint submitTime;              // For FIFO ordering within same priority
+    TimePoint readyTime;               // For delayed tasks (defaults to now)
+
+    // Comparator for priority queue: lower Priority value = higher priority
+    // Within same priority, earlier submitTime goes first
+    bool operator&gt;(const Task&amp; other) const {
+        if (static_cast&lt;int&gt;(priority) != static_cast&lt;int&gt;(other.priority))
+            return static_cast&lt;int&gt;(priority) &gt; static_cast&lt;int&gt;(other.priority);
+        return submitTime &gt; other.submitTime;
+    }
+};
+
+int main() {
+    // Demonstrate type usage
+    std::promise&lt;int&gt; prom;
+    TaskResult&lt;int&gt; result(prom.get_future(), 42, Priority::HIGH);
+    std::cout &lt;&lt; "TaskResult valid: " &lt;&lt; result.valid() &lt;&lt; "\n";
+    std::cout &lt;&lt; "Task ID: " &lt;&lt; result.id() &lt;&lt; "\n";
+    std::cout &lt;&lt; "Priority: " &lt;&lt; priorityName(result.priority()) &lt;&lt; "\n";
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><strong><code>enum class Priority</code>:</strong> Scoped enum prevents implicit conversion to <code>int</code>. Lower numeric values represent higher urgency.</li>
+      <li><strong><code>TaskId</code>:</strong> Strong typedef via <code>using</code> for clarity. Every submitted task gets a unique ID.</li>
+      <li><strong><code>TaskResult&lt;T&gt;</code>:</strong> Wraps a <code>std::future&lt;T&gt;</code> with metadata (ID, priority). Move-only because <code>std::future</code> is move-only. The caller holds this to retrieve the result later.</li>
+      <li><strong><code>Task</code> struct:</strong> Internal representation. <code>std::function&lt;void()&gt;</code> type-erases the callable so we can store any callable. The <code>operator&gt;</code> makes it compatible with <code>std::priority_queue</code> (which is a max-heap by default).</li>
+      <li><strong><code>readyTime</code>:</strong> For delayed tasks. Defaults to submission time (immediate execution). Will be used by the timer thread in Step 5.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ====== Step 2 ====== -->
+
+<h2>Step 2: Implement the Priority Queue</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution2')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution2">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;queue&gt;
+#include &lt;mutex&gt;
+#include &lt;condition_variable&gt;
+#include &lt;chrono&gt;
+#include &lt;atomic&gt;
+#include &lt;vector&gt;
+#include &lt;string&gt;
+#include &lt;functional&gt;
+#include &lt;optional&gt;
+
+using TaskId = std::uint64_t;
+using Clock = std::chrono::steady_clock;
+using TimePoint = Clock::time_point;
+
+enum class Priority { CRITICAL = 0, HIGH = 1, NORMAL = 2, LOW = 3 };
+
+struct Task {
+    std::function&lt;void()&gt; execute;
+    Priority priority;
+    TaskId id;
+    TimePoint submitTime;
+    TimePoint readyTime;
+
+    bool operator&gt;(const Task&amp; other) const {
+        if (static_cast&lt;int&gt;(priority) != static_cast&lt;int&gt;(other.priority))
+            return static_cast&lt;int&gt;(priority) &gt; static_cast&lt;int&gt;(other.priority);
+        return submitTime &gt; other.submitTime;
+    }
+};
+
+// ---- Thread-safe priority queue ----
+
+class TaskPriorityQueue {
+public:
+    TaskPriorityQueue() = default;
+
+    // Non-copyable
+    TaskPriorityQueue(const TaskPriorityQueue&amp;) = delete;
+    TaskPriorityQueue&amp; operator=(const TaskPriorityQueue&amp;) = delete;
+
+    // Push a task into the queue and notify one waiter
+    void push(Task task) {
+        {
+            std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+            if (stopped_) return;
+            queue_.push(std::move(task));
+        }
+        cond_.notify_one();
+    }
+
+    // Pop the highest-priority task (blocks until available or stopped)
+    std::optional&lt;Task&gt; pop() {
+        std::unique_lock&lt;std::mutex&gt; lock(mutex_);
+        cond_.wait(lock, [this] {
+            return !queue_.empty() || stopped_;
+        });
+        if (queue_.empty()) return std::nullopt;
+
+        Task task = std::move(const_cast&lt;Task&amp;&gt;(queue_.top()));
+        queue_.pop();
+        return task;
+    }
+
+    // Pop with timeout
+    std::optional&lt;Task&gt; pop_for(const std::chrono::milliseconds&amp; timeout) {
+        std::unique_lock&lt;std::mutex&gt; lock(mutex_);
+        if (!cond_.wait_for(lock, timeout, [this] {
+            return !queue_.empty() || stopped_;
+        })) {
+            return std::nullopt;  // Timeout
+        }
+        if (queue_.empty()) return std::nullopt;
+
+        Task task = std::move(const_cast&lt;Task&amp;&gt;(queue_.top()));
+        queue_.pop();
+        return task;
+    }
+
+    // Non-blocking pop
+    std::optional&lt;Task&gt; try_pop() {
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        if (queue_.empty()) return std::nullopt;
+
+        Task task = std::move(const_cast&lt;Task&amp;&gt;(queue_.top()));
+        queue_.pop();
+        return task;
+    }
+
+    std::size_t size() const {
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        return queue_.size();
+    }
+
+    bool empty() const {
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        return queue_.empty();
+    }
+
+    // Stop the queue and wake all waiters
+    void stop() {
+        {
+            std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+            stopped_ = true;
+        }
+        cond_.notify_all();
+    }
+
+private:
+    mutable std::mutex mutex_;
+    std::condition_variable cond_;
+    // Max-heap with std::greater comparator so CRITICAL (0) is at top
+    std::priority_queue&lt;Task, std::vector&lt;Task&gt;, std::greater&lt;Task&gt;&gt; queue_;
+    bool stopped_ = false;
+};
+
+int main() {
+    TaskPriorityQueue pq;
+    auto now = Clock::now();
+
+    // Push tasks with different priorities
+    pq.push({[](){ std::cout &lt;&lt; "LOW task\n"; }, Priority::LOW, 3, now, now});
+    pq.push({[](){ std::cout &lt;&lt; "CRITICAL task\n"; }, Priority::CRITICAL, 1, now, now});
+    pq.push({[](){ std::cout &lt;&lt; "NORMAL task\n"; }, Priority::NORMAL, 4, now, now});
+    pq.push({[](){ std::cout &lt;&lt; "HIGH task\n"; }, Priority::HIGH, 2, now, now});
+
+    // Pop all -- they should come out in priority order
+    while (auto task = pq.try_pop()) {
+        std::cout &lt;&lt; "Processing task " &lt;&lt; task-&gt;id &lt;&lt; "\n";
+        task-&gt;execute();
+    }
+
+    pq.stop();
+    std::cout &lt;&lt; "Queue stopped. Size: " &lt;&lt; pq.size() &lt;&lt; "\n";
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><strong><code>std::priority_queue</code> with <code>std::greater</code>:</strong> By default, <code>std::priority_queue</code> is a max-heap. Using <code>std::greater</code> as the comparator inverts the ordering so that the smallest priority value (CRITICAL = 0) is at the top.</li>
+      <li><strong>Thread safety:</strong> Every public method acquires <code>mutex_</code> before accessing the queue. The <code>condition_variable</code> allows workers to block efficiently when the queue is empty.</li>
+      <li><strong>Move semantics:</strong> Tasks are moved out of the queue via <code>std::move</code>. The internal storage uses <code>const_cast</code> to move from <code>top()</code> since <code>priority_queue::top()</code> returns a <code>const&amp;</code>.</li>
+      <li><strong><code>std::optional</code>:</strong> Used for <code>pop</code> return types to cleanly signal "no result" without exceptions or sentinel values.</li>
+      <li><strong>Graceful stop:</strong> The <code>stop()</code> method sets the flag and wakes all waiting threads, allowing them to exit cleanly.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ====== Step 3 ====== -->
+
+<h2>Step 3: Build the Thread Pool</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution3')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution3">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;thread&gt;
+#include &lt;mutex&gt;
+#include &lt;condition_variable&gt;
+#include &lt;queue&gt;
+#include &lt;vector&gt;
+#include &lt;functional&gt;
+#include &lt;atomic&gt;
+#include &lt;chrono&gt;
+#include &lt;sstream&gt;
+
+// Simple thread pool with graceful shutdown
+
+class ThreadPool {
+public:
+    explicit ThreadPool(std::size_t numThreads)
+        : stopped_(false) {
+        for (std::size_t i = 0; i &lt; numThreads; ++i) {
+            workers_.emplace_back([this, i]() { workerLoop(i); });
+        }
+        std::cout &lt;&lt; "ThreadPool: started " &lt;&lt; numThreads &lt;&lt; " workers\n";
+    }
+
+    ~ThreadPool() {
+        shutdown();
+    }
+
+    // Non-copyable, non-movable
+    ThreadPool(const ThreadPool&amp;) = delete;
+    ThreadPool&amp; operator=(const ThreadPool&amp;) = delete;
+
+    // Submit a task (void return for now -- we add futures in Step 4)
+    void submit(std::function&lt;void()&gt; task) {
+        {
+            std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+            if (stopped_) return;
+            tasks_.push(std::move(task));
+        }
+        cond_.notify_one();
+    }
+
+    // Graceful shutdown: finish queued work, then join all threads
+    void shutdown() {
+        if (stopped_.exchange(true)) return;  // Already stopped
+        cond_.notify_all();
+
+        for (auto&amp; w : workers_) {
+            if (w.joinable()) w.join();
+        }
+        std::cout &lt;&lt; "ThreadPool: all " &lt;&lt; workers_.size()
+                  &lt;&lt; " workers stopped\n";
+    }
+
+    std::size_t pendingTasks() const {
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        return tasks_.size();
+    }
+
+private:
+    void workerLoop(std::size_t id) {
+        while (true) {
+            std::function&lt;void()&gt; task;
+            {
+                std::unique_lock&lt;std::mutex&gt; lock(mutex_);
+                cond_.wait(lock, [this] {
+                    return !tasks_.empty() || stopped_;
+                });
+
+                if (stopped_ &amp;&amp; tasks_.empty()) return;
+
+                task = std::move(tasks_.front());
+                tasks_.pop();
+            }
+            // Execute outside the lock
+            task();
+        }
+    }
+
+    std::vector&lt;std::thread&gt; workers_;
+    std::queue&lt;std::function&lt;void()&gt;&gt; tasks_;
+    mutable std::mutex mutex_;
+    std::condition_variable cond_;
+    std::atomic&lt;bool&gt; stopped_;
+};
+
+// ---- Demo ----
+
+int main() {
+    {
+        ThreadPool pool(4);
+
+        // Submit 10 tasks
+        for (int i = 0; i &lt; 10; ++i) {
+            pool.submit([i]() {
+                std::ostringstream oss;
+                oss &lt;&lt; "Task " &lt;&lt; i &lt;&lt; " running on thread "
+                    &lt;&lt; std::this_thread::get_id() &lt;&lt; "\n";
+                std::cout &lt;&lt; oss.str();
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            });
+        }
+
+        std::cout &lt;&lt; "Submitted 10 tasks. Pending: "
+                  &lt;&lt; pool.pendingTasks() &lt;&lt; "\n";
+
+        // RAII: pool destructor calls shutdown()
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    }  // pool destroyed here
+    std::cout &lt;&lt; "Pool destroyed. All tasks completed.\n";
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><strong>RAII:</strong> The destructor calls <code>shutdown()</code>, ensuring threads are joined even if an exception is thrown. This is the Resource Acquisition Is Initialization pattern in action.</li>
+      <li><strong><code>std::atomic&lt;bool&gt; stopped_</code>:</strong> Thread-safe flag. <code>exchange(true)</code> atomically sets it and returns the old value, providing a test-and-set that prevents double-shutdown.</li>
+      <li><strong><code>condition_variable::wait</code> with predicate:</strong> Workers sleep until there is work or the pool is stopped. The predicate handles spurious wakeups correctly.</li>
+      <li><strong>Task execution outside the lock:</strong> The lock is released before calling <code>task()</code>, maximizing concurrency. This is critical for performance -- holding the lock during execution would serialize all tasks.</li>
+      <li><strong><code>std::function&lt;void()&gt;</code>:</strong> Type-erases the callable so the pool can store lambdas with different captures, member functions, or any callable object.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ====== Step 4 ====== -->
+
+<h2>Step 4: Add Task Scheduling with Futures</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution4')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution4">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;thread&gt;
+#include &lt;mutex&gt;
+#include &lt;condition_variable&gt;
+#include &lt;queue&gt;
+#include &lt;vector&gt;
+#include &lt;functional&gt;
+#include &lt;future&gt;
+#include &lt;atomic&gt;
+#include &lt;chrono&gt;
+#include &lt;memory&gt;
+#include &lt;cstdint&gt;
+
+using TaskId = std::uint64_t;
+using Clock = std::chrono::steady_clock;
+using TimePoint = Clock::time_point;
+
+enum class Priority { CRITICAL = 0, HIGH = 1, NORMAL = 2, LOW = 3 };
+
+struct Task {
+    std::function&lt;void()&gt; execute;
+    Priority priority;
+    TaskId id;
+    TimePoint submitTime;
+
+    bool operator&gt;(const Task&amp; other) const {
+        if (static_cast&lt;int&gt;(priority) != static_cast&lt;int&gt;(other.priority))
+            return static_cast&lt;int&gt;(priority) &gt; static_cast&lt;int&gt;(other.priority);
+        return submitTime &gt; other.submitTime;
+    }
+};
+
+// ---- Thread pool with priority scheduling and futures ----
+
+class TaskScheduler {
+public:
+    explicit TaskScheduler(std::size_t numThreads = 4)
+        : stopped_(false), nextId_(1) {
+        for (std::size_t i = 0; i &lt; numThreads; ++i) {
+            workers_.emplace_back([this, i]() { workerLoop(i); });
+        }
+        std::cout &lt;&lt; "TaskScheduler: " &lt;&lt; numThreads &lt;&lt; " workers started\n";
+    }
+
+    ~TaskScheduler() { shutdown(); }
+
+    TaskScheduler(const TaskScheduler&amp;) = delete;
+    TaskScheduler&amp; operator=(const TaskScheduler&amp;) = delete;
+
+    // Schedule a task with a return value, returns a future
+    template&lt;typename F&gt;
+    auto schedule(F&amp;&amp; f, Priority prio = Priority::NORMAL)
+        -&gt; std::future&lt;typename std::invoke_result_t&lt;F&gt;&gt;
+    {
+        using ReturnType = typename std::invoke_result_t&lt;F&gt;;
+
+        // Wrap in a shared_ptr so the packaged_task outlives the lambda capture
+        auto packaged = std::make_shared&lt;std::packaged_task&lt;ReturnType()&gt;&gt;(
+            std::forward&lt;F&gt;(f)
+        );
+        auto future = packaged-&gt;get_future();
+
+        TaskId id = nextId_++;
+        TimePoint now = Clock::now();
+
+        Task task{
+            [packaged]() { (*packaged)(); },  // Execute the packaged_task
+            prio,
+            id,
+            now
+        };
+
+        {
+            std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+            if (!stopped_) {
+                queue_.push(std::move(task));
+            }
+        }
+        cond_.notify_one();
+
+        return future;
+    }
+
+    // Schedule a void task (simplified overload)
+    template&lt;typename F&gt;
+    std::future&lt;void&gt; scheduleVoid(F&amp;&amp; f, Priority prio = Priority::NORMAL) {
+        return schedule(std::forward&lt;F&gt;(f), prio);
+    }
+
+    void shutdown() {
+        if (stopped_.exchange(true)) return;
+        cond_.notify_all();
+        for (auto&amp; w : workers_) {
+            if (w.joinable()) w.join();
+        }
+        std::cout &lt;&lt; "TaskScheduler: shutdown complete\n";
+    }
+
+private:
+    void workerLoop(std::size_t workerId) {
+        while (true) {
+            Task task;
+            {
+                std::unique_lock&lt;std::mutex&gt; lock(mutex_);
+                cond_.wait(lock, [this] {
+                    return !queue_.empty() || stopped_;
+                });
+
+                if (stopped_ &amp;&amp; queue_.empty()) return;
+
+                task = std::move(const_cast&lt;Task&amp;&gt;(queue_.top()));
+                queue_.pop();
+            }
+            // Execute outside the lock -- exceptions propagate through future
+            task.execute();
+        }
+    }
+
+    std::vector&lt;std::thread&gt; workers_;
+    std::priority_queue&lt;Task, std::vector&lt;Task&gt;, std::greater&lt;Task&gt;&gt; queue_;
+    mutable std::mutex mutex_;
+    std::condition_variable cond_;
+    std::atomic&lt;bool&gt; stopped_;
+    std::atomic&lt;TaskId&gt; nextId_;
+};
+
+// ---- Demo ----
+
+int main() {
+    TaskScheduler scheduler(4);
+
+    // Schedule tasks with different priorities
+    auto f1 = scheduler.schedule([]() { return 42; }, Priority::CRITICAL);
+    auto f2 = scheduler.schedule([val = 7]() { return val * val; }, Priority::HIGH);
+    auto f3 = scheduler([]() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        return std::string("hello");
+    }, Priority::NORMAL);
+    auto f4 = scheduler([]() { return 3.14; }, Priority::LOW);
+
+    // Retrieve results (blocks until ready)
+    std::cout &lt;&lt; "f1 (CRITICAL): " &lt;&lt; f1.get() &lt;&lt; "\n";
+    std::cout &lt;&lt; "f2 (HIGH): " &lt;&lt; f2.get() &lt;&lt; "\n";
+    std::cout &lt;&lt; "f3 (NORMAL): " &lt;&lt; f3.get() &lt;&lt; "\n";
+    std::cout &lt;&lt; "f4 (LOW): " &lt;&lt; f4.get() &lt;&lt; "\n";
+
+    scheduler.shutdown();
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><strong><code>std::packaged_task</code>:</strong> Wraps any callable and creates a <code>std::future</code> via <code>get_future()</code>. When the packaged_task is invoked, the result (or exception) is stored in the shared state, making it available through the future.</li>
+      <li><strong><code>std::shared_ptr</code> capture:</strong> The packaged_task is captured by shared_ptr in the lambda. This ensures the task object lives until the lambda executes, even if the original future is moved or destroyed.</li>
+      <li><strong>Exception propagation:</strong> If the callable throws, <code>std::packaged_task</code> catches the exception and stores it in the shared state. Calling <code>future.get()</code> will re-throw it.</li>
+      <li><strong>Priority ordering:</strong> CRITICAL tasks are dequeued first, ensuring urgent work is not blocked behind lower-priority tasks.</li>
+      <li><strong><code>std::invoke_result_t</code>:</strong> C++17 trait that deduces the return type of a callable. This makes the <code>schedule()</code> function work with any callable, returning the correct <code>std::future&lt;T&gt;</code> type.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ====== Step 5 ====== -->
+
+<h2>Step 5: Implement Delayed/Timed Tasks</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution5')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution5">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;thread&gt;
+#include &lt;mutex&gt;
+#include &lt;condition_variable&gt;
+#include &lt;queue&gt;
+#include &lt;vector&gt;
+#include &lt;functional&gt;
+#include &lt;future&gt;
+#include &lt;atomic&gt;
+#include &lt;chrono&gt;
+#include &lt;memory&gt;
+#include &lt;cstdint&gt;
+
+using TaskId = std::uint64_t;
+using Clock = std::chrono::steady_clock;
+using TimePoint = Clock::time_point;
+
+enum class Priority { CRITICAL = 0, HIGH = 1, NORMAL = 2, LOW = 3 };
+
+struct Task {
+    std::function&lt;void()&gt; execute;
+    Priority priority;
+    TaskId id;
+    TimePoint submitTime;
+    TimePoint readyTime;       // When the task becomes eligible for execution
+
+    bool operator&gt;(const Task&amp; other) const {
+        if (static_cast&lt;int&gt;(priority) != static_cast&lt;int&gt;(other.priority))
+            return static_cast&lt;int&gt;(priority) &gt; static_cast&lt;int&gt;(other.priority);
+        return submitTime &gt; other.submitTime;
+    }
+};
+
+// Comparator for the timer queue: orders by readyTime (earliest first)
+struct TimerCompare {
+    bool operator()(const Task&amp; a, const Task&amp; b) const {
+        return a.readyTime &gt; b.readyTime;
+    }
+};
+
+// ---- Scheduler with timer thread ----
+
+class TimedTaskScheduler {
+public:
+    explicit TimedTaskScheduler(std::size_t numWorkers = 4)
+        : stopped_(false), nextId_(1) {
+        // Start worker threads
+        for (std::size_t i = 0; i &lt; numWorkers; ++i) {
+            workers_.emplace_back([this, i]() { workerLoop(i); });
+        }
+        // Start timer thread
+        timerThread_ = std::thread([this]() { timerLoop(); });
+        std::cout &lt;&lt; "TimedScheduler: " &lt;&lt; numWorkers
+                  &lt;&lt; " workers + 1 timer started\n";
+    }
+
+    ~TimedTaskScheduler() { shutdown(); }
+
+    TimedTaskScheduler(const TimedTaskScheduler&amp;) = delete;
+    TimedTaskScheduler&amp; operator=(const TimedTaskScheduler&amp;) = delete;
+
+    // Schedule a task for immediate execution
+    template&lt;typename F&gt;
+    auto schedule(F&amp;&amp; f, Priority prio = Priority::NORMAL)
+        -&gt; std::future&lt;typename std::invoke_result_t&lt;F&gt;&gt;
+    {
+        return scheduleAt(std::chrono::milliseconds(0),
+                          std::forward&lt;F&gt;(f), prio);
+    }
+
+    // Schedule a task after a delay
+    template&lt;typename F&gt;
+    auto scheduleAfter(const std::chrono::milliseconds&amp; delay,
+                        F&amp;&amp; f, Priority prio = Priority::NORMAL)
+        -&gt; std::future&lt;typename std::invoke_result_t&lt;F&gt;&gt;
+    {
+        return scheduleAt(delay, std::forward&lt;F&gt;(f), prio);
+    }
+
+    // Schedule a task at a specific time point
+    template&lt;typename F&gt;
+    auto scheduleAt(TimePoint when, F&amp;&amp; f, Priority prio = Priority::NORMAL)
+        -&gt; std::future&lt;typename std::invoke_result_t&lt;F&gt;&gt;
+    {
+        using ReturnType = typename std::invoke_result_t&lt;F&gt;;
+
+        auto packaged = std::make_shared&lt;std::packaged_task&lt;ReturnType()&gt;&gt;(
+            std::forward&lt;F&gt;(f)
+        );
+        auto future = packaged-&gt;get_future();
+
+        TaskId id = nextId_++;
+        TimePoint now = Clock::now();
+
+        Task task{
+            [packaged]() { (*packaged)(); },
+            prio,
+            id,
+            now,
+            when
+        };
+
+        if (when &lt;= now) {
+            // Already ready: push directly to ready queue
+            {
+                std::lock_guard&lt;std::mutex&gt; lock(readyMutex_);
+                readyQueue_.push(std::move(task));
+            }
+            readyCond_.notify_one();
+        } else {
+            // Future execution: push to timer queue
+            {
+                std::lock_guard&lt;std::mutex&gt; lock(timerMutex_);
+                timerQueue_.push(std::move(task));
+            }
+            timerCond_.notify_one();
+        }
+
+        return future;
+    }
+
+    void shutdown() {
+        if (stopped_.exchange(true)) return;
+        readyCond_.notify_all();
+        timerCond_.notify_all();
+        for (auto&amp; w : workers_) {
+            if (w.joinable()) w.join();
+        }
+        if (timerThread_.joinable()) timerThread_.join();
+        std::cout &lt;&lt; "TimedScheduler: shutdown complete\n";
+    }
+
+private:
+    // Timer loop: moves tasks to ready queue when their time arrives
+    void timerLoop() {
+        while (true) {
+            std::unique_lock&lt;std::mutex&gt; lock(timerMutex_);
+            timerCond_.wait(lock, [this] {
+                return !timerQueue_.empty() || stopped_;
+            });
+
+            if (stopped_) {
+                // Drain remaining timed tasks
+                while (!timerQueue_.empty()) {
+                    Task task = std::move(
+                        const_cast&lt;Task&amp;&gt;(timerQueue_.top()));
+                    timerQueue_.pop();
+                    // Move to ready queue
+                    std::lock_guard&lt;std::mutex&gt; rlock(readyMutex_);
+                    readyQueue_.push(std::move(task));
+                }
+                readyCond_.notify_all();
+                return;
+            }
+
+            // Check if the earliest task is ready
+            TimePoint now = Clock::now();
+            while (!timerQueue_.empty() &amp;&amp;
+                   timerQueue_.top().readyTime &lt;= now) {
+                Task task = std::move(
+                    const_cast&lt;Task&amp;&gt;(timerQueue_.top()));
+                timerQueue_.pop();
+                readyCond_.notify_one();
+                lock.unlock();  // Release timer lock before acquiring ready lock
+                {
+                    std::lock_guard&lt;std::mutex&gt; rlock(readyMutex_);
+                    readyQueue_.push(std::move(task));
+                }
+                lock.lock();  // Re-acquire for next iteration
+            }
+
+            // If timer queue not empty, wait until the next task's ready time
+            if (!timerQueue_.empty()) {
+                timerCond_.wait_until(lock, timerQueue_.top().readyTime);
+            }
+        }
+    }
+
+    // Worker loop: processes tasks from the ready queue
+    void workerLoop(std::size_t workerId) {
+        while (true) {
+            Task task;
+            {
+                std::unique_lock&lt;std::mutex&gt; lock(readyMutex_);
+                readyCond_.wait(lock, [this] {
+                    return !readyQueue_.empty() || stopped_;
+                });
+                if (stopped_ &amp;&amp; readyQueue_.empty()) return;
+                task = std::move(const_cast&lt;Task&amp;&gt;(readyQueue_.top()));
+                readyQueue_.pop();
+            }
+            task.execute();
+        }
+    }
+
+    // Ready queue (priority-based)
+    std::priority_queue&lt;Task, std::vector&lt;Task&gt;, std::greater&lt;Task&gt;&gt; readyQueue_;
+    mutable std::mutex readyMutex_;
+    std::condition_variable readyCond_;
+
+    // Timer queue (time-ordered)
+    std::priority_queue&lt;Task, std::vector&lt;Task&gt;, TimerCompare&gt; timerQueue_;
+    mutable std::mutex timerMutex_;
+    std::condition_variable timerCond_;
+
+    std::vector&lt;std::thread&gt; workers_;
+    std::thread timerThread_;
+    std::atomic&lt;bool&gt; stopped_;
+    std::atomic&lt;TaskId&gt; nextId_;
+};
+
+// ---- Demo ----
+
+int main() {
+    TimedTaskScheduler scheduler(2);
+    auto start = Clock::now();
+
+    // Immediate task
+    auto f1 = scheduler.schedule([]() {
+        return std::string("immediate");
+    }, Priority::HIGH);
+    std::cout &lt;&lt; "Immediate: " &lt;&lt; f1.get() &lt;&lt; "\n";
+
+    // Delayed task (500ms from now)
+    auto f2 = scheduler.scheduleAfter(std::chrono::milliseconds(500), []() {
+        return std::string("delayed 500ms");
+    }, Priority::NORMAL);
+
+    // Another delayed task (200ms from now) -- should complete first
+    auto f3 = scheduler.scheduleAfter(std::chrono::milliseconds(200), []() {
+        return std::string("delayed 200ms");
+    }, Priority::CRITICAL);
+
+    std::cout &lt;&lt; "200ms task: " &lt;&lt; f3.get() &lt;&lt; "\n";
+    std::cout &lt;&lt; "500ms task: " &lt;&lt; f2.get() &lt;&lt; "\n";
+
+    auto elapsed = std::chrono::duration_cast&lt;std::chrono::milliseconds&gt;(
+        Clock::now() - start).count();
+    std::cout &lt;&lt; "Total elapsed: " &lt;&lt; elapsed &lt;&lt; "ms\n";
+
+    scheduler.shutdown();
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><strong>Dual-queue design:</strong> A timer queue (ordered by <code>readyTime</code>) and a ready queue (ordered by priority). The timer thread promotes tasks from the timer queue to the ready queue when their deadline arrives.</li>
+      <li><strong><code>condition_variable::wait_until</code>:</strong> The timer thread sleeps efficiently until the earliest timed task's <code>readyTime</code>. This avoids busy-waiting and uses zero CPU while idle.</li>
+      <li><strong>Lock ordering:</strong> The timer loop carefully releases the timer lock before acquiring the ready lock to avoid deadlock. This is a subtle but critical detail in multi-lock designs.</li>
+      <li><strong><code>std::chrono</code>:</strong> Uses <code>steady_clock</code> (monotonic) for timing, which is immune to system clock adjustments. <code>system_clock</code> could jump backward/forward due to NTP or DST changes.</li>
+      <li><strong>Graceful shutdown:</strong> On shutdown, the timer thread drains all remaining timed tasks into the ready queue so they get a chance to execute.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ====== Step 6 ====== -->
+
+<h2>Step 6: Add Exception Handling and Cancellation</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution6')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution6">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;thread&gt;
+#include &lt;mutex&gt;
+#include &lt;condition_variable&gt;
+#include &lt;queue&gt;
+#include &lt;vector&gt;
+#include &lt;functional&gt;
+#include &lt;future&gt;
+#include &lt;atomic&gt;
+#include &lt;chrono&gt;
+#include &lt;memory&gt;
+#include &lt;stdexcept&gt;
+#include &lt;unordered_set&gt;
+#include &lt;cstdint&gt;
+
+using TaskId = std::uint64_t;
+using Clock = std::chrono::steady_clock;
+using TimePoint = Clock::time_point;
+
+enum class Priority { CRITICAL = 0, HIGH = 1, NORMAL = 2, LOW = 3 };
+
+struct Task {
+    std::function&lt;void()&gt; execute;
+    Priority priority;
+    TaskId id;
+    TimePoint submitTime;
+
+    bool operator&gt;(const Task&amp; other) const {
+        if (static_cast&lt;int&gt;(priority) != static_cast&lt;int&gt;(other.priority))
+            return static_cast&lt;int&gt;(priority) &gt; static_cast&lt;int&gt;(other.priority);
+        return submitTime &gt; other.submitTime;
+    }
+};
+
+// ---- Scheduler with exception propagation and cancellation ----
+
+class CancelableScheduler {
+public:
+    explicit CancelableScheduler(std::size_t numThreads = 4)
+        : stopped_(false), nextId_(1) {
+        for (std::size_t i = 0; i &lt; numThreads; ++i) {
+            workers_.emplace_back([this, i]() { workerLoop(i); });
+        }
+    }
+
+    ~CancelableScheduler() { shutdown(); }
+
+    CancelableScheduler(const CancelableScheduler&amp;) = delete;
+    CancelableScheduler&amp; operator=(const CancelableScheduler&amp;) = delete;
+
+    // Schedule and return a future + task ID for cancellation
+    template&lt;typename F&gt;
+    auto schedule(F&amp;&amp; f, Priority prio = Priority::NORMAL)
+        -&gt; std::pair&lt;std::future&lt;typename std::invoke_result_t&lt;F&gt;&gt;, TaskId&gt;
+    {
+        using ReturnType = typename std::invoke_result_t&lt;F&gt;;
+
+        auto packaged = std::make_shared&lt;std::packaged_task&lt;ReturnType()&gt;&gt;(
+            std::forward&lt;F&gt;(f)
+        );
+        auto future = packaged-&gt;get_future();
+        TaskId id = nextId_++;
+
+        Task task{
+            [this, packaged, id]() {
+                // Check if cancelled before executing
+                if (isCancelled(id)) {
+                    throw std::runtime_error("Task cancelled");
+                }
+                (*packaged)();
+            },
+            prio,
+            id,
+            Clock::now()
+        };
+
+        {
+            std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+            if (stopped_) {
+                throw std::runtime_error("Scheduler is stopped");
+            }
+            activeIds_.insert(id);
+            queue_.push(std::move(task));
+        }
+        cond_.notify_one();
+
+        return {std::move(future), id};
+    }
+
+    // Cancel a task by ID (only works if not yet executing)
+    bool cancel(TaskId id) {
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        auto it = activeIds_.find(id);
+        if (it == activeIds_.end()) return false;  // Already completed/running
+        activeIds_.erase(it);
+
+        // Rebuild the queue without the cancelled task
+        std::priority_queue&lt;Task, std::vector&lt;Task&gt;, std::greater&lt;Task&gt;&gt; newQueue;
+        bool found = false;
+        while (!queue_.empty()) {
+            Task t = std::move(const_cast&lt;Task&amp;&gt;(queue_.top()));
+            queue_.pop();
+            if (t.id == id &amp;&amp; !found) {
+                found = true;  // Skip this task
+            } else {
+                newQueue.push(std::move(t));
+            }
+        }
+        queue_ = std::move(newQueue);
+        return found;
+    }
+
+    bool isCancelled(TaskId id) const {
+        std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+        return activeIds_.find(id) == activeIds_.end();
+    }
+
+    void shutdown() {
+        if (stopped_.exchange(true)) return;
+        cond_.notify_all();
+        for (auto&amp; w : workers_) {
+            if (w.joinable()) w.join();
+        }
+    }
+
+private:
+    void workerLoop(std::size_t workerId) {
+        while (true) {
+            Task task;
+            {
+                std::unique_lock&lt;std::mutex&gt; lock(mutex_);
+                cond_.wait(lock, [this] {
+                    return !queue_.empty() || stopped_;
+                });
+                if (stopped_ &amp;&amp; queue_.empty()) return;
+                task = std::move(const_cast&lt;Task&amp;&gt;(queue_.top()));
+                queue_.pop();
+            }
+            // Execute -- exceptions propagate through packaged_task
+            try {
+                task.execute();
+            } catch (...) {
+                // packaged_task already captured the exception
+                // Clean up active ID
+                std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+                activeIds_.erase(task.id);
+                throw;  // Re-throw so packaged_task can store it
+            }
+            // Mark as completed
+            {
+                std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+                activeIds_.erase(task.id);
+            }
+        }
+    }
+
+    std::vector&lt;std::thread&gt; workers_;
+    std::priority_queue&lt;Task, std::vector&lt;Task&gt;, std::greater&lt;Task&gt;&gt; queue_;
+    mutable std::mutex mutex_;
+    std::condition_variable cond_;
+    std::atomic&lt;bool&gt; stopped_;
+    std::atomic&lt;TaskId&gt; nextId_;
+    std::unordered_set&lt;TaskId&gt; activeIds_;
+};
+
+// ---- Demo ----
+
+int main() {
+    CancelableScheduler scheduler(2);
+
+    // Schedule a normal task
+    auto [f1, id1] = scheduler.schedule([]() {
+        std::cout &lt;&lt; "Task 1 executed\n";
+        return 100;
+    }, Priority::NORMAL);
+
+    // Schedule a task that throws
+    auto [f2, id2] = scheduler.schedule([]() -&gt; int {
+        std::cout &lt;&lt; "Task 2 throwing...\n";
+        throw std::runtime_error("Intentional error in task 2");
+    }, Priority::HIGH);
+
+    // Schedule a task and cancel it
+    auto [f3, id3] = scheduler.schedule([]() {
+        std::cout &lt;&lt; "Task 3 executed (should not appear)\n";
+        return 300;
+    }, Priority::LOW);
+
+    bool cancelled = scheduler.cancel(id3);
+    std::cout &lt;&lt; "Task 3 cancelled: " &lt;&lt; std::boolalpha &lt;&lt; cancelled &lt;&lt; "\n";
+
+    // Get results
+    std::cout &lt;&lt; "Task 1 result: " &lt;&lt; f1.get() &lt;&lt; "\n";
+
+    // Task 2 threw -- get() re-throws the exception
+    try {
+        f2.get();
+    } catch (const std::exception&amp; e) {
+        std::cout &lt;&lt; "Task 2 exception caught: " &lt;&lt; e.what() &lt;&lt; "\n";
+    }
+
+    // Task 3 was cancelled -- get() re-throws the cancellation exception
+    try {
+        f3.get();
+    } catch (const std::exception&amp; e) {
+        std::cout &lt;&lt; "Task 3 exception caught: " &lt;&lt; e.what() &lt;&lt; "\n";
+    }
+
+    scheduler.shutdown();
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><strong><code>std::packaged_task</code> exception capture:</strong> When a task throws, <code>std::packaged_task</code> automatically stores the exception in the shared state. Calling <code>future.get()</code> re-throws it in the calling thread.</li>
+      <li><strong>Cancellation via <code>cancel()</code>:</strong> Removes the task from the queue by rebuilding it without the target task. The cancelled task's lambda throws <code>"Task cancelled"</code> if it somehow executes (race condition guard).</li>
+      <li><strong><code>activeIds_</code> set:</strong> Tracks which tasks are still pending or running. Used for both cancellation checks and cleanup. The <code>unordered_set</code> provides O(1) lookup.</li>
+      <li><strong><code>std::pair</code> return:</strong> <code>schedule()</code> returns both the future and the task ID, giving the caller control over cancellation.</li>
+      <li><strong>Structured bindings:</strong> <code>auto [f1, id1] = ...</code> (C++17) decomposes the returned pair for clean code.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ====== Step 7 ====== -->
+
+<h2>Step 7: Build a Result Aggregator</h2>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution7')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution7">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;thread&gt;
+#include &lt;mutex&gt;
+#include &lt;condition_variable&gt;
+#include &lt;vector&gt;
+#include &lt;functional&gt;
+#include &lt;future&gt;
+#include &lt;atomic&gt;
+#include &lt;chrono&gt;
+#include &lt;memory&gt;
+#include &lt;stdexcept&gt;
+#include &lt;variant&gt;
+#include &lt;cstdint&gt;
+
+// ---- when_all result aggregator ----
+
+// A result that holds either a value or an exception
+template&lt;typename T&gt;
+class Try {
+public:
+    // Success case
+    Try(T value) : data_(std::move(value)) {}
+
+    // Failure case
+    Try(std::exception_ptr ex) : data_(ex) {}
+
+    bool hasValue() const {
+        return std::holds_alternative&lt;T&gt;(data_);
+    }
+
+    T&amp; get() {
+        if (auto* val = std::get_if&lt;T&gt;(&amp;data_)) return *val;
+        std::rethrow_exception(std::get&lt;std::exception_ptr&gt;(data_));
+    }
+
+    const T&amp; get() const {
+        if (auto* val = std::get_if&lt;T&gt;(&amp;data_)) return *val;
+        std::rethrow_exception(std::get&lt;std::exception_ptr&gt;(data_));
+    }
+
+private:
+    std::variant&lt;T, std::exception_ptr&gt; data_;
+};
+
+// Aggregated result from multiple tasks
+template&lt;typename T&gt;
+class WhenAllResult {
+public:
+    WhenAllResult() = default;
+
+    // Wait for all futures and collect results
+    explicit WhenAllResult(std::vector&lt;std::future&lt;T&gt;&gt;&amp;&amp; futures)
+        : results_(futures.size()) {
+        // Launch a thread to wait on all futures concurrently
+        std::vector&lt;std::thread&gt; waiters;
+        waiters.reserve(futures.size());
+
+        for (std::size_t i = 0; i &lt; futures.size(); ++i) {
+            waiters.emplace_back([this, i](std::future&lt;T&gt; fut) {
+                try {
+                    T value = fut.get();
+                    results_[i] = Try&lt;T&gt;(std::move(value));
+                } catch (...) {
+                    results_[i] = Try&lt;T&gt;(std::current_exception());
+                }
+                // Signal completion
+                {
+                    std::lock_guard&lt;std::mutex&gt; lock(mutex_);
+                    completedCount_++;
+                }
+                cond_.notify_one();
+            }, std::move(futures[i]));
+        }
+
+        // Wait for all waiter threads
+        for (auto&amp; t : waiters) {
+            if (t.joinable()) t.join();
+        }
+    }
+
+    std::size_t size() const { return results_.size(); }
+
+    // Get individual result (re-throws if that task failed)
+    const T&amp; get(std::size_t index) const {
+        return results_.at(index).get();
+    }
+
+    // Check if a specific task succeeded
+    bool hasValue(std::size_t index) const {
+        return results_.at(index).hasValue();
+    }
+
+    // Get the Try object for detailed inspection
+    const Try&lt;T&gt;&amp; tryGet(std::size_t index) const {
+        return results_.at(index);
+    }
+
+    // Count of successful tasks
+    std::size_t successCount() const {
+        return std::count_if(results_.begin(), results_.end(),
+            [](const Try&lt;T&gt;&amp; t) { return t.hasValue(); });
+    }
+
+    // Count of failed tasks
+    std::size_t failureCount() const {
+        return results_.size() - successCount();
+    }
+
+    // Collect all successful values into a vector
+    std::vector&lt;T&gt; values() const {
+        std::vector&lt;T&gt; vals;
+        for (const auto&amp; r : results_) {
+            if (r.hasValue()) vals.push_back(r.get());
+        }
+        return vals;
+    }
+
+private:
+    std::vector&lt;Try&lt;T&gt;&gt; results_;
+    mutable std::mutex mutex_;
+    std::condition_variable cond_;
+    std::size_t completedCount_{0};
+};
+
+// ---- Convenience: when_all that waits for all futures ----
+
+template&lt;typename T&gt;
+WhenAllResult&lt;T&gt; when_all(std::vector&lt;std::future&lt;T&gt;&gt; futures) {
+    return WhenAllResult&lt;T&gt;(std::move(futures));
+}
+
+// ---- Demo ----
+
+int main() {
+    // Create 6 tasks: some succeed, some throw
+    std::vector&lt;std::future&lt;int&gt;&gt; futures;
+    auto launch = [&amp;futures](int delayMs, int value, bool shouldThrow) {
+        futures.push_back(std::async(std::launch::async, [=]() -&gt; int {
+            std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
+            if (shouldThrow) {
+                throw std::runtime_error("Task " + std::to_string(value) + " failed");
+            }
+            return value;
+        }));
+    };
+
+    launch(100, 1, false);   // succeeds
+    launch(50,  2, true);    // throws
+    launch(200, 3, false);   // succeeds
+    launch(150, 4, false);   // succeeds
+    launch(80,  5, true);    // throws
+    launch(300, 6, false);   // succeeds
+
+    // Aggregate all results
+    WhenAllResult&lt;int&gt; all = when_all(std::move(futures));
+
+    std::cout &lt;&lt; "Total tasks: " &lt;&lt; all.size() &lt;&lt; "\n";
+    std::cout &lt;&lt; "Succeeded:   " &lt;&lt; all.successCount() &lt;&lt; "\n";
+    std::cout &lt;&lt; "Failed:      " &lt;&lt; all.failureCount() &lt;&lt; "\n";
+
+    // Print each result
+    for (std::size_t i = 0; i &lt; all.size(); ++i) {
+        if (all.hasValue(i)) {
+            std::cout &lt;&lt; "Task " &lt;&lt; i &lt;&lt; ": " &lt;&lt; all.get(i) &lt;&lt; "\n";
+        } else {
+            try {
+                all.get(i);
+            } catch (const std::exception&amp; e) {
+                std::cout &lt;&lt; "Task " &lt;&lt; i &lt;&lt; ": EXCEPTION - "
+                          &lt;&lt; e.what() &lt;&lt; "\n";
+            }
+        }
+    }
+
+    // Collect all successful values
+    auto vals = all.values();
+    std::cout &lt;&lt; "\nAll successful values: ";
+    for (auto v : vals) std::cout &lt;&lt; v &lt;&lt; " ";
+    std::cout &lt;&lt; "\n";
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><strong><code>Try&lt;T&gt;</code>:</strong> A result wrapper that stores either a value or an exception. Uses <code>std::variant</code> (C++17) to hold either case. Similar to Rust's <code>Result</code> type or Haskell's <code>Either</code>.</li>
+      <li><strong><code>WhenAllResult&lt;T&gt;</code>:</strong> Collects results from multiple futures. Each future is waited on in a separate thread, so all tasks run concurrently. Results are indexed by their original position.</li>
+      <li><strong><code>std::current_exception()</code>:</strong> Captures the current exception as an <code>std::exception_ptr</code>, allowing it to be stored and re-thrown later in a different thread.</li>
+      <li><strong><code>std::async(std::launch::async)</code>:</strong> Forces asynchronous launch (the default may defer execution). Each task runs in its own thread for true parallelism in this demo.</li>
+      <li><strong><code>std::count_if</code> with lambda:</strong> STL algorithm to count successful results. Demonstrates functional-style programming with lambdas.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ====== Follow-up Questions ====== -->
+
+<h2>Follow-up Questions</h2>
+
+<div class="question">
+  <h3>Variations to Try</h3>
+  <ol>
+    <li><strong>Work stealing:</strong> Extend the thread pool with per-thread local deques. When a worker's local queue is empty, it steals from other workers' queues (steal from front, pop from back). This reduces contention on the global queue.</li>
+    <li><strong>Task dependencies (DAG scheduler):</strong> Support dependent tasks where task B can only start after task A completes. Implement a directed acyclic graph with in-degree tracking. When a task completes, decrement the in-degree of its dependents and schedule any that become ready.</li>
+    <li><strong>Dynamic priority adjustment:</strong> Allow task priority to change after submission (e.g., elevate a task from NORMAL to CRITICAL based on external events). Use a <code>std::unordered_map&lt;TaskId, Priority&gt;</code> for O(1) lookup and rebuild the queue when priorities change.</li>
+    <li><strong>Rate limiting:</strong> Add per-priority rate limits to prevent low-priority tasks from starving under heavy CRITICAL load. Implement token bucket or leaky bucket algorithms.</li>
+  </ol>
+</div>
+
+<!-- ====== Key Takeaways ====== -->
+
+<div class="callout green">
+  <p><strong>Key Takeaways:</strong></p>
+  <ul>
+    <li><strong>RAII is essential for thread safety:</strong> The scheduler destructor joins all threads, preventing dangling threads. Smart pointers manage task lifetime automatically.</li>
+    <li><strong><code>std::packaged_task</code> bridges callables and futures:</strong> It type-erases the callable and provides a future for result retrieval. Exceptions in the task are automatically propagated.</li>
+    <li><strong><code>condition_variable</code> enables efficient waiting:</strong> Workers sleep until work is available, using zero CPU while idle. The predicate overload handles spurious wakeups.</li>
+    <li><strong><code>enum class</code> provides type safety:</strong> Priority levels cannot accidentally convert to <code>int</code>, preventing subtle bugs.</li>
+    <li><strong>Move semantics are critical:</strong> Tasks, futures, and packaged_tasks are all move-only types. Understanding <code>std::move</code> and perfect forwarding (<code>std::forward</code>) is essential for building efficient concurrent systems.</li>
+    <li><strong><code>std::variant</code> enables safe sum types:</strong> The <code>Try&lt;T&gt;</code> wrapper stores either a value or an exception without dynamic allocation, combining the safety of tagged unions with modern C++ ergonomics.</li>
+    <li><strong>Lock ordering prevents deadlock:</strong> When using multiple mutexes (timer queue + ready queue), always acquire them in the same order or release one before acquiring another.</li>
+    <li><strong><code>std::atomic</code> for simple shared state:</strong> Flags like <code>stopped_</code> and counters like <code>nextId_</code> can use atomics instead of mutexes for lock-free access.</li>
+  </ul>
+</div>
+
+<div class="callout">
+  <p><strong>Complexity Analysis:</strong></p>
+  <table>
+    <tr><th>Operation</th><th>Time</th><th>Notes</th></tr>
+    <tr><td>schedule (immediate)</td><td>O(log n)</td><td>Priority queue insertion</td></tr>
+    <tr><td>schedule (delayed)</td><td>O(log n)</td><td>Timer queue insertion</td></tr>
+    <tr><td>worker pop</td><td>O(log n)</td><td>Priority queue extraction</td></tr>
+    <tr><td>cancel</td><td>O(n)</td><td>Rebuilds priority queue</td></tr>
+    <tr><td>when_all (collect)</td><td>O(n)</td><td>One waiter thread per future</td></tr>
+    <tr><td>timer promotion</td><td>O(log m)</td><td>m = tasks in timer queue</td></tr>
+  </table>
+</div>
+
+<div class="callout red">
+  <p><strong>Common Pitfalls:</strong></p>
+  <ul>
+    <li><strong>Priority inversion:</strong> If a low-priority task holds a lock needed by a high-priority task, priorities become meaningless. Consider using <code>std::shared_mutex</code> for read-heavy paths to reduce contention.</li>
+    <li><strong>Starvation:</strong> Under continuous CRITICAL load, LOW-priority tasks may never execute. Use aging (gradually increase priority over time) to prevent this.</li>
+    <li><strong>Future lifetime:</strong> If a <code>std::future</code> is destroyed before calling <code>get()</code>, the result is discarded. If the task threw, the exception is silently swallowed -- this can hide bugs.</li>
+    <li><strong>Timer queue drift:</strong> Under heavy load, the timer thread may not wake exactly at the deadline. For hard real-time requirements, consider dedicated timer hardware or OS-level timers.</li>
+    <li><strong>Shared_ptr overhead:</strong> Capturing <code>std::shared_ptr&lt;packaged_task&gt;</code> in the task lambda incurs reference counting overhead. For extremely high-frequency tasks, consider custom allocators or intrusive ref counting.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="../index.html">C++ Index &larr;</a>
+  <span style="color: #8b949e;"></span>
+</div>
+<script>
+function toggleSolution(id) {
+  document.getElementById(id).classList.toggle('visible');
+}
+</script>
+</body>
+</html>

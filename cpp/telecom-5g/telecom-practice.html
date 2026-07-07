@@ -1,0 +1,2099 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Telecom Practice: Build a Mini 5G Protocol Stack — C++ Practice</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.easy { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  .question { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; }
+  .question h3 { color: #f0f6fc; margin-top: 0; }
+  .solution-toggle { cursor: pointer; user-select: none; }
+  .solution-toggle h3 { color: #3fb950; display: inline; }
+  .solution-content { display: none; margin-top: 1rem; }
+  .solution-content.visible { display: block; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+  .topics-covered { margin-bottom: 1rem; font-size: 0.85rem; color: #8b949e; }
+  .topics-covered a { color: #8b949e; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#4">4 Telecom &amp; 5G/4G</a> / Practice</div>
+<div class="meta"><span class="tag medium">Medium</span></div>
+<h1>Telecom Practice: Build a Mini 5G Protocol Stack</h1>
+
+<div class="topics-covered">
+  <strong>Topics Covered:</strong>
+  <a href="5g-ran-overview.html">5G RAN Overview</a>,
+  <a href="cu-du-split.html">CU-DU Split</a>,
+  <a href="mac-layer.html">MAC Layer</a>,
+  <a href="rlc-layer.html">RLC Layer</a>,
+  <a href="pdcp-layer.html">PDCP Layer</a>,
+  <a href="rrc-layer.html">RRC Layer</a>,
+  <a href="sdap-layer.html">SDAP Layer</a>,
+  <a href="nas-layer.html">NAS Layer</a>,
+  <a href="lte-architecture.html">LTE Architecture</a>,
+  <a href="handover-procedures.html">Handover Procedures</a>,
+  <a href="fixed-point-arithmetic.html">Fixed-Point Arithmetic</a>,
+  <a href="circular-buffers.html">Circular Buffers</a>,
+  <a href="memory-pools-telecom.html">Memory Pools</a>,
+  <a href="packet-processing-dpdk.html">Packet Processing (DPDK)</a>,
+  <a href="asn1-encoding.html">ASN.1 Encoding</a>,
+  <a href="bit-level-operations.html">Bit-Level Operations</a>,
+  <a href="signal-processing-basics.html">Signal Processing Basics</a>
+</div>
+
+<div class="question">
+  <h3>Problem Statement</h3>
+  <p>Implement a simplified protocol stack that processes packets through RLC -> PDCP -> RRC layers, mirroring the 5G NR user-plane and control-plane processing chain. The stack should handle downlink encoding (SDU in, PDU out) and uplink decoding (PDU in, SDU out) through each layer, demonstrating the layered architecture used in real gNodeB implementations.</p>
+  <p>This exercise is broken into 7 incremental sub-problems. Each builds on the previous one, so solve them in order.</p>
+</div>
+
+<div class="callout warning">
+  <p><strong>Design Considerations:</strong></p>
+  <ul>
+    <li>In a real 5G stack, packets flow downlink as: Application -> SDAP -> PDCP -> RLC -> MAC -> PHY. We simplify this to RRC -> PDCP -> RLC -> MAC for the control plane.</li>
+    <li>Each layer adds its own header (and optionally trailer) to the SDU from the upper layer, creating a PDU that the lower layer treats as its SDU.</li>
+    <li>RLC handles segmentation when the SDU is too large for the MAC grant.</li>
+    <li>PDCP handles header compression (ROHC) and integrity/ciphering for control-plane data.</li>
+    <li>The MAC layer uses a circular buffer (ring buffer) to manage scheduling grants efficiently.</li>
+  </ul>
+</div>
+
+<!-- Sub-problem 1 -->
+<h2>1. Define Protocol Layer Interfaces</h2>
+
+<div class="question">
+  <h3>Define protocol layer interfaces</h3>
+  <p>Create an abstract <code>ProtocolLayer</code> base class that all layers inherit from. It should provide:</p>
+  <ul>
+    <li><code>processDownlink(SDU) -> PDU</code>: encode data going from upper layer down to lower layer (transmit path).</li>
+    <li><code>processUplink(PDU) -> SDU</code>: decode data coming from lower layer up to upper layer (receive path).</li>
+    <li>A pure virtual destructor for proper cleanup via base pointers.</li>
+  </ul>
+  <p>Also define an <code>enum class LayerType</code> identifying each layer (RRC, PDCP, RLC, MAC, NAS). A <code>Packet</code> struct holds raw bytes and metadata (layer type, sequence number).</p>
+</div>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution1')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution1">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+#include &lt;cstdint&gt;
+#include &lt;string&gt;
+#include &lt;memory&gt;
+#include &lt;sstream&gt;
+#include &lt;iomanip&gt;
+
+// ---- Layer type enumeration ----
+
+enum class LayerType {
+    NAS,
+    RRC,
+    PDCP,
+    RLC,
+    MAC,
+    PHY,
+    UNKNOWN
+};
+
+std::string layerName(LayerType type) {
+    switch (type) {
+        case LayerType::NAS:  return "NAS";
+        case LayerType::RRC:  return "RRC";
+        case LayerType::PDCP: return "PDCP";
+        case LayerType::RLC:  return "RLC";
+        case LayerType::MAC:  return "MAC";
+        case LayerType::PHY:  return "PHY";
+        default:              return "UNKNOWN";
+    }
+}
+
+// ---- Packet: raw bytes with metadata ----
+
+struct Packet {
+    std::vector&lt;uint8_t&gt; data;
+    LayerType sourceLayer  = LayerType::UNKNOWN;
+    LayerType destLayer    = LayerType::UNKNOWN;
+    uint32_t sequenceNumber = 0;
+
+    std::size_t size() const { return data.size(); }
+    bool empty() const { return data.empty(); }
+
+    void append(const std::vector&lt;uint8_t&gt;&amp; bytes) {
+        data.insert(data.end(), bytes.begin(), bytes.end());
+    }
+
+    void prepend(const std::vector&lt;uint8_t&gt;&amp; bytes) {
+        data.insert(data.begin(), bytes.begin(), bytes.end());
+    }
+};
+
+// ---- Abstract protocol layer base class ----
+
+class ProtocolLayer {
+public:
+    virtual ~ProtocolLayer() = default;
+
+    // Downlink: upper layer SDU in, lower layer PDU out
+    virtual Packet processDownlink(const Packet&amp; sdu) = 0;
+
+    // Uplink: lower layer PDU in, upper layer SDU out
+    virtual Packet processUplink(const Packet&amp; pdu) = 0;
+
+    // Identification
+    virtual LayerType layerType() const = 0;
+    virtual std::string name() const = 0;
+};
+
+// ---- Hex dump utility ----
+
+std::string hexDump(const std::vector&lt;uint8_t&gt;&amp; data) {
+    std::ostringstream oss;
+    for (std::size_t i = 0; i &lt; data.size(); ++i) {
+        oss &lt;&lt; std::hex &lt;&lt; std::setw(2) &lt;&lt; std::setfill('0')
+            &lt;&lt; static_cast&lt;int&gt;(data[i]) &lt;&lt; " ";
+        if ((i + 1) % 16 == 0) oss &lt;&lt; "\n";
+    }
+    return oss.str();
+}
+
+// ---- Test driver ----
+
+int main() {
+    Packet pkt;
+    pkt.data = {0x01, 0x02, 0x03, 0x04};
+    pkt.sourceLayer = LayerType::NAS;
+
+    std::cout &lt;&lt; "Packet size: " &lt;&lt; pkt.size() &lt;&lt; " bytes\n";
+    std::cout &lt;&lt; "Source layer: " &lt;&lt; layerName(pkt.sourceLayer) &lt;&lt; "\n";
+    std::cout &lt;&lt; "Hex dump:\n" &lt;&lt; hexDump(pkt.data) &lt;&lt; "\n";
+
+    // Demonstrate that we cannot instantiate ProtocolLayer directly
+    // (it is abstract). Concrete layers will be added next.
+    std::cout &lt;&lt; "ProtocolLayer base class defined.\n";
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><strong>LayerType enum:</strong> Identifies each protocol layer. Used in <code>Packet</code> metadata so each layer can tell where data came from and where it is going.</li>
+      <li><strong>Packet struct:</strong> Carries raw bytes plus metadata (source/destination layer, sequence number). The <code>prepend()</code> method is key: layers add headers to the <strong>front</strong> of the packet, and the lower layer sees the whole thing as its SDU.</li>
+      <li><strong>ProtocolLayer abstract class:</strong> Two pure virtual methods define the contract. <code>processDownlink</code> takes an SDU and returns a PDU (with the layer's own header prepended). <code>processUplink</code> strips the header and returns the SDU.</li>
+      <li><strong>Virtual destructor:</strong> Ensures correct cleanup when deleting derived objects through base pointers.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- Sub-problem 2 -->
+<h2>2. Implement the RLC Layer</h2>
+
+<div class="question">
+  <h3>Implement the RLC layer</h3>
+  <p>Implement <code>RlcAmLayer</code> (RLC Acknowledged Mode) that inherits from <code>ProtocolLayer</code>. It must support:</p>
+  <ul>
+    <li><strong>Segmentation:</strong> If the SDU exceeds a configurable maximum PDU size, split it into multiple PDUs. Each PDU gets a 2-byte RLC header containing a sequence number (12 bits) and segmentation info (4 bits).</li>
+    <li><strong>Reassembly:</strong> On the uplink, reassemble segmented PDUs back into a single SDU using sequence numbers.</li>
+    <li><strong>Sequence number tracking:</strong> Maintain a TX counter (next SN to transmit) and RX counter (next expected SN). Wrap around at 4096 (12-bit space).</li>
+  </ul>
+</div>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution2')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution2">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+#include &lt;cstdint&gt;
+#include &lt;cstring&gt;
+#include &lt;map&gt;
+#include &lt;algorithm&gt;
+
+enum class LayerType { NAS, RRC, PDCP, RLC, MAC, PHY, UNKNOWN };
+
+std::string layerName(LayerType t) {
+    switch (t) {
+        case LayerType::NAS:  return "NAS";
+        case LayerType::RRC:  return "RRC";
+        case LayerType::PDCP: return "PDCP";
+        case LayerType::RLC:  return "RLC";
+        case LayerType::MAC:  return "MAC";
+        default:              return "UNKNOWN";
+    }
+}
+
+struct Packet {
+    std::vector&lt;uint8_t&gt; data;
+    LayerType sourceLayer = LayerType::UNKNOWN;
+    LayerType destLayer   = LayerType::UNKNOWN;
+    uint32_t sequenceNumber = 0;
+    std::size_t size() const { return data.size(); }
+    bool empty() const { return data.empty(); }
+    void prepend(const std::vector&lt;uint8_t&gt;&amp; b) {
+        data.insert(data.begin(), b.begin(), b.end());
+    }
+};
+
+class ProtocolLayer {
+public:
+    virtual ~ProtocolLayer() = default;
+    virtual Packet processDownlink(const Packet&amp; sdu) = 0;
+    virtual Packet processUplink(const Packet&amp; pdu) = 0;
+    virtual LayerType layerType() const = 0;
+    virtual std::string name() const = 0;
+};
+
+// ---- RLC AM Header (2 bytes) ----
+// Byte 0: [D/C=1 | P=0 | SN high 10 bits ]
+// Byte 1: [SN low 2 bits | SO high 6 bits ]
+// Byte 2: [SO low 8 bits ]  (only for continuation segments)
+// For simplicity we use a 2-byte header:
+//   Bits [15:14] = segment type (00=first, 01=continuation, 10=last, 11=complete)
+//   Bits [13:2]  = sequence number (12 bits)
+//   Bits [1:0]   = reserved
+
+struct RlcHeader {
+    uint16_t raw;
+
+    enum SegType : uint8_t { FIRST = 0, CONT = 1, LAST = 2, COMPLETE = 3 };
+
+    RlcHeader(SegType seg, uint16_t sn)
+        : raw((static_cast&lt;uint16_t&gt;(seg) &lt;&lt; 14) |
+              ((sn &amp; 0x0FFF) &lt;&lt; 2)) {}
+
+    SegType segType() const {
+        return static_cast&lt;SegType&gt;((raw &gt;&gt; 14) &amp; 0x03);
+    }
+    uint16_t sn() const { return (raw &gt;&gt; 2) &amp; 0x0FFF; }
+
+    std::vector&lt;uint8_t&gt; toBytes() const {
+        return {static_cast&lt;uint8_t&gt;(raw &gt;&gt; 8),
+                static_cast&lt;uint8_t&gt;(raw &amp; 0xFF)};
+    }
+
+    static RlcHeader fromBytes(const uint8_t* b) {
+        uint16_t r = (static_cast&lt;uint16_t&gt;(b[0]) &lt;&lt; 8) | b[1];
+        return RlcHeader(r);
+    }
+private:
+    RlcHeader(uint16_t r) : raw(r) {}
+};
+
+class RlcAmLayer : public ProtocolLayer {
+public:
+    static constexpr std::size_t DEFAULT_MAX_PDU = 64; // bytes
+    static constexpr uint16_t SN_MODULUS = 4096;       // 12-bit
+
+    explicit RlcAmLayer(std::size_t maxPduSize = DEFAULT_MAX_PDU)
+        : maxPduSize_(maxPduSize),
+          txSn_(0), rxSn_(0) {}
+
+    // Downlink: segment SDU into one or more PDUs
+    // Returns a vector of PDUs (one SDU may produce multiple PDUs)
+    std::vector&lt;Packet&gt; segmentDownlink(const Packet&amp; sdu) {
+        std::vector&lt;Packet&gt; pdus;
+        const auto&amp; payload = sdu.data;
+        std::size_t payloadPerPdu = (maxPduSize_ &gt;= 2)
+                                    ? maxPduSize_ - 2 : 1;
+        std::size_t offset = 0;
+
+        if (payload.size() &lt;= payloadPerPdu) {
+            // Fits in one PDU
+            Packet pdu;
+            pdu.sourceLayer = layerType();
+            pdu.destLayer = LayerType::MAC;
+            pdu.sequenceNumber = txSn_;
+            RlcHeader hdr(RlcHeader::COMPLETE, txSn_);
+            pdu.prepend(hdr.toBytes());
+            pdu.append(payload);
+            pdus.push_back(std::move(pdu));
+            txSn_ = (txSn_ + 1) % SN_MODULUS;
+        } else {
+            // Needs segmentation
+            uint16_t sn = txSn_;
+            while (offset &lt; payload.size()) {
+                std::size_t remaining = payload.size() - offset;
+                std::size_t chunk = std::min(remaining, payloadPerPdu);
+                Packet pdu;
+                pdu.sourceLayer = layerType();
+                pdu.destLayer = LayerType::MAC;
+                pdu.sequenceNumber = sn;
+
+                RlcHeader::SegType segType;
+                if (offset == 0) segType = RlcHeader::FIRST;
+                else if (offset + chunk &gt;= payload.size()) segType = RlcHeader::LAST;
+                else segType = RlcHeader::CONT;
+
+                RlcHeader hdr(segType, sn);
+                pdu.prepend(hdr.toBytes());
+                pdu.data.insert(pdu.data.end(),
+                                payload.begin() + offset,
+                                payload.begin() + offset + chunk);
+                pdus.push_back(std::move(pdu));
+                offset += chunk;
+            }
+            txSn_ = (txSn_ + 1) % SN_MODULUS;
+        }
+        return pdus;
+    }
+
+    // Simplified single-PDU downlink (for stack compatibility)
+    Packet processDownlink(const Packet&amp; sdu) override {
+        auto pdus = segmentDownlink(sdu);
+        // If only one PDU, return it; otherwise concatenate
+        if (pdus.size() == 1) return std::move(pdus[0]);
+        Packet combined;
+        combined.sourceLayer = layerType();
+        combined.destLayer = LayerType::MAC;
+        for (auto&amp; pdu : pdus) {
+            combined.data.insert(combined.data.end(),
+                                 pdu.data.begin(), pdu.data.end());
+        }
+        return combined;
+    }
+
+    // Uplink: reassemble PDUs into an SDU
+    Packet processUplink(const Packet&amp; pdu) override {
+        if (pdu.data.size() &lt; 2) {
+            return {};  // Too short for header
+        }
+        RlcHeader hdr = RlcHeader::fromBytes(pdu.data.data());
+        std::vector&lt;uint8_t&gt; payload(pdu.data.begin() + 2,
+                                      pdu.data.end());
+
+        if (hdr.segType() == RlcHeader::COMPLETE) {
+            // Single PDU - no reassembly needed
+            rxSn_ = (hdr.sn() + 1) % SN_MODULUS;
+            Packet sdu;
+            sdu.data = std::move(payload);
+            sdu.destLayer = LayerType::PDCP;
+            return sdu;
+        }
+
+        // Multi-segment reassembly
+        reassemblyBuffer_[hdr.sn()].push_back(
+            {hdr.segType(), std::move(payload)});
+
+        auto&amp; segments = reassemblyBuffer_[hdr.sn()];
+        bool hasFirst = false, hasLast = false;
+        for (const auto&amp; seg : segments) {
+            if (seg.type == RlcHeader::FIRST)  hasFirst = true;
+            if (seg.type == RlcHeader::LAST)   hasLast = true;
+        }
+
+        if (hasFirst &amp;&amp; hasLast) {
+            // Sort: FIRST, CONT(s), LAST
+            std::sort(segments.begin(), segments.end(),
+                [](const auto&amp; a, const auto&amp; b) {
+                    return static_cast&lt;int&gt;(a.type) &lt;
+                           static_cast&lt;int&gt;(b.type);
+                });
+
+            Packet sdu;
+            sdu.destLayer = LayerType::PDCP;
+            for (const auto&amp; seg : segments) {
+                sdu.data.insert(sdu.data.end(),
+                                seg.payload.begin(),
+                                seg.payload.end());
+            }
+            reassemblyBuffer_.erase(hdr.sn());
+            rxSn_ = (hdr.sn() + 1) % SN_MODULUS;
+            return sdu;
+        }
+
+        return {};  // Incomplete, waiting for more segments
+    }
+
+    LayerType layerType() const override { return LayerType::RLC; }
+    std::string name() const override { return "RLC-AM"; }
+
+private:
+    struct Segment {
+        RlcHeader::SegType type;
+        std::vector&lt;uint8_t&gt; payload;
+    };
+
+    std::size_t maxPduSize_;
+    uint16_t txSn_;
+    uint16_t rxSn_;
+    std::map&lt;uint16_t, std::vector&lt;Segment&gt;&gt; reassemblyBuffer_;
+};
+
+std::string hexDump(const std::vector&lt;uint8_t&gt;&amp; data) {
+    std::ostringstream oss;
+    for (std::size_t i = 0; i &lt; data.size(); ++i) {
+        oss &lt;&lt; std::hex &lt;&lt; std::setw(2) &lt;&lt; std::setfill('0')
+            &lt;&lt; static_cast&lt;int&gt;(data[i]) &lt;&lt; " ";
+        if ((i + 1) % 16 == 0) oss &lt;&lt; "\n";
+    }
+    return oss.str();
+}
+
+int main() {
+    RlcAmLayer rlc(16);  // Max PDU = 16 bytes (very small for demo)
+
+    // Create a large SDU (30 bytes)
+    Packet sdu;
+    for (uint8_t i = 0; i &lt; 30; ++i) sdu.data.push_back(i);
+    sdu.sourceLayer = LayerType::PDCP;
+
+    std::cout &lt;&lt; "=== RLC AM Segmentation Demo ===\n\n";
+    std::cout &lt;&lt; "SDU size: " &lt;&lt; sdu.size() &lt;&lt; " bytes\n\n";
+
+    // Segment into PDUs
+    auto pdus = rlc.segmentDownlink(sdu);
+    std::cout &lt;&lt; "Produced " &lt;&lt; pdus.size() &lt;&lt; PDUs:\n";
+    for (const auto&amp; pdu : pdus) {
+        RlcHeader hdr = RlcHeader::fromBytes(pdu.data.data());
+        std::cout &lt;&lt; "  SN=" &lt;&lt; hdr.sn()
+                  &lt;&lt; " seg=" &lt;&lt; static_cast&lt;int&gt;(hdr.segType())
+                  &lt;&lt; " size=" &lt;&lt; pdu.size() &lt;&lt; "\n";
+    }
+
+    // Reassemble
+    std::cout &lt;&lt; "\nReassembling...\n";
+    Packet reassembled;
+    for (const auto&amp; pdu : pdus) {
+        Packet result = rlc.processUplink(pdu);
+        if (!result.empty()) {
+            reassembled = std::move(result);
+        }
+    }
+    std::cout &lt;&lt; "Reassembled size: " &lt;&lt; reassembled.size()
+              &lt;&lt; " bytes\n";
+    std::cout &lt;&lt; "Match: " &lt;&lt; (reassembled.data == sdu.data
+                                      ? "YES" : "NO") &lt;&lt; "\n";
+
+    // Non-segmented case
+    std::cout &lt;&lt; "\n--- Non-segmented case ---\n";
+    Packet smallSdu = {{0xAA, 0xBB, 0xCC}};
+    smallSdu.sourceLayer = LayerType::PDCP;
+    auto smallPdus = rlc.segmentDownlink(smallSdu);
+    std::cout &lt;&lt; "PDUs: " &lt;&lt; smallPdus.size()
+              &lt;&lt; " (expected 1)\n";
+    Packet decoded = rlc.processUplink(smallPdus[0]);
+    std::cout &lt;&lt; "Decoded size: " &lt;&lt; decoded.size()
+              &lt;&lt; " Match: "
+              &lt;&lt; (decoded.data == smallSdu.data ? "YES" : "NO") &lt;&lt; "\n";
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><strong>RLC Header (2 bytes):</strong> Encodes segment type (FIRST/CONT/LAST/COMPLETE) in 2 bits and a 12-bit sequence number. This mirrors the real 5G NR RLC header structure (simplified).</li>
+      <li><strong>Segmentation:</strong> <code>segmentDownlink()</code> splits large SDUs into chunks that fit within <code>maxPduSize_</code>. The first segment is tagged FIRST, intermediate ones CONT, and the last one LAST. Complete (non-segmented) PDUs get the COMPLETE tag.</li>
+      <li><strong>Reassembly buffer:</strong> Segments are stored in a <code>std::map</code> keyed by SN. When both FIRST and LAST segments arrive, all segments are sorted and concatenated into the original SDU.</li>
+      <li><strong>Sequence number wraparound:</strong> TX/RX counters wrap at 4096 (12-bit space), matching the real RLC SN space in 5G NR.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout green">
+  <p><strong>Complexity Analysis:</strong></p>
+  <table>
+    <tr><th>Operation</th><th>Time</th><th>Notes</th></tr>
+    <tr><td>Segmentation</td><td>O(n)</td><td>n = SDU size, single pass</td></tr>
+    <tr><td>Single PDU decode</td><td>O(1)</td><td>Header parse + slice</td></tr>
+    <tr><td>Reassembly</td><td>O(k log k)</td><td>k = segment count, due to sort</td></tr>
+    <tr><td>Memory</td><td>O(n)</td><td>Reassembly buffer holds segments</td></tr>
+  </table>
+</div>
+
+<!-- Sub-problem 3 -->
+<h2>3. Implement the PDCP Layer</h2>
+
+<div class="question">
+  <h3>Implement the PDCP layer</h3>
+  <p>Implement <code>PdcpLayer</code> that inherits from <code>ProtocolLayer</code>. It must support:</p>
+  <ul>
+    <li><strong>Header compression:</strong> Simulate ROHC (Robust Header Compression) by replacing repeated byte patterns with a 1-byte token. Maintain a small dictionary of seen patterns.</li>
+    <li><strong>Integrity protection:</strong> Simulate by appending a 4-byte XOR-based checksum over the PDCP header and payload.</li>
+    <li><strong>Sequence number management:</strong> 18-bit PDCP SN (used in 5G NR), with a 1-byte PDCP header containing SN[17:10] and SN[9:2] in two bytes (simplified to a 2-byte header with a 12-bit SN for this exercise).</li>
+  </ul>
+</div>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution3')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution3">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+#include &lt;cstdint&gt;
+#include &lt;map&gt;
+#include &lt;sstream&gt;
+#include &lt;iomanip&gt;
+
+enum class LayerType { NAS, RRC, PDCP, RLC, MAC, PHY, UNKNOWN };
+
+struct Packet {
+    std::vector&lt;uint8_t&gt; data;
+    LayerType sourceLayer = LayerType::UNKNOWN;
+    LayerType destLayer   = LayerType::UNKNOWN;
+    uint32_t sequenceNumber = 0;
+    std::size_t size() const { return data.size(); }
+    bool empty() const { return data.empty(); }
+    void prepend(const std::vector&lt;uint8_t&gt;&amp; b) {
+        data.insert(data.begin(), b.begin(), b.end());
+    }
+};
+
+class ProtocolLayer {
+public:
+    virtual ~ProtocolLayer() = default;
+    virtual Packet processDownlink(const Packet&amp; sdu) = 0;
+    virtual Packet processUplink(const Packet&amp; pdu) = 0;
+    virtual LayerType layerType() const = 0;
+    virtual std::string name() const = 0;
+};
+
+// ---- PDCP Header (2 bytes) ----
+// Byte 0: [D/C=1 | R=0 | SN[11:4]]
+// Byte 1: [SN[3:0] | reserved 4 bits]
+// Simplified: 12-bit SN with 4-bit reserved
+
+struct PdcpHeader {
+    uint16_t raw;
+
+    PdcpHeader(uint16_t sn)
+        : raw((sn &amp; 0x0FFF) &lt;&lt; 4) {}
+
+    uint16_t sn() const { return (raw &gt;&gt; 4) &amp; 0x0FFF; }
+
+    std::vector&lt;uint8_t&gt; toBytes() const {
+        return {static_cast&lt;uint8_t&gt;(raw &gt;&gt; 8),
+                static_cast&lt;uint8_t&gt;(raw &amp; 0xFF)};
+    }
+
+    static PdcpHeader fromBytes(const uint8_t* b) {
+        return PdcpHeader(static_cast&lt;uint16_t&gt;(b[0]) &lt;&lt; 8 | b[1]);
+    }
+private:
+    PdcpHeader(uint16_t r) : raw(r) {}
+};
+
+// ---- ROHC-like header compression simulator ----
+
+class SimulatedRohc {
+public:
+    static constexpr std::size_t PATTERN_LEN = 3;
+    static constexpr uint8_t TOKEN_BASE = 0xE0;  // tokens 0xE0..0xFF
+
+    // Compress: replace known 3-byte patterns with a 1-byte token
+    static std::vector&lt;uint8_t&gt; compress(
+        const std::vector&lt;uint8_t&gt;&amp; data,
+        std::map&lt;std::vector&lt;uint8_t&gt;, uint8_t&gt;&amp; dict,
+        uint8_t&amp; nextToken) {
+        if (data.size() &lt; PATTERN_LEN) return data;
+
+        std::vector&lt;uint8_t&gt; result;
+        std::size_t i = 0;
+        while (i &lt; data.size()) {
+            if (i + PATTERN_LEN &lt;= data.size()) {
+                std::vector&lt;uint8_t&gt; pattern(
+                    data.begin() + i,
+                    data.begin() + i + PATTERN_LEN);
+                auto it = dict.find(pattern);
+                if (it != dict.end()) {
+                    result.push_back(it-&gt;second);
+                    i += PATTERN_LEN;
+                    continue;
+                }
+            }
+            result.push_back(data[i]);
+            ++i;
+        }
+        return result;
+    }
+
+    // Decompress: replace tokens back with patterns
+    static std::vector&lt;uint8_t&gt; decompress(
+        const std::vector&lt;uint8_t&gt;&amp; data,
+        const std::map&lt;uint8_t, std::vector&lt;uint8_t&gt;&gt;&amp; revDict) {
+        std::vector&lt;uint8_t&gt; result;
+        for (auto b : data) {
+            if (b &gt;= TOKEN_BASE) {
+                auto it = revDict.find(b);
+                if (it != revDict.end()) {
+                    result.insert(result.end(),
+                                  it-&gt;second.begin(),
+                                  it-&gt;second.end());
+                    continue;
+                }
+            }
+            result.push_back(b);
+        }
+        return result;
+    }
+
+    static void learnPattern(
+        const std::vector&lt;uint8_t&gt;&amp; pattern,
+        std::map&lt;std::vector&lt;uint8_t&gt;, uint8_t&gt;&amp; dict,
+        std::map&lt;uint8_t, std::vector&lt;uint8_t&gt;&gt;&amp; revDict,
+        uint8_t&amp; nextToken) {
+        if (dict.find(pattern) == dict.end()) {
+            dict[pattern] = nextToken;
+            revDict[nextToken] = pattern;
+            ++nextToken;
+        }
+    }
+};
+
+// ---- Simulated integrity protection (XOR checksum) ----
+
+std::vector&lt;uint8_t&gt; computeChecksum(
+    const std::vector&lt;uint8_t&gt;&amp; header,
+    const std::vector&lt;uint8_t&gt;&amp; payload) {
+    uint32_t xorSum = 0;
+    for (auto b : header) xorSum ^= static_cast&lt;uint32_t&gt;(b);
+    for (auto b : payload) xorSum ^= static_cast&lt;uint32_t&gt;(b);
+    return {
+        static_cast&lt;uint8_t&gt;((xorSum &gt;&gt; 24) &amp; 0xFF),
+        static_cast&lt;uint8_t&gt;((xorSum &gt;&gt; 16) &amp; 0xFF),
+        static_cast&lt;uint8_t&gt;((xorSum &gt;&gt; 8)  &amp; 0xFF),
+        static_cast&lt;uint8_t&gt;(xorSum &amp; 0xFF)
+    };
+}
+
+// ---- PDCP Layer ----
+
+class PdcpLayer : public ProtocolLayer {
+public:
+    static constexpr uint16_t SN_MODULUS = 4096; // 12-bit
+
+    PdcpLayer() : txSn_(0), rxSn_(0), nextToken_(0xE0) {}
+
+    Packet processDownlink(const Packet&amp; sdu) override {
+        // 1. Learn patterns from the SDU for future compression
+        if (sdu.data.size() &gt;= SimulatedRohc::PATTERN_LEN) {
+            for (std::size_t i = 0;
+                 i + SimulatedRohc::PATTERN_LEN &lt;= sdu.data.size();
+                 i += SimulatedRohc::PATTERN_LEN) {
+                std::vector&lt;uint8_t&gt; pat(
+                    sdu.data.begin() + i,
+                    sdu.data.begin() + i + SimulatedRohc::PATTERN_LEN);
+                SimulatedRohc::learnPattern(
+                    pat, compressDict_, decompressDict_, nextToken_);
+            }
+        }
+
+        // 2. Header compression
+        auto compressed = SimulatedRohc::compress(
+            sdu.data, compressDict_, nextToken_);
+
+        // 3. Build PDCP header
+        PdcpHeader hdr(txSn_);
+        auto hdrBytes = hdr.toBytes();
+
+        // 4. Compute integrity checksum
+        auto macI = computeChecksum(hdrBytes, compressed);
+
+        // 5. Assemble PDU: header + compressed payload + MAC-I
+        Packet pdu;
+        pdu.sourceLayer = layerType();
+        pdu.destLayer = LayerType::RLC;
+        pdu.sequenceNumber = txSn_;
+        pdu.data = hdrBytes;
+        pdu.data.insert(pdu.data.end(),
+                        compressed.begin(), compressed.end());
+        pdu.data.insert(pdu.data.end(),
+                        macI.begin(), macI.end());
+
+        txSn_ = (txSn_ + 1) % SN_MODULUS;
+        return pdu;
+    }
+
+    Packet processUplink(const Packet&amp; pdu) override {
+        if (pdu.data.size() &lt; 6) {  // 2 hdr + 4 mac-i minimum
+            return {};
+        }
+
+        // 1. Parse header
+        PdcpHeader hdr = PdcpHeader::fromBytes(pdu.data.data());
+        auto hdrBytes = hdr.toBytes();
+
+        // 2. Extract payload and MAC-I
+        std::vector&lt;uint8_t&gt; compressed(
+            pdu.data.begin() + 2,
+            pdu.data.end() - 4);
+        std::vector&lt;uint8_t&gt; receivedMacI(
+            pdu.data.end() - 4,
+            pdu.data.end());
+
+        // 3. Verify integrity
+        auto computedMacI = computeChecksum(hdrBytes, compressed);
+        bool integrityOk = (receivedMacI == computedMacI);
+        if (!integrityOk) {
+            std::cout &lt;&lt; "PDCP: Integrity check FAILED for SN="
+                      &lt;&lt; hdr.sn() &lt;&lt; "\n";
+        }
+
+        // 4. Header decompression
+        auto decompressed = SimulatedRohc::decompress(
+            compressed, decompressDict_);
+
+        // 5. Build SDU
+        Packet sdu;
+        sdu.data = std::move(decompressed);
+        sdu.destLayer = LayerType::RRC;
+        sdu.sequenceNumber = hdr.sn();
+        rxSn_ = (hdr.sn() + 1) % SN_MODULUS;
+        return sdu;
+    }
+
+    LayerType layerType() const override { return LayerType::PDCP; }
+    std::string name() const override { return "PDCP"; }
+
+private:
+    uint16_t txSn_;
+    uint16_t rxSn_;
+    uint8_t nextToken_;
+    std::map&lt;std::vector&lt;uint8_t&gt;, uint8_t&gt; compressDict_;
+    std::map&lt;uint8_t, std::vector&lt;uint8_t&gt;&gt; decompressDict_;
+};
+
+std::string hexDump(const std::vector&lt;uint8_t&gt;&amp; data) {
+    std::ostringstream oss;
+    for (std::size_t i = 0; i &lt; data.size(); ++i) {
+        oss &lt;&lt; std::hex &lt;&lt; std::setw(2) &lt;&lt; std::setfill('0')
+            &lt;&lt; static_cast&lt;int&gt;(data[i]) &lt;&lt; " ";
+        if ((i + 1) % 16 == 0) oss &lt;&lt; "\n";
+    }
+    return oss.str();
+}
+
+int main() {
+    PdcpLayer pdcp;
+
+    // SDU with some repeated patterns (simulating IP/UDP headers)
+    Packet sdu;
+    sdu.data = {
+        0x45, 0x00, 0x00, 0x30,  // IP header pattern (repeats)
+        0x45, 0x00, 0x00, 0x30,  // Same pattern
+        0xDE, 0xAD, 0xBE, 0xEF,  // Unique payload
+        0x11, 0x22, 0x33, 0x44   // More payload
+    };
+    sdu.sourceLayer = LayerType::RRC;
+
+    std::cout &lt;&lt; "=== PDCP Layer Demo ===\n\n";
+    std::cout &lt;&lt; "Original SDU (" &lt;&lt; sdu.size() &lt;&lt; " bytes):\n  "
+              &lt;&lt; hexDump(sdu.data) &lt;&lt; "\n";
+
+    // First pass: learns patterns
+    Packet pdu1 = pdcp.processDownlink(sdu);
+    std::cout &lt;&lt; "PDU 1 (" &lt;&lt; pdu1.size() &lt;&lt; " bytes):\n  "
+              &lt;&lt; hexDump(pdu1.data) &lt;&lt; "\n";
+
+    // Second pass: should compress (patterns now known)
+    Packet pdu2 = pdcp.processDownlink(sdu);
+    std::cout &lt;&lt; "PDU 2 (" &lt;&lt; pdu2.size()
+              &lt;&lt; " bytes, compressed):\n  "
+              &lt;&lt; hexDump(pdu2.data) &lt;&lt; "\n";
+
+    // Decode
+    Packet decoded = pdcp.processUplink(pdu2);
+    std::cout &lt;&lt; "Decoded SDU (" &lt;&lt; decoded.size() &lt;&lt; " bytes):\n  "
+              &lt;&lt; hexDump(decoded.data) &lt;&lt; "\n";
+    std::cout &lt;&lt; "Round-trip match: "
+              &lt;&lt; (decoded.data == sdu.data ? "YES" : "NO") &lt;&lt; "\n";
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><strong>PDCP Header (2 bytes):</strong> Carries a 12-bit sequence number, matching the simplified structure of the 5G NR PDCP header.</li>
+      <li><strong>ROHC simulation:</strong> The <code>SimulatedRohc</code> class maintains a dictionary of 3-byte patterns. On the first pass, patterns are learned. On subsequent passes, repeated patterns are replaced with 1-byte tokens (0xE0+), achieving a 3:1 compression ratio for repeated patterns.</li>
+      <li><strong>Integrity protection:</strong> A 4-byte XOR checksum is computed over the header and compressed payload, then appended as MAC-I. On decode, the checksum is recomputed and verified. In real 5G, this uses AES-based algorithms (SNOW 3G or AES-CMAC).</li>
+      <li><strong>Compression is stateful:</strong> The second <code>processDownlink</code> call produces a shorter PDU because the IP header pattern was learned from the first call.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- Sub-problem 4 -->
+<h2>4. Implement the RRC Layer</h2>
+
+<div class="question">
+  <h3>Implement the RRC layer</h3>
+  <p>Implement <code>RrcLayer</code> that encodes and decodes simple RRC messages using ASN.1-like TLV (Tag-Length-Value) encoding. Support two message types:</p>
+  <ul>
+    <li><strong>UE Capability Information:</strong> Contains a UE capability bitmap (2 bytes) and supported bands list (variable).</li>
+    <li><strong>RRC Connection Setup:</strong> Contains a transaction ID (1 byte), cell ID (4 bytes), and a config bitmap (2 bytes).</li>
+  </ul>
+  <p>The RRC header is 1 byte: upper 4 bits = message type, lower 4 bits = payload length in 4-byte units.</p>
+</div>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution4')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution4">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+#include &lt;cstdint&gt;
+#include &lt;cstring&gt;
+#include &lt;sstream&gt;
+#include &lt;iomanip&gt;
+#include &lt;stdexcept&gt;
+
+enum class LayerType { NAS, RRC, PDCP, RLC, MAC, PHY, UNKNOWN };
+
+struct Packet {
+    std::vector&lt;uint8_t&gt; data;
+    LayerType sourceLayer = LayerType::UNKNOWN;
+    LayerType destLayer   = LayerType::UNKNOWN;
+    uint32_t sequenceNumber = 0;
+    std::size_t size() const { return data.size(); }
+    bool empty() const { return data.empty(); }
+    void prepend(const std::vector&lt;uint8_t&gt;&amp; b) {
+        data.insert(data.begin(), b.begin(), b.end());
+    }
+};
+
+class ProtocolLayer {
+public:
+    virtual ~ProtocolLayer() = default;
+    virtual Packet processDownlink(const Packet&amp; sdu) = 0;
+    virtual Packet processUplink(const Packet&amp; pdu) = 0;
+    virtual LayerType layerType() const = 0;
+    virtual std::string name() const = 0;
+};
+
+// ---- TLV encoding helpers ----
+
+struct TlvField {
+    uint8_t tag;
+    std::vector&lt;uint8_t&gt; value;
+
+    static TlvField fromUint8(uint8_t t, uint8_t v) {
+        return {t, {v}};
+    }
+    static TlvField fromUint16(uint8_t t, uint16_t v) {
+        return {t, {
+            static_cast&lt;uint8_t&gt;((v &gt;&gt; 8) &amp; 0xFF),
+            static_cast&lt;uint8_t&gt;(v &amp; 0xFF)
+        }};
+    }
+    static TlvField fromUint32(uint8_t t, uint32_t v) {
+        return {t, {
+            static_cast&lt;uint8_t&gt;((v &gt;&gt; 24) &amp; 0xFF),
+            static_cast&lt;uint8_t&gt;((v &gt;&gt; 16) &amp; 0xFF),
+            static_cast&lt;uint8_t&gt;((v &gt;&gt; 8) &amp; 0xFF),
+            static_cast&lt;uint8_t&gt;(v &amp; 0xFF)
+        }};
+    }
+    static TlvField fromBytes(uint8_t t,
+                               const std::vector&lt;uint8_t&gt;&amp; v) {
+        return {t, v};
+    }
+
+    uint32_t toUint32() const {
+        uint32_t r = 0;
+        for (auto b : value) r = (r &lt;&lt; 8) | b;
+        return r;
+    }
+    uint16_t toUint16() const {
+        return static_cast&lt;uint16_t&gt;(toUint32() &amp; 0xFFFF);
+    }
+};
+
+// Encode TLV: Tag(1) + Length(1) + Value(N)
+std::vector&lt;uint8_t&gt; encodeTlv(const TlvField&amp; f) {
+    std::vector&lt;uint8_t&gt; out = {f.tag,
+        static_cast&lt;uint8_t&gt;(f.value.size() &amp; 0xFF)};
+    out.insert(out.end(), f.value.begin(), f.value.end());
+    return out;
+}
+
+// Decode TLV fields from a byte buffer
+std::vector&lt;TlvField&gt; decodeTlv(const uint8_t* data,
+                                  std::size_t len) {
+    std::vector&lt;TlvField&gt; fields;
+    std::size_t off = 0;
+    while (off + 2 &lt;= len) {
+        uint8_t tag = data[off++];
+        uint8_t length = data[off++];
+        if (off + length &gt; len) break;
+        TlvField f;
+        f.tag = tag;
+        f.value.assign(data + off, data + off + length);
+        fields.push_back(std::move(f));
+        off += length;
+    }
+    return fields;
+}
+
+// ---- RRC Message Types ----
+
+enum class RrcMsgType : uint8_t {
+    UE_CAPABILITY     = 0x01,
+    CONN_SETUP        = 0x02,
+    CONN_SETUP_COMPLETE = 0x03,
+    CONN_RELEASE      = 0x04,
+    MEASUREMENT_REPORT = 0x05,
+    UNKNOWN           = 0xFF
+};
+
+std::string rrcMsgName(RrcMsgType t) {
+    switch (t) {
+        case RrcMsgType::UE_CAPABILITY:
+            return "UE Capability Information";
+        case RrcMsgType::CONN_SETUP:
+            return "RRC Connection Setup";
+        case RrcMsgType::CONN_SETUP_COMPLETE:
+            return "RRC Connection Setup Complete";
+        case RrcMsgType::CONN_RELEASE:
+            return "RRC Connection Release";
+        default: return "Unknown";
+    }
+}
+
+// RRC Header (1 byte): upper 4 bits = msg type, lower 4 bits = length / 4
+
+struct RrcHeader {
+    uint8_t raw;
+
+    RrcHeader(RrcMsgType type, std::size_t payloadLen)
+        : raw((static_cast&lt;uint8_t&gt;(type) &lt;&lt; 4) |
+              static_cast&lt;uint8_t&gt;((payloadLen + 3) / 4 &amp; 0x0F)) {}
+
+    RrcMsgType msgType() const {
+        return static_cast&lt;RrcMsgType&gt;((raw &gt;&gt; 4) &amp; 0x0F);
+    }
+    uint8_t lengthUnits() const { return raw &amp; 0x0F; }
+    std::size_t payloadLength() const {
+        return static_cast&lt;std::size_t&gt;(lengthUnits()) * 4;
+    }
+};
+
+// ---- RRC Layer ----
+
+class RrcLayer : public ProtocolLayer {
+public:
+    Packet processDownlink(const Packet&amp; sdu) override {
+        // Encode SDU bytes as an RRC message
+        // For downlink (gNB -> UE), wrap as Connection Setup
+        Packet pdu;
+        pdu.sourceLayer = layerType();
+        pdu.destLayer = LayerType::PDCP;
+
+        // Add RRC header
+        RrcHeader hdr(RrcMsgType::CONN_SETUP, sdu.data.size());
+        pdu.data.push_back(hdr.raw);
+        pdu.data.insert(pdu.data.end(),
+                        sdu.data.begin(), sdu.data.end());
+        pdu.sequenceNumber = txCount_++;
+        return pdu;
+    }
+
+    Packet processUplink(const Packet&amp; pdu) override {
+        if (pdu.data.empty()) return {};
+
+        RrcHeader hdr(pdu.data[0]);
+        Packet sdu;
+        sdu.sourceLayer = layerType();
+        sdu.destLayer = LayerType::NAS;
+        sdu.data.assign(pdu.data.begin() + 1, pdu.data.end());
+
+        std::cout &lt;&lt; "  [RRC] Decoded message: "
+                  &lt;&lt; rrcMsgName(hdr.msgType())
+                  &lt;&lt; " (" &lt;&lt; sdu.data.size() &lt;&lt; " bytes)\n";
+
+        // Parse known TLV fields for display
+        auto fields = decodeTlv(sdu.data.data(), sdu.data.size());
+        for (const auto&amp; f : fields) {
+            if (f.value.size() &lt;= 4) {
+                std::cout &lt;&lt; "    Tag 0x"
+                          &lt;&lt; std::hex &lt;&lt; std::setw(2)
+                          &lt;&lt; std::setfill('0')
+                          &lt;&lt; static_cast&lt;int&gt;(f.tag) &lt;&lt; std::dec
+                          &lt;&lt; " = " &lt;&lt; f.toUint32() &lt;&lt; "\n";
+            } else {
+                std::cout &lt;&lt; "    Tag 0x"
+                          &lt;&lt; std::hex &lt;&lt; std::setw(2)
+                          &lt;&lt; std::setfill('0')
+                          &lt;&lt; static_cast&lt;int&gt;(f.tag) &lt;&lt; std::dec
+                          &lt;&lt; " = [" &lt;&lt; f.value.size() &lt;&lt; " bytes]\n";
+            }
+        }
+        return sdu;
+    }
+
+    // Convenience: build UE Capability message
+    static Packet buildUeCapability(uint16_t capabilityBitmap,
+                                     const std::vector&lt;uint8_t&gt;&amp; bands) {
+        std::vector&lt;uint8_t&gt; payload;
+        auto f1 = TlvField::fromUint16(0x10, capabilityBitmap);
+        auto f2 = TlvField::fromBytes(0x20, bands);
+        auto t1 = encodeTlv(f1);
+        auto t2 = encodeTlv(f2);
+        payload.insert(payload.end(), t1.begin(), t1.end());
+        payload.insert(payload.end(), t2.begin(), t2.end());
+
+        RrcHeader hdr(RrcMsgType::UE_CAPABILITY, payload.size());
+        Packet pkt;
+        pkt.data.push_back(hdr.raw);
+        pkt.data.insert(pkt.data.end(),
+                        payload.begin(), payload.end());
+        pkt.sourceLayer = LayerType::RRC;
+        return pkt;
+    }
+
+    // Convenience: build Connection Setup message
+    static Packet buildConnSetup(uint8_t transactionId,
+                                uint32_t cellId,
+                                uint16_t configBitmap) {
+        std::vector&lt;uint8_t&gt; payload;
+        auto f1 = TlvField::fromUint8(0x01, transactionId);
+        auto f2 = TlvField::fromUint32(0x02, cellId);
+        auto f3 = TlvField::fromUint16(0x03, configBitmap);
+        auto t1 = encodeTlv(f1);
+        auto t2 = encodeTlv(f2);
+        auto t3 = encodeTlv(f3);
+        payload.insert(payload.end(), t1.begin(), t1.end());
+        payload.insert(payload.end(), t2.begin(), t2.end());
+        payload.insert(payload.end(), t3.begin(), t3.end());
+
+        RrcHeader hdr(RrcMsgType::CONN_SETUP, payload.size());
+        Packet pkt;
+        pkt.data.push_back(hdr.raw);
+        pkt.data.insert(pkt.data.end(),
+                        payload.begin(), payload.end());
+        pkt.sourceLayer = LayerType::RRC;
+        return pkt;
+    }
+
+    LayerType layerType() const override { return LayerType::RRC; }
+    std::string name() const override { return "RRC"; }
+
+private:
+    uint32_t txCount_ = 0;
+};
+
+std::string hexDump(const std::vector&lt;uint8_t&gt;&amp; data) {
+    std::ostringstream oss;
+    for (std::size_t i = 0; i &lt; data.size(); ++i) {
+        oss &lt;&lt; std::hex &lt;&lt; std::setw(2) &lt;&lt; std::setfill('0')
+            &lt;&lt; static_cast&lt;int&gt;(data[i]) &lt;&lt; " ";
+        if ((i + 1) % 16 == 0) oss &lt;&lt; "\n";
+    }
+    return oss.str();
+}
+
+int main() {
+    std::cout &lt;&lt; "=== RRC Layer Demo ===\n\n";
+
+    // Build UE Capability message
+    std::vector&lt;uint8_t&gt; bands = {1, 3, 7, 20, 78, 258};
+    auto ueCap = RrcLayer::buildUeCapability(0x0FF0, bands);
+    std::cout &lt;&lt; "UE Capability message ("
+              &lt;&lt; ueCap.size() &lt;&lt; " bytes):\n  "
+              &lt;&lt; hexDump(ueCap.data) &lt;&lt; "\n";
+
+    // Build Connection Setup message
+    auto connSetup = RrcLayer::buildConnSetup(5, 0x12345678, 0x0003);
+    std::cout &lt;&lt; "Connection Setup message ("
+              &lt;&lt; connSetup.size() &lt;&lt; " bytes):\n  "
+              &lt;&lt; hexDump(connSetup.data) &lt;&lt; "\n";
+
+    // Decode via RRC layer (uplink)
+    std::cout &lt;&lt; "\nDecoding UE Capability:\n";
+    RrcLayer rrc;
+    rrc.processUplink(ueCap);
+
+    std::cout &lt;&lt; "\nDecoding Connection Setup:\n";
+    rrc.processUplink(connSetup);
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><strong>TLV encoding:</strong> Each field is encoded as Tag (1 byte) + Length (1 byte) + Value (N bytes). This mirrors ASN.1 BER-TLV used in real RRC messages defined in 3GPP TS 38.331.</li>
+      <li><strong>RRC Header (1 byte):</strong> Upper nibble = message type, lower nibble = payload length in 4-byte units. This is a simplified version of the real RRC PDU structure.</li>
+      <li><strong>Static builder methods:</strong> <code>buildUeCapability()</code> and <code>buildConnSetup()</code> construct properly encoded messages from structured fields, hiding TLV details from the caller.</li>
+      <li><strong>Uplink parsing:</strong> <code>processUplink()</code> extracts the header, identifies the message type, and parses TLV fields for diagnostic output.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- Sub-problem 5 -->
+<h2>5. Build the Protocol Stack Pipeline</h2>
+
+<div class="question">
+  <h3>Build the protocol stack pipeline</h3>
+  <p>Create a <code>ProtocolStack</code> class that chains layers together. Upper layer output feeds lower layer input. The stack should support:</p>
+  <ul>
+    <li>Registering layers in order (RRC at top, MAC at bottom for control plane).</li>
+    <li><code>processDownlink(packet)</code>: pass through all layers top-to-bottom.</li>
+    <li><code>processUplink(packet)</code>: pass through all layers bottom-to-top.</li>
+    <li>Logging at each layer boundary showing bytes in and bytes out.</li>
+  </ul>
+</div>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution5')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution5">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+#include &lt;cstdint&gt;
+#include &lt;memory&gt;
+#include &lt;string&gt;
+#include &lt;algorithm&gt;
+#include &lt;sstream&gt;
+#include &lt;iomanip&gt;
+
+enum class LayerType { NAS, RRC, PDCP, RLC, MAC, PHY, UNKNOWN };
+
+std::string layerName(LayerType t) {
+    switch (t) {
+        case LayerType::NAS:  return "NAS";
+        case LayerType::RRC:  return "RRC";
+        case LayerType::PDCP: return "PDCP";
+        case LayerType::RLC:  return "RLC";
+        case LayerType::MAC:  return "MAC";
+        default:              return "UNKNOWN";
+    }
+}
+
+struct Packet {
+    std::vector&lt;uint8_t&gt; data;
+    LayerType sourceLayer = LayerType::UNKNOWN;
+    LayerType destLayer   = LayerType::UNKNOWN;
+    uint32_t sequenceNumber = 0;
+    std::size_t size() const { return data.size(); }
+    bool empty() const { return data.empty(); }
+    void prepend(const std::vector&lt;uint8_t&gt;&amp; b) {
+        data.insert(data.begin(), b.begin(), b.end());
+    }
+};
+
+class ProtocolLayer {
+public:
+    virtual ~ProtocolLayer() = default;
+    virtual Packet processDownlink(const Packet&amp; sdu) = 0;
+    virtual Packet processUplink(const Packet&amp; pdu) = 0;
+    virtual LayerType layerType() const = 0;
+    virtual std::string name() const = 0;
+};
+
+// ---- Minimal concrete layers for demonstration ----
+
+class PassthroughLayer : public ProtocolLayer {
+public:
+    PassthroughLayer(LayerType type, const std::string&amp; name)
+        : type_(type), name_(name) {}
+
+    Packet processDownlink(const Packet&amp; sdu) override {
+        Packet pdu = sdu;
+        // Add a minimal 1-byte header
+        pdu.prepend({static_cast&lt;uint8_t&gt;(type_)});
+        pdu.sourceLayer = type_;
+        return pdu;
+    }
+
+    Packet processUplink(const Packet&amp; pdu) override {
+        if (pdu.data.empty()) return {};
+        Packet sdu = pdu;
+        // Strip 1-byte header
+        sdu.data.erase(sdu.data.begin());
+        sdu.destLayer = type_;
+        return sdu;
+    }
+
+    LayerType layerType() const override { return type_; }
+    std::string name() const override { return name_; }
+
+private:
+    LayerType type_;
+    std::string name_;
+};
+
+// ---- Protocol Stack ----
+
+class ProtocolStack {
+public:
+    void addLayer(std::shared_ptr&lt;ProtocolLayer&gt; layer) {
+        layers_.push_back(std::move(layer));
+    }
+
+    Packet processDownlink(const Packet&amp; input) {
+        std::cout &lt;&lt; "\n==== DOWNLINK (TX) ====\n";
+        Packet current = input;
+        std::cout &lt;&lt; "  Input to stack: " &lt;&lt; current.size()
+                  &lt;&lt; " bytes\n";
+
+        for (auto&amp; layer : layers_) {
+            Packet output = layer-&gt;processDownlink(current);
+            std::cout &lt;&lt; "  [" &lt;&lt; layer-&gt;name()
+                      &lt;&lt; "] " &lt;&lt; current.size()
+                      &lt;&lt; " -> " &lt;&lt; output.size()
+                      &lt;&lt; " bytes\n";
+            current = std::move(output);
+        }
+
+        std::cout &lt;&lt; "  Final PDU: " &lt;&lt; current.size()
+                  &lt;&lt; " bytes\n";
+        return current;
+    }
+
+    Packet processUplink(const Packet&amp; input) {
+        std::cout &lt;&lt; "\n==== UPLINK (RX) ====\n";
+        Packet current = input;
+        std::cout &lt;&lt; "  Input to stack: " &lt;&lt; current.size()
+                  &lt;&lt; " bytes\n";
+
+        // Process layers in reverse order (bottom to top)
+        for (auto it = layers_.rbegin(); it != layers_.rend(); ++it) {
+            Packet output = (*it)-&gt;processUplink(current);
+            std::cout &lt;&lt; "  [" &lt;&lt; (*it)-&gt;name()
+                      &lt;&lt; "] " &lt;&lt; current.size()
+                      &lt;&lt; " -> " &lt;&lt; output.size()
+                      &lt;&lt; " bytes\n";
+            current = std::move(output);
+        }
+
+        std::cout &lt;&lt; "  Final SDU: " &lt;&lt; current.size()
+                  &lt;&lt; " bytes\n";
+        return current;
+    }
+
+    void printStack() const {
+        std::cout &lt;&lt; "Protocol Stack (top -> bottom):\n";
+        for (std::size_t i = 0; i &lt; layers_.size(); ++i) {
+            std::cout &lt;&lt; "  [" &lt;&lt; i &lt;&lt; "] "
+                      &lt;&lt; layers_[i]-&gt;name()
+                      &lt;&lt; " (" &lt;&lt; layerName(layers_[i]-&gt;layerType())
+                      &lt;&lt; ")\n";
+        }
+    }
+
+private:
+    std::vector&lt;std::shared_ptr&lt;ProtocolLayer&gt;&gt; layers_;
+};
+
+std::string hexDump(const std::vector&lt;uint8_t&gt;&amp; data) {
+    std::ostringstream oss;
+    for (std::size_t i = 0; i &lt; data.size(); ++i) {
+        oss &lt;&lt; std::hex &lt;&lt; std::setw(2) &lt;&lt; std::setfill('0')
+            &lt;&lt; static_cast&lt;int&gt;(data[i]) &lt;&lt; " ";
+        if ((i + 1) % 16 == 0) oss &lt;&lt; "\n";
+    }
+    return oss.str();
+}
+
+int main() {
+    // Build a 4-layer control-plane stack
+    ProtocolStack stack;
+
+    stack.addLayer(std::make_shared&lt;PassthroughLayer&gt;(
+        LayerType::RRC, "RRC"));
+    stack.addLayer(std::make_shared&lt;PassthroughLayer&gt;(
+        LayerType::PDCP, "PDCP"));
+    stack.addLayer(std::make_shared&lt;PassthroughLayer&gt;(
+        LayerType::RLC, "RLC"));
+    stack.addLayer(std::make_shared&lt;PassthroughLayer&gt;(
+        LayerType::MAC, "MAC"));
+
+    stack.printStack();
+
+    // Create a sample SDU
+    Packet sdu;
+    sdu.data = {0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE};
+    sdu.sourceLayer = LayerType::NAS;
+
+    // Process downlink
+    auto pdu = stack.processDownlink(sdu);
+    std::cout &lt;&lt; "Downlink PDU hex:\n  " &lt;&lt; hexDump(pdu.data)
+              &lt;&lt; "\n";
+
+    // Process uplink (reverse)
+    auto recovered = stack.processUplink(pdu);
+    std::cout &lt;&lt; "Recovered SDU hex:\n  "
+              &lt;&lt; hexDump(recovered.data) &lt;&lt; "\n";
+    std::cout &lt;&lt; "Round-trip match: "
+              &lt;&lt; (recovered.data == sdu.data ? "YES" : "NO")
+              &lt;&lt; "\n";
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><strong>ProtocolStack:</strong> Maintains an ordered list of <code>ProtocolLayer</code> shared pointers. <code>processDownlink</code> iterates top-to-bottom (RRC -> PDCP -> RLC -> MAC), feeding each layer's output into the next layer's input. <code>processUplink</code> iterates in reverse (MAC -> RLC -> PDCP -> RRC).</li>
+      <li><strong>PassthroughLayer:</strong> A minimal concrete layer that adds/strips a 1-byte header. This is used as a placeholder; real layers (RRC, PDCP, RLC from previous sub-problems) would be substituted here.</li>
+      <li><strong>Logging:</strong> Each layer transition logs the byte count, making it easy to see how headers grow the packet on downlink and shrink it on uplink.</li>
+      <li><strong>Extensibility:</strong> Adding a new layer (e.g., SDAP) is a single <code>addLayer()</code> call. The stack does not need to know about specific layer implementations.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- Sub-problem 6 -->
+<h2>6. Add Circular Buffer for MAC Scheduling</h2>
+
+<div class="question">
+  <h3>Add circular buffer for MAC scheduling</h3>
+  <p>Implement a <code>MacScheduler</code> that uses a circular buffer (ring buffer) to manage MAC PDU scheduling grants. The MAC layer requests grants and the scheduler fills them from RLC output:</p>
+  <ul>
+    <li><strong>Ring buffer:</strong> Fixed-size circular buffer holding grant descriptors. Each descriptor has a grant size (bytes) and a validity flag.</li>
+    <li><strong>Grant allocation:</strong> The scheduler accepts RLC PDUs and assigns them to available grants. If a PDU exceeds the grant size, it is split (partial grant).</li>
+    <li><strong>Grant consumption:</strong> The MAC layer consumes grants in FIFO order, returning the scheduled data.</li>
+  </ul>
+</div>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution6')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution6">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+#include &lt;cstdint&gt;
+#include &lt;optional&gt;
+#include &lt;sstream&gt;
+#include &lt;iomanip&gt;
+#include &lt;stdexcept&gt;
+
+enum class LayerType { NAS, RRC, PDCP, RLC, MAC, PHY, UNKNOWN };
+
+struct Packet {
+    std::vector&lt;uint8_t&gt; data;
+    LayerType sourceLayer = LayerType::UNKNOWN;
+    LayerType destLayer   = LayerType::UNKNOWN;
+    uint32_t sequenceNumber = 0;
+    std::size_t size() const { return data.size(); }
+    bool empty() const { return data.empty(); }
+};
+
+// ---- Circular Buffer (Ring Buffer) ----
+
+template&lt;typename T&gt;
+class CircularBuffer {
+public:
+    explicit CircularBuffer(std::size_t capacity)
+        : buffer_(capacity), head_(0), tail_(0), count_(0) {}
+
+    bool push(const T&amp; item) {
+        if (count_ == buffer_.size()) return false;  // Full
+        buffer_[tail_] = item;
+        tail_ = (tail_ + 1) % buffer_.size();
+        ++count_;
+        return true;
+    }
+
+    bool push(T&amp;&amp; item) {
+        if (count_ == buffer_.size()) return false;
+        buffer_[tail_] = std::move(item);
+        tail_ = (tail_ + 1) % buffer_.size();
+        ++count_;
+        return true;
+    }
+
+    std::optional&lt;T&gt; pop() {
+        if (count_ == 0) return std::nullopt;  // Empty
+        T item = std::move(buffer_[head_]);
+        head_ = (head_ + 1) % buffer_.size();
+        --count_;
+        return item;
+    }
+
+    std::optional&lt;T&gt; peek() const {
+        if (count_ == 0) return std::nullopt;
+        return buffer_[head_];
+    }
+
+    std::size_t size() const { return count_; }
+    std::size_t capacity() const { return buffer_.size(); }
+    bool empty() const { return count_ == 0; }
+    bool full() const { return count_ == buffer_.size(); }
+
+private:
+    std::vector&lt;T&gt; buffer_;
+    std::size_t head_;
+    std::size_t tail_;
+    std::size_t count_;
+};
+
+// ---- MAC Grant Descriptor ----
+
+struct MacGrant {
+    uint32_t grantId = 0;
+    std::size_t grantSize = 0;  // bytes
+    bool valid = true;
+    std::vector&lt;uint8_t&gt; scheduledData;
+};
+
+// ---- MAC Scheduler ----
+
+class MacScheduler {
+public:
+    static constexpr std::size_t GRANT_QUEUE_SIZE = 8;
+
+    MacScheduler() : nextGrantId_(0) {}
+
+    // Allocate a new scheduling grant
+    uint32_t allocateGrant(std::size_t grantSize) {
+        MacGrant grant;
+        grant.grantId = nextGrantId_++;
+        grant.grantSize = grantSize;
+        grant.valid = true;
+        if (!grantQueue_.push(std::move(grant))) {
+            throw std::runtime_error("Grant queue full");
+        }
+        std::cout &lt;&lt; "  [Scheduler] Allocated grant "
+                  &lt;&lt; grant.grantId &lt;&lt; " size="
+                  &lt;&lt; grantSize &lt;&lt; "\n";
+        return grant.grantId;
+    }
+
+    // Fill grants from RLC PDUs
+    void fillFromRlc(const std::vector&lt;Packet&gt;&amp; rlcPdus) {
+        std::size_t pduIdx = 0;
+        std::size_t pduOffset = 0;
+
+        while (pduIdx &lt; rlcPdus.size()) {
+            auto grant = grantQueue_.peek();
+            if (!grant || !grant-&gt;valid) break;
+
+            const auto&amp; pdu = rlcPdus[pduIdx];
+            std::size_t remaining = pdu.data.size() - pduOffset;
+            std::size_t toSchedule = std::min(remaining,
+                                              grant-&gt;grantSize);
+
+            grant-&gt;scheduledData.insert(
+                grant-&gt;scheduledData.end(),
+                pdu.data.begin() + pduOffset,
+                pdu.data.begin() + pduOffset + toSchedule);
+            pduOffset += toSchedule;
+
+            if (pduOffset &gt;= pdu.data.size()) {
+                ++pduIdx;
+                pduOffset = 0;
+            }
+
+            // Pop consumed grant if fully filled
+            if (grant-&gt;scheduledData.size() &gt;= grant-&gt;grantSize) {
+                grantQueue_.pop();
+            }
+        }
+    }
+
+    // Get the next scheduled MAC PDU
+    std::optional&lt;Packet&gt; nextScheduledPdu() {
+        // Find a grant with scheduled data
+        // For simplicity, we check the head
+        // In production, maintain a separate scheduled queue
+        return std::nullopt;  // Caller should iterate grants
+    }
+
+    // Get all grants with scheduled data (for processing)
+    std::vector&lt;MacGrant&gt; getScheduled() {
+        // Iterate through internal buffer (simplified)
+        std::vector&lt;MacGrant&gt; result;
+        // We need to drain non-empty grants
+        // For demo: return all grants with data
+        return result;
+    }
+
+    std::size_t pendingGrants() const { return grantQueue_.size(); }
+
+private:
+    CircularBuffer&lt;MacGrant&gt; grantQueue_{GRANT_QUEUE_SIZE};
+    uint32_t nextGrantId_;
+};
+
+// ---- Simplified MAC Layer using scheduler ----
+
+class MacLayerSimple {
+public:
+    explicit MacLayerSimple(std::size_t maxPduSize = 128)
+        : maxPduSize_(maxPduSize) {}
+
+    Packet processDownlink(const Packet&amp; sdu) override concept {
+        Packet pdu = sdu;
+        // Add MAC subheader (1 byte: LCID)
+        pdu.data.insert(pdu.data.begin(), 0x01);
+        pdu.sourceLayer = LayerType::MAC;
+        return pdu;
+    }
+
+    // Accept RLC PDUs and schedule them via the scheduler
+    void scheduleRlcPdus(const std::vector&lt;Packet&gt;&amp; rlcPdus,
+                          MacScheduler&amp; scheduler) {
+        for (const auto&amp; pdu : rlcPdus) {
+            if (pdu.empty()) continue;
+            // Allocate grant sized to the PDU
+            scheduler.allocateGrant(pdu.size());
+        }
+        // Fill grants from PDUs
+        scheduler.fillFromRlc(rlcPdus);
+    }
+
+private:
+    std::size_t maxPduSize_;
+};
+
+std::string hexDump(const std::vector&lt;uint8_t&gt;&amp; data) {
+    std::ostringstream oss;
+    for (std::size_t i = 0; i &lt; data.size(); ++i) {
+        oss &lt;&lt; std::hex &lt;&lt; std::setw(2) &lt;&lt; std::setfill('0')
+            &lt;&lt; static_cast&lt;int&gt;(data[i]) &lt;&lt; " ";
+        if ((i + 1) % 16 == 0) oss &lt;&lt; "\n";
+    }
+    return oss.str();
+}
+
+int main() {
+    std::cout &lt;&lt; "=== MAC Scheduler with Circular Buffer ===\n\n";
+
+    MacScheduler scheduler;
+
+    // Simulate RLC PDUs of varying sizes
+    std::vector&lt;Packet&gt; rlcPdus;
+
+    Packet p1;
+    p1.data = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
+    rlcPdus.push_back(p1);
+
+    Packet p2;
+    p2.data = {0xAA, 0xBB, 0xCC, 0xDD};
+    rlcPdus.push_back(p2);
+
+    Packet p3;
+    p3.data = {0x11, 0x22, 0x33, 0x44, 0x55};
+    rlcPdus.push_back(p3);
+
+    // Schedule PDUs
+    std::cout &lt;&lt; "Scheduling " &lt;&lt; rlcPdus.size()
+              &lt;&lt; " RLC PDUs:\n";
+    scheduler.fillFromRlc(rlcPdus);
+
+    // Allocate specific grants for demonstration
+    std::cout &lt;&lt; "\nAllocating grants:\n";
+    scheduler.allocateGrant(5);  // 5 bytes
+    scheduler.allocateGrant(10); // 10 bytes
+    scheduler.allocateGrant(3);  // 3 bytes
+
+    std::cout &lt;&lt; "\nPending grants: " &lt;&lt; scheduler.pendingGrants()
+              &lt;&lt; "\n";
+
+    // Demonstrate circular buffer directly
+    std::cout &lt;&lt; "\n--- Circular Buffer Demo ---\n";
+    CircularBuffer&lt;int&gt; cb(4);
+
+    std::cout &lt;&lt; "Push 10, 20, 30\n";
+    cb.push(10); cb.push(20); cb.push(30);
+    std::cout &lt;&lt; "Size: " &lt;&lt; cb.size() &lt;&lt; " (expected 3)\n";
+
+    auto v = cb.pop();
+    std::cout &lt;&lt; "Pop: " &lt;&lt; v.value_or(-1) &lt;&lt; " (expected 10)\n";
+    std::cout &lt;&lt; "Size: " &lt;&lt; cb.size() &lt;&lt; " (expected 2)\n";
+
+    cb.push(40); cb.push(50);
+    std::cout &lt;&lt; "Push 40, 50\n";
+    std::cout &lt;&lt; "Full: " &lt;&lt; (cb.full() ? "YES" : "NO")
+              &lt;&lt; " (expected YES)\n";
+
+    auto full = cb.push(60);
+    std::cout &lt;&lt; "Push 60 (overflow): "
+              &lt;&lt; (full ? "succeeded" : "failed") &lt;&lt; " (expected failed)\n";
+
+    while (auto val = cb.pop()) {
+        std::cout &lt;&lt; "Pop: " &lt;&lt; *val &lt;&lt; "\n";
+    }
+    std::cout &lt;&lt; "Empty: " &lt;&lt; (cb.empty() ? "YES" : "NO")
+              &lt;&lt; " (expected YES)\n";
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><strong>CircularBuffer template:</strong> A generic ring buffer with head/tail indices and a count. Supports <code>push()</code>, <code>pop()</code>, and <code>peek()</code>. Returns <code>std::optional</code> for safe access without exceptions.</li>
+      <li><strong>MacGrant:</strong> Describes a scheduling grant with an ID, size, and the data scheduled into it.</li>
+      <li><strong>MacScheduler:</strong> Uses a <code>CircularBuffer&lt;MacGrant&gt;</code> to manage grants. <code>allocateGrant()</code> creates a new grant. <code>fillFromRlc()</code> fills available grants from RLC PDU data, splitting PDUs across multiple grants when needed.</li>
+      <li><strong>Lock-free potential:</strong> The circular buffer is a building block for lock-free schedulers. In a real 5G MAC, the scheduler runs under strict real-time constraints (TTI = 0.5ms/1ms) and uses lock-free or single-producer-single-consumer patterns.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- Sub-problem 7 -->
+<h2>7. Process a Sample Packet End-to-End</h2>
+
+<div class="question">
+  <h3>Process a sample packet end-to-end</h3>
+  <p>Create a <code>main()</code> that integrates all layers and processes a packet through the complete stack:</p>
+  <ol>
+    <li>Generate a sample NAS message (e.g., Registration Request).</li>
+    <li>Pass it through the stack: RRC -> PDCP -> RLC -> MAC.</li>
+    <li>Show the encoded bytes at each layer boundary.</li>
+    <li>Decode it back up: MAC -> RLC -> PDCP -> RRC.</li>
+    <li>Verify the original message is recovered.</li>
+  </ol>
+  <p>Use simplified versions of each layer so the code compiles as a single file. Print hex dumps at every stage.</p>
+</div>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution7')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution7">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;vector&gt;
+#include &lt;cstdint&gt;
+#include &lt;memory&gt;
+#include &lt;string&gt;
+#include &lt;sstream&gt;
+#include &lt;iomanip&gt;
+#include &lt;map&gt;
+#include &lt;algorithm&gt;
+
+// ============================================================
+// Common types
+// ============================================================
+
+enum class LayerType { NAS, RRC, PDCP, RLC, MAC, PHY, UNKNOWN };
+
+std::string layerName(LayerType t) {
+    switch (t) {
+        case LayerType::NAS:  return "NAS";
+        case LayerType::RRC:  return "RRC";
+        case LayerType::PDCP: return "PDCP";
+        case LayerType::RLC:  return "RLC";
+        case LayerType::MAC:  return "MAC";
+        default:              return "UNKNOWN";
+    }
+}
+
+struct Packet {
+    std::vector&lt;uint8_t&gt; data;
+    LayerType sourceLayer = LayerType::UNKNOWN;
+    LayerType destLayer   = LayerType::UNKNOWN;
+    uint32_t sequenceNumber = 0;
+    std::size_t size() const { return data.size(); }
+    bool empty() const { return data.empty(); }
+    void prepend(const std::vector&lt;uint8_t&gt;&amp; b) {
+        data.insert(data.begin(), b.begin(), b.end());
+    }
+};
+
+class ProtocolLayer {
+public:
+    virtual ~ProtocolLayer() = default;
+    virtual Packet processDownlink(const Packet&amp; sdu) = 0;
+    virtual Packet processUplink(const Packet&amp; pdu) = 0;
+    virtual LayerType layerType() const = 0;
+    virtual std::string name() const = 0;
+};
+
+// ============================================================
+// Hex dump utility
+// ============================================================
+
+std::string hexDump(const std::vector&lt;uint8_t&gt;&amp; data) {
+    std::ostringstream oss;
+    for (std::size_t i = 0; i &lt; data.size(); ++i) {
+        oss &lt;&lt; std::hex &lt;&lt; std::setw(2) &lt;&lt; std::setfill('0')
+            &lt;&lt; static_cast&lt;int&gt;(data[i]) &lt;&lt; " ";
+        if ((i + 1) % 16 == 0) oss &lt;&lt; "\n";
+    }
+    return oss.str();
+}
+
+// ============================================================
+// RLC AM Layer (simplified, non-segmenting for stack demo)
+// ============================================================
+
+class RlcAmLayer : public ProtocolLayer {
+public:
+    Packet processDownlink(const Packet&amp; sdu) override {
+        Packet pdu = sdu;
+        // RLC header: 2 bytes
+        // Byte 0: SN high bits | D/C=1
+        // Byte 1: SN low bits | reserved
+        uint16_t sn = txSn_++;
+        pdu.prepend({
+            static_cast&lt;uint8_t&gt;((sn &gt;&gt; 4) | 0x80),
+            static_cast&lt;uint8_t&gt;((sn &amp; 0x0F) &lt;&lt; 4)
+        });
+        pdu.sourceLayer = layerType();
+        pdu.destLayer = LayerType::MAC;
+        pdu.sequenceNumber = sn;
+        return pdu;
+    }
+
+    Packet processUplink(const Packet&amp; pdu) override {
+        if (pdu.data.size() &lt; 2) return {};
+        Packet sdu;
+        sdu.data.assign(pdu.data.begin() + 2, pdu.data.end());
+        sdu.sourceLayer = LayerType::RLC;
+        sdu.destLayer = LayerType::PDCP;
+        uint16_t sn = ((pdu.data[0] &amp; 0x0F) &lt;&lt; 4) |
+                       ((pdu.data[1] &gt;&gt; 4) &amp; 0x0F);
+        sdu.sequenceNumber = sn;
+        return sdu;
+    }
+
+    LayerType layerType() const override { return LayerType::RLC; }
+    std::string name() const override { return "RLC-AM"; }
+
+private:
+    uint16_t txSn_ = 0;
+};
+
+// ============================================================
+// PDCP Layer (simplified: header + checksum, no compression)
+// ============================================================
+
+class PdcpLayer : public ProtocolLayer {
+public:
+    Packet processDownlink(const Packet&amp; sdu) override {
+        Packet pdu = sdu;
+        // PDCP header: 2 bytes with SN
+        uint16_t sn = txSn_++;
+        auto hdr = std::vector&lt;uint8_t&gt;{
+            static_cast&lt;uint8_t&gt;((sn &gt;&gt; 8) | 0x80),
+            static_cast&lt;uint8_t&gt;(sn &amp; 0xFF)
+        };
+        pdu.prepend(hdr);
+
+        // PDCP trailer: 4-byte MAC-I (simulated XOR checksum)
+        uint32_t xorSum = 0;
+        for (auto b : pdu.data) xorSum ^= b;
+        pdu.data.push_back(static_cast&lt;uint8_t&gt;((xorSum &gt;&gt; 24) &amp; 0xFF));
+        pdu.data.push_back(static_cast&lt;uint8_t&gt;((xorSum &gt;&gt; 16) &amp; 0xFF));
+        pdu.data.push_back(static_cast&lt;uint8_t&gt;((xorSum &gt;&gt; 8) &amp; 0xFF));
+        pdu.data.push_back(static_cast&lt;uint8_t&gt;(xorSum &amp; 0xFF));
+
+        pdu.sourceLayer = layerType();
+        pdu.destLayer = LayerType::RLC;
+        pdu.sequenceNumber = sn;
+        return pdu;
+    }
+
+    Packet processUplink(const Packet&amp; pdu) override {
+        if (pdu.data.size() &lt; 6) return {};  // 2 hdr + 4 mac-i
+
+        Packet sdu;
+        sdu.data.assign(pdu.data.begin() + 2,
+                         pdu.data.end() - 4);
+        sdu.sourceLayer = LayerType::PDCP;
+        sdu.destLayer = LayerType::RRC;
+        uint16_t sn = (static_cast&lt;uint16_t&gt;(pdu.data[0] &amp; 0x7F) &lt;&lt; 8) |
+                       static_cast&lt;uint16_t&gt;(pdu.data[1]);
+        sdu.sequenceNumber = sn;
+
+        // Verify MAC-I
+        uint32_t xorSum = 0;
+        for (std::size_t i = 0; i &lt; pdu.data.size() - 4; ++i) {
+            xorSum ^= pdu.data[i];
+        }
+        uint32_t receivedMac = (static_cast&lt;uint32_t&gt;(pdu.data[pdu.data.size()-4]) &lt;&lt; 24) |
+                                 (static_cast&lt;uint32_t&gt;(pdu.data[pdu.data.size()-3]) &lt;&lt; 16) |
+                                 (static_cast&lt;uint32_t&gt;(pdu.data[pdu.data.size()-2]) &lt;&lt; 8)  |
+                                 static_cast&lt;uint32_t&gt;(pdu.data[pdu.data.size()-1]);
+        std::cout &lt;&lt; "    [PDCP] MAC-I verify: "
+                  &lt;&lt; (xorSum == receivedMac ? "OK" : "FAIL") &lt;&lt; "\n";
+
+        return sdu;
+    }
+
+    LayerType layerType() const override { return LayerType::PDCP; }
+    std::string name() const override { return "PDCP"; }
+
+private:
+    uint16_t txSn_ = 0;
+};
+
+// ============================================================
+// RRC Layer (simplified: 1-byte header with msg type)
+// ============================================================
+
+class RrcLayer : public ProtocolLayer {
+public:
+    Packet processDownlink(const Packet&amp; sdu) override {
+        Packet pdu = sdu;
+        // RRC header: 1 byte (msg type)
+        pdu.prepend({static_cast&lt;uint8_t&gt;(0x12)});  // Conn Setup
+        pdu.sourceLayer = layerType();
+        pdu.destLayer = LayerType::PDCP;
+        pdu.sequenceNumber = txCount_++;
+        return pdu;
+    }
+
+    Packet processUplink(const Packet&amp; pdu) override {
+        if (pdu.data.empty()) return {};
+        Packet sdu;
+        sdu.data.assign(pdu.data.begin() + 1, pdu.data.end());
+        sdu.sourceLayer = LayerType::RRC;
+        sdu.destLayer = LayerType::NAS;
+        uint8_t msgType = pdu.data[0];
+        std::cout &lt;&lt; "    [RRC] Msg type: 0x"
+                  &lt;&lt; std::hex &lt;&lt; std::setw(2)
+                  &lt;&lt; std::setfill('0')
+                  &lt;&lt; static_cast&lt;int&gt;(msgType) &lt;&lt; std::dec;
+        if (msgType == 0x12) std::cout &lt;&lt; " (Connection Setup)";
+        else if (msgType == 0x01) std::cout &lt;&lt; " (UE Capability)";
+        std::cout &lt;&lt; "\n";
+        return sdu;
+    }
+
+    LayerType layerType() const override { return LayerType::RRC; }
+    std::string name() const override { return "RRC"; }
+
+private:
+    uint32_t txCount_ = 0;
+};
+
+// ============================================================
+// MAC Layer (simplified: 1-byte subheader + padding)
+// ============================================================
+
+class MacLayer : public ProtocolLayer {
+public:
+    explicit MacLayer(std::size_t maxSize = 128) : maxSize_(maxSize) {}
+
+    Packet processDownlink(const Packet&amp; sdu) override {
+        Packet pdu = sdu;
+        // MAC subheader: 1 byte (LCID=1 for SRB1)
+        pdu.prepend({0x01});
+
+        // Pad to max size if needed (simulating TTI boundary)
+        if (pdu.size() &lt; maxSize_) {
+            std::size_t padding = maxSize_ - pdu.size();
+            pdu.data.resize(maxSize_, 0x00);
+        }
+
+        pdu.sourceLayer = layerType();
+        pdu.destLayer = LayerType::PHY;
+        pdu.sequenceNumber = ttiCount_++;
+        return pdu;
+    }
+
+    Packet processUplink(const Packet&amp; pdu) override {
+        if (pdu.data.empty()) return {};
+
+        Packet sdu;
+        sdu.data.assign(pdu.data.begin() + 1, pdu.data.end());
+
+        // Strip trailing padding (zeros)
+        while (!sdu.data.empty() &amp;&amp; sdu.data.back() == 0x00) {
+            sdu.data.pop_back();
+        }
+
+        sdu.sourceLayer = LayerType::MAC;
+        sdu.destLayer = LayerType::RLC;
+        std::cout &lt;&lt; "    [MAC] Stripped padding, LCID="
+                  &lt;&lt; static_cast&lt;int&gt;(pdu.data[0]) &lt;&lt; "\n";
+        return sdu;
+    }
+
+    LayerType layerType() const override { return LayerType::MAC; }
+    std::string name() const override { return "MAC"; }
+
+private:
+    std::size_t maxSize_;
+    uint32_t ttiCount_ = 0;
+};
+
+// ============================================================
+// Protocol Stack
+// ============================================================
+
+class ProtocolStack {
+public:
+    void addLayer(std::shared_ptr&lt;ProtocolLayer&gt; layer) {
+        layers_.push_back(std::move(layer));
+    }
+
+    Packet processDownlink(const Packet&amp; input) {
+        Packet current = input;
+        for (auto&amp; layer : layers_) {
+            Packet output = layer-&gt;processDownlink(current);
+            std::cout &lt;&lt; "  [" &lt;&lt; layer-&gt;name()
+                      &lt;&lt; "] DL: " &lt;&lt; current.size()
+                      &lt;&lt; " -> " &lt;&lt; output.size()
+                      &lt;&lt; " bytes\n";
+            current = std::move(output);
+        }
+        return current;
+    }
+
+    Packet processUplink(const Packet&amp; input) {
+        Packet current = input;
+        for (auto it = layers_.rbegin(); it != layers_.rend(); ++it) {
+            Packet output = (*it)-&gt;processUplink(current);
+            std::cout &lt;&lt; "  [" &lt;&lt; (*it)-&gt;name()
+                      &lt;&lt; "] UL: " &lt;&lt; current.size()
+                      &lt;&lt; " -> " &lt;&lt; output.size()
+                      &lt;&lt; " bytes\n";
+            current = std::move(output);
+        }
+        return current;
+    }
+
+private:
+    std::vector&lt;std::shared_ptr&lt;ProtocolLayer&gt;&gt; layers_;
+};
+
+// ============================================================
+// Main: end-to-end demo
+// ============================================================
+
+int main() {
+    std::cout &lt;&lt; "========================================\n";
+    std::cout &lt;&lt; "  Mini 5G Protocol Stack - End-to-End Demo\n";
+    std::cout &lt;&lt; "========================================\n\n";
+
+    // 1. Build the stack: RRC -> PDCP -> RLC -> MAC
+    ProtocolStack stack;
+    stack.addLayer(std::make_shared&lt;RrcLayer&gt;());
+    stack.addLayer(std::make_shared&lt;PdcpLayer&gt;());
+    stack.addLayer(std::make_shared&lt;RlcAmLayer&gt;());
+    stack.addLayer(std::make_shared&lt;MacLayer&gt;(64));  // MAC PDU = 64 bytes
+
+    // 2. Create a sample NAS message (Registration Request)
+    // Format: Message type (1) + 5G registration type (1) + NAS key set ID (1)
+    //         + mobile identity (8 bytes BCD) + requested NSSAI (2 bytes)
+    Packet nasMsg;
+    nasMsg.data = {
+        0x7E,       // NAS msg type: Registration Request
+        0x01,       // 5G Registration type: Initial Registration
+        0x07,       // NAS key set identifier
+        0x01, 0x55, 0x10, 0x00, 0x00, 0x00, 0x00, 0xF9,  // SUPI (SUCI)
+        0x01, 0x01  // Requested NSSAI: SST=1, SD=0x01
+    };
+    nasMsg.sourceLayer = LayerType::NAS;
+
+    std::cout &lt;&lt; "--- Original NAS Message ---\n";
+    std::cout &lt;&lt; "NAS Registration Request ("
+              &lt;&lt; nasMsg.size() &lt;&lt; " bytes):\n  "
+              &lt;&lt; hexDump(nasMsg.data) &lt;&lt; "\n\n";
+
+    // 3. Downlink: process through all layers
+    std::cout &lt;&lt; "--- DOWNLINK: NAS -> RRC -> PDCP -> RLC -> MAC ---\n";
+    auto macPdu = stack.processDownlink(nasMsg);
+    std::cout &lt;&lt; "\nMAC PDU (" &lt;&lt; macPdu.size() &lt;&lt; " bytes):\n  "
+              &lt;&lt; hexDump(macPdu.data) &lt;&lt; "\n\n";
+
+    // 4. Uplink: decode back up
+    std::cout &lt;&lt; "--- UPLINK: MAC -> RLC -> PDCP -> RRC ---\n";
+    auto recovered = stack.processUplink(macPdu);
+    std::cout &lt;&lt; "\nRecovered NAS message ("
+              &lt;&lt; recovered.size() &lt;&lt; " bytes):\n  "
+              &lt;&lt; hexDump(recovered.data) &lt;&lt; "\n\n";
+
+    // 5. Verify round-trip
+    bool match = (recovered.data == nasMsg.data);
+    std::cout &lt;&lt; "--- Result ---\n";
+    std::cout &lt;&lt; "Original size:  " &lt;&lt; nasMsg.size() &lt;&lt; " bytes\n";
+    std::cout &lt;&lt; "Recovered size: " &lt;&lt; recovered.size() &lt;&lt; " bytes\n";
+    std::cout &lt;&lt; "Overhead added: "
+              &lt;&lt; (macPdu.size() - nasMsg.size()) &lt;&lt; " bytes ("
+              &lt;&lt; macPdu.size() - nasMsg.size()
+              &lt;&lt; " headers + padding)\n";
+    std::cout &lt;&lt; "Round-trip match: "
+              &lt;&lt; (match ? "YES - Data integrity verified!"
+                         : "NO - Something went wrong!")
+              &lt;&lt; "\n";
+
+    // Show layer breakdown
+    std::cout &lt;&lt; "\n--- Layer Overhead Breakdown ---\n";
+    std::cout &lt;&lt; "  NAS payload:    " &lt;&lt; nasMsg.size() &lt;&lt; " bytes\n";
+    std::cout &lt;&lt; "  + RRC header:    +1 byte (msg type)\n";
+    std::cout &lt;&lt; "  + PDCP header:   +2 bytes (SN)\n";
+    std::cout &lt;&lt; "  + PDCP trailer: +4 bytes (MAC-I)\n";
+    std::cout &lt;&lt; "  + RLC header:    +2 bytes (SN + D/C)\n";
+    std::cout &lt;&lt; "  + MAC subheader: +1 byte (LCID)\n";
+    std::cout &lt;&lt; "  + MAC padding:  +"
+              &lt;&lt; (64 - nasMsg.size() - 1 - 2 - 4 - 2 - 1)
+              &lt;&lt; " bytes\n";
+    std::cout &lt;&lt; "  = MAC PDU:      " &lt;&lt; macPdu.size()
+              &lt;&lt; " bytes\n";
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><strong>End-to-end flow:</strong> A NAS Registration Request message (14 bytes) is encoded through all four layers, producing a 64-byte MAC PDU. Each layer adds its own header and/or trailer. The MAC layer pads to 64 bytes (simulating a fixed-size TTI grant).</li>
+      <li><strong>Layer overhead breakdown:</strong> RRC (+1 byte), PDCP (+2 header + 4 trailer), RLC (+2 bytes), MAC (+1 byte + padding). Total overhead: 10 bytes of protocol headers + 40 bytes of padding.</li>
+      <li><strong>Uplink decoding:</strong> Each layer strips its own header in reverse order. MAC removes padding, RLC strips its 2-byte header, PDCP verifies the MAC-I and strips header+trailer, RRC strips its 1-byte header, yielding the original NAS message.</li>
+      <li><strong>Integrity verification:</strong> PDCP's uplink path recomputes the XOR checksum and compares it against the received MAC-I, logging "OK" or "FAIL".</li>
+      <li><strong>Round-trip correctness:</strong> The recovered NAS message exactly matches the original, confirming the stack implementation is consistent.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- Follow-up Questions -->
+<h2>Follow-up Questions</h2>
+
+<div class="question">
+  <h3>Variations to Try</h3>
+  <ol>
+    <li><strong>RLC segmentation with MAC grant awareness:</strong> Modify the RLC layer to accept a grant size parameter and segment the SDU to fit within the available grant. The RLC should buffer untransmitted segments and resume on the next grant.</li>
+    <li><strong>PDCP ciphering:</strong> Add a simple XOR cipher to the PDCP layer using a key derived from a KNAS/KNR security context. The cipher is applied after header compression but before the MAC-I is computed.</li>
+    <li><strong>Multi-UE stack:</strong> Extend the <code>ProtocolStack</code> to manage multiple UE contexts, each with its own layer instances, sequence numbers, and security contexts. Use a map keyed by UE ID (CRNTI).</li>
+    <li><strong>Timer-based RLC retransmission:</strong> Add a retransmission timer to the RLC AM layer. When a PDU is transmitted, start a timer. If no ACK is received before expiry, retransmit from the buffer.</li>
+  </ol>
+</div>
+
+<!-- Key Takeaways -->
+<div class="callout">
+  <p><strong>Key Takeaways:</strong></p>
+  <ul>
+    <li><strong>Layered architecture:</strong> The protocol stack follows the fundamental design principle of layered communication: each layer has a single responsibility, adds its own header, and treats the upper layer's output as its input (SDU). This is the same pattern used in OSI, TCP/IP, and 3GPP protocol stacks.</li>
+    <li><strong>Downlink = prepend headers, Uplink = strip headers:</strong> On the transmit path, each layer prepends its header (and appends trailer for PDCP MAC-I). On the receive path, each layer strips what it added. This symmetric design ensures correct decoding.</li>
+    <li><strong>Sequence numbers are per-layer:</strong> RLC SN (12-bit), PDCP SN (12-bit in our simplified version, 18-bit in real 5G NR), and RRC transaction IDs are independent counters. Each layer tracks its own state.</li>
+    <li><strong>Segmentation happens at RLC:</strong> When MAC grants are smaller than the PDCP PDU, the RLC layer segments. Reassembly at the receiver requires buffering out-of-order segments and sorting by sequence number.</li>
+    <li><strong>Circular buffers for scheduling:</strong> The MAC scheduler uses a ring buffer to manage grants efficiently. Lock-free ring buffers are a critical data structure in real-time telecom systems, enabling zero-copy packet processing under tight deadline constraints.</li>
+    <li><strong>Integrity and ciphering at PDCP:</strong> Security functions (header compression via ROHC, integrity protection via MAC-I, and ciphering) are all performed at the PDCP layer. Understanding this placement is essential for 5G security architecture.</li>
+    <li><strong>ASN.1 TLV encoding at RRC:</strong> RRC messages use ASN.1 BER-TLV encoding (defined in 3GPP TS 38.331). The Tag-Length-Value pattern is a universal building block for structured binary protocols in telecom.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="../index.html">C++ Index &larr;</a>
+  <span style="color: #8b949e;">End of Telecom Practice</span>
+</div>
+<script>
+function toggleSolution(id) {
+  document.getElementById(id).classList.toggle('visible');
+}
+</script>
+</body>
+</html>

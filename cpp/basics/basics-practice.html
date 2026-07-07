@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Basics Practice: Build a Student Management System</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #c9d1d9; line-height: 1.7; padding: 2rem; max-width: 860px; margin: 0 auto; }
+  a { color: #58a6ff; text-decoration: none; } a:hover { text-decoration: underline; } a:visited { color: #a371f7; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #8b949e; } .breadcrumb a { color: #8b949e; } .breadcrumb a:hover { color: #58a6ff; }
+  h1 { font-size: 1.75rem; color: #f0f6fc; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; color: #f0f6fc; margin: 2rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #21262d; }
+  h3 { font-size: 1rem; color: #58a6ff; margin: 1.5rem 0 0.5rem; }
+  p { margin-bottom: 0.75rem; } ul, ol { margin: 0.5rem 0 1rem 1.5rem; } li { margin-bottom: 0.3rem; }
+  .callout { background: #161b22; border-left: 3px solid #58a6ff; padding: 1rem 1.25rem; margin: 1rem 0 1.5rem; border-radius: 0 6px 6px 0; }
+  .callout.green { border-left-color: #3fb950; } .callout.red { border-left-color: #f85149; } .callout.warning { border-left-color: #d29922; }
+  .callout p { margin-bottom: 0.4rem; }
+  pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1rem 1.25rem; overflow-x: auto; margin: 1rem 0 1.5rem; font-size: 0.9rem; line-height: 1.5; color: #79c0ff; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #21262d; } th { color: #8b949e; font-weight: 600; }
+  .nav { display: flex; justify-content: space-between; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #30363d; }
+  .nav a { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #30363d; border-radius: 6px; color: #c9d1d9; font-size: 0.9rem; transition: border-color 0.15s, color 0.15s; }
+  .nav a:hover { border-color: #58a6ff; color: #58a6ff; text-decoration: none; }
+  .meta { margin-bottom: 1rem; font-size: 0.85rem; } .meta span { margin-right: 1rem; }
+  .tag { display: inline-block; font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tag.basic { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.easy { background: #3fb95022; color: #3fb950; border: 1px solid #3fb95044; }
+  .tag.medium { background: #d2992222; color: #d29922; border: 1px solid #d2992244; }
+  .tag.advanced { background: #f8514922; color: #f85149; border: 1px solid #f8514944; }
+  .question { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 1.25rem; margin: 1rem 0 1.5rem; }
+  .question h3 { color: #f0f6fc; margin-top: 0; }
+  .solution-toggle { cursor: pointer; user-select: none; }
+  .solution-toggle h3 { color: #3fb950; display: inline; }
+  .solution-content { display: none; margin-top: 1rem; }
+  .solution-content.visible { display: block; }
+  code { background: #161b22; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.9rem; color: #79c0ff; }
+  .topics-covered { margin-bottom: 1rem; font-size: 0.85rem; color: #8b949e; }
+  .topics-covered a { color: #8b949e; }
+  .nav-placeholder { visibility: hidden; }
+</style>
+</head>
+<body>
+<div class="breadcrumb"><a href="../index.html">C++ Learning Path</a> / <a href="../index.html#1">1 Basics</a> / Practice</div>
+<div class="meta"><span class="tag basic">Basic</span></div>
+<h1>Basics Practice: Build a Student Management System</h1>
+
+<div class="topics-covered">
+  <strong>Topics Covered:</strong>
+  <a href="variables-data-types.html">Variables &amp; Data Types</a>,
+  <a href="control-flow.html">Control Flow</a>,
+  <a href="functions.html">Functions</a>,
+  <a href="arrays-strings.html">Arrays &amp; Strings</a>,
+  <a href="pointers.html">Pointers</a>,
+  <a href="references.html">References</a>,
+  <a href="classes-objects.html">Classes &amp; Objects</a>,
+  <a href="constructors-destructors.html">Constructors &amp; Destructors</a>,
+  <a href="inheritance.html">Inheritance</a>,
+  <a href="polymorphism.html">Polymorphism</a>,
+  <a href="encapsulation-abstraction.html">Encapsulation &amp; Abstraction</a>,
+  <a href="function-templates.html">Function Templates</a>,
+  <a href="class-templates.html">Class Templates</a>,
+  <a href="vector.html">std::vector</a>,
+  <a href="map-unordered-map.html">std::map / std::unordered_map</a>,
+  <a href="std-string.html">std::string</a>,
+  <a href="iterators-basics.html">Iterators</a>
+</div>
+
+<div class="question">
+  <h3>Problem Statement</h3>
+  <p>Build a <code>StudentManager</code> class hierarchy with CRUD operations, search, sorting, and a template-based report generator. This project exercises nearly every core C++ concept: classes, inheritance, polymorphism, templates, STL containers, algorithms, and control flow.</p>
+  <p><strong>Requirements:</strong></p>
+  <ul>
+    <li>A <code>Student</code> base class with encapsulated fields and proper constructors.</li>
+    <li>A <code>StudentManager</code> that stores students in a <code>std::vector</code> and supports add, remove, update, and search operations.</li>
+    <li>Derived classes <code>GraduateStudent</code> and <code>UndergradStudent</code> with polymorphic display.</li>
+    <li>A template-based report generator that works with any container of student pointers.</li>
+    <li>A simple CLI menu in <code>main()</code> for user interaction.</li>
+  </ul>
+</div>
+
+<div class="callout warning">
+  <p><strong>Guidelines:</strong></p>
+  <ul>
+    <li>Use proper encapsulation: make data members <code>private</code> and expose via getters/setters.</li>
+    <li>Prefer <code>std::string</code> over C-style strings for names and titles.</li>
+    <li>Use <code>std::vector</code> as the primary storage container.</li>
+    <li>Use <code>std::sort</code> with custom comparators for sorting.</li>
+    <li>Apply the <code>virtual</code> keyword for polymorphic behavior.</li>
+  </ul>
+</div>
+
+<h2>Step 1: Define the Student Class</h2>
+
+<div class="question">
+  <h3>1. Define the Student class</h3>
+  <p>Create a <code>Student</code> class with <code>private</code> members for <code>name</code> (string), <code>id</code> (int), <code>age</code> (int), <code>grade</code> (string), and <code>gpa</code> (double). Provide a parameterized constructor, a default constructor, getters, setters, and a <code>virtual display()</code> method for polymorphism.</p>
+</div>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution1')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution1">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+
+class Student {
+private:
+    std::string name;
+    int id;
+    int age;
+    std::string grade;
+    double gpa;
+
+public:
+    // Default constructor
+    Student()
+        : name(""), id(0), age(0), grade(""), gpa(0.0) {}
+
+    // Parameterized constructor
+    Student(const std::string&amp; name, int id, int age,
+            const std::string&amp; grade, double gpa)
+        : name(name), id(id), age(age), grade(grade), gpa(gpa) {}
+
+    // Getters
+    std::string getName()   const { return name; }
+    int         getId()     const { return id; }
+    int         getAge()    const { return age; }
+    std::string getGrade()  const { return grade; }
+    double      getGpa()    const { return gpa; }
+
+    // Setters
+    void setName(const std::string&amp; n)  { name = n; }
+    void setId(int i)                     { id = i; }
+    void setAge(int a)                   { age = a; }
+    void setGrade(const std::string&amp; g) { grade = g; }
+    void setGpa(double g)                { gpa = g; }
+
+    // Virtual display for polymorphism
+    virtual void display() const {
+        std::cout &lt;&lt; "Student: " &lt;&lt; name
+                  &lt;&lt; " | ID: " &lt;&lt; id
+                  &lt;&lt; " | Age: " &lt;&lt; age
+                  &lt;&lt; " | Grade: " &lt;&lt; grade
+                  &lt;&lt; " | GPA: " &lt;&lt; gpa &lt;&lt; "\n";
+    }
+
+    // Virtual destructor for proper cleanup in inheritance
+    virtual ~Student() = default;
+};
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li>All data members are <code>private</code>, enforcing encapsulation.</li>
+      <li>The constructor uses a member initializer list for efficient initialization.</li>
+      <li>Getters are marked <code>const</code> since they do not modify the object.</li>
+      <li><code>display()</code> is <code>virtual</code> so derived classes can override it.</li>
+      <li>The virtual destructor ensures correct cleanup when deleting through a base pointer.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout green">
+  <p><strong>Complexity Analysis:</strong></p>
+  <ul>
+    <li><strong>Time:</strong> O(1) for all getters/setters; O(L) for string operations where L is string length.</li>
+    <li><strong>Space:</strong> O(L) per Student object for the stored strings.</li>
+  </ul>
+</div>
+
+<h2>Step 2: Implement the StudentManager with Vector Storage</h2>
+
+<div class="question">
+  <h3>2. Implement the StudentManager with vector storage</h3>
+  <p>Use <code>std::vector&lt;Student*&gt;</code> to store student pointers. Implement <code>addStudent()</code>, <code>removeStudent()</code> (by ID), <code>updateStudent()</code> (by ID), and <code>displayAll()</code> methods.</p>
+</div>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution2')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution2">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+#include &lt;algorithm&gt;
+
+class StudentManager {
+private:
+    std::vector&lt;Student*&gt; students;
+
+    // Helper: find index of student by ID (-1 if not found)
+    int findIndex(int id) const {
+        for (size_t i = 0; i &lt; students.size(); ++i) {
+            if (students[i]-&gt;getId() == id) {
+                return static_cast&lt;int&gt;(i);
+            }
+        }
+        return -1;
+    }
+
+public:
+    StudentManager() = default;
+
+    ~StudentManager() {
+        for (auto* s : students) {
+            delete s;
+        }
+    }
+
+    // Prevent copying (owns raw pointers)
+    StudentManager(const StudentManager&amp;) = delete;
+    StudentManager&amp; operator=(const StudentManager&amp;) = delete;
+
+    void addStudent(Student* student) {
+        students.push_back(student);
+        std::cout &lt;&lt; "Added: ";
+        student-&gt;display();
+    }
+
+    bool removeStudent(int id) {
+        int idx = findIndex(id);
+        if (idx == -1) {
+            std::cout &lt;&lt; "Student with ID " &lt;&lt; id
+                      &lt;&lt; " not found.\n";
+            return false;
+        }
+        delete students[idx];
+        students.erase(students.begin() + idx);
+        std::cout &lt;&lt; "Removed student with ID " &lt;&lt; id &lt;&lt; ".\n";
+        return true;
+    }
+
+    bool updateStudent(int id, const std::string&amp; newName,
+                       int newAge, const std::string&amp; newGrade,
+                       double newGpa) {
+        int idx = findIndex(id);
+        if (idx == -1) {
+            std::cout &lt;&lt; "Student with ID " &lt;&lt; id
+                      &lt;&lt; " not found.\n";
+            return false;
+        }
+        students[idx]-&gt;setName(newName);
+        students[idx]-&gt;setAge(newAge);
+        students[idx]-&gt;setGrade(newGrade);
+        students[idx]-&gt;setGpa(newGpa);
+        std::cout &lt;&lt; "Updated: ";
+        students[idx]-&gt;display();
+        return true;
+    }
+
+    void displayAll() const {
+        if (students.empty()) {
+            std::cout &lt;&lt; "No students in the system.\n";
+            return;
+        }
+        std::cout &lt;&lt; "=== All Students (" &lt;&lt; students.size()
+                  &lt;&lt; ") ===\n";
+        for (const auto* s : students) {
+            s-&gt;display();
+        }
+    }
+
+    Student* getStudent(int id) const {
+        int idx = findIndex(id);
+        return (idx != -1) ? students[idx] : nullptr;
+    }
+};
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><code>std::vector&lt;Student*&gt;</code> stores pointers so polymorphism works correctly with derived classes.</li>
+      <li>The destructor deletes each student to prevent memory leaks.</li>
+      <li>Copy constructor and assignment operator are deleted because raw pointer ownership is not safely copyable.</li>
+      <li><code>findIndex()</code> is a private helper used by multiple methods to locate a student by ID.</li>
+      <li><code>erase()</code> takes an iterator obtained from <code>begin() + idx</code>.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout green">
+  <p><strong>Complexity Analysis:</strong></p>
+  <ul>
+    <li><strong>Add:</strong> O(1) amortized (vector push_back).</li>
+    <li><strong>Remove:</strong> O(n) &mdash; search is O(n), erase shifts elements.</li>
+    <li><strong>Update / Search:</strong> O(n) &mdash; linear scan for the ID.</li>
+    <li><strong>Display All:</strong> O(n) &mdash; visits each student once.</li>
+  </ul>
+</div>
+
+<h2>Step 3: Add Search Functionality</h2>
+
+<div class="question">
+  <h3>3. Add search functionality</h3>
+  <p>Implement three search methods in <code>StudentManager</code>: search by name (partial/substring match), search by exact ID, and search by GPA range (min, max). Return matching results as a vector of pointers.</p>
+</div>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution3')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution3">
+    <pre>
+#include &lt;vector&gt;
+#include &lt;string&gt;
+#include &lt;algorithm&gt;
+#include &lt;iostream&gt;
+
+// Add these methods to StudentManager:
+
+// Search by name (case-insensitive partial match)
+std::vector&lt;Student*&gt; searchByName(const std::string&amp; query) const {
+    std::vector&lt;Student*&gt; results;
+    std::string lowerQuery = query;
+    std::transform(lowerQuery.begin(), lowerQuery.end(),
+                   lowerQuery.begin(), ::tolower);
+
+    for (auto* s : students) {
+        std::string lowerName = s-&gt;getName();
+        std::transform(lowerName.begin(), lowerName.end(),
+                       lowerName.begin(), ::tolower);
+        if (lowerName.find(lowerQuery) != std::string::npos) {
+            results.push_back(s);
+        }
+    }
+    return results;
+}
+
+// Search by exact ID
+Student* searchById(int id) const {
+    int idx = findIndex(id);
+    if (idx != -1) {
+        std::cout &lt;&lt; "Found: ";
+        students[idx]-&gt;display();
+        return students[idx];
+    }
+    std::cout &lt;&lt; "No student with ID " &lt;&lt; id &lt;&lt; ".\n";
+    return nullptr;
+}
+
+// Search by GPA range
+std::vector&lt;Student*&gt; searchByGpaRange(double minGpa, double maxGpa) const {
+    std::vector&lt;Student*&gt; results;
+    for (auto* s : students) {
+        if (s-&gt;getGpa() &gt;= minGpa &amp;&amp; s-&gt;getGpa() &lt;= maxGpa) {
+            results.push_back(s);
+        }
+    }
+    return results;
+}
+
+// Helper to display search results
+void displayResults(const std::vector&lt;Student*&gt;&amp; results) const {
+    if (results.empty()) {
+        std::cout &lt;&lt; "No matching students found.\n";
+        return;
+    }
+    std::cout &lt;&lt; "Found " &lt;&lt; results.size() &lt;&lt; " student(s):\n";
+    for (const auto* s : results) {
+        s-&gt;display();
+    }
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><code>searchByName</code> converts both the query and the student name to lowercase for case-insensitive partial matching using <code>std::string::find()</code>.</li>
+      <li><code>searchById</code> reuses the <code>findIndex()</code> helper for O(n) lookup.</li>
+      <li><code>searchByGpaRange</code> checks each student's GPA against the provided range.</li>
+      <li>Search methods return vectors of pointers (not copies) for efficiency and polymorphic access.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout green">
+  <p><strong>Complexity Analysis:</strong></p>
+  <ul>
+    <li><strong>All search methods:</strong> O(n * L) where n is the number of students and L is string length for name searches. GPA and ID searches are O(n).</li>
+    <li><strong>Space:</strong> O(k) for the results vector, where k is the number of matches.</li>
+  </ul>
+</div>
+
+<h2>Step 4: Implement Sorting</h2>
+
+<div class="question">
+  <h3>4. Implement sorting</h3>
+  <p>Add sorting methods to <code>StudentManager</code> that sort students by GPA (descending), by name (alphabetical), or by ID (ascending). Use <code>std::sort</code> with lambda-based custom comparators.</p>
+</div>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution4')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution4">
+    <pre>
+#include &lt;algorithm&gt;
+
+// Add these methods to StudentManager:
+
+void sortByGpa() {
+    std::sort(students.begin(), students.end(),
+        [](const Student* a, const Student* b) {
+            return a-&gt;getGpa() &gt; b-&gt;getGpa();
+        });
+    std::cout &lt;&lt; "Students sorted by GPA (descending).\n";
+}
+
+void sortByName() {
+    std::sort(students.begin(), students.end(),
+        [](const Student* a, const Student* b) {
+            return a-&gt;getName() &lt; b-&gt;getName();
+        });
+    std::cout &lt;&lt; "Students sorted by name (ascending).\n";
+}
+
+void sortById() {
+    std::sort(students.begin(), students.end(),
+        [](const Student* a, const Student* b) {
+            return a-&gt;getId() &lt; b-&gt;getId();
+        });
+    std::cout &lt;&lt; "Students sorted by ID (ascending).\n";
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li><code>std::sort</code> takes a pair of iterators and an optional comparator.</li>
+      <li>Lambda expressions <code>[...](...){ ... }</code> provide concise inline comparators.</li>
+      <li>Each comparator returns <code>true</code> when the first argument should come before the second.</li>
+      <li>GPA sort uses <code>&gt;</code> for descending order; name and ID use <code>&lt;</code> for ascending.</li>
+      <li>Sorting operates on the pointer vector, so the actual Student objects are not copied.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout green">
+  <p><strong>Complexity Analysis:</strong></p>
+  <ul>
+    <li><strong>Time:</strong> O(n log n) &mdash; <code>std::sort</code> is typically introsort (quicksort + heapsort).</li>
+    <li><strong>Space:</strong> O(log n) &mdash; recursion depth for quicksort partitioning.</li>
+  </ul>
+</div>
+
+<div class="callout warning">
+  <p><strong>Warning:</strong> Since we store pointers, sorting does not move the actual Student objects &mdash; it only rearranges the pointers in the vector. This is efficient but means the "order" is a property of the vector, not the objects themselves.</p>
+</div>
+
+<h2>Step 5: Add Inheritance &mdash; GraduateStudent and UndergradStudent</h2>
+
+<div class="question">
+  <h3>5. Add inheritance: GraduateStudent and UndergradStudent</h3>
+  <p>Derive <code>GraduateStudent</code> and <code>UndergradStudent</code> from <code>Student</code>. Add <code>thesisTitle</code> (string) for graduate students and <code>major</code> (string) for undergraduates. Override the <code>display()</code> method to show the extra field. Demonstrate polymorphism by calling <code>display()</code> through base-class pointers.</p>
+</div>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution5')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution5">
+    <pre>
+class GraduateStudent : public Student {
+private:
+    std::string thesisTitle;
+
+public:
+    GraduateStudent(const std::string&amp; name, int id, int age,
+                     const std::string&amp; grade, double gpa,
+                     const std::string&amp; thesisTitle)
+        : Student(name, id, age, grade, gpa),
+          thesisTitle(thesisTitle) {}
+
+    std::string getThesisTitle() const { return thesisTitle; }
+    void setThesisTitle(const std::string&amp; t) { thesisTitle = t; }
+
+    void display() const override {
+        std::cout &lt;&lt; "[Grad] " &lt;&lt; getName()
+                  &lt;&lt; " | ID: " &lt;&lt; getId()
+                  &lt;&lt; " | Age: " &lt;&lt; getAge()
+                  &lt;&lt; " | Grade: " &lt;&lt; getGrade()
+                  &lt;&lt; " | GPA: " &lt;&lt; getGpa()
+                  &lt;&lt; " | Thesis: " &lt;&lt; thesisTitle &lt;&lt; "\n";
+    }
+};
+
+class UndergradStudent : public Student {
+private:
+    std::string major;
+
+public:
+    UndergradStudent(const std::string&amp; name, int id, int age,
+                     const std::string&amp; grade, double gpa,
+                     const std::string&amp; major)
+        : Student(name, id, age, grade, gpa),
+          major(major) {}
+
+    std::string getMajor() const { return major; }
+    void setMajor(const std::string&amp; m) { major = m; }
+
+    void display() const override {
+        std::cout &lt;&lt; "[Ugrad] " &lt;&lt; getName()
+                   &lt;&lt; " | ID: " &lt;&lt; getId()
+                   &lt;&lt; " | Age: " &lt;&lt; getAge()
+                   &lt;&lt; " | Grade: " &lt;&lt; getGrade()
+                   &lt;&lt; " | GPA: " &lt;&lt; getGpa()
+                   &lt;&lt; " | Major: " &lt;&lt; major &lt;&lt; "\n";
+    }
+};
+
+// Demonstration of polymorphism
+void demonstratePolymorphism() {
+    StudentManager manager;
+
+    manager.addStudent(new UndergradStudent("Alice", 101, 20, "A", 3.8, "Computer Science"));
+    manager.addStudent(new GraduateStudent("Bob", 202, 25, "A-", 3.9, "Machine Learning"));
+    manager.addStudent(new UndergradStudent("Charlie", 103, 22, "B+", 3.2, "Physics"));
+
+    std::cout &lt;&lt; "\n--- Polymorphic Display ---\n";
+    manager.displayAll();
+    // Each student's own display() is called, even through Student*
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li>Both derived classes publicly inherit from <code>Student</code>, gaining all base-class functionality.</li>
+      <li>The derived constructors pass parameters to the base constructor via the initializer list.</li>
+      <li><code>display()</code> is marked <code>override</code> to explicitly indicate it overrides a virtual function. The compiler will error if the signature does not match.</li>
+      <li>When <code>StudentManager</code> calls <code>s-&gt;display()</code> through a <code>Student*</code>, the correct derived version is invoked at runtime (dynamic dispatch).</li>
+      <li>Each derived class prefixes its output with <code>[Grad]</code> or <code>[Ugrad]</code> for easy identification.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout green">
+  <p><strong>Complexity Analysis:</strong></p>
+  <ul>
+    <li><strong>Time:</strong> O(1) for construction. Polymorphic dispatch adds a small constant-time overhead (vtable lookup) per call.</li>
+    <li><strong>Space:</strong> O(L) extra bytes per derived object for the additional string member.</li>
+  </ul>
+</div>
+
+<h2>Step 6: Template-Based Report Generator</h2>
+
+<div class="question">
+  <h3>6. Template-based report generator</h3>
+  <p>Create a template function <code>generateReport()</code> that accepts any container of <code>Student*</code> pointers (vector, list, deque, etc.) and prints a formatted report. The template should also accept a title string and use a formatting lambda for custom output per container.</p>
+</div>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution6')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution6">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+#include &lt;vector&gt;
+#include &lt;list&gt;
+#include &lt;deque&gt;
+#include &lt;iomanip&gt;
+
+// Template report generator: works with any container of Student*
+template &lt;typename Container&gt;
+void generateReport(const std::string&amp; title, const Container&amp; students) {
+    std::cout &lt;&lt; "\n========================================\n";
+    std::cout &lt;&lt; "  " &lt;&lt; title &lt;&lt; "\n";
+    std::cout &lt;&lt; "========================================\n";
+    std::cout &lt;&lt; std::left
+              &lt;&lt; std::setw(5)  &lt;&lt; "ID"
+              &lt;&lt; std::setw(20) &lt;&lt; "Name"
+              &lt;&lt; std::setw(8) &lt;&lt; "Age"
+              &lt;&lt; std::setw(8) &lt;&lt; "GPA"
+              &lt;&lt; "Grade\n";
+    std::cout &lt;&lt; "----------------------------------------\n";
+
+    for (const auto* student : students) {
+        std::cout &lt;&lt; std::left
+                  &lt;&lt; std::setw(5)  &lt;&lt; student-&gt;getId()
+                  &lt;&lt; std::setw(20) &lt;&lt; student-&gt;getName()
+                  &lt;&lt; std::setw(8)  &lt;&lt; student-&gt;getAge()
+                  &lt;&lt; std::setw(8)  &lt;&lt; std::fixed &lt;&lt; std::setprecision(2)
+                                        &lt;&lt; student-&gt;getGpa()
+                  &lt;&lt; student-&gt;getGrade() &lt;&lt; "\n";
+    }
+
+    std::cout &lt;&lt; "========================================\n";
+    std::cout &lt;&lt; "  Total students: " &lt;&lt; students.size() &lt;&lt; "\n";
+    std::cout &lt;&lt; "========================================\n";
+}
+
+// Overload that accepts a filter predicate
+template &lt;typename Container, typename Predicate&gt;
+void generateFilteredReport(const std::string&amp; title,
+                            const Container&amp; students,
+                            Predicate filter) {
+    std::cout &lt;&lt; "\n========================================\n";
+    std::cout &lt;&lt; "  " &lt;&lt; title &lt;&lt; " (filtered)\n";
+    std::cout &lt;&lt; "========================================\n";
+
+    int count = 0;
+    for (const auto* student : students) {
+        if (filter(student)) {
+            student-&gt;display();
+            ++count;
+        }
+    }
+
+    if (count == 0) {
+        std::cout &lt;&lt; "  No students match the filter.\n";
+    }
+    std::cout &lt;&lt; "----------------------------------------\n";
+    std::cout &lt;&lt; "  Matched: " &lt;&lt; count &lt;&lt; " / "
+              &lt;&lt; students.size() &lt;&lt; "\n";
+    std::cout &lt;&lt; "========================================\n";
+}
+
+// Usage example
+void demonstrateReports() {
+    std::vector&lt;Student*&gt; allStudents;
+    allStudents.push_back(new UndergradStudent("Alice", 101, 20, "A", 3.8, "CS"));
+    allStudents.push_back(new GraduateStudent("Bob", 202, 25, "A-", 3.9, "ML"));
+    allStudents.push_back(new UndergradStudent("Charlie", 103, 22, "B+", 3.2, "Physics"));
+
+    // Works with vector
+    generateReport("All Students Report", allStudents);
+
+    // Works with std::list (copy pointers for demo)
+    std::list&lt;Student*&gt; studentList(allStudents.begin(), allStudents.end());
+    generateReport("List-Based Report", studentList);
+
+    // Filtered report: only GPA &gt;= 3.5
+    generateFilteredReport("High GPA Students", allStudents,
+        [](const Student* s) { return s-&gt;getGpa() &gt;= 3.5; });
+
+    // Cleanup
+    for (auto* s : allStudents) delete s;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li>The template function <code>generateReport</code> accepts any container type that supports range-based <code>for</code> iteration.</li>
+      <li><code>std::setw</code> and <code>std::left</code> from <code>&lt;iomanip&gt;</code> align columns in the report output.</li>
+      <li><code>generateFilteredReport</code> is a second template that accepts a predicate (lambda/function) to filter students.</li>
+      <li>Both templates work with <code>std::vector</code>, <code>std::list</code>, <code>std::deque</code>, or any custom container with <code>begin()</code>/<code>end()</code>.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout green">
+  <p><strong>Complexity Analysis:</strong></p>
+  <ul>
+    <li><strong>Time:</strong> O(n) to iterate and print all students. Filtered version is also O(n).</li>
+    <li><strong>Space:</strong> O(1) extra space (output only). The template itself has zero runtime overhead due to compile-time instantiation.</li>
+  </ul>
+</div>
+
+<h2>Step 7: Add a Simple CLI Menu</h2>
+
+<div class="question">
+  <h3>7. Add a simple CLI menu</h3>
+  <p>Create a <code>main()</code> function with a loop-based text menu that lets the user interact with the <code>StudentManager</code>. Support options for adding students (both undergrad and grad), displaying all, searching, sorting, and exiting.</p>
+</div>
+
+<div class="callout">
+  <div class="solution-toggle" onclick="toggleSolution('solution7')">
+    <h3>Click to reveal Solution</h3>
+  </div>
+  <div class="solution-content" id="solution7">
+    <pre>
+#include &lt;iostream&gt;
+#include &lt;string&gt;
+#include &lt;limits&gt;
+
+void printMenu() {
+    std::cout &lt;&lt; "\n========= Student Management System =========\n";
+    std::cout &lt;&lt; "  1. Add Undergraduate Student\n";
+    std::cout &lt;&lt; "  2. Add Graduate Student\n";
+    std::cout &lt;&lt; "  3. Display All Students\n";
+    std::cout &lt;&lt; "  4. Search by Name\n";
+    std::cout &lt;&lt; "  5. Search by ID\n";
+    std::cout &lt;&lt; "  6. Search by GPA Range\n";
+    std::cout &lt;&lt; "  7. Sort by GPA\n";
+    std::cout &lt;&lt; "  8. Sort by Name\n";
+    std::cout &lt;&lt; "  9. Sort by ID\n";
+    std::cout &lt;&lt; "  10. Remove Student\n";
+    std::cout &lt;&lt; "  0. Exit\n";
+    std::cout &lt;&lt; "============================================\n";
+    std::cout &lt;&lt; "Enter choice: ";
+}
+
+int main() {
+    StudentManager manager;
+
+    while (true) {
+        printMenu();
+        int choice;
+        if (!(std::cin &gt;&gt; choice)) {
+            std::cin.clear();
+            std::cin.ignore(std::numeric_limits&lt;std::streamsize&gt;::max(), '\n');
+            std::cout &lt;&lt; "Invalid input. Please enter a number.\n";
+            continue;
+        }
+
+        if (choice == 0) {
+            std::cout &lt;&lt; "Goodbye!\n";
+            break;
+        }
+
+        switch (choice) {
+        case 1: {
+            std::string name, grade, major;
+            int id, age;
+            double gpa;
+            std::cout &lt;&lt; "Name: "; std::cin.ignore();
+            std::getline(std::cin, name);
+            std::cout &lt;&lt; "ID: "; std::cin &gt;&gt; id;
+            std::cout &lt;&lt; "Age: "; std::cin &gt;&gt; age;
+            std::cout &lt;&lt; "Grade: "; std::cin &gt;&gt; grade;
+            std::cout &lt;&lt; "GPA: "; std::cin &gt;&gt; gpa;
+            std::cout &lt;&lt; "Major: "; std::cin.ignore();
+            std::getline(std::cin, major);
+            manager.addStudent(
+                new UndergradStudent(name, id, age, grade, gpa, major));
+            break;
+        }
+        case 2: {
+            std::string name, grade, thesis;
+            int id, age;
+            double gpa;
+            std::cout &lt;&lt; "Name: "; std::cin.ignore();
+            std::getline(std::cin, name);
+            std::cout &lt;&lt; "ID: "; std::cin &gt;&gt; id;
+            std::cout &lt;&lt; "Age: "; std::cin &gt;&gt; age;
+            std::cout &lt;&lt; "Grade: "; std::cin &gt;&gt; grade;
+            std::cout &lt;&lt; "GPA: "; std::cin &gt;&gt; gpa;
+            std::cout &lt;&lt; "Thesis Title: "; std::cin.ignore();
+            std::getline(std::cin, thesis);
+            manager.addStudent(
+                new GraduateStudent(name, id, age, grade, gpa, thesis));
+            break;
+        }
+        case 3:
+            manager.displayAll();
+            break;
+        case 4: {
+            std::string query;
+            std::cout &lt;&lt; "Search name: "; std::cin.ignore();
+            std::getline(std::cin, query);
+            manager.displayResults(manager.searchByName(query));
+            break;
+        }
+        case 5: {
+            int id;
+            std::cout &lt;&lt; "Student ID: "; std::cin &gt;&gt; id;
+            manager.searchById(id);
+            break;
+        }
+        case 6: {
+            double minGpa, maxGpa;
+            std::cout &lt;&lt; "Min GPA: "; std::cin &gt;&gt; minGpa;
+            std::cout &lt;&lt; "Max GPA: "; std::cin &gt;&gt; maxGpa;
+            manager.displayResults(
+                manager.searchByGpaRange(minGpa, maxGpa));
+            break;
+        }
+        case 7:
+            manager.sortByGpa();
+            manager.displayAll();
+            break;
+        case 8:
+            manager.sortByName();
+            manager.displayAll();
+            break;
+        case 9:
+            manager.sortById();
+            manager.displayAll();
+            break;
+        case 10: {
+            int id;
+            std::cout &lt;&lt; "Student ID to remove: "; std::cin &gt;&gt; id;
+            manager.removeStudent(id);
+            break;
+        }
+        default:
+            std::cout &lt;&lt; "Invalid choice. Try again.\n";
+        }
+    }
+
+    return 0;
+}
+    </pre>
+    <p><strong>Explanation:</strong></p>
+    <ul>
+      <li>The <code>while (true)</code> loop keeps the program running until the user selects exit (0).</li>
+      <li><code>std::cin.ignore()</code> before <code>std::getline()</code> clears the newline left in the buffer by <code>&gt;&gt;</code>.</li>
+      <li>Invalid non-numeric input is handled by clearing <code>std::cin</code>'s error state and ignoring the rest of the line.</li>
+      <li><code>new UndergradStudent(...)</code> and <code>new GraduateStudent(...)</code> create derived objects stored as <code>Student*</code> &mdash; polymorphism in action.</li>
+      <li>The switch statement dispatches each menu option to the corresponding <code>StudentManager</code> method.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="callout red">
+  <p><strong>Production Note:</strong> In a real application you would use <code>std::unique_ptr&lt;Student&gt;</code> or <code>std::shared_ptr&lt;Student&gt;</code> instead of raw pointers to guarantee memory safety. This exercise uses raw pointers to keep the focus on core OOP concepts. You can refactor to smart pointers as an advanced follow-up.</p>
+</div>
+
+<h2>Follow-up Questions</h2>
+
+<div class="question">
+  <h3>Variations to Try</h3>
+  <ol>
+    <li><strong>Add persistence:</strong> Save and load the student database to/from a text file using <code>&lt;fstream&gt;</code>. Implement <code>saveToFile()</code> and <code>loadFromFile()</code> methods. How do you serialize the derived class type so you know whether to reconstruct a <code>GraduateStudent</code> or <code>UndergradStudent</code>?</li>
+    <li><strong>Replace raw pointers with smart pointers:</strong> Refactor <code>StudentManager</code> to use <code>std::unique_ptr&lt;Student&gt;</code> or <code>std::shared_ptr&lt;Student&gt;</code>. How does this simplify the destructor, copy semantics, and exception safety?</li>
+    <li><strong>Add an academic record history:</strong> Each student tracks a <code>std::map&lt;std::string, double&gt;</code> (course name to grade) and can compute the GPA dynamically. Change <code>gpa</code> from a stored field to a computed property.</li>
+    <li><strong>Build a full-featured comparator system:</strong> Allow the user to sort by any field in ascending or descending order by composing comparators at runtime using a <code>SortField</code> enum and a <code>SortOrder</code> enum.</li>
+  </ol>
+</div>
+
+<div class="callout">
+  <p><strong>Key Takeaways:</strong></p>
+  <ul>
+    <li><strong>Encapsulation:</strong> Private data members with public getters/setters protect invariants and make the class safe to refactor. Always prefer <code>private</code> access unless there is a compelling reason otherwise.</li>
+    <li><strong>Inheritance + Polymorphism:</strong> Deriving <code>GraduateStudent</code> and <code>UndergradStudent</code> from <code>Student</code> lets the manager store heterogeneous objects uniformly. The <code>virtual</code> keyword and <code>override</code> specifier ensure correct dynamic dispatch.</li>
+    <li><strong>Templates:</strong> The report generator works with any container type, demonstrating generic programming. Templates are compiled once per type but have zero runtime overhead.</li>
+    <li><strong>STL Algorithms:</strong> <code>std::sort</code> with lambda comparators is idiomatic C++. Avoid writing your own sort unless you need a specific algorithm.</li>
+    <li><strong>RAII and Ownership:</strong> When storing raw pointers in a container, the owning class must delete them in its destructor. In modern C++, prefer smart pointers to automate this.</li>
+    <li><strong>CLI Design:</strong> A simple loop-and-switch menu is the starting point for any console application. Robust input handling (clearing error state, ignoring buffer) prevents crashes from bad user input.</li>
+  </ul>
+</div>
+
+<div class="nav">
+  <a href="../index.html">C++ Index &larr;</a>
+  <span class="nav-placeholder">placeholder</span>
+</div>
+<script>
+function toggleSolution(id) {
+  document.getElementById(id).classList.toggle('visible');
+}
+</script>
+</body>
+</html>
